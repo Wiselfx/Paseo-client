@@ -1,0 +1,37 @@
+{
+  "type": "session",
+  "message": {
+    "type": "schedule/resume/response",
+    "payload": {
+      "requestId": "resume",
+      "schedule": {
+        "id": "a9bffe73",
+        "name": "T9 fixture schedule renamed",
+        "prompt": "Reply with the single word: rescheduled",
+        "cadence": {
+          "type": "cron",
+          "expression": "0 0 1 2 *",
+          "timezone": "UTC"
+        },
+        "target": {
+          "type": "new-agent",
+          "config": {
+            "provider": "omp",
+            "cwd": "/tmp/fixture-sandbox",
+            "modeId": "full",
+            "model": "opencode-go/deepseek-v4.1-flash"
+          }
+        },
+        "status": "active",
+        "createdAt": "2026-11-08T23:12:17.750Z",
+        "updatedAt": "2026-11-08T23:12:18.291Z",
+        "nextRunAt": "2027-02-01T00:00:00.000Z",
+        "lastRunAt": null,
+        "pausedAt": null,
+        "expiresAt": null,
+        "maxRuns": 3
+      },
+      "error": null
+    }
+  }
+}

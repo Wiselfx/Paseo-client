@@ -46,6 +46,8 @@ let usage = """
       checkout <workspaceId>   git status, PR badge and working diff summary
       files <workspaceId> [path]
                                list a directory in a workspace
+      schedules                full stack (SchedulesStore) on a sandbox schedule:
+                               create, inspect, update, pause/resume, run once, logs and delete
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -306,6 +308,8 @@ do {
             throw ProbeError("files needs a <workspaceId>")
         }
         try await runFiles(connection, workspaceId: workspaceId, path: arguments.commandArguments.dropFirst().first)
+    case "schedules":
+        try await runSchedules(connection)
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
