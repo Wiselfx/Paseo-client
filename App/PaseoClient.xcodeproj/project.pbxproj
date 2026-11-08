@@ -1,0 +1,403 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		017F930490C9F32B130E575B /* HostsFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 844C6D23837E5C8218C3CCDA /* HostsFeature */; };
+		021D7A4965E87D4DB3C858D1 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A6CDB060911D3A7AA1CF59 /* AppModel.swift */; };
+		049611178B625E349F188C4E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5BA54415A9997E52BAA8657 /* RootView.swift */; };
+		13ED90D46385376ABC5FBBCF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9088EF8AC3E2485FA76459E0 /* Assets.xcassets */; };
+		1CA6FAA8D88D9880B2871C61 /* AgentsFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 096BE21136BFC1FEFE0A1C2A /* AgentsFeature */; };
+		57436A836FCA8CAF191560A7 /* PaseoStore in Frameworks */ = {isa = PBXBuildFile; productRef = F6A7FCB2B479A9CC8D1703B5 /* PaseoStore */; };
+		7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */; };
+		7D870FF7D3951B959C2F5C62 /* ConversationFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 83B8C3487425B9DD0AD01562 /* ConversationFeature */; };
+		A171A48B81A851AF22D95177 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 6807B21097244F4D3EC8432A /* DesignSystem */; };
+		CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64108FA9FC10EE10BE16975 /* Keychain.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		67A6CDB060911D3A7AA1CF59 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		9088EF8AC3E2485FA76459E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		93A7A34FF872890A0D7B1BE1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B5BA54415A9997E52BAA8657 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B64108FA9FC10EE10BE16975 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaseoClientApp.swift; sourceTree = "<group>"; };
+		D583D4EC5FCF8C4E46667749 /* PaseoCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaseoCore; path = ../Packages/PaseoCore; sourceTree = SOURCE_ROOT; };
+		E0973B3517160F9D49A8F309 /* PaseoClient.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PaseoClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E534C96E3E952966814440BD /* PaseoUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaseoUI; path = ../Packages/PaseoUI; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		62846E1091ABD920AB014514 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				57436A836FCA8CAF191560A7 /* PaseoStore in Frameworks */,
+				A171A48B81A851AF22D95177 /* DesignSystem in Frameworks */,
+				017F930490C9F32B130E575B /* HostsFeature in Frameworks */,
+				1CA6FAA8D88D9880B2871C61 /* AgentsFeature in Frameworks */,
+				7D870FF7D3951B959C2F5C62 /* ConversationFeature in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		9255BF8717729F0324C5A138 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				D583D4EC5FCF8C4E46667749 /* PaseoCore */,
+				E534C96E3E952966814440BD /* PaseoUI */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		A2D0FF96299ED473709B96E0 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				67A6CDB060911D3A7AA1CF59 /* AppModel.swift */,
+				B64108FA9FC10EE10BE16975 /* Keychain.swift */,
+				C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */,
+				B5BA54415A9997E52BAA8657 /* RootView.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		B2A20E73B4645BB46B5138FD /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				9088EF8AC3E2485FA76459E0 /* Assets.xcassets */,
+				93A7A34FF872890A0D7B1BE1 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		DB67F85C32AC358061AB4C0E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E0973B3517160F9D49A8F309 /* PaseoClient.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E2B0D8E44F70F8AB12A5E36F = {
+			isa = PBXGroup;
+			children = (
+				9255BF8717729F0324C5A138 /* Packages */,
+				B2A20E73B4645BB46B5138FD /* Resources */,
+				A2D0FF96299ED473709B96E0 /* Sources */,
+				DB67F85C32AC358061AB4C0E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		695AC63E85C1D490585D5CEC /* PaseoClient */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3E4B282C2CFF866454FEE917 /* Build configuration list for PBXNativeTarget "PaseoClient" */;
+			buildPhases = (
+				8A9A6C4D52D2DB6D1520EE15 /* Sources */,
+				49729A550B318628FA9FF20F /* Resources */,
+				62846E1091ABD920AB014514 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PaseoClient;
+			packageProductDependencies = (
+				F6A7FCB2B479A9CC8D1703B5 /* PaseoStore */,
+				6807B21097244F4D3EC8432A /* DesignSystem */,
+				844C6D23837E5C8218C3CCDA /* HostsFeature */,
+				096BE21136BFC1FEFE0A1C2A /* AgentsFeature */,
+				83B8C3487425B9DD0AD01562 /* ConversationFeature */,
+			);
+			productName = PaseoClient;
+			productReference = E0973B3517160F9D49A8F309 /* PaseoClient.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		ED39129A2BA326EBDDD4C300 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					695AC63E85C1D490585D5CEC = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = D00A4A2B6FC4543111422397 /* Build configuration list for PBXProject "PaseoClient" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = E2B0D8E44F70F8AB12A5E36F;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				445C28B28757431F8BF992ED /* XCLocalSwiftPackageReference "../Packages/PaseoCore" */,
+				8799387966AF0009A4813E30 /* XCLocalSwiftPackageReference "../Packages/PaseoUI" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = DB67F85C32AC358061AB4C0E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				695AC63E85C1D490585D5CEC /* PaseoClient */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		49729A550B318628FA9FF20F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				13ED90D46385376ABC5FBBCF /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8A9A6C4D52D2DB6D1520EE15 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				021D7A4965E87D4DB3C858D1 /* AppModel.swift in Sources */,
+				CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */,
+				7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */,
+				049611178B625E349F188C4E /* RootView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		8107233E789A81CCA8C81118 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.wiselfx.paseoclient;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		880D9623B5779E85985B9682 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.wiselfx.paseoclient;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		8CEDAB8F9B525D05BED4EB01 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		ABAD54692092EE951F5562E8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3E4B282C2CFF866454FEE917 /* Build configuration list for PBXNativeTarget "PaseoClient" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				880D9623B5779E85985B9682 /* Debug */,
+				8107233E789A81CCA8C81118 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D00A4A2B6FC4543111422397 /* Build configuration list for PBXProject "PaseoClient" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ABAD54692092EE951F5562E8 /* Debug */,
+				8CEDAB8F9B525D05BED4EB01 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		445C28B28757431F8BF992ED /* XCLocalSwiftPackageReference "../Packages/PaseoCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/PaseoCore;
+		};
+		8799387966AF0009A4813E30 /* XCLocalSwiftPackageReference "../Packages/PaseoUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/PaseoUI;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		096BE21136BFC1FEFE0A1C2A /* AgentsFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AgentsFeature;
+		};
+		6807B21097244F4D3EC8432A /* DesignSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DesignSystem;
+		};
+		83B8C3487425B9DD0AD01562 /* ConversationFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ConversationFeature;
+		};
+		844C6D23837E5C8218C3CCDA /* HostsFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HostsFeature;
+		};
+		F6A7FCB2B479A9CC8D1703B5 /* PaseoStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PaseoStore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = ED39129A2BA326EBDDD4C300 /* Project object */;
+}

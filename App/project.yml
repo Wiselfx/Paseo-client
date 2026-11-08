@@ -1,0 +1,56 @@
+# Source of truth for the Xcode project. Regenerate after editing:
+#   cd App && xcodegen generate
+# All code lives in Packages/; this target only composes features.
+name: PaseoClient
+options:
+  bundleIdPrefix: com.wiselfx
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+packages:
+  PaseoCore:
+    path: ../Packages/PaseoCore
+  PaseoUI:
+    path: ../Packages/PaseoUI
+targets:
+  PaseoClient:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - Resources
+    dependencies:
+      - package: PaseoCore
+        product: PaseoStore
+      - package: PaseoUI
+        product: DesignSystem
+      - package: PaseoUI
+        product: HostsFeature
+      - package: PaseoUI
+        product: AgentsFeature
+      - package: PaseoUI
+        product: ConversationFeature
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Paseo
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSLocalNetworkUsageDescription: Paseo connects to the agent daemon on your network.
+        # The daemon is reached by IP or Tailscale name over plain ws:// on a private network.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wiselfx.paseoclient
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES

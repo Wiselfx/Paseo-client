@@ -11,8 +11,9 @@ App/                  Composition root: app entry, navigation, settings storage,
                       Thin. Owns no logic a test would want.
 Packages/PaseoUI      (Apple platforms only)
   Features/*          Hosts · Agents · Conversation · Terminal · Files · Workspaces · Settings …
-                      Each depends on PaseoStore + DesignSystem. Never on another Feature,
-                      never on PaseoKit or PaseoProtocol directly.
+                      Each depends on PaseoStore + DesignSystem. Never on another Feature.
+                      PaseoStore re-exports Kit/Protocol value types for display; features
+                      never create connections or send requests.
   DesignSystem        Tokens, typography, motion, haptics, glass, bubbles, the collapsible
                       turn cells, rich previews (links, images, maps). No Paseo types.
 Packages/PaseoCore    (Foundation only: builds and tests on Linux)
