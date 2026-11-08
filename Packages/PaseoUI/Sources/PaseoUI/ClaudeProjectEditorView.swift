@@ -36,6 +36,14 @@
                     Text(notice ?? "")
                 }
         }
+        private var closeButton: some View {
+            Button {
+                action(.cancel)
+            } label: {
+                Image(systemName: "xmark").font(.system(size: 23, weight: .light)).frame(width: 44, height: 44)
+            }.glassEffect(in: .circle).accessibilityLabel("Cancel new project").accessibilityIdentifier(
+                "project.cancel")
+        }
         private var form: some View {
             VStack(spacing: 0) {
                 ZStack {
