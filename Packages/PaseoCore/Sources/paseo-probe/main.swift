@@ -46,6 +46,8 @@ let usage = """
       checkout <workspaceId>   git status, PR badge and working diff summary
       files <workspaceId> [path]
                                list a directory in a workspace
+      git-extras [cwd]         full stack on /tmp/fixture-git: modern-vs-legacy diff,
+                               branch suggestions/switch, discard, live file watch, PR badge
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -306,6 +308,9 @@ do {
             throw ProbeError("files needs a <workspaceId>")
         }
         try await runFiles(connection, workspaceId: workspaceId, path: arguments.commandArguments.dropFirst().first)
+    case "git-extras":
+        try await runGitExtras(
+            connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-git/scratch-repo")
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -696,4 +701,218 @@ func runFiles(_ connection: DaemonConnection, workspaceId: String, path: String?
     }
     if let error = store.files.error { print("error: \(error)") }
     await session.closeCheckout(workspaceId)
+}
+
+
+// MARK: - Git extras (T11)
+
+enum GitExtrasPhaseText {
+    static func diff(_ phase: WorkspaceGitExtras.DiffPhase) -> String {
+        switch phase {
+        case .idle: return "idle"
+        case .loading: return "loading"
+        case .ready: return "ready"
+        case .failed(let message): return "failed(\(message))"
+        }
+    }
+
+    static func file(_ phase: WorkspaceGitExtras.FilePhase) -> String {
+        switch phase {
+        case .idle: return "idle"
+        case .loading: return "loading"
+        case .ready: return "ready"
+        case .failed(let message): return "failed(\(message))"
+        }
+    }
+}
+
+@discardableResult
+func runGit(_ arguments: [String], cwd: String) throws -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["git"] + arguments
+    process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    try process.run()
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    let output = String(data: data, encoding: .utf8) ?? ""
+    guard process.terminationStatus == 0 else {
+        throw ProbeError("git \(arguments.joined(separator: " ")) failed: \(output)")
+    }
+    return output.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// Creates the fixture repo idempotently: a bare remote and a checkout in /tmp/fixture-git only.
+func ensureGitExtrasFixture(_ cwd: String) throws {
+    let root = "/tmp/fixture-git"
+    guard cwd == "\(root)/scratch-repo" else {
+        throw ProbeError("git-extras only runs in \(root)/scratch-repo; refusing \(cwd)")
+    }
+    let remote = "\(root)/remote.git"
+    let fileManager = FileManager.default
+    try fileManager.createDirectory(atPath: remote, withIntermediateDirectories: true)
+    if !fileManager.fileExists(atPath: "\(remote)/HEAD") {
+        try runGit(["init", "--bare", "-q", "-b", "main", remote], cwd: root)
+    }
+    if !fileManager.fileExists(atPath: "\(cwd)/.git") {
+        try fileManager.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+        try runGit(["init", "-q", "-b", "main"], cwd: cwd)
+        try runGit(["config", "user.email", "fixture@example.test"], cwd: cwd)
+        try runGit(["config", "user.name", "Fixture"], cwd: cwd)
+        try Data("# scratch\n\nline one\nline two\n".utf8)
+            .write(to: URL(fileURLWithPath: "\(cwd)/README.md"))
+        try Data("print(\"hello\")\n".utf8)
+            .write(to: URL(fileURLWithPath: "\(cwd)/hello.py"))
+        try runGit(["add", "."], cwd: cwd)
+        try runGit(["commit", "-qm", "initial fixture commit"], cwd: cwd)
+        try runGit(["remote", "add", "origin", remote], cwd: cwd)
+        try runGit(["push", "-qu", "origin", "main"], cwd: cwd)
+    }
+    let branches = try runGit(["branch", "--list", "feature/t11"], cwd: cwd)
+    if branches.isEmpty {
+        try runGit(["checkout", "-qb", "feature/t11"], cwd: cwd)
+        let readme = URL(fileURLWithPath: "\(cwd)/README.md")
+        let existing = (try? String(contentsOf: readme, encoding: .utf8)) ?? "# scratch\n"
+        try Data((existing + "feature line\n").utf8).write(to: readme)
+        try runGit(["commit", "-qam", "feature commit"], cwd: cwd)
+        try runGit(["push", "-qu", "origin", "feature/t11"], cwd: cwd)
+    }
+    try runGit(["checkout", "-q", "main"], cwd: cwd)
+    try runGit(["reset", "-q", "--hard", "origin/main"], cwd: cwd)
+}
+
+/// End-to-end check of T11 against the live daemon. Only creates a workspace for the fixture repo
+/// and archives it again; it never touches another workspace or project.
+@MainActor
+func runGitExtras(_ connection: DaemonConnection, cwd: String) async throws {
+    try ensureGitExtrasFixture(cwd)
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    guard await waitForDirectory(session) else {
+        throw ProbeError("workspace directory did not load: \(session.workspaceDirectory.error ?? "unknown error")")
+    }
+
+    let projectsBefore = (try? await connection.send(ProjectListRequest()))?.projects
+        .filter { $0.projectRootPath == cwd } ?? []
+    var workspace = session.workspaceDirectory.workspaces.first { $0.cwd == cwd }
+    var createdWorkspace = false
+    if workspace == nil {
+        let response = try await connection.send(
+            WorkspaceCreateRequest(
+                source: .directory(path: cwd, projectId: nil),
+                idempotencyKey: "paseo-probe-t11-\(UUID().uuidString)"))
+        guard let created = response.workspace else {
+            throw ProbeError("workspace.create failed: \(response.error ?? "unknown")")
+        }
+        workspace = created
+        createdWorkspace = true
+    }
+    guard let workspace else { throw ProbeError("no workspace for \(cwd)") }
+
+    var cleanedUp = false
+    do {
+        let checkout = session.checkout(for: workspace)
+        _ = await waitForCheckout(checkout)
+        try await waitUntil("the initial checkout diff", timeout: 30) {
+            checkout.diffPhase != .idle && checkout.diffPhase != .loading
+        }
+        let extras = session.gitExtras.workspace(for: checkout)
+        let capabilities = extras.capabilities
+        print(
+            "workspace \(workspace.id) cwd=\(checkout.cwd) created=\(createdWorkspace) "
+                + "modernDiff=\(capabilities.supportsModernDiff) discard=\(capabilities.supportsDiscardChanges) "
+                + "files=\(capabilities.supportsFileWatching)")
+
+        await extras.loadBranchSuggestions(query: "feature", limit: 20)
+        print("branches: \(extras.branchSuggestions.map(\.name).joined(separator: ","))")
+
+        let switched = await extras.switchBranch("feature/t11")
+        print("switch feature/t11 -> \(switched) branch=\(extras.currentBranch ?? "-")")
+        let switchedBack = await extras.switchBranch("main")
+        print("switch main -> \(switchedBack) branch=\(extras.currentBranch ?? "-")")
+
+        let readme = URL(fileURLWithPath: "\(cwd)/README.md")
+        let original = try Data(contentsOf: readme)
+        try (original + Data("probe diff\n".utf8)).write(to: readme)
+        // The daemon's git observer debounces stat changes before the diff snapshot catches up.
+        try await Task.sleep(for: .seconds(1))
+
+        await extras.loadDiff(compare: .working(cwd: cwd))
+        try await waitUntil("the diff", timeout: 30) { extras.diffPhase != .loading }
+        print(
+            "diff pipeline=\(extras.isUsingLegacyPipeline ? "legacy" : "modern") "
+                + "phase=\(GitExtrasPhaseText.diff(extras.diffPhase)) files=\(extras.filesChanged) "
+                + "+\(extras.additions)-\(extras.deletions)")
+        for file in extras.files.prefix(5) {
+            print("  \(file.path) +\(file.additions)-\(file.deletions)")
+        }
+
+        let discarded = await extras.discard(paths: ["README.md"])
+        print("discard -> \(discarded) dirty=\(checkout.status?.isDirty.map(String.init) ?? "-")")
+        try original.write(to: readme)
+
+        await extras.watchFile("README.md")
+        let initialSize = extras.watchedFile?.size
+        print(
+            "file \(extras.watchedFile?.path ?? "-") phase=\(GitExtrasPhaseText.file(extras.filePhase)) "
+                + "size=\(initialSize.map(String.init) ?? "-")")
+
+        try (original + Data("probe watched\n".utf8)).write(to: readme)
+        _ = await eventuallyProbe(timeout: 5) {
+            extras.watchedFile?.size != initialSize && extras.watchedFile?.size != nil
+        }
+        print("file update size=\(extras.watchedFile?.size.map(String.init) ?? "-")")
+        try original.write(to: readme)
+        await extras.stopWatchingFile()
+
+        await extras.loadPrStatus()
+        let badge = extras.prBadge
+        print(
+            "pr auth=\(extras.prAuthState.map { String(describing: $0) } ?? "-") "
+                + "badge=\(badge.map { " #\($0.number.map(String.init) ?? "-") \($0.state) checks=\($0.checks)" } ?? extras.prError ?? "none")")
+
+        if let error = extras.actionError ?? extras.diffError ?? extras.fileError {
+            print("error: \(error)")
+        }
+
+        await session.closeCheckout(workspace.id)
+        if createdWorkspace {
+            _ = try? await connection.send(ArchiveWorkspaceRequest(workspaceId: workspace.id))
+            if projectsBefore.isEmpty {
+                let projects = (try? await connection.send(ProjectListRequest()))?.projects ?? []
+                if let project = projects.first(where: { $0.projectRootPath == cwd }) {
+                    _ = try? await connection.send(
+                        ProjectRemoveRequest(projectId: project.projectId))
+                }
+            }
+            cleanedUp = true
+        }
+    } catch {
+        await session.closeCheckout(workspace.id)
+        if createdWorkspace, !cleanedUp {
+            _ = try? await connection.send(ArchiveWorkspaceRequest(workspaceId: workspace.id))
+            if projectsBefore.isEmpty {
+                let projects = (try? await connection.send(ProjectListRequest()))?.projects ?? []
+                if let project = projects.first(where: { $0.projectRootPath == cwd }) {
+                    _ = try? await connection.send(
+                        ProjectRemoveRequest(projectId: project.projectId))
+                }
+            }
+        }
+        throw error
+    }
+}
+
+@MainActor
+func eventuallyProbe(timeout: TimeInterval, _ condition: @MainActor () -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(100))
+    }
+    return condition()
 }

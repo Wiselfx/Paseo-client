@@ -25,6 +25,8 @@ public final class HostSession {
     public let terminals: TerminalsStore
     /// Provider catalogue, agent creation, and live permission routing.
     public private(set) var agentControl: AgentControlStore
+    /// Git extras for open workspaces: modern diffs, discard, branches, PR badge, live files.
+    public let gitExtras: GitExtrasStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -42,6 +44,7 @@ public final class HostSession {
         self.terminals = TerminalsStore(client: client)
         self.agentControl = AgentControlStore(client: client)
         self.workspaceDirectory = WorkspaceDirectory(client: client)
+        self.gitExtras = GitExtrasStore(client: client)
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
@@ -99,6 +102,7 @@ public final class HostSession {
 
     /// Call when the checkout screen goes away. Releases its diff subscription.
     public func closeCheckout(_ workspaceId: String) async {
+        await gitExtras.close(workspaceId)
         guard let store = checkouts.removeValue(forKey: workspaceId) else { return }
         await store.close()
     }
@@ -141,6 +145,7 @@ public final class HostSession {
             serverInfo = info
             agentControl.serverInfoChanged(info)
             workspaceDirectory.update(serverInfo: info)
+            gitExtras.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
             if sawReconnect {
                 sawReconnect = false
@@ -169,6 +174,7 @@ public final class HostSession {
         for store in openCheckouts {
             await store.resubscribe()
         }
+        await gitExtras.resubscribe()
     }
 
     // MARK: Event loop
@@ -193,6 +199,7 @@ public final class HostSession {
 
         case .binaryFrame(let data):
             terminals.handle(binaryFrame: data)
+            gitExtras.handle(binaryFrame: data)
         }
     }
 
@@ -200,6 +207,7 @@ public final class HostSession {
     /// `DaemonEvent` stays small.
     private func handleUnhandled(messageType: String, raw: Data) async {
         let decoder = JSONDecoder()
+        gitExtras.handle(messageType: messageType, raw: raw)
         switch messageType {
         case "workspace_update":
             if let update = try? decoder.decode(SessionPayloadEnvelope<WorkspaceUpdate>.self, from: raw).payload {

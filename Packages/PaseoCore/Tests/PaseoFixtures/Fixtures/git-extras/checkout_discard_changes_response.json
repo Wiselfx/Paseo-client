@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout.discard_changes.response",
+    "payload": {
+      "cwd": "/tmp/fixture-git/scratch-repo",
+      "success": true,
+      "error": null,
+      "requestId": "t11-7"
+    }
+  }
+}
