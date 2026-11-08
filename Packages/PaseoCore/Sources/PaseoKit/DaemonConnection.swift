@@ -486,7 +486,12 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
             return
         }
 
-        if let requestId = header.requestId, resolvePending(requestId, with: .success(data)) {
+        // Some events carry a requestId-shaped field in their payload (the daemon's
+        // `subscription:<cwd>` status id). Only a message whose type is a response may settle a
+        // pending request; everything else is an event.
+        if let requestId = header.requestId, Self.isResponseType(header.messageType),
+            resolvePending(requestId, with: .success(data))
+        {
             return
         }
 
@@ -519,9 +524,23 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
             }
         default:
             // A response for a request we already gave up on: drop it silently.
-            if header.requestId != nil { return }
+            if header.requestId != nil, Self.isResponseType(messageType) { return }
             emitEvent(.unhandled(messageType: messageType, raw: data))
         }
+    }
+
+    /// Response types that correlate a pending request without the usual `_response` suffix.
+    /// `create_agent_request` answers with `status`, permission answers with
+    /// `agent_permission_resolved`, and archive answers with the `agent_archived` broadcast.
+    private static let correlatedResponseTypes: Set<String> = [
+        "status", "agent_archived", "agent_permission_resolved",
+    ]
+
+    /// A message type that may settle a pending request or is a late response we should drop.
+    private static func isResponseType(_ messageType: String?) -> Bool {
+        guard let messageType else { return false }
+        return messageType.hasSuffix("_response") || messageType.hasSuffix(".response")
+            || correlatedResponseTypes.contains(messageType)
     }
 
     private struct TimelineReplacement: Decodable, Sendable {

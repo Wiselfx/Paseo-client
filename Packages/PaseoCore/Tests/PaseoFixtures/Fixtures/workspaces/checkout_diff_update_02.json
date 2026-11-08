@@ -1,0 +1,239 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout_diff_update",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "files": [
+        {
+          "path": "convert.py",
+          "isNew": false,
+          "isDeleted": false,
+          "additions": 3,
+          "deletions": 0,
+          "hunks": [
+            {
+              "oldStart": 3,
+              "oldCount": 3,
+              "newStart": 3,
+              "newCount": 6,
+              "lines": [
+                {
+                  "type": "header",
+                  "content": "@@ -3,3 +3,6 @@"
+                },
+                {
+                  "type": "context",
+                  "content": "",
+                  "tokens": [
+                    {
+                      "text": "",
+                      "style": null
+                    }
+                  ]
+                },
+                {
+                  "type": "context",
+                  "content": "def f_to_c(f):",
+                  "tokens": [
+                    {
+                      "text": "def",
+                      "style": "keyword"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "f_to_c",
+                      "style": "definition"
+                    },
+                    {
+                      "text": "(",
+                      "style": "punctuation"
+                    },
+                    {
+                      "text": "f",
+                      "style": "variable"
+                    },
+                    {
+                      "text": ")",
+                      "style": "punctuation"
+                    },
+                    {
+                      "text": ":",
+                      "style": null
+                    }
+                  ]
+                },
+                {
+                  "type": "context",
+                  "content": "    return (f - 32) * 5 / 9",
+                  "tokens": [
+                    {
+                      "text": "    ",
+                      "style": null
+                    },
+                    {
+                      "text": "return",
+                      "style": "keyword"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "(",
+                      "style": "punctuation"
+                    },
+                    {
+                      "text": "f",
+                      "style": "variable"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "-",
+                      "style": "operator"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "32",
+                      "style": "number"
+                    },
+                    {
+                      "text": ")",
+                      "style": "punctuation"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "*",
+                      "style": "operator"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "5",
+                      "style": "number"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "/",
+                      "style": "operator"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "9",
+                      "style": "number"
+                    }
+                  ]
+                },
+                {
+                  "type": "add",
+                  "content": "",
+                  "tokens": [
+                    {
+                      "text": "",
+                      "style": null
+                    }
+                  ]
+                },
+                {
+                  "type": "add",
+                  "content": "def kelvin_to_c(k):",
+                  "tokens": [
+                    {
+                      "text": "def",
+                      "style": "keyword"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "kelvin_to_c",
+                      "style": "definition"
+                    },
+                    {
+                      "text": "(",
+                      "style": "punctuation"
+                    },
+                    {
+                      "text": "k",
+                      "style": "variable"
+                    },
+                    {
+                      "text": ")",
+                      "style": "punctuation"
+                    },
+                    {
+                      "text": ":",
+                      "style": null
+                    }
+                  ]
+                },
+                {
+                  "type": "add",
+                  "content": "    return k - 273.15",
+                  "tokens": [
+                    {
+                      "text": "    ",
+                      "style": null
+                    },
+                    {
+                      "text": "return",
+                      "style": "keyword"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "k",
+                      "style": "variable"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "-",
+                      "style": "operator"
+                    },
+                    {
+                      "text": " ",
+                      "style": null
+                    },
+                    {
+                      "text": "273.15",
+                      "style": "number"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "status": "ok"
+        }
+      ],
+      "error": null,
+      "subscriptionId": "00000000-0000-0000-0000-000000000000"
+    }
+  }
+}

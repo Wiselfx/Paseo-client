@@ -1,0 +1,71 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_workspaces_response",
+    "payload": {
+      "requestId": "t7-2",
+      "subscriptionId": "00000000-0000-0000-0000-000000000000",
+      "entries": [
+        {
+          "id": "wks_6adc97aa7e1e49e3",
+          "projectId": "prj_9f675e179792b526",
+          "projectDisplayName": "fixture-sandbox",
+          "projectCustomName": null,
+          "projectCustomIconRevision": null,
+          "projectRootPath": "/tmp/fixture-sandbox",
+          "workspaceDirectory": "/tmp/fixture-sandbox",
+          "setupStatus": null,
+          "projectKind": "git",
+          "workspaceKind": "local_checkout",
+          "name": "fixture sandbox",
+          "title": "fixture sandbox",
+          "pinnedAt": null,
+          "background": true,
+          "parentWorkspaceId": "wks_FIXTURE00000000",
+          "archivingAt": null,
+          "status": "attention",
+          "statusEnteredAt": "2026-11-08T21:30:58.795Z",
+          "activityAt": null,
+          "createdAt": "2026-11-08T21:02:44.322Z",
+          "diffStat": null,
+          "scripts": [],
+          "project": {
+            "projectKey": "prj_9f675e179792b526",
+            "projectName": "fixture-sandbox",
+            "workspaceName": "fixture sandbox",
+            "checkout": {
+              "cwd": "/tmp/fixture-sandbox",
+              "currentBranch": "main",
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-sandbox",
+              "isGit": true,
+              "isPaseoOwnedWorktree": false,
+              "mainRepoRoot": null
+            }
+          },
+          "gitRuntime": {
+            "currentBranch": "main",
+            "remoteUrl": null,
+            "isPaseoOwnedWorktree": false,
+            "isDirty": true,
+            "aheadBehind": null,
+            "aheadOfOrigin": null,
+            "behindOfOrigin": null
+          },
+          "githubRuntime": {
+            "featuresEnabled": false,
+            "pullRequest": null,
+            "error": null
+          },
+          "lastUserMessageAt": "2026-11-08T21:30:55.648Z"
+        }
+      ],
+      "emptyProjects": [],
+      "pageInfo": {
+        "nextCursor": null,
+        "prevCursor": null,
+        "hasMore": false
+      }
+    }
+  }
+}

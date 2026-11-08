@@ -1,0 +1,96 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.create.response",
+    "payload": {
+      "requestId": "t7-8",
+      "workspace": {
+        "id": "wks_147d5ce71e935b83",
+        "projectId": "prj_9f675e179792b526",
+        "projectDisplayName": "fixture-sandbox",
+        "projectCustomName": null,
+        "projectCustomIconRevision": null,
+        "projectRootPath": "/tmp/fixture-sandbox",
+        "workspaceDirectory": "/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+        "setupStatus": null,
+        "worktreeSlug": "fixture-t7",
+        "projectKind": "git",
+        "workspaceKind": "worktree",
+        "background": false,
+        "name": "fixture-t7-worktree-1794176306106",
+        "title": null,
+        "pinnedAt": null,
+        "archivingAt": null,
+        "status": "done",
+        "statusEnteredAt": "2026-11-08T22:18:26.236Z",
+        "activityAt": null,
+        "createdAt": "2026-11-08T22:18:26.236Z",
+        "lastUserMessageAt": null,
+        "diffStat": {
+          "additions": 0,
+          "deletions": 0
+        },
+        "scripts": [],
+        "gitRuntime": {
+          "currentBranch": "fixture-t7-worktree-1794176306106",
+          "remoteUrl": null,
+          "isPaseoOwnedWorktree": true,
+          "isDirty": false,
+          "aheadBehind": null,
+          "aheadOfOrigin": null,
+          "behindOfOrigin": null
+        },
+        "githubRuntime": null
+      },
+      "creation": {
+        "kind": "workspace",
+        "idempotencyKey": "fixture-t7-1794176306106",
+        "revision": 2,
+        "phase": "completed",
+        "error": null,
+        "workspaceId": "wks_147d5ce71e935b83",
+        "agentId": null,
+        "workspace": {
+          "id": "wks_147d5ce71e935b83",
+          "projectId": "prj_9f675e179792b526",
+          "projectDisplayName": "fixture-sandbox",
+          "projectCustomName": null,
+          "projectCustomIconRevision": null,
+          "projectRootPath": "/tmp/fixture-sandbox",
+          "workspaceDirectory": "/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+          "setupStatus": null,
+          "worktreeSlug": "fixture-t7",
+          "projectKind": "git",
+          "workspaceKind": "worktree",
+          "background": false,
+          "name": "fixture-t7-worktree-1794176306106",
+          "title": null,
+          "pinnedAt": null,
+          "archivingAt": null,
+          "status": "done",
+          "statusEnteredAt": "2026-11-08T22:18:26.236Z",
+          "activityAt": null,
+          "createdAt": "2026-11-08T22:18:26.236Z",
+          "lastUserMessageAt": null,
+          "diffStat": {
+            "additions": 0,
+            "deletions": 0
+          },
+          "scripts": [],
+          "gitRuntime": {
+            "currentBranch": "fixture-t7-worktree-1794176306106",
+            "remoteUrl": null,
+            "isPaseoOwnedWorktree": true,
+            "isDirty": false,
+            "aheadBehind": null,
+            "aheadOfOrigin": null,
+            "behindOfOrigin": null
+          },
+          "githubRuntime": null
+        }
+      },
+      "error": null,
+      "setupTerminalId": null
+    }
+  }
+}
