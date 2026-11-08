@@ -1,0 +1,439 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agent_timeline_response",
+    "payload": {
+      "requestId": "timeline",
+      "agentId": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+      "agent": {
+        "id": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+        "provider": "opencode",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_6adc97aa7e1e49e3",
+        "model": "opencode/inkling-2-small-free",
+        "thinkingOptionId": null,
+        "effectiveThinkingOptionId": "default",
+        "runtimeInfo": {
+          "provider": "opencode",
+          "sessionId": "ses_e43076a6fffeatOqWZtnt3gQa6",
+          "model": "opencode/inkling-2-small-free",
+          "thinkingOptionId": "default",
+          "modeId": "build"
+        },
+        "createdAt": "2026-11-08T21:02:50.312Z",
+        "updatedAt": "2026-11-08T21:03:06.592Z",
+        "lastUserMessageAt": "2026-11-08T21:02:57.839Z",
+        "status": "idle",
+        "activeTurn": null,
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true,
+          "supportsSessionListing": true,
+          "supportsDynamicModes": true,
+          "supportsMcpServers": true,
+          "supportsReasoningStream": true,
+          "supportsToolInvocations": true,
+          "supportsRewindBoth": true,
+          "supportsRewindConversation": false,
+          "supportsRewindFiles": false
+        },
+        "currentModeId": "build",
+        "availableModes": [
+          {
+            "id": "build",
+            "label": "Build",
+            "description": "The default agent. Executes tools based on configured permissions."
+          },
+          {
+            "id": "plan",
+            "label": "Plan",
+            "description": "Read-only agent for exploring the codebase and planning work before implementation."
+          }
+        ],
+        "features": [
+          {
+            "type": "toggle",
+            "id": "auto_accept",
+            "label": "Auto-accept",
+            "value": false
+          }
+        ],
+        "pendingPermissions": [],
+        "persistence": {
+          "provider": "opencode",
+          "sessionId": "ses_e43076a6fffeatOqWZtnt3gQa6",
+          "nativeHandle": "ses_e43076a6fffeatOqWZtnt3gQa6",
+          "metadata": {
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-sandbox",
+            "model": "opencode/inkling-2-small-free",
+            "title": "fixture sandbox",
+            "openCodeRuntimeNotices": [
+              {
+                "major": 2,
+                "timestamp": "2026-11-08T21:02:50.312Z"
+              }
+            ]
+          }
+        },
+        "title": "fixture sandbox",
+        "labels": {
+          "paseo.parent-agent-id": "00000000-0000-4000-8000-000000000001",
+          "paseo.open-agent-tab.cid_dd8d8d5ba4d34c73a3f1f795d49fb975": "true"
+        },
+        "archivedAt": null,
+        "lastUsage": {
+          "inputTokens": 19341,
+          "cachedInputTokens": 111488,
+          "outputTokens": 236,
+          "totalCostUsd": 0,
+          "contextWindowMaxTokens": 1048576,
+          "contextWindowUsedTokens": 19165
+        },
+        "requiresAttention": false,
+        "attentionReason": null,
+        "attentionTimestamp": null
+      },
+      "direction": "tail",
+      "projection": "projected",
+      "epoch": "da097735-b51a-4cf4-9a64-cc6aaa2e96c5",
+      "reset": false,
+      "staleCursor": false,
+      "gap": false,
+      "window": {
+        "minSeq": 1,
+        "maxSeq": 22,
+        "nextSeq": 23
+      },
+      "startCursor": {
+        "epoch": "da097735-b51a-4cf4-9a64-cc6aaa2e96c5",
+        "seq": 1
+      },
+      "endCursor": {
+        "epoch": "da097735-b51a-4cf4-9a64-cc6aaa2e96c5",
+        "seq": 22
+      },
+      "hasOlder": false,
+      "hasNewer": false,
+      "entries": [
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "tool_call",
+            "callId": "paseo-agent-message:ca38ce5a-1a02-4301-a6ae-1929202c6ab6",
+            "agentMessage": {
+              "event": "message",
+              "sender": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "title": "Parent session"
+              },
+              "text": "Reply with just the word ready."
+            },
+            "name": "agent_message",
+            "status": "completed",
+            "error": null,
+            "detail": {
+              "type": "plain_text",
+              "text": "Reply with just the word ready.",
+              "icon": "bot"
+            }
+          },
+          "timestamp": "2026-11-08T21:02:50.377Z",
+          "seqStart": 2,
+          "seqEnd": 3,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 2,
+              "endSeq": 3
+            }
+          ],
+          "turnId": "419ded1d-9551-4c7f-89dc-cb52d551f4d4",
+          "collapsed": [
+            "tool_lifecycle"
+          ]
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "reasoning",
+            "text": "The user message is a paseo-system agent-message asking me to \"Reply with just the word ready.\" It's from another agent. I should just reply with \"ready\"? But I'm an agent in a harness; the message says reply with just the word ready. There's no actual user task. I should probably just answer \"ready\". But maybe I should also consider context: another agent sent a message. The instruction says reply with just the word ready. I'll do that."
+          },
+          "timestamp": "2026-11-08T21:02:51.651Z",
+          "seqStart": 4,
+          "seqEnd": 6,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 4,
+              "endSeq": 6
+            }
+          ],
+          "turnId": "419ded1d-9551-4c7f-89dc-cb52d551f4d4",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "assistant_message",
+            "text": "ready",
+            "messageId": "msg_1bcf895e8001xy2Uzr5GBOHBjn"
+          },
+          "timestamp": "2026-11-08T21:02:51.651Z",
+          "seqStart": 7,
+          "seqEnd": 7,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 7,
+              "endSeq": 7
+            }
+          ],
+          "turnId": "419ded1d-9551-4c7f-89dc-cb52d551f4d4",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "user_message",
+            "text": "Think briefly first. Then: list the files here, read convert.py, add a function f_to_c(f) to convert.py, run python3 -c 'from convert import *; print(f_to_c(212))' to check it, and search the folder for the word weather. Finish with a short markdown summary that has a small table, a python code block, and a link to https://en.wikipedia.org/wiki/Fahrenheit .",
+            "clientMessageId": "fixture-msg-1",
+            "messageId": "fixture-msg-1"
+          },
+          "timestamp": "2026-11-08T21:02:57.839Z",
+          "seqStart": 8,
+          "seqEnd": 8,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 8,
+              "endSeq": 8
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "reasoning",
+            "text": "Let me start by listing files and reading convert.py."
+          },
+          "timestamp": "2026-11-08T21:02:58.669Z",
+          "seqStart": 9,
+          "seqEnd": 9,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 9,
+              "endSeq": 9
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "tool_call",
+            "callId": "functions.shell:0",
+            "name": "shell",
+            "status": "completed",
+            "detail": {
+              "type": "shell",
+              "command": "ls -la",
+              "output": "total 8\ndrwxr-xr-x 1 root root    46 Nov  8 21:02 .\ndrwxrwxrwt 1 root root 19820 Nov  8 21:02 ..\ndrwxr-xr-x 1 root root    82 Nov  8 21:02 .git\n-rw-r--r-- 1 root root    42 Nov  8 21:02 README.md\n-rw-r--r-- 1 root root    41 Nov  8 21:02 convert.py\n"
+            },
+            "error": null,
+            "metadata": {
+              "status": "completed",
+              "truncated": false,
+              "exit": 0
+            }
+          },
+          "timestamp": "2026-11-08T21:02:58.711Z",
+          "seqStart": 10,
+          "seqEnd": 10,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 10,
+              "endSeq": 10
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "tool_call",
+            "callId": "functions.read:1",
+            "name": "read",
+            "status": "completed",
+            "detail": {
+              "type": "read",
+              "filePath": "/tmp/fixture-sandbox/convert.py",
+              "content": "Read file /tmp/fixture-sandbox/convert.py, lines 1-2\n1: def c_to_f(c):\n2:     return c * 9 / 5 + 32"
+            },
+            "error": null,
+            "metadata": {
+              "truncated": false
+            }
+          },
+          "timestamp": "2026-11-08T21:03:00.717Z",
+          "seqStart": 11,
+          "seqEnd": 11,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 11,
+              "endSeq": 11
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "tool_call",
+            "callId": "functions.edit:2",
+            "name": "edit",
+            "status": "completed",
+            "detail": {
+              "type": "edit",
+              "filePath": "/tmp/fixture-sandbox/convert.py",
+              "oldString": "def c_to_f(c):\n    return c * 9 / 5 + 32",
+              "newString": "def c_to_f(c):\n    return c * 9 / 5 + 32\n\ndef f_to_c(f):\n    return (f - 32) * 5 / 9"
+            },
+            "error": null,
+            "metadata": {
+              "files": [
+                {
+                  "file": "convert.py",
+                  "patch": "Index: convert.py\n===================================================================\n--- convert.py\n+++ convert.py\n@@ -1,2 +1,5 @@\n def c_to_f(c):\n     return c * 9 / 5 + 32\n+\n+def f_to_c(f):\n+    return (f - 32) * 5 / 9\n",
+                  "status": "modified",
+                  "additions": 3,
+                  "deletions": 0
+                }
+              ],
+              "truncated": false
+            }
+          },
+          "timestamp": "2026-11-08T21:03:01.957Z",
+          "seqStart": 12,
+          "seqEnd": 12,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 12,
+              "endSeq": 12
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "tool_call",
+            "callId": "functions.shell:3",
+            "name": "shell",
+            "status": "completed",
+            "detail": {
+              "type": "shell",
+              "command": "python3 -c 'from convert import *; print(f_to_c(212))'",
+              "output": "100.0\n"
+            },
+            "error": null,
+            "metadata": {
+              "status": "completed",
+              "truncated": false,
+              "exit": 0
+            }
+          },
+          "timestamp": "2026-11-08T21:03:03.037Z",
+          "seqStart": 13,
+          "seqEnd": 14,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 13,
+              "endSeq": 14
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": [
+            "tool_lifecycle"
+          ]
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "tool_call",
+            "callId": "functions.grep:4",
+            "name": "grep",
+            "status": "completed",
+            "detail": {
+              "type": "search",
+              "query": "weather",
+              "toolName": "grep",
+              "content": "Found 1 matches\n/tmp/fixture-sandbox/README.md:\n  Line 3: A tiny weather logger.\n",
+              "numFiles": 0
+            },
+            "error": null,
+            "metadata": {
+              "matches": 1,
+              "truncated": false
+            }
+          },
+          "timestamp": "2026-11-08T21:03:05.282Z",
+          "seqStart": 15,
+          "seqEnd": 16,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 15,
+              "endSeq": 16
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": [
+            "tool_lifecycle"
+          ]
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "reasoning",
+            "text": "Done. Now the summary with table, code block, link."
+          },
+          "timestamp": "2026-11-08T21:03:06.012Z",
+          "seqStart": 17,
+          "seqEnd": 17,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 17,
+              "endSeq": 17
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "assistant_message",
+            "text": "Done. Summary:\n\n| Item | Result |\n|---|---|\n| Files listed | `.git/`, `README.md`, `convert.py` |\n| `f_to_c` added to `convert.py` | Yes |\n| `f_to_c(212)` check | `100.0` |\n| \"weather\" search | 1 match — `README.md` line 3 |\n\n```python\ndef f_to_c(f):\n    return (f - 32) * 5 / 9\n```\n\nReference: [Fahrenheit — Wikipedia](https://en.wikipedia.org/wiki/Fahrenheit)",
+            "messageId": "msg_1bcf8d02f001viEd23QZaGUfbk"
+          },
+          "timestamp": "2026-11-08T21:03:06.559Z",
+          "seqStart": 18,
+          "seqEnd": 22,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 18,
+              "endSeq": 22
+            }
+          ],
+          "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70",
+          "collapsed": [
+            "assistant_merge"
+          ]
+        }
+      ],
+      "error": null
+    }
+  }
+}

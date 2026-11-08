@@ -1,5 +1,5 @@
 # Keeps this repository's own dependencies current. Each ecosystem is grouped into one pull request per week,
-# because every pull request runs the full simulator suite.
+# to keep review load low.
 version: 2
 updates:
   # The actions used by the workflows in .github/workflows.
@@ -11,10 +11,9 @@ updates:
       actions:
         patterns: ["*"]
 
-  # The library's Swift package dependencies (Package.swift and Package.resolved). The demo project's
-  # swift-snapshot-testing pin lives in project.yml and is changed by hand, since a new version can change rendering.
+  # Swift package dependencies. PaseoCore has none on purpose; PaseoUI's live here.
   - package-ecosystem: "swift"
-    directory: "/"
+    directory: "/Packages/PaseoUI"
     schedule:
       interval: "weekly"
     groups:

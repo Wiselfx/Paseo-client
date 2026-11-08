@@ -1,0 +1,88 @@
+# Architecture
+
+Paseo Client is a native iPhone app for the [Paseo](https://github.com/getpaseo/paseo) daemon.
+The daemon runs your agents on your machine; this app is a window onto it that feels like a
+messaging app. The daemon is the backend and we never change it. Everything here is client.
+
+## Layers
+
+```
+App/                  Composition root: app entry, navigation, settings storage, Keychain.
+                      Thin. Owns no logic a test would want.
+Packages/PaseoUI      (Apple platforms only)
+  Features/*          Hosts · Agents · Conversation · Terminal · Files · Workspaces · Settings …
+                      Each depends on PaseoStore + DesignSystem. Never on another Feature,
+                      never on PaseoKit or PaseoProtocol directly.
+  DesignSystem        Tokens, typography, motion, haptics, glass, bubbles, the collapsible
+                      turn cells, rich previews (links, images, maps). No Paseo types.
+Packages/PaseoCore    (Foundation only: builds and tests on Linux)
+  PaseoStore          @Observable state the UI reads, and the pure logic behind it:
+                      TimelineState (merging deltas), TurnBuilder (grouping into turns).
+  PaseoKit            One WebSocket to one daemon: hello, requests, events, reconnect.
+  PaseoProtocol       Wire types. Mirrors packages/protocol/src/messages.ts upstream.
+Packages/ClaudeUI     Parts bin: the claude-ios-ui package this repo was forked from.
+                      Frozen. Copy pieces into DesignSystem; never depend on it from Core.
+```
+
+Dependencies point down only. SwiftPM targets enforce this: a wrong import fails to compile.
+
+### Why the split at PaseoCore
+
+Everything that talks to the daemon or decides what to show is plain Swift with Foundation and
+Observation. That code builds and tests on Linux, next to a live daemon, so it can be verified
+without a Mac. SwiftUI code can only be checked in Xcode, so it stays thin: views render store
+state and send intents back. If a view needs an `if` about protocol details, the logic belongs in
+the store.
+
+## Talking to the daemon
+
+- One `DaemonConnection` per host. The app uses LAN or Tailscale with the daemon password first;
+  the relay (E2E encrypted, QR pairing) comes later behind the same `DaemonClient` protocol.
+- Every frame is first decoded as an `InboundHeader` (outer type, message type, requestId). Responses
+  go to the waiting request; everything else becomes a `DaemonEvent`. The full decode happens only
+  where the type is known.
+- **Forward compatibility.** The daemon updates on its own schedule. Every enum decodes unknown
+  values into an `.unknown` case. Unknown fields are ignored. Never make a decoder throw on
+  something a newer daemon might add.
+- **Capabilities.** `ServerInfo.features` is checked in the store, once. Features read a plain flag.
+- **Fixtures, not guesses.** `Tools/capture-fixtures.mjs` records real traffic. Protocol tests
+  decode those files. When adding a message type, capture it first.
+- Upstream reference: the protocol docs in getpaseo/paseo, especially `docs/timeline-sync.md`,
+  `docs/protocol-compatibility.md` and `docs/agent-stream-disclosure.md`.
+
+## The turn
+
+The chat is not a list of messages. It's a list of **turns**, built by `TurnBuilder`:
+
+```
+Turn
+├─ userMessage                     the bubble you sent
+└─ segments
+   ├─ work   "2 thoughts, 1 tool call"   consecutive reasoning + tool calls, collapsible
+   ├─ prose  assistant markdown
+   ├─ work   …
+   └─ prose  final answer
+phase: running · completed · failed     duration: "Completed in 4s"
+```
+
+Live updates arrive as small deltas. `TimelineState` merges them into rows that look exactly like
+the daemon's projected history. Replaying the stream must equal the projection; a test checks
+this. Rows have stable ids so views keep identity while text streams in.
+
+## Rendering rich content
+
+Assistant prose renders as Markdown. Rich content (link previews, images, maps, file cards, code)
+comes from one registry in DesignSystem that maps detected content to a cell. Adding a new kind
+of rich content means adding one entry there, never a special case inside a view.
+
+## Feel
+
+Haptics, motion and the "alive" status lines (the playful words while the agent works) live in
+DesignSystem and are triggered by store state changes, not by individual views. That keeps the
+feel consistent and lets one place tune it.
+
+## Repo rules
+
+- Work happens on branches in worktrees. `main` only gets reviewed merges.
+- `ARCHITECTURE.md` is the map; tickets in `docs/tickets/` are the work orders.
+- Don't add a dependency without a note in the PR saying why it beats writing it.

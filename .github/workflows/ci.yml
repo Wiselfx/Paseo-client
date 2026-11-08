@@ -5,181 +5,19 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      record_references:
-        description: Re-record screenshot references and the accessibility baseline, and upload them as artifacts
-        type: boolean
-        default: false
 
 concurrency:
-  # A newer push or pull-request update cancels the older run; manual runs (such as re-recording references) are
-  # grouped separately so they neither cancel nor get cancelled by push runs.
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  XCODEGEN_VERSION: 2.45.4
-  DEMO_DIR: Examples/ClaudeUIDemo
-  PROJECT: ClaudeUIDemo.xcodeproj
-  SCHEME: ClaudeUIDemo
-  # Screenshot references are recorded on exactly this simulator. Changing it means re-recording them.
-  SIMULATOR_DEVICE: iPhone 15 Pro
-  SIMULATOR_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-27-0
-
 jobs:
-  checks:
-    name: Format, project sync, unit tests, iOS 26 SDK build
-    runs-on: macos-26
-    timeout-minutes: 30
-    env:
-      # The package supports iOS 26, so it must keep building with the iOS 26 SDK.
-      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Check formatting
-        run: swift format lint --strict --recursive --parallel .
-
-      - name: Check Xcode project matches project.yml
-        run: |
-          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" \
-            "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
-          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
-          (cd "$DEMO_DIR" && "$RUNNER_TEMP/xcodegen/bin/xcodegen" generate --quiet)
-          if ! git diff --exit-code -- "$DEMO_DIR/$PROJECT"; then
-            echo "::error::$PROJECT is out of date. Run 'xcodegen generate' in $DEMO_DIR and commit the result."
-            exit 1
-          fi
-
-      - name: Unit tests
-        run: swift test
-
-      - name: Build app and widget extension
-        working-directory: ${{ env.DEMO_DIR }}
-        run: |
-          xcodebuild build -project "$PROJECT" -scheme "$SCHEME" \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO | tail -n 50
-          exit "${PIPESTATUS[0]}"
-
-  api-compat:
-    name: Public API unchanged since the last release
-    runs-on: macos-26
+  core:
+    name: PaseoCore (Linux)
+    runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+    container: swift:6.2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Compare the public API with the latest tag
-        id: diff
-        run: |
-          baseline=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || git describe --tags --abbrev=0)
-          echo "Comparing against $baseline"
-          set +e
-          swift package diagnose-api-breaking-changes "$baseline" --products ClaudeUI --products ClaudeWidgets | tee api-diff.txt
-          status="${PIPESTATUS[0]}"
-          set -e
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          echo "baseline=$baseline" >> "$GITHUB_OUTPUT"
-
-      - name: Require the 'breaking' label when the API changed
-        if: ${{ steps.diff.outputs.status != '0' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "::warning::The public API differs from ${{ steps.diff.outputs.baseline }} (see the step above)."
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "Push to main: recorded as a warning only."
-            exit 0
-          fi
-          labels=$(gh pr view "${{ github.event.pull_request.number }}" --json labels --jq '.labels[].name')
-          if echo "$labels" | grep -qx "breaking"; then
-            echo "The pull request carries the 'breaking' label; the change is intentional. Make sure CHANGELOG.md and docs/VERSIONING.md cover it."
-            exit 0
-          fi
-          echo "::error::This pull request changes the public API (an added, removed or renamed public symbol). Either revert the API change, or add the 'breaking' label and document the change in CHANGELOG.md (an added action also needs a note that adopters' switches will warn)."
-          exit 1
-
-  simulator-tests:
-    name: Screenshot and UI tests (iOS 27)
-    # macOS minutes are free for public repositories. While the repository is private, run this job
-    # manually from the Actions tab.
-    if: ${{ !github.event.repository.private || github.event_name == 'workflow_dispatch' }}
-    needs: checks
-    runs-on: xcode-27
-    timeout-minutes: 90
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
-    defaults:
-      run:
-        working-directory: ${{ env.DEMO_DIR }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Create simulator
-        run: |
-          UDID=$(xcrun simctl create "CI $SIMULATOR_DEVICE" "$SIMULATOR_DEVICE" "$SIMULATOR_RUNTIME")
-          echo "SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
-          xcrun simctl boot "$UDID"
-
-      - name: Build for testing
-        run: |
-          xcodebuild build-for-testing -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "id=$SIMULATOR_UDID" -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO | tail -n 50
-          exit "${PIPESTATUS[0]}"
-
-      - name: Screenshot tests
-        env:
-          TEST_RUNNER_SNAPSHOT_TESTING_RECORD: ${{ inputs.record_references && 'all' || 'never' }}
-        run: |
-          xcodebuild test-without-building -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "id=$SIMULATOR_UDID" -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            -only-testing:ClaudeUISnapshotTests -resultBundlePath "$RUNNER_TEMP/SnapshotTests.xcresult" \
-            | tail -n 100
-          status="${PIPESTATUS[0]}"
-          # Recording always reports failures; the recorded images are the output.
-          [ "${{ inputs.record_references }}" = "true" ] || exit "$status"
-
-      - name: Upload recorded screenshots
-        if: ${{ inputs.record_references }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: recorded-snapshots
-          path: ${{ env.DEMO_DIR }}/SnapshotTests/__Snapshots__
-
-      - name: Record accessibility audit baseline
-        if: ${{ inputs.record_references }}
-        env:
-          TEST_RUNNER_ACCESSIBILITY_AUDIT_RECORD: "1"
-        run: |
-          xcodebuild test-without-building -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "id=$SIMULATOR_UDID" -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            -only-testing:ClaudeUIDemoUITests/AccessibilityAuditUITests | tail -n 50
-          exit "${PIPESTATUS[0]}"
-
-      - name: Upload recorded accessibility baseline
-        if: ${{ inputs.record_references }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: recorded-accessibility-baseline
-          path: ${{ env.DEMO_DIR }}/UITests/AccessibilityAuditBaseline.txt
-
-      - name: UI tests and accessibility audits
-        if: ${{ !inputs.record_references }}
-        run: |
-          xcodebuild test-without-building -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "id=$SIMULATOR_UDID" -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            -only-testing:ClaudeUIDemoUITests -resultBundlePath "$RUNNER_TEMP/UITests.xcresult" \
-            | tail -n 100
-          exit "${PIPESTATUS[0]}"
-
-      - name: Upload test results
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: simulator-test-results
-          path: ${{ runner.temp }}/*.xcresult
+      - name: Build and test
+        working-directory: Packages/PaseoCore
+        run: swift test

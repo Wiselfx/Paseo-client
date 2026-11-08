@@ -1,0 +1,22 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_stream",
+    "payload": {
+      "agentId": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+      "event": {
+        "type": "timeline",
+        "provider": "opencode",
+        "item": {
+          "type": "assistant_message",
+          "text": " check | `100.0` |\n| \"weather\" search | 1 match — `README.md` line 3 |\n\n```python\ndef f_to_c(f):\n    return (f - 32) * 5 / 9\n```\n\nReference: [Fahrenheit — Wikipedia](https://",
+          "messageId": "msg_1bcf8d02f001viEd23QZaGUfbk"
+        },
+        "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70"
+      },
+      "timestamp": "2026-11-08T21:03:06.488Z",
+      "seq": 21,
+      "epoch": "da097735-b51a-4cf4-9a64-cc6aaa2e96c5"
+    }
+  }
+}
