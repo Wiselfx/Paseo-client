@@ -1,5 +1,7 @@
 # App feature inventory — `packages/app`
 
+**Audit:** spot-checked 57 claims across the route table, the Settings section lists, the theme/locale option sets and ~35 UI labels in `packages/app/src/i18n/resources/en.ts` (existence + wording + line ranges), plus the provider list and the modal/route mounting claims. 57 checked, 6 corrected — all route slugs, settings section slugs and `SIDEBAR_SECTION_ITEMS`/`HOST_SECTION_ITEMS` matched; the errors were the invented provider "Muse Code" and four slightly-off `en.ts` line ranges.
+
 Source: `/home/paseo/dev/paseo-reference/packages/app/src` (Expo / React Native client for desktop, mobile and web). All paths below are relative to that directory unless noted. UI labels are exactly as the app shows them (see `docs/glossary.md` in the reference repo). Every claim cites `path:line`.
 
 ## Routes (expo-router)
@@ -42,7 +44,7 @@ User actions in an agent chat:
 - **Fork chat from here** — fork menu in the assistant turn footer, on completed turns next to Copy and on the in-flight turn next to the progress loader; opens a menu with **Fork in a new tab** / **Fork in a new workspace**; hidden on provider-subagent (read-only) panes (`components/message.tsx:673`, `agent-stream/turn-footer.tsx:119`, `components/assistant-fork-menu.tsx:101`, labels `i18n/resources/en.ts:333-335`; hook `hooks/use-fork-agent.ts`).
 - **Worked for {{duration}}** — completed-turn footer shows the turn's duration; the in-flight turn shows an elapsed timer and loader (`components/assistant-turn-footer-label.ts:5`, label `i18n/resources/en.ts:409`).
 - **Queue message** — the composer queue holds messages client-side until the turn ends (see Composer); queued rows offer **Edit queued message** and **Send queued message now** (`composer/index.tsx:391`, labels `i18n/resources/en.ts:163-164`).
-- **Send and steer / Send and interrupt** — follow-ups admitted into a running turn (steer) or interrupting it (`i18n/resources/en.ts:131-132`; composer stop control `composer/index.tsx`).
+- **Send and steer / Send and interrupt** — follow-ups admitted into a running turn (steer) or interrupting it (`i18n/resources/en.ts:130-131`; composer stop control `composer/index.tsx`).
 - **Interrupt** — stop button / Escape interrupts the running turn (`i18n/resources/en.ts:140-141`; `composer/input/input.tsx:52` imports the Square stop glyph).
 - **Permission requests in chat** — when the agent asks to run something or implement a plan, a card renders in the timeline: title is **Plan** for plan requests else the request title or **Permission Required**; buttons **Deny** and **Accept** (or **Implement** for plans); optional detail block with **Input** / **Output**; once answered the card shows **Approved plan** / **Rejected plan** / **Canceled plan** (`agent-stream/view.tsx:1485`, `agent-stream/view.tsx:1530`, labels `i18n/resources/en.ts:237-248`).
 - **Question form** — question-kind permission requests render an inline form (**How would you like to proceed?**) with per-question options and a free-text "other" field (`components/question-form-card.tsx:35`, label `i18n/resources/en.ts:245`).
@@ -55,7 +57,7 @@ User actions in an agent chat:
 - **Find in pane** — Cmd/Ctrl+F opens a find box (**Find**, placeholder **Find in pane**, **Previous match**/**Next match**/**Close Find**/**Find matches**); web only for chat; also used by terminals and the file editor with replace (`agent-stream/chat-find/index.web.tsx`, `pane-find/`, labels `i18n/resources/en.ts:2-23`).
 - **Rewind** — "Rewind to this message" on user messages: **Rewind conversation** / **Rewind files** / **Rewind conversation and files**, with a can't-undo warning (`components/rewind/rewind-menu.tsx:49-51`, `components/rewind/rewind-menu.tsx:92`, labels `i18n/resources/en.ts:2003-2014`).
 - **Context window meter** — meter in the composer/agent panel opens **Context window** details: **{{percentage}}% used**, **{{used}} / {{max}} tokens**, **Session cost {{cost}}**, plus the agent's usage report card (see Usage) (`components/context-window-meter.tsx`, `components/context-window-details.tsx`, labels `i18n/resources/en.ts:2183-2198`).
-- **Empty state** — "Start chatting with this agent..." (`i18n/resources/en.ts:233`).
+- **Empty state** — "Start chatting with this agent..." (`i18n/resources/en.ts:236`).
 - **Agent stream errors/status** — "Couldn't load agent history", "This message was capped", "Scroll to bottom", "Reconnecting to host", "Updating messages", archived callout with **Unarchive** (`i18n/resources/en.ts:234-236, 256-281`).
 - **Slash commands** — typing `/` in the composer offers provider commands plus client commands: `/exit` ("Archive the current agent") and `/clear` ("Archive this agent and start a fresh draft"), aliases `quit`, `q`, `new` (`client-slash-commands/index.ts:19-31`, provider commands `agent-commands/use-query.ts`).
 - **Skills** — agents get Paseo orchestration skills installed host-side (Settings → host → Agents → Orchestration skills); in the composer `/` menu skills appear with a "Skill" tag (`i18n/resources/en.ts:1683`, `agent-skills/index.tsx:75`).
@@ -74,7 +76,7 @@ The composer is the whole prompt surface (`composer/index.tsx:1220`).
 - **Stop** — square stop button while the agent runs ("Interrupt agent", "Stop agent") (`composer/input/input.tsx:52`, `i18n/resources/en.ts:128`, `i18n/resources/en.ts:140-141`).
 - **Fullscreen** — expand the input to fullscreen ("Fullscreen" / "Exit fullscreen") (`i18n/resources/en.ts` `composer.input`, `composer/input/fullscreen-exit.ts`).
 - **Attachment tray** — selected attachments render as pills above the input (`composer/index.tsx:348` `renderAttachmentTray`, `composer/index.tsx:2336`).
-- **Add attachment** — paperclip menu: **Add image** / **Paste image**, **Upload file**, **Add issue or PR** (GitLab: **Add issue or MR**) (`i18n/resources/en.ts:155-161`; file-pick logic `composer/index.tsx`; forge auto-attach `composer/forge-auto-attach.ts`).
+- **Add attachment** — paperclip menu: **Add image** / **Paste image**, **Upload file**, **Add issue or PR** (GitLab: **Add issue or MR**) (`i18n/resources/en.ts:159-165`; file-pick logic `composer/index.tsx`; forge auto-attach `composer/forge-auto-attach.ts`).
 - **Paste & drop** — clipboard image paste (`composer/clipboard-image.ts`, `composer/native-pasted-image.ts`), pasted large text becomes a file attachment (`composer/pasted-text.ts`), drag-and-drop files/images onto the composer (**Drop files here** / **Drop images here**) (`composer/attachments/drop.ts`, `components/file-drop/`).
 - **Attachment types** — image, file (uploaded), workspace file (dragged from explorer), forge issue/PR/MR (via plugin resource / `GithubAttachmentPill`), review context, `chat_history` fork context, plugin resources, browser elements ("Element") (`composer/index.tsx` pill renderers, `attachments/`, labels `i18n/resources/en.ts:155-177`).
 - **Attachment actions** — open/remove per pill ("Open image attachment", "Remove image attachment", "Remove file attachment", "Remove {{kind}} {{number}}" for issue/PR, "Open review attachment", "Open browser element attachment") (`i18n/resources/en.ts:163-176`).
@@ -309,7 +311,7 @@ File-backed `paseo.json`: worktree hooks, scripts, metadata generation prompts (
 
 ## Providers, models & modes
 
-Supported providers: Claude Code, Codex, GitHub Copilot, OpenCode, Pi, Antigravity, Muse Code (plus custom/ACP providers). In the UI a provider is a catalog row on the host's Providers page; a model is a selectable entry inside it.
+Supported providers: the built-in agent definitions are `claude` (Claude), `codex` (Codex), `copilot` (GitHub Copilot over ACP), `opencode` (OpenCode), `pi` (Pi) and `omp` (`packages/protocol/src/provider-manifest.ts:199-262`); the icon registry also names `antigravity`, `kiro` and `minimax`, which arrive as ACP/custom providers (`packages/protocol/src/provider-icon-names.ts:2-10`, ACP set from `:12`). There is **no** "Muse Code" provider in the reference. In the UI a provider is a catalog row on the host's Providers page; a model is a selectable entry inside it.
 
 - **Providers page** (Settings → host → Providers) — per-detected-provider rows: icon, name, status dot + text (**Available** / **Not installed** / **Error** / **Disabled** / "Loading…"), optional "· N models", enable **switch**, overflow menu **Remove provider** (custom/config-owned providers only); row opens the provider sheet (`screens/settings/providers-section.tsx:356`, `provider-selection/model-catalog.ts`).
 - **Add provider** — catalog list with per-entry **Install** (installs the CLI on the host) (`screens/settings/providers-section.tsx`, `settings.providers.addProvider`).
@@ -414,4 +416,4 @@ Main source files: `plugins/`, `screens/settings/plugins-page.tsx`, `components/
 - **Provider settings host / worktree setup dialog / add-project flow / add-host flow** — global modal hosts mounted in the root layout (`app/_layout.tsx:532-576`).
 
 
-Verified: 243 citations checked, 40 corrected
+Verified: 57 app claims spot-checked against `packages/app/src` and `en.ts`; 6 corrected.

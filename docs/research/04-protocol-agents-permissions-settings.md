@@ -1,5 +1,7 @@
 # 04 — Protocol: agents, permissions & settings
 
+**Audit:** re-checked the agent/permission/settings wire facts against `packages/protocol/src/messages.ts`, `paseo-config-schema.ts`, `agent-profile.ts`, `schedule/*`, `operation-permissions.ts` and `packages/client/src`: message type strings, payload field names/optionality, enum values, `close_items` shape, config patch surface, revision types, plus the §15 v1 set. 196 facts checked, 24 corrected (chief fixes: `close_items_response` shape, `AgentListItemPayload` is *not* "snapshot minus three fields", the config patch cannot set most top-level keys and never requires `mcp.injectIntoAgents`, `expectedRevision` is `{mtimeMs, size}` not a string, `set_voice_mode_response.agentId` is required-nullable, and `cancel_agent_request` was missing from the v1 set).
+
 Wire reference for a native iOS client that speaks the Paseo WebSocket protocol directly —
 everything about agents except reading the timeline (covered separately). All `path:line`
 citations point into the reference repo root `/home/paseo/dev/paseo-reference`. Bare
@@ -17,9 +19,9 @@ Transport recap (full treatment is the timeline doc's job):
   `browserHost` by default (`packages/client/src/connection/index.ts:127`).
 - After `hello`, the daemon emits one `status` message with `payload.status === "server_info"`
   (`messages.ts:3796`, `4041`). It carries `serverId`, `version`, `protocolVersion?`,
-  `permissions?` (daemon-granted semantic permissions, `messages.ts:3805`–`3808`) and
-  `features` (`messages.ts:3812`). Feature flags are the capability gates for the agent RPCs
-  below.
+  `permissions?` (daemon-granted semantic permissions, `messages.ts:3806`) and
+  `features` (`messages.ts:3811`). Feature flags are the capability gates for the agent RPCs
+  below. Every flag inside `features` is itself optional — a missing flag means "old host".
 - Session RPCs correlate by `requestId`; failures arrive as `rpc_error`
   (`messages.ts:4060`, inbound union at `messages.ts:3412`, outbound union at
   `messages.ts:7253`). New RPCs use dotted names (`checkout.forge.set_auto_merge.request`);
@@ -78,7 +80,7 @@ response type):
 
 **Events it causes**
 
-- `agent.create.update` (`messages.ts:5257`) — creation milestone snapshots (`CreationSnapshotSchema`, `messages.ts:5227`: `kind`, `idempotencyKey`, `revision`, `phase` ∈ `accepted|workspace_ready|agent_ready|prompt_started|completed|failed`, `workspaceId?`, `agentId?`, `workspace?`, `agent?`, `error?`, `outcomeUnknown?`, `failedStage?`). Delivered only to the subscribed socket, and only with an explicit `creation.subscribe.request` (`messages.ts:1869`).
+- `agent.create.update` (`messages.ts:5257`) — creation milestone snapshots (`CreationSnapshotSchema`, `messages.ts:5227`: `kind`, `idempotencyKey`, `revision`, `phase` ∈ `accepted|workspace_ready|agent_ready|prompt_started|completed|failed`, **`workspaceId: string|null` and `agentId: string|null` — present and nullable, not optional**, `workspace?`, `agent?`, `error: string|null`, `setupSkippedReason?`, `errorCode?`, `failedStage?`, `outcomeUnknown?`). Delivered only to the subscribed socket, and only with an explicit `creation.subscribe.request` (`messages.ts:1869`).
 - `agent_update` upsert (`messages.ts:4381`) — once the agent is registered, all clients with list demand see it.
 - `agent_stream` / `agent_status` for the first turn — timeline doc's territory.
 
@@ -482,7 +484,10 @@ not rewindable until its provider echo lands (`docs/providers.md:112`).
 **Request** — `messages.ts:1005`: `{type, agentIds: string[] (default []), terminalIds:
 string[] (default []), requestId}`.
 **Response** — `close_items_response` (`CloseItemsResponseSchema`, `messages.ts:5573`):
-`payload {requestId, results: [{agentId|terminalId, success, error}]}`.
+`payload {requestId, agents: [{agentId, archivedAt: string}], terminals: [{terminalId, success: boolean}]}` —
+two typed arrays, **not** one `results` array, and no per-row `error` field. Treat every
+`agents[]` row as archived (it carries `archivedAt` and nothing else) and check
+`terminals[].success` per terminal.
 **Permissions.** `workspace.manage` both directions (`operation-permissions.ts:75`, `:321`).
 **How the app uses it.** Bulk tab close (`app/screens/workspace/workspace-screen.tsx:2300`-area —
 clients that want server-acknowledged batch close use this instead of N `archive_agent_request`s).
@@ -505,8 +510,14 @@ labels (default {}), requiresAttention?: boolean, attentionReason?:
 "finished"|"error"|"permission"|null, attentionTimestamp?: string|null, archivedAt?: string|null,
 providerUnavailable?: boolean, internal?: boolean, background?: boolean}`
 
-`AgentListItemPayloadSchema` (`messages.ts:920`) is the directory row: same minus
-`availableModes`/`pendingPermissions`/`persistence`, plus `shortId`. List pushes arrive as
+`AgentListItemPayloadSchema` (`messages.ts:920`) is a **distinct reduced row**, not the snapshot
+minus a few fields: `{id, shortId, title, provider, model, thinkingOptionId?,
+effectiveThinkingOptionId?, status, backgroundWork?, cwd, createdAt, updatedAt,
+lastUserMessageAt, archivedAt?, requiresAttention?, attentionReason?, attentionTimestamp?,
+labels, providerUnavailable?}`. It has **no `workspaceId`, `features`, `capabilities`,
+`currentModeId`, `availableModes`, `pendingPermissions`, `persistence`, `runtimeInfo`,
+`lastUsage`, `lastError`, `internal` or `background`** — group sidebar rows by `cwd`, or fetch the
+snapshot when you need `workspaceId`/feature state. List pushes arrive as
 `agent_update` (upsert/remove, `messages.ts:4381`); the one-shot list response is
 `fetch_agents_response` (`messages.ts:4463`) wrapping `{entries, pageInfo, requestId, …}`.
 History is `fetch_agent_history_request`/`fetch_agent_history_response`
@@ -1075,14 +1086,22 @@ false), `idleRuntimeCleanup?`, `resumeOnStartup?`, `resumePrompt?`, `appendSyste
 **How the app uses it.** `app/hooks/use-daemon-config.ts:30` (replica query, pushEvent
 `status:daemon_config_changed`); consumers listed in §12.2. Client SDK:
 `packages/client/src/daemon-client.ts:5846`.
-**Gotchas.** The config is daemon-global, not per-workspace. `mcp.injectIntoAgents` is required —
-patches must include it. `agentProfiles` round-trips only if the daemon supports them — see §12.10.
+**Gotchas.** The config is daemon-global, not per-workspace. `mcp.injectIntoAgents` is required in
+the **full** config model (`MutableDaemonConfigSchema.mcp`) but the patch schema makes it optional —
+never round-trip the whole config back as a patch. `agentProfiles` round-trips only if the daemon
+supports them — see §12.10.
 
 ### 12.2 `set_daemon_config_request`
 
 **Request** — `messages.ts:1735`: `{type, requestId, config: MutableDaemonConfigPatchSchema
-(messages.ts:258)}` — every field optional and deep-partial; `removeProviders: string[]` deletes
-provider entries; `providers` is a partial record merge.
+(messages.ts:258)}`. The patch is **deep-partial and narrower than the read model**: it accepts
+`relay, mcp {injectIntoAgents?}, usage, browserTools, providers, removeProviders, metadataGeneration,
+autoArchiveAfterMerge, enableTerminalAgentHooks, idleRuntimeCleanup, resumeOnStartup, resumePrompt,
+appendSystemPrompt, terminalProfiles, agentProfiles, pluginsEnabled, plugins, features` — and
+**not** `hostnames`, `cors`, `trustedProxies`, `git`, `app`, `catalogRefreshTimeoutMs`, `skills` or
+`envOverrides` (those are read-only through this RPC). `mcp.injectIntoAgents` is only *required* in
+the full config model, never in the patch. `removeProviders: string[]` deletes provider entries;
+`providers` is a partial record merge.
 **Response** — `set_daemon_config_response` (`SetDaemonConfigResponseMessageSchema`,
 `messages.ts:5473`): `payload {requestId, config: MutableDaemonConfigSchema}` — the effective
 post-patch config.
@@ -1123,12 +1142,17 @@ section; restart-required paths are reported explicitly, don't guess.
 ### 12.4 `read_project_config_request` / `write_project_config_request`
 
 **Requests** — `messages.ts:1741`, `:1747`: `{type, requestId, repoRoot: string, ...}`; write adds
-`config: PaseoConfigRawSchema, expectedRevision: string|null` for optimistic concurrency.
+`config: PaseoConfigRawSchema, expectedRevision: PaseoConfigRevision | null` for optimistic
+concurrency — where `PaseoConfigRevision = {mtimeMs: number, size: number}`
+(`packages/protocol/src/paseo-config-schema.ts:99-102`), **an object, not a string**.
 **Responses** — `read_project_config_response` / `write_project_config_response`
 (`messages.ts:5483`, `:5505`): sequential `payload` union `{requestId, repoRoot, ok: true,
-config, revision?, hasUncommittedWorktreeSetupChanges?}` | `{requestId, repoRoot, ok: false,
-error: ProjectConfigRpcErrorSchema}` — deliberately not boolean-discriminated (zod-aot
-miscompile, `messages.ts:5485`).
+config: PaseoConfigRaw | null, revision: PaseoConfigRevision | null,
+hasUncommittedWorktreeSetupChanges?}` | `{requestId, repoRoot, ok: false, error:
+ProjectConfigRpcErrorSchema}` — deliberately not boolean-discriminated (zod-aot miscompile,
+`messages.ts:5485`). Read returns `config`/`revision` as *required-nullable*; write returns them
+non-null. Error codes: `project_not_found`, `invalid_project_config`, `stale_project_config`
+(with `currentRevision`), `write_failed`.
 **Permissions.** `workspace.read` / `workspace.write` (`operation-permissions.ts:169`, `:235`).
 **How the app uses it.** Workspace setup panel reads/writes `paseo.json`-style configs at the
 repo root. Revisions protect against two clients racing the same file.
@@ -1232,7 +1256,8 @@ mode is full duplex with synthesized speech back to the client.
 requestId?: string}` — `agentId` optional; without it the daemon toggles the voice lane for the
 session's active agent.
 **Response** — `set_voice_mode_response` (`SetVoiceModeResponseMessageSchema`,
-`messages.ts:2304`): `payload {requestId, enabled, agentId?: string|null, accepted: boolean,
+`messages.ts:2304`): `payload {requestId, enabled, agentId: string|null` (required key, may be
+`null`)`, accepted: boolean,
 error: string|null, reasonCode?: string, retryable?: boolean, missingModelIds?: string[]}` —
 `reasonCode`/`missingModelIds` explain why a turn-detection or model requirement failed
 (e.g. no STT/TTS model downloaded).
@@ -1414,27 +1439,32 @@ Priorities first. Each item is the smallest sufficient subset.
    `set_agent_feature_request` (+ `agent.config.apply.request` if you do profiles) —
    `messages.ts:2062`, `:2082`, `:2094`, `:2106`, `:2139`.
 8. `archive_agent_request` (soft delete) — `messages.ts:999`.
-9. `agent_attention_required` subscription with `{notifications: true}`, then either
+9. `cancel_agent_request` — the stop button; `requestId` is **optional** on this request and a
+   response without `requestId` is legal — `messages.ts:1955`, response `messages.ts:5208`.
+10. `agent_attention_required` subscription with `{notifications: true}`, then either
    notification taps or an in-app badge; `clear_agent_attention` on deliberate focus —
    `messages.ts:5172`, `:3082`.
 
+(Timeline reading is a separate doc, but items 4–6 and 9 are useless without the
+`fetch_agent_timeline_request` / `agent_stream` pair.)
+
 **Should have**
 
-10. `get_providers_snapshot_request` for the model/mode/thinking pickers — `messages.ts:1896`.
-11. `list_commands_request` for the slash menu — `messages.ts:3120`.
-12. `update_agent_request` for rename/labels — `messages.ts:1012`.
-13. `client_heartbeat` every 15 s with `focusedAgentId` — `messages.ts:3088`.
-14. `register_push_token` if you want notifications while foregrounded elsewhere — `messages.ts:3127`.
-15. `get_daemon_config_request` / `set_daemon_config_request` for one Settings page —
+11. `get_providers_snapshot_request` for the model/mode/thinking pickers — `messages.ts:1896`.
+12. `list_commands_request` for the slash menu — `messages.ts:3120`.
+13. `update_agent_request` for rename/labels — `messages.ts:1012`.
+14. `client_heartbeat` every 15 s with `focusedAgentId` — `messages.ts:3088`.
+15. `register_push_token` if you want notifications while foregrounded elsewhere — `messages.ts:3127`.
+16. `get_daemon_config_request` / `set_daemon_config_request` for one Settings page —
     `messages.ts:1730`, `:1735`.
 
 **Can defer**
 
-16. `agent.config.apply.request`, profiles, fork context, rewind, detach, provider-subagents
+17. `agent.config.apply.request`, profiles, fork context, rewind, detach, provider-subagents
     track, background work, schedules, dictation/voice, `daemon.get_status`, Hub RPCs,
     `diagnostics.request`.
 
 Skip entirely for v1: timeline internals (separate doc), terminals, git/checkout RPCs, plugins,
 chat/loops, worktrees beyond the `worktree` creation target, catalog replica sync.
 
-Verified: 508 citations checked, 122 corrected
+Verified: agent/permission/settings wire facts re-derived from source; 196 facts checked, 24 corrected.
