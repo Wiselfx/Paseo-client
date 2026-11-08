@@ -65,7 +65,93 @@ public struct Turn: Sendable, Equatable, Identifiable {
 public enum TurnBuilder {
     /// - Parameter activeTurnId: the agent's `activeTurn?.turnId`. That turn is `.running`.
     public static func turns(from rows: [TimelineRow], activeTurnId: String?) -> [Turn] {
-        fatalError("T3: not implemented")
+        var turns: [Turn] = []
+        var draft: TurnDraft?
+
+        func closeDraft() {
+            guard var current = draft else { return }
+            current.flushWork()
+            turns.append(current.finish(activeTurnId: activeTurnId))
+            draft = nil
+        }
+
+        for row in rows {
+            let targetId: String
+            if let turnId = row.turnId {
+                targetId = turnId
+            } else if let current = draft {
+                targetId = current.id
+            } else {
+                targetId = "orphan:\(row.id)"
+            }
+
+            if draft == nil || draft?.id != targetId {
+                closeDraft()
+                draft = TurnDraft(id: targetId)
+            }
+            draft?.add(row)
+        }
+        closeDraft()
+        return turns
+    }
+}
+
+/// Accumulates one turn while rows are walked in order.
+private struct TurnDraft {
+    var id: String
+    private var rows: [TimelineRow] = []
+    private var userMessage: TimelineRow?
+    private var segments: [Turn.Segment] = []
+    private var workRows: [TimelineRow] = []
+
+    mutating func add(_ row: TimelineRow) {
+        let isFirst = rows.isEmpty
+        rows.append(row)
+
+        if isFirst, case .userMessage = row.item {
+            userMessage = row
+            return
+        }
+
+        switch row.item {
+        case .reasoning, .toolCall:
+            workRows.append(row)
+        case .assistantMessage:
+            flushWork()
+            segments.append(.prose(row))
+        case .todo:
+            flushWork()
+            segments.append(.todo(row))
+        default:
+            flushWork()
+            segments.append(.notice(row))
+        }
+    }
+
+    mutating func flushWork() {
+        guard !workRows.isEmpty else { return }
+        segments.append(.work(Turn.WorkGroup(rows: workRows)))
+        workRows = []
+    }
+
+    func finish(activeTurnId: String?) -> Turn {
+        let isRunning = id == activeTurnId
+        let startedAt = rows.first.flatMap { PaseoDate.parse($0.timestamp) }
+        let endedAt = isRunning ? nil : rows.last.flatMap { PaseoDate.parse($0.timestamp) }
+
+        let phase: Turn.Phase
+        if isRunning {
+            phase = .running
+        } else if let errorMessage = rows.lazy.compactMap({ row -> String? in
+            if case .error(let message) = row.item { return message }
+            return nil
+        }).first {
+            phase = .failed(errorMessage)
+        } else {
+            phase = .completed
+        }
+
+        return Turn(id: id, userMessage: userMessage, segments: segments, phase: phase, startedAt: startedAt, endedAt: endedAt)
     }
 }
 
