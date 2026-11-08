@@ -61,3 +61,33 @@ actor Gate {
         waiters.removeAll()
     }
 }
+
+/// Awaits a non-throwing test task with a timeout. Returns `nil` instead of hanging forever.
+func awaitValue<T: Sendable>(
+    _ task: Task<T, Never>, timeout: Duration = .seconds(10)
+) async -> T? {
+    let (results, continuation) = AsyncStream.makeStream(
+        of: T?.self, bufferingPolicy: .unbounded)
+    let waiter = Task {
+        continuation.yield(await task.value)
+        continuation.finish()
+    }
+    let timer = Task {
+        do {
+            try await Task.sleep(for: timeout)
+        } catch {
+            return
+        }
+        task.cancel()
+        continuation.yield(nil)
+        continuation.finish()
+    }
+    defer {
+        waiter.cancel()
+        timer.cancel()
+    }
+    for await result in results {
+        return result
+    }
+    return nil
+}

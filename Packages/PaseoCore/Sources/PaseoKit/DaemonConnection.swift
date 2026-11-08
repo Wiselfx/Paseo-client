@@ -529,10 +529,18 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         }
     }
 
-    /// Every response message type in the protocol ends in `_response` or `.response`.
+    /// Response types that correlate a pending request without the usual `_response` suffix.
+    /// `create_agent_request` answers with `status`, permission answers with
+    /// `agent_permission_resolved`, and archive answers with the `agent_archived` broadcast.
+    private static let correlatedResponseTypes: Set<String> = [
+        "status", "agent_archived", "agent_permission_resolved",
+    ]
+
+    /// A message type that may settle a pending request or is a late response we should drop.
     private static func isResponseType(_ messageType: String?) -> Bool {
         guard let messageType else { return false }
         return messageType.hasSuffix("_response") || messageType.hasSuffix(".response")
+            || correlatedResponseTypes.contains(messageType)
     }
 
     private struct TimelineReplacement: Decodable, Sendable {

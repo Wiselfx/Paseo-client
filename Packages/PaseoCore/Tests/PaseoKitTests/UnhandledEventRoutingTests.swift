@@ -16,7 +16,7 @@ import Testing
         try await waitUntil { factory.count == 1 && factory.transports[0].outbound.count >= 1 }
         let transport = try #require(factory.transports.first)
         transport.push(text: try fixtureText("server_info"))
-        _ = try await connectTask.value
+        _ = try await awaitValue(connectTask)
 
         let eventLog = EventLog()
         let eventTask = eventLog.start(connection.events)
@@ -45,7 +45,7 @@ import Testing
         try await waitUntil { factory.count == 1 && factory.transports[0].outbound.count >= 1 }
         let transport = try #require(factory.transports.first)
         transport.push(text: try fixtureText("server_info"))
-        _ = try await connectTask.value
+        _ = try await awaitValue(connectTask)
 
         let eventLog = EventLog()
         let eventTask = eventLog.start(connection.events)

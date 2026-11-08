@@ -255,3 +255,40 @@ func streamEventType(_ event: AgentStreamEvent) -> String {
     case .unknown(let type): type
     }
 }
+
+struct TestWaitTimeout: Error {}
+
+/// Awaits a test task without ever blocking the suite forever. When `timeout` wins, the task is
+/// cancelled and `TestWaitTimeout` is thrown, so a broken implementation fails instead of hanging.
+func awaitValue<T: Sendable>(
+    _ task: Task<T, any Error>, timeout: Duration = .seconds(10)
+) async throws -> T {
+    let (results, continuation) = AsyncStream.makeStream(
+        of: Result<T, any Error>.self, bufferingPolicy: .unbounded)
+    let waiter = Task {
+        do {
+            continuation.yield(.success(try await task.value))
+        } catch {
+            continuation.yield(.failure(error))
+        }
+        continuation.finish()
+    }
+    let timer = Task {
+        do {
+            try await Task.sleep(for: timeout)
+        } catch {
+            return
+        }
+        task.cancel()
+        continuation.yield(.failure(TestWaitTimeout()))
+        continuation.finish()
+    }
+    defer {
+        waiter.cancel()
+        timer.cancel()
+    }
+    for await result in results {
+        return try result.get()
+    }
+    throw TestWaitTimeout()
+}

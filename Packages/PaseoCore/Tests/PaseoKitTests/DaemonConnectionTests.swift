@@ -25,7 +25,7 @@ import Testing
         #expect(hello["auth"]?["password"] == .string("secret"))
 
         transport.push(text: try fixtureText("server_info"))
-        let info = try await connectTask.value
+        let info = try await awaitValue(connectTask)
         #expect(info.serverId == "srv_FIXTURE")
         #expect(info.protocolVersion == 1)
         #expect(stateLog.states.contains(.connected(info)))
@@ -46,7 +46,7 @@ import Testing
         transport.push(text: #"{"type":"hello.rejected","reason":"incorrect_password"}"#)
 
         do {
-            _ = try await connectTask.value
+            _ = try await awaitValue(connectTask)
             Issue.record("connect() should have thrown")
         } catch let error as ConnectionError {
             #expect(error == .rejected(reason: "incorrect_password"))
@@ -73,7 +73,7 @@ import Testing
         transport.serverClose(code: 4401, reason: "incorrect_password")
 
         do {
-            _ = try await connectTask.value
+            _ = try await awaitValue(connectTask)
             Issue.record("connect() should have thrown")
         } catch let error as ConnectionError {
             #expect(error == .rejected(reason: "incorrect_password"))
@@ -90,7 +90,7 @@ import Testing
         transport.serverClose(code: 4401, reason: "")
 
         do {
-            _ = try await connectTask.value
+            _ = try await awaitValue(connectTask)
             Issue.record("connect() should have thrown")
         } catch let error as ConnectionError {
             #expect(error == .rejected(reason: "password_required"))
@@ -121,8 +121,8 @@ import Testing
         transport.push(text: try fixtureResponse("send_agent_message_response", requestId: messageId))
         transport.push(text: try fixtureResponse("fetch_agents_response", requestId: agentsId))
 
-        let agents = try await agentsTask.value
-        let message = try await messageTask.value
+        let agents = try await awaitValue(agentsTask)
+        let message = try await awaitValue(messageTask)
         #expect(agents.entries.first?.agent.provider == "opencode")
         #expect(message.accepted)
         #expect(message.agentId == "1c51ee58-765c-4f8d-bf27-7009338b361e")
@@ -146,7 +146,7 @@ import Testing
         let requestId = try #require(outboundRequestId(ofType: "send_agent_message_request", in: transport))
 
         do {
-            _ = try await sendTask.value
+            _ = try await awaitValue(sendTask)
             Issue.record("send() should have timed out")
         } catch let error as ConnectionError {
             #expect(error == .timeout)
@@ -218,7 +218,7 @@ import Testing
         first.serverClose(code: 1006, reason: "gone")
 
         do {
-            _ = try await sendTask.value
+            _ = try await awaitValue(sendTask)
             Issue.record("pending request should have failed")
         } catch let error as ConnectionError {
             #expect(error == .disconnected)
@@ -261,7 +261,7 @@ import Testing
         connection.disconnect()
 
         do {
-            _ = try await sendTask.value
+            _ = try await awaitValue(sendTask)
             Issue.record("pending request should have failed")
         } catch let error as ConnectionError {
             #expect(error == .disconnected)
@@ -284,7 +284,7 @@ import Testing
         try await waitUntil { factory.count == 1 && factory.transports[0].outbound.count >= 1 }
         let transport = try #require(factory.transports.first)
         transport.push(text: try fixtureText("server_info"))
-        let info = try await connectTask.value
+        let info = try await awaitValue(connectTask)
         return (transport, info)
     }
 }

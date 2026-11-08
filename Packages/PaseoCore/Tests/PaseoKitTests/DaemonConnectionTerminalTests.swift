@@ -21,7 +21,7 @@ import Testing
         #expect(hello["capabilities"]?["owned_subscriptions"] == nil)
 
         transport.push(text: try fixtureText("server_info"))
-        _ = try await connectTask.value
+        _ = try await awaitValue(connectTask)
     }
 
     @Test func binaryFramesArriveAsGenericBinaryEvents() async throws {
@@ -34,7 +34,7 @@ import Testing
         try await waitUntil { factory.count == 1 && factory.transports[0].outbound.count >= 1 }
         let transport = try #require(factory.transports.first)
         transport.push(text: try fixtureText("server_info"))
-        _ = try await connectTask.value
+        _ = try await awaitValue(connectTask)
 
         let frame = TerminalStreamFrame(
             opcode: .output, slot: 3, payload: Data("hello".utf8)
@@ -64,7 +64,7 @@ import Testing
         try await waitUntil { factory.count == 1 && factory.transports[0].outbound.count >= 1 }
         let transport = try #require(factory.transports.first)
         transport.push(text: try fixtureText("server_info"))
-        _ = try await connectTask.value
+        _ = try await awaitValue(connectTask)
 
         try await connection.send(TerminalInput.input("ls\r", terminalId: "t1"))
         try await waitUntil {

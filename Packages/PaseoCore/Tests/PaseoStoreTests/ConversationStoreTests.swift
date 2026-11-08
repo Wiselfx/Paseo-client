@@ -127,7 +127,7 @@ struct ConversationStoreTests {
         #expect(store.turns.last?.userMessage?.id == pendingRow.id)
 
         await gate.open()
-        await sending.value
+        #expect(await awaitValue(sending) != nil)
         #expect(store.actionError == nil)
         #expect(store.timeline.rows.contains { $0.isPending }, "stays until the daemon echoes it")
     }
