@@ -1,9 +1,6 @@
-import AgentsFeature
-import ConversationFeature
-import DesignSystem
-import HostsFeature
 import PaseoStore
 import SwiftUI
+import PaseoUI
 
 /// Navigation: connect → agents → conversation. Features never know about each other;
 /// they're wired together only here.

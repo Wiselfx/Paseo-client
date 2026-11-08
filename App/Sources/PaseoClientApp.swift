@@ -1,5 +1,5 @@
-import DesignSystem
 import SwiftUI
+import PaseoUI
 
 @main
 struct PaseoClientApp: App {

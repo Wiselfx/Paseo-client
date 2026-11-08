@@ -28,13 +28,7 @@ targets:
       - package: PaseoCore
         product: PaseoStore
       - package: PaseoUI
-        product: DesignSystem
-      - package: PaseoUI
-        product: HostsFeature
-      - package: PaseoUI
-        product: AgentsFeature
-      - package: PaseoUI
-        product: ConversationFeature
+        product: PaseoUI
     info:
       path: Resources/Info.plist
       properties:

@@ -7,15 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		017F930490C9F32B130E575B /* HostsFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 844C6D23837E5C8218C3CCDA /* HostsFeature */; };
 		021D7A4965E87D4DB3C858D1 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A6CDB060911D3A7AA1CF59 /* AppModel.swift */; };
 		049611178B625E349F188C4E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5BA54415A9997E52BAA8657 /* RootView.swift */; };
 		13ED90D46385376ABC5FBBCF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9088EF8AC3E2485FA76459E0 /* Assets.xcassets */; };
-		1CA6FAA8D88D9880B2871C61 /* AgentsFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 096BE21136BFC1FEFE0A1C2A /* AgentsFeature */; };
 		57436A836FCA8CAF191560A7 /* PaseoStore in Frameworks */ = {isa = PBXBuildFile; productRef = F6A7FCB2B479A9CC8D1703B5 /* PaseoStore */; };
 		7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */; };
-		7D870FF7D3951B959C2F5C62 /* ConversationFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 83B8C3487425B9DD0AD01562 /* ConversationFeature */; };
-		A171A48B81A851AF22D95177 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 6807B21097244F4D3EC8432A /* DesignSystem */; };
+		A171A48B81A851AF22D95177 /* PaseoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 63BF84ADEB1A8868F43ED3F6 /* PaseoUI */; };
 		CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64108FA9FC10EE10BE16975 /* Keychain.swift */; };
 /* End PBXBuildFile section */
 
@@ -37,10 +34,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				57436A836FCA8CAF191560A7 /* PaseoStore in Frameworks */,
-				A171A48B81A851AF22D95177 /* DesignSystem in Frameworks */,
-				017F930490C9F32B130E575B /* HostsFeature in Frameworks */,
-				1CA6FAA8D88D9880B2871C61 /* AgentsFeature in Frameworks */,
-				7D870FF7D3951B959C2F5C62 /* ConversationFeature in Frameworks */,
+				A171A48B81A851AF22D95177 /* PaseoUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,10 +106,7 @@
 			name = PaseoClient;
 			packageProductDependencies = (
 				F6A7FCB2B479A9CC8D1703B5 /* PaseoStore */,
-				6807B21097244F4D3EC8432A /* DesignSystem */,
-				844C6D23837E5C8218C3CCDA /* HostsFeature */,
-				096BE21136BFC1FEFE0A1C2A /* AgentsFeature */,
-				83B8C3487425B9DD0AD01562 /* ConversationFeature */,
+				63BF84ADEB1A8868F43ED3F6 /* PaseoUI */,
 			);
 			productName = PaseoClient;
 			productReference = E0973B3517160F9D49A8F309 /* PaseoClient.app */;
@@ -377,21 +368,9 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		096BE21136BFC1FEFE0A1C2A /* AgentsFeature */ = {
+		63BF84ADEB1A8868F43ED3F6 /* PaseoUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = AgentsFeature;
-		};
-		6807B21097244F4D3EC8432A /* DesignSystem */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = DesignSystem;
-		};
-		83B8C3487425B9DD0AD01562 /* ConversationFeature */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = ConversationFeature;
-		};
-		844C6D23837E5C8218C3CCDA /* HostsFeature */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = HostsFeature;
+			productName = PaseoUI;
 		};
 		F6A7FCB2B479A9CC8D1703B5 /* PaseoStore */ = {
 			isa = XCSwiftPackageProductDependency;
