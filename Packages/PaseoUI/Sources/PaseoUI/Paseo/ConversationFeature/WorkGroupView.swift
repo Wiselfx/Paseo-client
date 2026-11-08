@@ -100,7 +100,7 @@ struct StepView: View {
 }
 
 extension ToolCallPresentation.Status {
-    var codeBlockStatus: CodeBlock.Status {
+    var codeBlockStatus: OutputBlock.Status {
         switch self {
         case .running: .running
         case .succeeded: .succeeded

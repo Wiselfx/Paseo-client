@@ -3,7 +3,7 @@ import UIKit
 
 /// Terminal-style output: an optional command line, then output that scrolls both ways inside a
 /// capped height, so a 2,000-line log never takes over the conversation.
-public struct CodeBlock: View {
+public struct OutputBlock: View {
     public enum Status: Sendable { case running, succeeded, failed, plain }
 
     var title: String?
@@ -60,8 +60,8 @@ public struct CodeBlock: View {
 }
 
 public struct StatusDot: View {
-    var status: CodeBlock.Status
-    public init(status: CodeBlock.Status) { self.status = status }
+    var status: OutputBlock.Status
+    public init(status: OutputBlock.Status) { self.status = status }
 
     public var body: some View {
         switch status {

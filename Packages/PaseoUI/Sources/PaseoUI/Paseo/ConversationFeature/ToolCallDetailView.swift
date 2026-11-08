@@ -6,7 +6,7 @@ import SwiftUI
 struct ToolCallDetailView: View {
     let call: ToolCall
 
-    private var status: CodeBlock.Status { ToolCallPresentation(call).status.codeBlockStatus }
+    private var status: OutputBlock.Status { ToolCallPresentation(call).status.codeBlockStatus }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -23,11 +23,11 @@ struct ToolCallDetailView: View {
     @ViewBuilder private var content: some View {
         switch call.detail {
         case .shell(let command, let cwd, let output, _):
-            CodeBlock(title: cwd.map(Self.lastPathComponent), command: command, output: output, status: status)
+            OutputBlock(title: cwd.map(Self.lastPathComponent), command: command, output: output, status: status)
         case .read(let path, let content):
-            CodeBlock(title: path, output: content)
+            OutputBlock(title: path, output: content)
         case .write(let path, let content):
-            CodeBlock(title: path, output: content)
+            OutputBlock(title: path, output: content)
         case .edit(let path, let oldString, let newString, let unifiedDiff):
             DiffView(path: path, lines: DiffLine.parse(unifiedDiff: unifiedDiff, old: oldString, new: newString))
         case .search(let search):
@@ -37,7 +37,7 @@ struct ToolCallDetailView: View {
                 if let link = URL(string: url) {
                     Link(url, destination: link).font(Typeset.caption).lineLimit(1)
                 }
-                if let result, !result.isEmpty { CodeBlock(output: result) }
+                if let result, !result.isEmpty { OutputBlock(output: result) }
             }
         case .subAgent(_, let description, _):
             if let description { Text(description).font(Typeset.chrome).foregroundStyle(Palette.secondaryInk) }
@@ -46,9 +46,9 @@ struct ToolCallDetailView: View {
         case .plan(let text):
             Text(text).font(Typeset.proseSecondary).foregroundStyle(Palette.ink).textSelection(.enabled)
         case .worktreeSetup(_, _, let log):
-            CodeBlock(output: log)
+            OutputBlock(output: log)
         case .unknown(_, let raw):
-            CodeBlock(output: Self.describe(raw))
+            OutputBlock(output: Self.describe(raw))
         }
     }
 
@@ -154,9 +154,9 @@ struct SearchResultsView: View {
                     }
                 }
             } else if let files = search.filePaths, !files.isEmpty {
-                CodeBlock(output: files.joined(separator: "\n"))
+                OutputBlock(output: files.joined(separator: "\n"))
             } else if let content = search.content, !content.isEmpty {
-                CodeBlock(output: content)
+                OutputBlock(output: content)
             } else {
                 Text("No results").font(Typeset.caption).foregroundStyle(Palette.tertiaryInk)
             }
