@@ -57,12 +57,25 @@ public struct TimelineState: Sendable, Equatable {
 
     /// Merges a fetched page. See T2 for tail/before/after and reset semantics.
     public mutating func applyPage(_ page: FetchAgentTimelineRequest.Response) {
-        let pageRows = page.entries.map { Self.row(from: $0) }
+        var pageRows = page.entries.map { Self.row(from: $0) }
+
+        // A page can already contain a message we still show as pending (sent, then the page
+        // was fetched before the stream echo arrived). Confirm it in place: the page row takes
+        // the pending row's id so the bubble keeps its view identity.
+        var pending = rows.filter(\.isPending)
+        if !pending.isEmpty {
+            for index in pageRows.indices {
+                guard case .userMessage(let message) = pageRows[index].item, let clientId = message.clientMessageId,
+                    let pendingIndex = pending.firstIndex(where: { $0.id == "local:\(clientId)" })
+                else { continue }
+                pageRows[index].id = pending[pendingIndex].id
+                pending.remove(at: pendingIndex)
+            }
+        }
 
         if page.reset || (epoch != nil && epoch != page.epoch) {
-            rows = pageRows
+            rows = pageRows + pending
         } else {
-            let pending = rows.filter(\.isPending)
             let existing = rows.filter { !$0.isPending }
             let mergedIntervals = Self.mergeIntervals(pageRows.map { ($0.seqStart, $0.seqEnd) })
             let kept = existing.filter { !Self.overlapsAny($0.seqStart, $0.seqEnd, intervals: mergedIntervals) }

@@ -4,8 +4,12 @@ import PaseoProtocol
 /// One exchange: what you asked, the work the agent did, and what it said.
 /// This is the unit the chat renders; see ARCHITECTURE.md "The turn".
 public struct Turn: Sendable, Equatable, Identifiable {
-    /// The daemon's `turnId`, or `orphan:<first row id>` for rows without one.
+    /// View identity: the id of the turn's first row. Stable while the turn streams and when a
+    /// pending user message is confirmed (rows keep their ids; see `TimelineRow.id`).
     public var id: String
+    /// The daemon's turn id. Nil for a turn that is only a pending message so far, or for rows
+    /// the daemon sent without one.
+    public var turnId: String?
     /// The row whose item is `.userMessage`, if the turn starts with one. Not repeated in `segments`.
     public var userMessage: TimelineRow?
     /// Everything after the user message, in order.
@@ -76,18 +80,21 @@ public enum TurnBuilder {
         }
 
         for row in rows {
-            let targetId: String
+            // Grouping key: the daemon's turn id; rows without one join the current turn.
+            // A user message without one (just sent, not confirmed) always starts a new turn.
+            let startsPendingTurn = row.turnId == nil && { if case .userMessage = row.item { true } else { false } }()
+            let key: String
             if let turnId = row.turnId {
-                targetId = turnId
-            } else if let current = draft {
-                targetId = current.id
+                key = turnId
+            } else if let current = draft, !startsPendingTurn {
+                key = current.key
             } else {
-                targetId = "orphan:\(row.id)"
+                key = "untracked:\(row.id)"
             }
 
-            if draft == nil || draft?.id != targetId {
+            if draft == nil || draft?.key != key {
                 closeDraft()
-                draft = TurnDraft(id: targetId)
+                draft = TurnDraft(key: key, turnId: row.turnId, id: row.id)
             }
             draft?.add(row)
         }
@@ -98,7 +105,18 @@ public enum TurnBuilder {
 
 /// Accumulates one turn while rows are walked in order.
 private struct TurnDraft {
+    /// Grouping key while walking rows.
+    var key: String
+    var turnId: String?
+    /// The first row's id.
     var id: String
+
+    init(key: String, turnId: String?, id: String) {
+        self.key = key
+        self.turnId = turnId
+        self.id = id
+    }
+
     private var rows: [TimelineRow] = []
     private var userMessage: TimelineRow?
     private var segments: [Turn.Segment] = []
@@ -135,7 +153,7 @@ private struct TurnDraft {
     }
 
     func finish(activeTurnId: String?) -> Turn {
-        let isRunning = id == activeTurnId
+        let isRunning = turnId != nil && turnId == activeTurnId
         let startedAt = rows.first.flatMap { PaseoDate.parse($0.timestamp) }
         let endedAt = isRunning ? nil : rows.last.flatMap { PaseoDate.parse($0.timestamp) }
 
@@ -151,7 +169,7 @@ private struct TurnDraft {
             phase = .completed
         }
 
-        return Turn(id: id, userMessage: userMessage, segments: segments, phase: phase, startedAt: startedAt, endedAt: endedAt)
+        return Turn(id: id, turnId: turnId, userMessage: userMessage, segments: segments, phase: phase, startedAt: startedAt, endedAt: endedAt)
     }
 }
 

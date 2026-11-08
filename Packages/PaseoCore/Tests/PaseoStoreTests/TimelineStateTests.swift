@@ -98,4 +98,28 @@ import PaseoProtocol
         state.applyPage(reset)
         #expect(state.rows.map(\.seqStart) == tail.entries.map(\.seqStart))
     }
+
+    /// The page arrives before the stream echo: the pending bubble is confirmed, not duplicated.
+    @Test func pageConfirmsPendingMessage() throws {
+        var state = TimelineState()
+        state.applyPage(try Load.page(before: 8))
+        state.addPendingUserMessage(text: "Think briefly first…", clientMessageId: "fixture-msg-1", timestamp: "2026-11-08T21:00:00.000Z")
+        state.applyPage(try Load.page())
+        let users = state.rows.filter { if case .userMessage = $0.item { true } else { false } }
+        #expect(users.count == 1)
+        #expect(users.first?.id == "local:fixture-msg-1")
+        #expect(users.first?.isPending == false)
+        #expect(state.rows.allSatisfy { !$0.isPending })
+    }
+
+    @Test func resetKeepsUnconfirmedPendingMessages() throws {
+        var state = TimelineState()
+        state.applyPage(try Load.page(before: 8))
+        state.addPendingUserMessage(text: "still sending", clientMessageId: "c-new", timestamp: "2026-11-08T21:00:00.000Z")
+        var reset = try Load.page(before: 8)
+        reset.reset = true
+        state.applyPage(reset)
+        #expect(state.rows.last?.id == "local:c-new")
+        #expect(state.rows.last?.isPending == true)
+    }
 }

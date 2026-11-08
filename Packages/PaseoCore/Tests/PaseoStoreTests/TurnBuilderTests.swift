@@ -32,7 +32,8 @@ import PaseoProtocol
         #expect(!work.isActive)
         #expect(prose.seqStart == 18)
         #expect(turn.phase == .completed)
-        #expect(turn.id == "47c9ec71-6933-42d8-b8c9-8984cc788c70")
+        #expect(turn.turnId == "47c9ec71-6933-42d8-b8c9-8984cc788c70")
+        #expect(turn.id == "seq:8", "a turn's identity is its first row")
         let duration = try #require(turn.duration)
         #expect(duration >= 0 && duration < 600)
     }
@@ -72,8 +73,29 @@ import PaseoProtocol
             row("seq:3", nil, .assistantMessage(.init(text: "hello"))),
         ]
         let turns = TurnBuilder.turns(from: rows, activeTurnId: nil)
-        #expect(turns.map(\.id) == ["orphan:seq:1", "t1"])
+        #expect(turns.map(\.id) == ["seq:1", "seq:2"])
+        #expect(turns.map(\.turnId) == [nil, "t1"])
         #expect(turns[1].segments.map(\.id) == ["seq:3"])
+    }
+
+    /// A just-sent message has no turn id yet. It must start its own turn, and that turn must keep
+    /// its identity when the daemon confirms the message and assigns the turn id.
+    @Test func pendingMessageStartsItsOwnStableTurn() {
+        let done = row("seq:1", "t1", .assistantMessage(.init(text: "previous answer")))
+        var pending = row("seq:2", nil, .userMessage(.init(text: "next question", clientMessageId: "c1")))
+        pending.id = "local:c1"
+        pending.isPending = true
+        let before = TurnBuilder.turns(from: [done, pending], activeTurnId: nil)
+        #expect(before.map(\.id) == ["seq:1", "local:c1"])
+        #expect(before[1].userMessage?.id == "local:c1")
+
+        var confirmed = pending
+        confirmed.isPending = false
+        confirmed.turnId = "t2"
+        let reasoning = row("seq:3", "t2", .reasoning(.init(text: "hm")))
+        let after = TurnBuilder.turns(from: [done, confirmed, reasoning], activeTurnId: "t2")
+        #expect(after.map(\.id) == ["seq:1", "local:c1"])
+        #expect(after[1].phase == .running)
     }
 
     private func row(_ id: String, _ turnId: String?, _ item: TimelineItem) -> TimelineRow {
