@@ -19,6 +19,8 @@ public final class HostSession {
     public private(set) var projects: [String: ProjectPlacement] = [:]
     /// Last error from loading the agent list, for display.
     public private(set) var agentsError: String?
+    /// Live terminals and workspace scripts for every opened workspace.
+    public let terminals: TerminalsStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -32,6 +34,7 @@ public final class HostSession {
     /// so it can show login errors before this exists).
     public init(client: any DaemonClient) {
         self.client = client
+        self.terminals = TerminalsStore(client: client)
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
@@ -105,6 +108,7 @@ public final class HostSession {
 
     private func handle(state: ConnectionState) async {
         connection = state
+        await terminals.handle(connection: state)
         switch state {
         case .connected(let info):
             serverInfo = info
@@ -144,8 +148,11 @@ public final class HostSession {
             guard let store = conversations[agentId] else { return }
             await store.reloadTail()
 
-        case .unhandled:
-            break
+        case .unhandled(let messageType, let raw):
+            terminals.handle(messageType: messageType, raw: raw)
+
+        case .binaryFrame(let data):
+            terminals.handle(binaryFrame: data)
         }
     }
 

@@ -205,6 +205,29 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
     public var events: AsyncStream<DaemonEvent> { eventsStream }
     public var states: AsyncStream<ConnectionState> { statesStream }
 
+    public func send<M: PaseoOutboundMessage>(_ message: M) async throws {
+        let transport = mutex.withLock { core -> (any WebSocketTransport)? in
+            guard case .connected = core.state, let transport = core.transport else { return nil }
+            return transport
+        }
+        guard let transport else { throw ConnectionError.disconnected }
+
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(SessionOutboundEnvelope(message))
+        } catch {
+            throw ConnectionError.protocolViolation("could not encode \(M.type): \(error)")
+        }
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw ConnectionError.protocolViolation("\(M.type) did not encode as UTF-8")
+        }
+        do {
+            try await transport.send(text: text)
+        } catch {
+            throw Self.connectionError(from: error)
+        }
+    }
+
     // MARK: Lifecycle helpers
 
     /// Invalidates old async work, fails old requests, closes the old socket and moves to
@@ -418,7 +441,8 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
     private func handleFrame(_ frame: WebSocketFrame, transportID: Int, generation: Int) {
         let data: Data
         switch frame {
-        case .binary:
+        case .binary(let binary):
+            emitEvent(.binaryFrame(binary))
             return
         case .text(let text):
             guard let encoded = text.data(using: .utf8) else { return }

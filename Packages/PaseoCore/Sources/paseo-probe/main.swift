@@ -36,6 +36,9 @@ let usage = """
       chat <agentId> <text> [secs]
                                full stack (HostSession/ConversationStore): send text, print the
                                last turn as it changes until the agent finishes (default 180s)
+      terminal <workspaceId> [cwd]
+                               create a terminal in a workspace, attach, run `echo hello`, print
+                               the escaped bytes, detach and kill it (default cwd /tmp/fixture-sandbox)
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -274,6 +277,12 @@ do {
         guard arguments.commandArguments.count >= 2 else { throw ProbeError("chat needs <agentId> <text>") }
         let seconds = arguments.commandArguments.count > 2 ? Int(arguments.commandArguments[2]) ?? 180 : 180
         try await runChat(connection, agentId: arguments.commandArguments[0], text: arguments.commandArguments[1], seconds: seconds)
+    case "terminal":
+        guard let workspaceId = arguments.commandArguments.first else {
+            throw ProbeError("terminal needs a <workspaceId>")
+        }
+        let cwd = arguments.commandArguments.count > 1 ? arguments.commandArguments[1] : "/tmp/fixture-sandbox"
+        try await runTerminal(connection, workspaceId: workspaceId, cwd: cwd)
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -327,6 +336,71 @@ func runChat(_ connection: DaemonConnection, agentId: String, text: String, seco
         }
     }
     session.closeConversation(agentId)
+}
+
+@MainActor
+func runTerminal(_ connection: DaemonConnection, workspaceId: String, cwd: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    let store = session.terminals
+
+    let supportDeadline = Date().addingTimeInterval(5)
+    while !store.isSupported, Date() < supportDeadline {
+        try await Task.sleep(for: .milliseconds(50))
+    }
+    guard store.isSupported else { throw ProbeError("host does not support terminal restore modes") }
+    await store.open(workspaceId: workspaceId, cwd: cwd)
+
+    let terminal = await store.createTerminal(in: workspaceId, cwd: cwd, name: "paseo-probe")
+    guard let terminal else { throw ProbeError("create terminal failed: \(store.error ?? "unknown")") }
+    print("created \(terminal.id) name=\(terminal.name) cwd=\(terminal.cwd ?? "-")")
+
+    let stream = await store.attach(terminal.id, size: TerminalSize(rows: 24, cols: 80))
+    let collector = Task { () -> (bytes: Data, markers: [String]) in
+        var bytes = Data()
+        var markers: [String] = []
+        for await output in stream {
+            switch output {
+            case .replayBegin(let metadata):
+                markers.append(
+                    "replayBegin \(metadata.rows)x\(metadata.cols) history=\(metadata.retainedHistoryLines)")
+            case .output(let data):
+                bytes.append(data)
+            case .replayEnd:
+                markers.append("replayEnd")
+            case .exited(let error):
+                markers.append("exited \(error ?? "closed")")
+                return (bytes, markers)
+            }
+        }
+        return (bytes, markers)
+    }
+
+    store.sendInput("printf 'hello\\n'; ls\r", to: terminal.id)
+    try await Task.sleep(for: .seconds(2))
+    store.detach(terminal.id)
+    let received = await collector.value
+    print("markers: \(received.markers.joined(separator: ", "))")
+    print("bytes: \(escapedTerminalBytes(received.bytes))")
+
+    let killed = await store.killTerminal(terminal.id)
+    print("killed: \(killed) error=\(store.error ?? "none")")
+    guard killed else { throw ProbeError("kill terminal failed: \(store.error ?? "unknown")") }
+}
+
+func escapedTerminalBytes(_ data: Data) -> String {
+    var out = ""
+    for byte in data {
+        switch byte {
+        case 0x0A: out += "\\n"
+        case 0x0D: out += "\\r"
+        case 0x09: out += "\\t"
+        case 0x20..<0x7F: out.append(Character(UnicodeScalar(byte)))
+        default: out += String(format: "\\x%02x", byte)
+        }
+    }
+    return out
 }
 
 @MainActor

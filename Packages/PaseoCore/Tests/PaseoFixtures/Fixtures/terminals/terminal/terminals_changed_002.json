@@ -1,0 +1,10 @@
+{
+  "type": "session",
+  "message": {
+    "type": "terminals_changed",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "terminals": []
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "type": "session",
+  "message": {
+    "type": "create_terminal_response",
+    "payload": {
+      "terminal": {
+        "id": "1223f278-94a3-4fba-a893-54f4f7618454",
+        "name": "fixture-terminal",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_6adc97aa7e1e49e3",
+        "activity": null
+      },
+      "error": null,
+      "requestId": "capture-2"
+    }
+  }
+}
