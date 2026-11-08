@@ -1,0 +1,102 @@
+{
+  "type": "session",
+  "message": {
+    "type": "status",
+    "payload": {
+      "status": "agent_created",
+      "agentId": "a8c4fa13-5874-4077-98f9-bce6de7f610e",
+      "requestId": "create",
+      "agent": {
+        "id": "a8c4fa13-5874-4077-98f9-bce6de7f610e",
+        "provider": "omp",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_213e17a53f023719",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinkingOptionId": null,
+        "effectiveThinkingOptionId": "high",
+        "runtimeInfo": {
+          "provider": "omp",
+          "sessionId": "01a1bd74-9e09-7248-bbb0-46e9e0026810",
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "thinkingOptionId": "high",
+          "modeId": "full"
+        },
+        "createdAt": "2026-11-08T23:18:19.144Z",
+        "updatedAt": "2026-11-08T23:18:19.151Z",
+        "lastUserMessageAt": null,
+        "status": "running",
+        "activeTurn": {
+          "turnId": "92bcbf24-2a8b-4939-a384-1748ae2c5897",
+          "startedAt": "2026-11-08T23:18:19.151Z"
+        },
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true,
+          "supportsSessionListing": true,
+          "supportsDynamicModes": true,
+          "supportsMcpServers": true,
+          "supportsReasoningStream": true,
+          "supportsToolInvocations": true,
+          "supportsRewindConversation": true,
+          "supportsRewindFiles": false,
+          "supportsRewindBoth": false,
+          "supportsNativePaseoTools": true
+        },
+        "currentModeId": "full",
+        "availableModes": [
+          {
+            "id": "full",
+            "label": "Full Access",
+            "description": "Launches OMP with yolo approval mode so tools run without prompts.",
+            "icon": "ShieldOff",
+            "colorTier": "dangerous",
+            "isUnattended": true
+          },
+          {
+            "id": "write",
+            "label": "Write Approval",
+            "description": "Launches OMP with write approval mode — reads are free, writes require approval.",
+            "icon": "ShieldAlert",
+            "colorTier": "moderate"
+          },
+          {
+            "id": "ask",
+            "label": "Always Ask",
+            "description": "Launches OMP with always-ask approval mode for write and exec tools.",
+            "icon": "ShieldCheck",
+            "colorTier": "safe"
+          }
+        ],
+        "features": [
+          {
+            "type": "toggle",
+            "id": "fast_mode",
+            "label": "Fast",
+            "icon": "zap",
+            "value": false
+          }
+        ],
+        "pendingPermissions": [],
+        "persistence": {
+          "provider": "omp",
+          "sessionId": "01a1bd74-9e09-7248-bbb0-46e9e0026810",
+          "nativeHandle": "/tmp/fixture-sandbox/.fixture-session.jsonl",
+          "metadata": {
+            "cwd": "/tmp/fixture-sandbox",
+            "bridgedTools": [],
+            "model": "opencode-go/deepseek-v4.1-flash",
+            "modeId": "full"
+          }
+        },
+        "title": "Reply with the single word: ready",
+        "labels": {
+          "paseo.fixture": "t12-attachments-search"
+        },
+        "archivedAt": null,
+        "requiresAttention": false,
+        "attentionReason": null,
+        "attentionTimestamp": null
+      }
+    }
+  }
+}
