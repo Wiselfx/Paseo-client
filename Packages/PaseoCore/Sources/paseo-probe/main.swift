@@ -1,6 +1,7 @@
 import Foundation
 import PaseoKit
 import PaseoProtocol
+import PaseoStore
 
 #if canImport(Glibc)
     import Glibc
@@ -32,6 +33,9 @@ let usage = """
       agents                   list agents: id prefix, provider, status, title
       timeline <agentId>       fetch the tail; one line per entry: seq, type, short text
       watch <agentId> [secs]   subscribe and print each stream event's seq and type (default 30s)
+      chat <agentId> <text> [secs]
+                               full stack (HostSession/ConversationStore): send text, print the
+                               last turn as it changes until the agent finishes (default 180s)
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -266,6 +270,10 @@ do {
             seconds = parsed
         }
         try await runWatch(connection, agentId: agentId, seconds: seconds)
+    case "chat":
+        guard arguments.commandArguments.count >= 2 else { throw ProbeError("chat needs <agentId> <text>") }
+        let seconds = arguments.commandArguments.count > 2 ? Int(arguments.commandArguments[2]) ?? 180 : 180
+        try await runChat(connection, agentId: arguments.commandArguments[0], text: arguments.commandArguments[1], seconds: seconds)
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -274,4 +282,65 @@ do {
 } catch {
     FileHandle.standardError.write(Data("paseo-probe: \(error)\n".utf8))
     exit(1)
+}
+
+/// End-to-end check of the layers the app uses: connection → HostSession → ConversationStore → turns.
+@MainActor
+func runChat(_ connection: DaemonConnection, agentId: String, text: String, seconds: Int) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    let store = session.conversation(for: agentId)
+    let loadDeadline = Date().addingTimeInterval(15)
+    while store.phase == .loading, Date() < loadDeadline { try await Task.sleep(for: .milliseconds(50)) }
+    print("loaded: phase=\(store.phase) turns=\(store.turns.count) rows=\(store.timeline.rows.count)")
+
+    await store.send(text)
+    print("sent; actionError=\(store.actionError ?? "none")")
+    var last = ""
+    var sawRunning = false
+    let deadline = Date().addingTimeInterval(Double(seconds))
+    while Date() < deadline {
+        let line = describe(store.turns.last, running: store.isRunning)
+        if line != last { print(line); last = line }
+        if store.isRunning { sawRunning = true }
+        if sawRunning, !store.isRunning { break }
+        try await Task.sleep(for: .milliseconds(150))
+    }
+    print("final: turns=\(store.turns.count) running=\(store.isRunning) duration=\(store.turns.last?.duration.map { String(format: "%.1fs", $0) } ?? "-")")
+    if let turn = store.turns.last {
+        for segment in turn.segments {
+            switch segment {
+            case .work(let group):
+                print("  work: \(group.summary)")
+                for row in group.rows {
+                    if case .toolCall(let call) = row.item {
+                        let p = ToolCallPresentation(call)
+                        print("    \(p.title) · \(p.subtitle ?? "") [\(p.status)]")
+                    }
+                }
+            case .prose(let row):
+                if case .assistantMessage(let m) = row.item { print("  prose: \(m.text.prefix(160).replacingOccurrences(of: "\n", with: " ⏎ "))") }
+            case .todo: print("  todo")
+            case .notice(let row): print("  notice: \(row.item)")
+            }
+        }
+    }
+    session.closeConversation(agentId)
+}
+
+@MainActor
+func describe(_ turn: Turn?, running: Bool) -> String {
+    guard let turn else { return "(no turn)" }
+    let user: String = if case .userMessage(let m)? = turn.userMessage?.item { String(m.text.prefix(30)) } else { "-" }
+    let pending = turn.userMessage?.isPending == true ? " (pending)" : ""
+    let segments = turn.segments.map { segment -> String in
+        switch segment {
+        case .work(let g): "work(\(g.thoughtCount)t,\(g.toolCallCount)c\(g.isActive ? ",live" : ""))"
+        case .prose(let r): if case .assistantMessage(let m) = r.item { "prose(\(m.text.count))" } else { "prose" }
+        case .todo: "todo"
+        case .notice: "notice"
+        }
+    }.joined(separator: " ")
+    return "turn id=\(turn.id) phase=\(turn.phase) running=\(running) user=\"\(user)\"\(pending) [\(segments)]"
 }
