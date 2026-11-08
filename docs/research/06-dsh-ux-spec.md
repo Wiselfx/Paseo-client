@@ -1,5 +1,18 @@
 # dsh-claude-style → native iOS: UX and mascot spec
 
+**Audit (second pass):** every number, colour, timing and easing re-checked against
+the source at `/home/paseo/dev/dsh-claude-style-reference`: `tokens.json` (motion
+tokens and literals), the `docs/STYLE.md` tables, the `chat-fold`/`chat-wait`/
+`process-column`/`message-actions`/`sidebar-status`/`composer` CSS and TS, the mascot
+sheets, state machine and placement CSS, `scripts/build.mjs` + `packages/assets/assets.mjs`
+(which sheets are inlined, vectorized or routed), the status copy (all eight states,
+EN and ZH) and the license/asset notices (`LICENSE`, `OFL.txt`, the Sodium license,
+`AGENTS.md`, `README.en.md`). 11 corrections (the idle-row dot, the prose line-height
+citation, the GIF list and its licensing, Deepy's and Whalegirl's placement inset,
+the crab's facing citation, the OFL and Anthropic-font citations, and the
+attribution of the font instruction), 1 claim marked (unverified), and the
+unsupported "Verified: 170 citations" footer removed.
+
 Date: 2026-11-08 · Source repo: `dsh-claude-style` at `/home/paseo/dev/dsh-claude-style-reference` (all paths below are relative to that root; `docs/STYLE.md` is the design-token reference, and the values marked "generated" there come from `packages/client/src/theme/tokens.json`). This is a behavioral specification for reproducing the conversation UX and the mascots in a native SwiftUI client backed by a different backend. It is not code.
 
 Citation note: every claim carries `path:line`. Shorthand resolves within this document as follows: bare `tokens.json` = `packages/client/src/theme/tokens.json`; `STYLE.md` = `docs/STYLE.md`; `LICENSE` = the root `LICENSE`; `dom.ts` = `packages/contracts/src/dom.ts`; §1 files beside marked paths = `packages/client/src/features/chat-fold/` and, where named, `features/process-column/`, `features/message-actions/`, `features/sidebar-status/`, `features/composer/` and `theme/`; §2 = `packages/client/src/features/chat-wait/` and `shared/`; §3 = `packages/client/src/features/mascot/` and `scripts/`; `chat-follow.ts`/`chat-follow.css` = `packages/client/src/features/chat-follow/`; `lane.mjs` = `packages/testing/lane.mjs`. Where the skin leaves a thing to the host app (the DeepSeek Harness web GUI), that is said explicitly: the two implementations are not interchangeable, and reproducing the *host* is out of scope.
@@ -13,7 +26,9 @@ A turn's adjacent process content — reasoning, tool calls, commands, file writ
 
 - In the host's "compact" and "standard" detail tiers the group body **starts folded**; in the "detailed" and "fully-expanded" tiers the body is not capped and stays open throughout, and the skin leaves those tiers alone entirely (`packages/client/src/features/chat-fold/process-fold.ts:9-18`).
 - The skin reads a group's phase off a `data-shimmer` attribute on its header: present while the process section still runs (`process-fold.ts:20-25`). Body visibility is the host's own `hidden` attribute (`hidden="until-found"` when folded, removed when open, `process-fold.ts:22-23`).
-- "Took X seconds" / "Completed in Xs" is the **host's own** control at the end of a turn (`[data-turn-process]`, a button); the skin leaves it alone (`packages/testing/lane.mjs:26`). The skin only excludes its subtree from the chat area's entrance fade (`packages/client/src/features/chat-fold/fold-motion.css:34-43`). The exact wording is the host's locale string, not this repo's, and is not specified here.
+- The end-of-turn control (worded like "took X seconds"; the exact string is the
+  host's own locale text and this repo never states it — (unverified)) is the **host's
+  own** button `[data-turn-process]`; the skin leaves it alone (`packages/testing/lane.mjs:26`). The skin only excludes its subtree from the chat area's entrance fade (`packages/client/src/features/chat-fold/fold-motion.css:34-43`). The exact wording is the host's locale string, not this repo's, and is not specified here.
 - A stopped turn never gets an answer row; the host folds its groups itself at the end, and the skin opens the last one again so the work up to the stop stays on the page (`process-fold.ts:32-36`).
 - The turn's final answer is plain prose rows; thinking rows are `[data-variant="think"]` (`packages/contracts/src/dom.ts:47`).
 
@@ -71,7 +86,9 @@ The skin keeps the host's scroll window rather than adding one of its own: an op
 
 ### 1.8 Status dots and the running badge
 
-- Sidebar session row: a running conversation shows a **6 px filled dot in muted neutral `#898781`** (light and dark), breathing opacity 0.3 → 1 → 0.3 once per 1200 ms (`--dsh-claude-period-status-breathe`, `tokens.json:1170-1172`; animation `sidebar-status.css:40-57`). An idle/read session shows nothing decorative; a 10 px ring is an alternate look the reader can pick (`sidebar.css:502-512`; `sidebar-status.css:53-57` for reduced/ring handling).
+- Sidebar session row: a running conversation shows a **6 px filled dot in muted neutral `#898781`** (light and dark), breathing opacity 0.3 → 1 → 0.3 once per 1200 ms (`--dsh-claude-period-status-breathe`, `tokens.json:1170-1172`; animation `sidebar-status.css:40-57`). An idle/read session shows a 6 px **hollow** circle in caption ink
+  (`sidebar.css:489-496`); a 10 px ring is an alternate look the reader can pick
+  (`sidebar.css:531-534`; `sidebar-status.css:50-53` for reduced handling).
 - Awaiting-input (approvals, plan reviews, questions): **yellow `#fab219`** (`tokens.json:734-737`). Unread/finished-in-background reminder: **blue `#2a78d6`** (`tokens.json:728-731`).
 - Running session title shimmer (alternate indicator): a text-only sweep at 3000 ms (`--dsh-claude-period-status-title`, `tokens.json:1165-1167`), `cubic-bezier(0.45, 0, 0.55, 1)` (`--dsh-claude-ease-status-title`, `tokens.json:1290`), background-size 400 % with keyframes at 0 %/15 % → 85 %/100 % (`sidebar-status.css:59-95`); peak colour `--dsh-claude-status-title-peak`: light `color-mix(in srgb, var(--dsw-alias-label-primary) 45%, white)`, dark `#7b7974` (`tokens.json:49-54`).
 - Overtime badge on the waiting line: "No response yet" (`chat-wait.copy.json:2`) appears once the model has been silent for 10 s (`packages/client/src/features/chat-wait/wait-state.ts:11`). It enters on a springy slide+pop (open: 250 ms `--dsh-claude-duration-open`, `ease-settle`, overshoot pop 500 ms `--dsh-claude-ease-spring`) and exits at 120 ms `--dsh-claude-duration-exit` (`chat-wait.ts` `syncBadge`; `chat-wait.css:504-551`; tokens `tokens.json:1050,1032`). Colour: host `--dsw-alias-state-warn-label` on a 16 % wash, 11 px type, radius 5 px, padding 0 6 px (`chat-wait.css:504-517`).
@@ -84,7 +101,7 @@ Ink ladder (light / dark): primary `#161616` / `#FDFDFD`; secondary `--dsw-alias
 
 Borders: 1 px card/panel edges — light `--dsw-alias-border-l1` `#E9E9E9`, dark `rgba(255,255,255,0.09)` (a translucent white highlight, not a colour); l2 `#DEDEDE` / `rgba(255,255,255,0.18)`; l3 `#CFCFCF` / `rgba(255,255,255,0.3)` (`docs/STYLE.md:132-134`). Separators: `--dsh-claude-divider` `rgba(22,22,22,0.05)` / `rgba(255,255,255,0.06)`, drawn at **0.5 px** on lines that only separate (`docs/STYLE.md:135,295`).
 
-Shapes: radius ladder 4 / 8 / 16 px; 12 px popover card with 6 px rows; pills for CTAs; 4 px spacing rhythm; 1 px borders, 0.5 px separators (`docs/STYLE.md:286-300`). Typography: headings serif display at weight 500, tracking −0.01em, line-height 1.25; body prose serif (Markdown) line-height 23 px, block margins 12 px (`docs/STYLE.md:17,278-283`; `typography.css:74-79`). Type sizes in the composer are scaled by the reader's interface-font scale.
+Shapes: radius ladder 4 / 8 / 16 px; 12 px popover card with 6 px rows; pills for CTAs; 4 px spacing rhythm; 1 px borders, 0.5 px separators (`docs/STYLE.md:286-300`). Typography: headings serif display at weight 500, tracking −0.01em, line-height 1.25; body prose serif (Markdown) line-height 23 px, block margins 12 px (`packages/client/src/theme/typography.css:88-98`; headings `typography.css:74-79`). Type sizes in the composer are scaled by the reader's interface-font scale.
 
 Motion tokens that matter for the turn layout (ms): feedback 120; reveal 120; surface 150; exit 120; open 250; swap 150; swap-gap 50; move 200; roll 160; step 500; slide 240; fade 300; ease-glide `cubic-bezier(0.22,0.61,0.36,1)`; ease-out `ease-out`; ease-roll `cubic-bezier(0.4,0,0.2,1)`; ease-settle `cubic-bezier(0.22,1,0.36,1)` (`docs/STYLE.md:323` motion table; `tokens.json:1011-1095,1121,1258,1280-1310,1323-1328`). Reduced choice presses **every** animation/transition to 0.01 ms (`tokens.json:1159`).
 
@@ -128,7 +145,13 @@ Three characters share one state machine and one sprite-strip window; they diffe
 
 **Whalegirl** — `packages/assets/src/mascot/whalegirl/*.png`: 22 strips, one per animation, each a single long row (e.g. `idle.png`, 21 frames, 69 × 66 each); routed, not inlined, fetched on first play (`packages/client/src/features/mascot/sheets.ts:110-126`; `scripts/build.mjs:397-400,432-441`; `packages/assets/assets.mjs:32-36`; `packages/client/src/features/mascot/whale-girl.ts:8-18`; `packages/client/src/features/mascot/routed-sheets.ts:8-14`).
 
-**GIF previews** — `docs/gifs/*.gif` (20 animations: idle, idle-look, idle-spout, thinking, typing, music, conducting, building, error, happy, notification, compacting, sleeping, waking, poke-left/right, tickle, drag). These are the author's GIFs for the README; they are **not shipped in the npm package** and are not usable as licensed assets for this project (`AGENTS.md:43`; `README.en.md:122`).
+**GIF previews** — `docs/gifs/*.gif`, 20 files: `building, carrying, compacting,
+conducting, error, happy, idle-look, idle-spout, idle, music, notification,
+react-double, react-drag, react-left, react-right, roam-hop, sleeping, thinking,
+typing, waking` (there are **no** poke/tickle/drag GIFs). These are the author's GIFs
+for the README; they stay **out of the npm package** (`AGENTS.md:43`;
+`README.en.md:122`), and the README's permission covers shipping Deepy's frames with
+the plugin, not these files — treat them as documentation, not as art you may copy.
 
 The mascots are played with WAAPI `steps(1)` translations of a strip inside an overflow-hidden window; crop boxes per animation live in `packages/client/src/features/mascot/sheets.ts` (e.g. Deepy idle `{frames: 48, box: [12, 26, 36, 24], still: 0}`, `sheets.ts:40`; crab typing `{frames: 6, box: [15, 22, 28, 14], still: 0}`, `sheets.ts:90`). Deepy frame pace is **50 ms** (`DEEPY_FRAME_MS`, `sheets.ts:22`); crab **80 ms** (`CRAB_FRAME_MS`, `sheets.ts:75`); Whalegirl per-frame durations (e.g. idle 700/280/280/240/360/… ms, `sheets.ts:119`).
 
@@ -156,9 +179,12 @@ The README's "eight states" are the **deepseek-facing names** of the same machin
 
 All three stand **on the top edge of what they stand on** — the composer card (home page, both layouts), the input area or the panel that replaces its card in a conversation — anchored to the card's **right** end and drawn above it with `z-index: 1`; hidden (`visibility: hidden`) until the first sheet is ready (`mascot-frame.css:12-16`).
 
-- **Deepy**: 104 × 104 px (52 × 52 grid @ 2 px); `right: 8px`; `bottom: calc(100% - 4px)`; resting hit window `left: 24px; top: 60px; width: 64px; height: 36px`; ground line = middle of the shadow at logical row 48.5, box lifted so the last row lands on the card's top edge; sheets scaled smoothly, **not** `image-rendering: pixelated` (`packages/client/src/features/mascot/whale.css:1-13,21-42`; `packages/client/src/features/mascot/sheets.ts:10-26`; `docs/STYLE.md:950-970`).
-- **Crab**: 104 × 72 px (52 × 36 cells @ 2 px); feet on the card's top edge (`bottom: 100%`); `right: 0` on the home single-line card; in a conversation, `right: max(var(--dsh-composer-side-clearance, 16px), (100% - card-max-width)/2)`; pointer window `left: 48px; top: 40px; width: 48px; height: 32px`; `image-rendering: pixelated`; faces the reader at rest, turns toward whatever it looks at in a state with something to look at (`packages/client/src/features/mascot/crab.css:14-34,59-67`; `docs/STYLE.md:924-949`).
-- **Whalegirl**: 138 × 132 px (69 × 66 @ 2 px); `right: 8px`; `bottom: calc(100% - 12px)` (lifted 10 device px for the shadow plus 2 for the bounce); `image-rendering: pixelated`; hit window `left: 24px; top: 20px; width: 104px; height: 104px` (`packages/client/src/features/mascot/whale-girl.css:14-43`).
+- **Deepy**: 104 × 104 px (52 × 52 grid @ 2 px); `right: 8px` at rest, and the same
+  card-edge inset as the crab plus 8 px wherever he stands in a conversation or on a
+  panel (`mascot-frame.css:28-40`); `bottom: calc(100% - 4px)`; resting hit window `left: 24px; top: 60px; width: 64px; height: 36px`; ground line = middle of the shadow at logical row 48.5, box lifted so the last row lands on the card's top edge; sheets scaled smoothly, **not** `image-rendering: pixelated` (`packages/client/src/features/mascot/whale.css:1-13,21-42`; `packages/client/src/features/mascot/sheets.ts:10-26`; `docs/STYLE.md:950-970`).
+- **Crab**: 104 × 72 px (52 × 36 cells @ 2 px); feet on the card's top edge (`bottom: 100%`); `right: 0` on the home single-line card; in a conversation, `right: max(var(--dsh-composer-side-clearance, 16px), (100% - card-max-width)/2)`; pointer window `left: 48px; top: 40px; width: 48px; height: 32px`; `image-rendering: pixelated`; faces the reader at rest, turns toward whatever it looks at in a state with something to look at (facing described in `docs/STYLE.md:938-947`; size/placement `packages/client/src/features/mascot/crab.css:14-34`; pointer window `59-67`).
+- **Whalegirl**: 138 × 132 px (69 × 66 @ 2 px); `right: 8px` (inset like Deepy's in a
+  conversation or on a panel, `mascot-frame.css:28-40`); `bottom: calc(100% - 12px)` (lifted 10 device px for the shadow plus 2 for the bounce); `image-rendering: pixelated`; hit window `left: 24px; top: 20px; width: 104px; height: 104px` (`packages/client/src/features/mascot/whale-girl.css:14-43`).
 - On a panel replacing the card, each stands a little higher (Deepy `bottom: calc(100% - 11px)`, crab `calc(100% - 7px)`, Whalegirl `calc(100% - 19px)`) (`packages/client/src/features/mascot/whale.css:32-36`, `packages/client/src/features/mascot/whale-girl.css:26-30`, `packages/client/src/features/mascot/crab.css:36-43`).
 - Only the resting (idle) body takes the pointer; other states are inert to presses, and Reduced motion pins still frames (the `still` index per animation, `packages/client/src/features/mascot/sheets.ts:39,84,118`).
 - Hovering the resting mascot **250 ms** opens a pixel bubble (PoxiaoPixel face): DeepSeek account balance on top (checking ≤ once a minute), the conversation's cost under it (`mascot-bubble.ts:16`; `README.en.md:68`). A press closes the bubble and plays a reaction.
@@ -218,11 +244,30 @@ The PolyForm Shield "Noncompete" clause:
 
 ### Fonts (included faces, as hosted)
 
-The repo ships (and the npm package carries) **JetBrains Mono** (including Italic), **Inter** (look-alike face cut to Claude's Latin coverage), **Noto Serif** (look-alike serif), and the **ClaudeStylePixel.woff2** PoxiaoPixel subset — all under the **SIL Open Font License 1.1** (`packages/assets/src/fonts/OFL.txt`; `LICENSE:43-47`). These are **not required to keep attribution inside your app's UI**, but the OFL requires (i) not selling the font software by itself, (ii) not using its Reserved Font Name for derivative versions, and (iii) keeping it under OFL if you redistribute it. Bundling them in an iOS app — including a commercial one — is therefore permitted.
+**OFL faces** — the repo ships (and the npm package carries) **JetBrains Mono**
+(including Italic), **Inter** (look-alike face cut to Claude's Latin coverage),
+**Noto Serif** (look-alike serif), and the **ClaudeStylePixel.woff2** PoxiaoPixel
+subset — all under the **SIL Open Font License 1.1**
+(`packages/assets/src/fonts/OFL.txt:1-5` names all four; `LICENSE:43-47` names only
+JetBrains Mono). These are **not required to keep attribution inside your app's UI**, but the OFL requires (i) not selling the font software by itself, (ii) not using its Reserved Font Name for derivative versions, and (iii) keeping it under OFL if you redistribute it. Bundling them in an iOS app — including a commercial one — is therefore permitted.
 
-The **Anthropic faces** (`AnthropicSansWebText.ttf`, `AnthropicSerifWebText.ttf`, `AnthropicMonoWeb.ttf`) are **repo-only**, never in the npm package; they are registered at runtime only when the reader drops them into `$DSH_HOME/dsh-claude-style/fonts/` (`packages/client/src/theme/typography.css:21-27` header comment; `packages/client/src/shared/webfonts.ts:5-14`). The repo states they are for **personal use only** (`LICENSE:35-41`; `README.en.md:97-99`).
+The **Anthropic faces** (`AnthropicSansWebText.ttf`, `AnthropicSerifWebText.ttf`, `AnthropicMonoWeb.ttf`) are **repo-only**, never in the npm package; they are registered at runtime only when the reader drops them into `$DSH_HOME/dsh-claude-style/fonts/` (`packages/client/src/theme/typography.css:21-27` header comment; `packages/client/src/shared/webfonts.ts:5-14`). The repo states they are for **personal use only** (`LICENSE:35-41`; `AGENTS.md:43`);
+the README goes no further than offering the copies "for download and study"
+(`README.en.md:97`).
 
-Per the user's instruction recorded in this task (2026-11-08): the included fonts are offered **for research** (study, measurement, comparison against the look-alikes) and **for use in a personal iOS app**. That instruction is consistent with the OFL faces' license and with the "personal use" framing for the Anthropic faces *as long as the app stays personal and is not redistributed*. If the app is ever distributed — including through the App Store — the Anthropic faces' "personal use only" grant would no longer cover it, and the OFL faces would still be fine to bundle. The distribution scenario is not covered by anything in this repo; that would be a separate decision with Anthropic (for its faces) — again, not legal advice.
+Per the user (an instruction given to the research agent directly on 2026-11-08;
+it appears **nowhere in this repository**, whose own text stops at "personal use
+only" for the Anthropic faces and "for download and study" in the README): the
+included fonts are offered **for research** (study, measurement, comparison against
+the look-alikes) and **for use in a personal iOS app**. That is the user's own
+reading — consistent with the OFL faces' license and with the "personal use only"
+framing for the Anthropic faces *as long as the app stays personal and is not
+redistributed* — and not a statement the repository makes. If the app is ever
+distributed — including through the App Store — the Anthropic faces' "personal use
+only" grant would no longer cover it, and the OFL faces would still be fine to
+bundle. The distribution scenario is not covered by anything in this repo; that
+would be a separate decision with Anthropic (for its faces) — again, not legal
+advice.
 
 Net: for a personal, non-commercial, non-distributed iOS app, using all the included fonts for research and bundling them privately is the intended reading; for anything shipped, use the OFL faces only, and your own or licensed replacements for the rest.
 
@@ -263,4 +308,3 @@ The button is the **host's own**, rendered only while the follow is off. The ski
 
 `README.en.md`, `LICENSE`, `AGENTS.md`, `docs/STYLE.md`, `docs/ARCHITECTURE.md`, `docs/NOTICE.md`, `docs/THIRD_PARTY_NOTICES.md`, `docs/gifs/`, `packages/client/src/theme/tokens.json`, `packages/client/src/theme/{typography,sidebar}.css`, `packages/client/src/features/{chat-fold,chat-wait,chat-follow,message-actions,mascot,process-column,composer,sidebar-status}/…`, `packages/client/src/shared/{turn-activity,swapping-text.css,motion.css}`, `packages/contracts/src/dom.ts`, `packages/testing/lane.mjs`, `packages/assets/src/{mascot,fonts}/…`, `scripts/build.mjs`, `packages/assets/assets.mjs`.
 
-Verified: 170 citations checked, 58 corrected.
