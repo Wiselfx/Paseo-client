@@ -1,0 +1,314 @@
+import Foundation
+import Observation
+import PaseoKit
+import PaseoProtocol
+
+/// Host-scoped settings and presence for one daemon: the mutable config document, provider enable
+/// switches, agent profiles, slash commands, push-token registration and the 15 s heartbeat.
+///
+/// Owned by `HostSession`. Configuration writes are surgical patches: only the fields the caller
+/// sets go out, so unknown daemon config survives untouched.
+///
+/// IMPLEMENTATION TICKET: docs/tickets/PHASE3-BACKEND.md (T10)
+@MainActor @Observable
+public final class HostSettingsStore {
+    public enum Phase: Sendable, Equatable {
+        case idle
+        case loading
+        case ready
+        case failed(String)
+    }
+
+    public private(set) var phase: Phase = .idle
+    /// The last successful read or patch response. Nil until `load()` succeeds.
+    public private(set) var config: DaemonConfig?
+    /// Last failed load, patch, command or push action. Cleared by the next success.
+    public private(set) var error: String?
+    public private(set) var isSaving = false
+    /// Slash commands by agent id, as last loaded.
+    public private(set) var commandsByAgent: [String: [AgentSlashCommand]] = [:]
+    /// Last command-listing error per agent id.
+    public private(set) var commandErrorsByAgent: [String: String] = [:]
+
+    // Capability flags, read once per `server_info`.
+    /// `features.agentProfiles`: old daemons silently drop the key when saving config.
+    public private(set) var supportsProfiles = false
+    /// `features.pushTokenRevocation`: only capable daemons accept `push.unregister.request`.
+    public private(set) var supportsPushTokenRevocation = false
+
+    // Presence state. The app drives this from focus and visibility changes.
+    public private(set) var isPresenting = false
+    public private(set) var focusedAgentId: String?
+    public private(set) var appVisible = true
+    public private(set) var lastPresenceSentAt: Date?
+    /// Number of heartbeats written to the socket, including the immediate ones on changes.
+    public private(set) var presenceSentCount = 0
+
+    private let client: any DaemonClient
+    private let heartbeatInterval: Duration
+    private var deviceType: PresenceDeviceType = .mobile
+    private var appVisibilityChangedAt: String?
+    private var presenceTask: Task<Void, Never>?
+
+    /// - Parameter heartbeatInterval: 15 s in the app; tests pass a short interval.
+    public init(client: any DaemonClient, heartbeatInterval: Duration = .seconds(15)) {
+        self.client = client
+        self.heartbeatInterval = heartbeatInterval
+    }
+
+    // MARK: Config
+
+    /// Reads the daemon config. Safe to call again (pull to refresh, or after a reconnect).
+    public func load() async {
+        phase = .loading
+        do {
+            let response = try await client.send(GetDaemonConfigRequest())
+            config = response.config
+            error = nil
+            phase = .ready
+        } catch {
+            let message = hostSettingsErrorText(error)
+            self.error = message
+            phase = .failed(message)
+        }
+    }
+
+    /// Applies one surgical patch and stores the daemon's effective config. Returns false with
+    /// `error` set when the daemon rejects it or the socket fails.
+    ///
+    /// `set_daemon_config_request` has no revision field: `expectedRevision` belongs to the
+    /// project-config RPC (`write_project_config_request`), not to daemon config. The daemon's
+    /// response is the effective config after the merge, which is what this store adopts.
+    @discardableResult
+    public func save(_ patch: DaemonConfigPatch) async -> Bool {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let response = try await client.send(SetDaemonConfigRequest(config: patch))
+            config = response.config
+            error = nil
+            phase = .ready
+            return true
+        } catch {
+            self.error = hostSettingsErrorText(error)
+            return false
+        }
+    }
+
+    /// Provider rows in the daemon's config, in provider-id order.
+    public var providerSettings: [(provider: String, settings: DaemonProviderConfig)] {
+        (config?.providers ?? [:]).sorted { $0.key < $1.key }.map { (provider: $0.key, settings: $0.value) }
+    }
+
+    /// A provider is enabled unless the config explicitly disables it.
+    public func isProviderEnabled(_ providerId: String) -> Bool {
+        config?.providers[providerId]?.enabled ?? true
+    }
+
+    /// Flips one provider's enable switch. This is a config patch: `providers` is a per-provider
+    /// merge, not a replacement.
+    @discardableResult
+    public func setProviderEnabled(_ providerId: String, _ enabled: Bool) async -> Bool {
+        var patch = DaemonConfigPatch()
+        patch.providers = [providerId: DaemonConfigPatch.Provider(enabled: enabled)]
+        return await save(patch)
+    }
+
+    /// Saved profiles. Empty unless the daemon advertises `features.agentProfiles`.
+    public var profiles: [AgentProfile] {
+        guard supportsProfiles else { return [] }
+        return config?.agentProfiles ?? []
+    }
+
+    // MARK: Slash commands
+
+    /// Loads the slash-command menu for one agent. With `draft` it asks for the commands a draft
+    /// would have instead of the live agent's.
+    @discardableResult
+    public func loadCommands(for agentId: String, draft: AgentDraftConfig? = nil) async -> [AgentSlashCommand] {
+        do {
+            let response = try await client.send(
+                ListCommandsRequest(agentId: agentId, draftConfig: draft))
+            if let error = response.error {
+                commandErrorsByAgent[agentId] = error
+                return commandsByAgent[agentId] ?? []
+            }
+            commandErrorsByAgent[agentId] = nil
+            commandsByAgent[agentId] = response.commands
+            return response.commands
+        } catch {
+            commandErrorsByAgent[agentId] = hostSettingsErrorText(error)
+            return commandsByAgent[agentId] ?? []
+        }
+    }
+
+    public func commands(for agentId: String) -> [AgentSlashCommand] {
+        commandsByAgent[agentId] ?? []
+    }
+
+    public func commandError(for agentId: String) -> String? {
+        commandErrorsByAgent[agentId]
+    }
+
+    /// Drops cached commands when a conversation closes.
+    public func clearCommands(for agentId: String) {
+        commandsByAgent[agentId] = nil
+        commandErrorsByAgent[agentId] = nil
+    }
+
+    // MARK: Presence
+
+    /// Starts the 15 s heartbeat and sends one immediately. Call when the app becomes active.
+    public func startPresence(
+        deviceType: PresenceDeviceType = .mobile, focusedAgentId: String? = nil, appVisible: Bool = true
+    ) {
+        guard !isPresenting else {
+            updatePresence(focusedAgentId: focusedAgentId, appVisible: appVisible)
+            return
+        }
+        self.deviceType = deviceType
+        self.focusedAgentId = focusedAgentId
+        self.appVisible = appVisible
+        self.appVisibilityChangedAt = nil
+        isPresenting = true
+        sendHeartbeat()
+
+        let interval = heartbeatInterval
+        presenceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    return
+                }
+                guard let self else { return }
+                self.sendHeartbeat()
+            }
+        }
+    }
+
+    /// The user focused an agent (or closed the conversation when nil). Sends immediately.
+    public func updateFocus(_ agentId: String?) {
+        focusedAgentId = agentId
+        guard isPresenting else { return }
+        sendHeartbeat()
+    }
+
+    /// The app moved between foreground and background. Sends immediately on a real change.
+    public func updateVisibility(_ visible: Bool) {
+        guard appVisible != visible else { return }
+        appVisible = visible
+        appVisibilityChangedAt = Self.timestamp()
+        guard isPresenting else { return }
+        sendHeartbeat()
+    }
+
+    /// One call for focus and visibility changes together, e.g. from a scene-phase handler.
+    public func updatePresence(focusedAgentId: String?, appVisible: Bool) {
+        let visibilityChanged = self.appVisible != appVisible
+        self.focusedAgentId = focusedAgentId
+        self.appVisible = appVisible
+        if visibilityChanged { appVisibilityChangedAt = Self.timestamp() }
+        guard isPresenting else { return }
+        sendHeartbeat()
+    }
+
+    /// Stops the heartbeat. Call when the app goes away or the host is removed.
+    public func stopPresence() {
+        isPresenting = false
+        presenceTask?.cancel()
+        presenceTask = nil
+    }
+
+    // MARK: Push
+
+    /// Registers an Expo push token. Fire-and-forget: the daemon sends no response.
+    public func registerPushToken(_ token: String) async {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            error = "A push token is required."
+            return
+        }
+        do {
+            try await client.send(RegisterPushToken(token: trimmed))
+            error = nil
+        } catch {
+            self.error = hostSettingsErrorText(error)
+        }
+    }
+
+    /// Revokes a push token. Returns false with `error` set when the host cannot revoke tokens.
+    @discardableResult
+    public func unregisterPushToken(_ token: String) async -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            error = "A push token is required."
+            return false
+        }
+        guard supportsPushTokenRevocation else {
+            error = "This host cannot revoke push tokens."
+            return false
+        }
+        do {
+            _ = try await client.send(PushUnregisterRequest(token: trimmed))
+            error = nil
+            return true
+        } catch {
+            self.error = hostSettingsErrorText(error)
+            return false
+        }
+    }
+
+    // MARK: HostSession handoff
+
+    /// Called once per `server_info`; capability flags are read here and nowhere else.
+    internal func serverInfoChanged(_ info: ServerInfo?) {
+        supportsProfiles = info?.hasFeature("agentProfiles") ?? false
+        supportsPushTokenRevocation = info?.hasFeature("pushTokenRevocation") ?? false
+    }
+
+    /// Pushed `status` messages this ticket owns. `daemon_config_changed` carries the full config.
+    internal func handle(messageType: String, raw: Data) {
+        guard messageType == "status" else { return }
+        guard
+            let changed = try? JSONDecoder().decode(
+                SessionPayloadEnvelope<DaemonConfigChanged>.self, from: raw
+            ).payload,
+            changed.status == "daemon_config_changed"
+        else { return }
+        config = changed.config
+        if phase != .loading { phase = .ready }
+    }
+
+    // MARK: Internals
+
+    private func sendHeartbeat() {
+        let now = Date()
+        lastPresenceSentAt = now
+        presenceSentCount += 1
+        let message = ClientHeartbeat(
+            deviceType: deviceType,
+            focusedAgentId: focusedAgentId,
+            lastActivityAt: Self.timestamp(now),
+            appVisible: appVisible,
+            appVisibilityChangedAt: appVisibilityChangedAt)
+        let client = self.client
+        Task {
+            try? await client.send(message)
+        }
+    }
+
+    private static func timestamp(_ date: Date = Date()) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+}
+
+/// One readable line for an error, for `error` and phases.
+private func hostSettingsErrorText(_ error: Error) -> String {
+    if let error = error as? LocalizedError, let description = error.errorDescription {
+        return description
+    }
+    return String(describing: error)
+}

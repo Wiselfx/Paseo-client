@@ -42,6 +42,9 @@ let usage = """
       agent-control [cwd]      full stack (AgentControlStore/ConversationStore) on a sandbox:
                                list providers, create an omp agent, switch its mode, answer a
                                permission request, rename and archive it (default cwd /tmp/fixture-sandbox)
+      host-settings [agentId]
+                               host config, provider switches, slash commands, 15 s presence
+                               heartbeat and push-token revocation (default: fixture sandbox agent)
       workspaces               projects and workspaces from the live directory subscription
       checkout <workspaceId>   git status, PR badge and working diff summary
       files <workspaceId> [path]
@@ -294,6 +297,11 @@ do {
         try await runTerminal(connection, workspaceId: workspaceId, cwd: cwd)
     case "agent-control":
         try await runAgentControl(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
+    case "host-settings":
+        try await runHostSettings(
+            connection,
+            agentId: arguments.commandArguments.first
+                ?? "1c51ee58-765c-4f8d-bf27-7009338b361e")
     case "workspaces":
         try await runWorkspaces(connection)
     case "checkout":
@@ -547,6 +555,92 @@ func runAgentControl(_ connection: DaemonConnection, cwd: String) async throws {
         }
         throw error
     }
+}
+
+/// End-to-end check of T10 against the live daemon: config read, a harmless patch that is restored,
+/// slash commands for the sandbox agent, presence heartbeats and push-token revocation.
+@MainActor
+func runHostSettings(_ connection: DaemonConnection, agentId: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    let store = session.hostSettings
+
+    await store.load()
+    guard store.phase == .ready else {
+        throw ProbeError("daemon config failed to load: \(store.phase)")
+    }
+    let config = try unwrapConfig(store)
+    let enabledProviders = config.providers
+        .filter { $0.value.enabled != false }
+        .keys.sorted()
+    let enabledList = enabledProviders.joined(separator: ",")
+    print(
+        "config: providers=\(config.providers.count) enabled=[\(enabledList)] profiles=\(store.profiles.count)"
+    )
+    print(
+        "features: agentProfiles=\(store.supportsProfiles) pushTokenRevocation=\(store.supportsPushTokenRevocation)"
+    )
+    let inject = config.mcp?.injectIntoAgents.map(String.init) ?? "-"
+    let cleanup = config.idleRuntimeCleanup.map(String.init) ?? "-"
+    print(
+        "settings: mcp.injectIntoAgents=\(inject) "
+            + "autoArchiveAfterMerge=\(config.autoArchiveAfterMerge) idleRuntimeCleanup=\(cleanup)"
+    )
+
+    let commands = await store.loadCommands(for: agentId)
+    let kinds = Dictionary(grouping: commands, by: { command -> String in
+        switch command.kind {
+        case .command: "command"
+        case .skill: "skill"
+        case .unknown(let raw): raw
+        }
+    }).mapValues(\.count)
+    let kindText = kinds.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+    print("commands for \(String(agentId.prefix(8))): \(commands.count) [\(kindText)]")
+    print("  first: \(commands.prefix(4).map(\.name).joined(separator: ", "))")
+    if let error = store.commandError(for: agentId) { print("  commandsError: \(error)") }
+
+    store.startPresence(focusedAgentId: agentId, appVisible: true)
+    try await Task.sleep(for: .milliseconds(200))
+    print("presence: started focus=\(String(agentId.prefix(8))) sent=\(store.presenceSentCount)")
+    store.updateVisibility(false)
+    try await Task.sleep(for: .milliseconds(200))
+    print("presence: hidden sent=\(store.presenceSentCount) visible=\(store.appVisible)")
+    try await Task.sleep(for: .seconds(16))
+    print("presence: after 16 s sent=\(store.presenceSentCount) (15 s cadence expected)")
+    store.stopPresence()
+
+    let revoked = await store.unregisterPushToken("paseo-probe-not-registered")
+    print("push revoke of an unregistered token: success=\(revoked) error=\(store.error ?? "none")")
+
+    guard let originalPrompt = config.resumePrompt else {
+        throw ProbeError("config.resumePrompt is missing; not writing config")
+    }
+    var patch = DaemonConfigPatch()
+    patch.resumePrompt = "\(originalPrompt) [probe]"
+    let patched = await store.save(patch)
+    let patchedPrompt = store.config?.resumePrompt ?? "-"
+    print(
+        "patch resumePrompt: saved=\(patched) effective=\(patchedPrompt) error=\(store.error ?? "none")"
+    )
+    var restore = DaemonConfigPatch()
+    restore.resumePrompt = originalPrompt
+    let restored = await store.save(restore)
+    let restoredPrompt = store.config?.resumePrompt ?? "-"
+    print(
+        "restore resumePrompt: saved=\(restored) effective=\(restoredPrompt) error=\(store.error ?? "none")"
+    )
+    guard restored, store.config?.resumePrompt == originalPrompt else {
+        throw ProbeError("daemon config was not restored")
+    }
+}
+
+/// Reads the config the store holds, or fails the probe instead of force-unwrapping.
+@MainActor
+func unwrapConfig(_ store: HostSettingsStore) throws -> DaemonConfig {
+    guard let config = store.config else { throw ProbeError("daemon config is nil") }
+    return config
 }
 
 // MARK: - Workspaces and git
