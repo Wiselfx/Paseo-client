@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "subscribe_terminal_response",
+    "payload": {
+      "terminalId": "1223f278-94a3-4fba-a893-54f4f7618454",
+      "slot": 2,
+      "error": null,
+      "requestId": "capture-3"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "type": "session",
+  "message": {
+    "type": "terminals_changed",
+    "payload": {
+      "cwd": "/tmp/fixture-terminals",
+      "terminals": [
+        {
+          "id": "6a842610-800a-4fd3-871c-56561b3a29c3",
+          "name": "fixture",
+          "workspaceId": "wks_7f451d74b177f13a",
+          "title": "fixture",
+          "activity": null
+        }
+      ]
+    }
+  }
+}

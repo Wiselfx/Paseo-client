@@ -1,0 +1,10 @@
+{
+  "type": "session",
+  "message": {
+    "type": "list_terminals_response",
+    "payload": {
+      "terminals": [],
+      "requestId": "capture-1"
+    }
+  }
+}

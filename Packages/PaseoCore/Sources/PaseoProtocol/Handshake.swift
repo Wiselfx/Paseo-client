@@ -12,6 +12,19 @@ public enum Credential: Sendable, Hashable {
     case localCredential(String)
 }
 
+/// Client capability names this client advertises. Only advertise behavior this client implements.
+/// Source: packages/protocol/src/client-capabilities.ts `CLIENT_CAPS`.
+public enum ClientCapabilities {
+    public static let helloRejection = "hello_rejection"
+    public static let terminalChunkedReplay = "terminal_chunked_replay"
+    /// Every behavior this client actually implements. No `binary_chunking_v1` sends (we never
+    /// chunk) and no `owned_subscriptions` (we detach through the legacy terminal unsubscribe).
+    public static let implemented: [String: Bool] = [
+        helloRejection: true,
+        terminalChunkedReplay: true,
+    ]
+}
+
 /// First frame after the socket opens. Not session-wrapped.
 public struct Hello: Encodable, Sendable {
     public var type = "hello"
@@ -29,7 +42,7 @@ public struct Hello: Encodable, Sendable {
         public var token: String?
     }
 
-    public init(clientId: String, appVersion: String?, credential: Credential?, capabilities: [String: Bool] = ["helloRejection": true]) {
+    public init(clientId: String, appVersion: String?, credential: Credential?, capabilities: [String: Bool] = ClientCapabilities.implemented) {
         self.clientId = clientId
         self.appVersion = appVersion
         self.capabilities = capabilities

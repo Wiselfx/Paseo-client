@@ -54,6 +54,8 @@ public enum DaemonEvent: Sendable {
     case timelineReplacement(agentId: String, epoch: String)
     /// Any session message type this client doesn't route yet. `raw` is the whole frame.
     case unhandled(messageType: String, raw: Data)
+    /// A WebSocket binary frame, unparsed. Terminal streams ride here; the store decodes them.
+    case binaryFrame(Data)
 }
 
 /// What PaseoStore depends on. `DaemonConnection` is the real one; tests use a fake.
@@ -61,6 +63,10 @@ public protocol DaemonClient: AnyObject, Sendable {
     /// Sends a request and waits for the response with the same `requestId`. Assigns a fresh
     /// `requestId`; the caller's value is ignored. Throws `ConnectionError`.
     func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response
+
+    /// Sends a session message with no correlated response (`terminal_input`,
+    /// `subscribe_terminals_request`, `unsubscribe_terminal_request`). Throws `ConnectionError`.
+    func send<M: PaseoOutboundMessage>(_ message: M) async throws
 
     /// Unsolicited daemon messages, in arrival order. Single consumer.
     var events: AsyncStream<DaemonEvent> { get }

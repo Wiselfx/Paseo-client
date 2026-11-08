@@ -1,0 +1,23 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.script.stop.response",
+    "payload": {
+      "requestId": "capture-4",
+      "workspaceId": "wks_7f451d74b177f13a",
+      "scriptName": "fixture",
+      "script": {
+        "scriptName": "fixture",
+        "type": "script",
+        "hostname": "fixture",
+        "port": null,
+        "proxyUrl": null,
+        "lifecycle": "stopped",
+        "health": null,
+        "exitCode": 0,
+        "terminalId": "6a842610-800a-4fd3-871c-56561b3a29c3"
+      },
+      "error": null
+    }
+  }
+}
