@@ -916,11 +916,8 @@ public final class URLSessionWebSocketTransport: WebSocketTransport, @unchecked 
     private func mappedReceiveError(_ error: any Error) -> any Error {
         let closeCode = task.closeCode
         guard closeCode != .invalid else { return error }
-        #if canImport(FoundationNetworking)
-            let reason = task.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        #else
-            let reason = task.closeReason ?? ""
-        #endif
+        // `closeReason` is `Data?` on every platform.
+        let reason = task.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
         return WebSocketClosed(code: closeCode.rawValue, reason: reason)
     }
 
