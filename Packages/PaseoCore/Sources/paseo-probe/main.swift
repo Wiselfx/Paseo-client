@@ -39,6 +39,9 @@ let usage = """
       terminal <workspaceId> [cwd]
                                create a terminal in a workspace, attach, run `echo hello`, print
                                the escaped bytes, detach and kill it (default cwd /tmp/fixture-sandbox)
+      agent-control [cwd]      full stack (AgentControlStore/ConversationStore) on a sandbox:
+                               list providers, create an omp agent, switch its mode, answer a
+                               permission request, rename and archive it (default cwd /tmp/fixture-sandbox)
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -127,7 +130,9 @@ func makeConnection(_ arguments: ParsedArguments) throws -> DaemonConnection {
     DaemonConnection(
         endpoint: DaemonEndpoint(url: arguments.url, credential: try resolveCredential(arguments)),
         clientId: "paseo-probe-\(UUID().uuidString.prefix(8))",
-        appVersion: nil
+        // Daemons before 0.1.45 hide non-legacy providers (pi, omp) from clients that don't
+        // identify a modern version. The app passes its own version; the probe passes this floor.
+        appVersion: "0.1.45"
     )
 }
 
@@ -283,6 +288,8 @@ do {
         }
         let cwd = arguments.commandArguments.count > 1 ? arguments.commandArguments[1] : "/tmp/fixture-sandbox"
         try await runTerminal(connection, workspaceId: workspaceId, cwd: cwd)
+    case "agent-control":
+        try await runAgentControl(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -417,4 +424,111 @@ func describe(_ turn: Turn?, running: Bool) -> String {
         }
     }.joined(separator: " ")
     return "turn id=\(turn.id) phase=\(turn.phase) running=\(running) user=\"\(user)\"\(pending) [\(segments)]"
+}
+
+@MainActor
+func waitUntil(
+    _ label: String, timeout: TimeInterval = 60, _ condition: @MainActor () -> Bool
+) async throws {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if condition() { return }
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    if condition() { return }
+    throw ProbeError("timed out waiting for \(label)")
+}
+
+func modeText(_ agent: AgentSnapshot?) -> String {
+    agent?.currentModeId ?? "-"
+}
+
+/// End-to-end check of T6 against the live daemon: catalogue, create, mode switch, permission
+/// answer, rename, archive. Only ever creates an agent in the given sandbox cwd, and archives it.
+@MainActor
+func runAgentControl(_ connection: DaemonConnection, cwd: String) async throws {
+    let sandbox = "/tmp/fixture-sandbox"
+    guard cwd == sandbox else {
+        throw ProbeError("agent-control only runs in \(sandbox); refusing to create an agent in \(cwd)")
+    }
+
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+
+    let catalog = session.agentControl
+    await catalog.loadCatalog(cwd: sandbox)
+    guard catalog.phase == .ready else {
+        throw ProbeError("provider catalogue failed: \(catalog.phase)")
+    }
+    let statuses = catalog.providers.map { entry in
+        "\(entry.provider):\(entry.status)\(entry.enabled ? "" : "(disabled)")"
+    }
+    print("providers (\(catalog.providers.count)): \(statuses.joined(separator: " "))")
+    for provider in catalog.readyProviders {
+        let models = catalog.models(forProvider: provider.provider)
+        let modes = catalog.modes(forProvider: provider.provider).map(\.id)
+        print("  \(provider.provider): \(models.count) models, modes [\(modes.joined(separator: ","))]")
+    }
+
+    let provider = "omp"
+    let model = "opencode-go/deepseek-v4.1-flash"
+    let thinking = catalog.thinkingOptions(forProvider: provider, modelId: model).map(\.id)
+    guard catalog.provider(provider)?.isAvailable == true else {
+        throw ProbeError("\(provider) is not available in the catalogue")
+    }
+    print("\(provider) \(model) thinking: [\(thinking.joined(separator: ","))]")
+
+    guard
+        let agentId = await catalog.createAgent(
+            cwd: sandbox, provider: provider, model: model, modeId: "full",
+            prompt: "Reply with the single word: ready", title: "T6 probe")
+    else {
+        throw ProbeError("create failed: \(catalog.actionError ?? "unknown error")")
+    }
+    print("created \(String(agentId.prefix(8))) in \(sandbox) mode=full")
+    var archived = false
+
+    do {
+        let store = session.conversation(for: agentId)
+        try await waitUntil("the conversation to load") { store.phase == .ready }
+        try await waitUntil("the first turn to finish", timeout: 120) { !store.isRunning }
+        print("agent idle: mode=\(modeText(store.agent)) model=\(store.agent?.model ?? "-")")
+
+        await store.setMode("ask")
+        try await waitUntil("the mode switch") { store.agent?.currentModeId == "ask" }
+        print("mode -> ask: accepted, notice=\(store.lastNotice?.message ?? "none")")
+
+        await store.send("Use the shell tool to run exactly: echo t6-probe-permission")
+        try await waitUntil("a permission request", timeout: 120) { !store.pendingPermissions.isEmpty }
+        guard let request = store.pendingPermissions.first else {
+            throw ProbeError("permission request vanished before it could be answered")
+        }
+        let options = (request.actions ?? []).map { "\($0.id):\($0.behavior)" }.joined(separator: ",")
+        print("permission: kind=\(request.kind) name=\(request.name) actions=[\(options)]")
+        print("  title: \(request.title?.replacingOccurrences(of: "\n", with: " / ") ?? "-")")
+
+        await store.respond(to: request.id, with: .allowing())
+        try await waitUntil("the permission resolution", timeout: 60) { store.pendingPermissions.isEmpty }
+        print("answered allow; pending=\(store.pendingPermissions.count)")
+
+        await store.rename(to: "T6 probe agent")
+        try await waitUntil("the rename") { store.agent?.title == "T6 probe agent" }
+        print("renamed: title=\(store.agent?.title ?? "-")")
+
+        await store.archive()
+        archived = true
+        try await waitUntil("the agent to leave the list", timeout: 30) {
+            !session.agents.contains { $0.id == agentId }
+        }
+        print("archived; agents listed now: \(session.agents.count)")
+        session.closeConversation(agentId)
+    } catch {
+        // Never leave a sandbox agent behind.
+        if !archived {
+            _ = try? await connection.send(ArchiveAgentRequest(agentId: agentId))
+            print("cleanup: archived \(String(agentId.prefix(8))) after failure")
+        }
+        throw error
+    }
 }
