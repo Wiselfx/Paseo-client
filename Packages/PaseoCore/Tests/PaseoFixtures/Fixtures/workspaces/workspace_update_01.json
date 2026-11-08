@@ -1,0 +1,68 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace_update",
+    "payload": {
+      "kind": "upsert",
+      "workspace": {
+        "id": "wks_147d5ce71e935b83",
+        "projectId": "prj_9f675e179792b526",
+        "projectDisplayName": "fixture-sandbox",
+        "projectCustomName": null,
+        "projectCustomIconRevision": null,
+        "projectRootPath": "/tmp/fixture-sandbox",
+        "workspaceDirectory": "/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+        "setupStatus": null,
+        "worktreeSlug": "fixture-t7",
+        "projectKind": "git",
+        "workspaceKind": "worktree",
+        "name": "fixture-t7-worktree-1794176306106",
+        "title": null,
+        "pinnedAt": null,
+        "background": false,
+        "archivingAt": null,
+        "status": "done",
+        "statusEnteredAt": "2026-11-08T22:18:26.236Z",
+        "activityAt": null,
+        "createdAt": "2026-11-08T22:18:26.236Z",
+        "diffStat": {
+          "additions": 1,
+          "deletions": 0
+        },
+        "scripts": [],
+        "project": {
+          "projectKey": "prj_9f675e179792b526",
+          "projectName": "fixture-sandbox",
+          "workspaceName": "fixture-t7-worktree-1794176306106",
+          "checkout": {
+            "cwd": "/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+            "currentBranch": "fixture-t7-worktree-1794176306106",
+            "remoteUrl": null,
+            "worktreeRoot": "/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+            "isGit": true,
+            "isPaseoOwnedWorktree": true,
+            "mainRepoRoot": "/tmp/fixture-sandbox"
+          }
+        },
+        "gitRuntime": {
+          "currentBranch": "fixture-t7-worktree-1794176306106",
+          "remoteUrl": null,
+          "isPaseoOwnedWorktree": true,
+          "isDirty": true,
+          "aheadBehind": {
+            "ahead": 0,
+            "behind": 0
+          },
+          "aheadOfOrigin": null,
+          "behindOfOrigin": null
+        },
+        "githubRuntime": {
+          "featuresEnabled": false,
+          "pullRequest": null,
+          "error": null
+        },
+        "lastUserMessageAt": null
+      }
+    }
+  }
+}

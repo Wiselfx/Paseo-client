@@ -14,6 +14,17 @@ public enum Fixture {
         return try Data(contentsOf: url)
     }
 
+    /// A fixture inside one area directory, e.g. `Fixtures/workspaces/checkout_status_response.json`.
+    public static func data(_ name: String, in area: String) throws -> Data {
+        guard
+            let url = Bundle.module.url(
+                forResource: name, withExtension: "json", subdirectory: "Fixtures/" + area)
+        else {
+            throw FixtureError.missing("\(area)/\(name)")
+        }
+        return try Data(contentsOf: url)
+    }
+
     /// Every `agent_stream` frame of one turn, in arrival order.
     public static func streamFrames() throws -> [Data] {
         guard let dir = Bundle.module.url(forResource: "stream", withExtension: nil, subdirectory: "Fixtures") else {

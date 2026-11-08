@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "archive_workspace_response",
+    "payload": {
+      "requestId": "t7-11",
+      "workspaceId": "wks_147d5ce71e935b83",
+      "archivedAt": "2026-11-08T22:18:28.800Z",
+      "error": null
+    }
+  }
+}

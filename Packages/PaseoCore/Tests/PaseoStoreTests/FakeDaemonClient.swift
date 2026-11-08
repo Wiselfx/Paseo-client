@@ -20,6 +20,7 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
         @Sendable (CancelAgentRequest) async throws -> CancelAgentRequest.Response
     typealias SubscriptionHandler =
         @Sendable (SetAgentTimelineSubscriptionRequest) async throws -> SetAgentTimelineSubscriptionRequest.Response
+    typealias GenericHandler = @Sendable (any PaseoRequest) async throws -> Any
 
     let events: AsyncStream<DaemonEvent>
     let states: AsyncStream<ConnectionState>
@@ -33,6 +34,8 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
     private var sendMessageHandler: SendMessageHandler?
     private var cancelHandler: CancelHandler?
     private var subscriptionHandler: SubscriptionHandler?
+    /// Type-erased handlers for request types added after the original fake. Keyed by wire type.
+    private var genericHandlers: [String: GenericHandler] = [:]
 
     init() {
         let (events, eventContinuation) = AsyncStream<DaemonEvent>.makeStream(bufferingPolicy: .unbounded)
@@ -65,6 +68,18 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
         locked { subscriptionHandler = handler }
     }
 
+    /// Answers any request type without extending the switch below. Takes precedence over the
+    /// built-in handlers when both exist.
+    func on<R: PaseoRequest>(_ type: R.Type, _ handler: @escaping @Sendable (R) async throws -> R.Response) {
+        let key = R.type
+        locked {
+            genericHandlers[key] = { any in
+                guard let request = any as? R else { throw FakeError.unexpectedResponse(key) }
+                return try await handler(request)
+            }
+        }
+    }
+
     // MARK: Pushing traffic
 
     func push(_ event: DaemonEvent) {
@@ -92,6 +107,12 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
 
     func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
         locked { recorded.append(request) }
+
+        if let handler = locked({ genericHandlers[R.type] }) {
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+        }
 
         switch request {
         case let request as FetchAgentsRequest:

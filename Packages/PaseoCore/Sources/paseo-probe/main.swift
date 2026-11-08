@@ -36,6 +36,10 @@ let usage = """
       chat <agentId> <text> [secs]
                                full stack (HostSession/ConversationStore): send text, print the
                                last turn as it changes until the agent finishes (default 180s)
+      workspaces               projects and workspaces from the live directory subscription
+      checkout <workspaceId>   git status, PR badge and working diff summary
+      files <workspaceId> [path]
+                               list a directory in a workspace
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -274,6 +278,18 @@ do {
         guard arguments.commandArguments.count >= 2 else { throw ProbeError("chat needs <agentId> <text>") }
         let seconds = arguments.commandArguments.count > 2 ? Int(arguments.commandArguments[2]) ?? 180 : 180
         try await runChat(connection, agentId: arguments.commandArguments[0], text: arguments.commandArguments[1], seconds: seconds)
+    case "workspaces":
+        try await runWorkspaces(connection)
+    case "checkout":
+        guard let workspaceId = arguments.commandArguments.first else {
+            throw ProbeError("checkout needs a <workspaceId>")
+        }
+        try await runCheckout(connection, workspaceId: workspaceId)
+    case "files":
+        guard let workspaceId = arguments.commandArguments.first else {
+            throw ProbeError("files needs a <workspaceId>")
+        }
+        try await runFiles(connection, workspaceId: workspaceId, path: arguments.commandArguments.dropFirst().first)
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -343,4 +359,154 @@ func describe(_ turn: Turn?, running: Bool) -> String {
         }
     }.joined(separator: " ")
     return "turn id=\(turn.id) phase=\(turn.phase) running=\(running) user=\"\(user)\"\(pending) [\(segments)]"
+}
+
+
+// MARK: - Workspaces and git
+
+func workspaceKindText(_ kind: WorkspaceKind) -> String {
+    switch kind {
+    case .directory: "directory"
+    case .localCheckout: "local_checkout"
+    case .checkout: "checkout"
+    case .worktree: "worktree"
+    case .unknown(let raw): raw
+    }
+}
+
+func projectKindText(_ kind: WorkspaceProjectKind) -> String {
+    switch kind {
+    case .git: "git"
+    case .nonGit: "non_git"
+    case .directory: "directory"
+    case .unknown(let raw): raw
+    }
+}
+
+func bucketText(_ status: WorkspaceStatusBucket) -> String {
+    switch status {
+    case .needsInput: "needs_input"
+    case .failed: "failed"
+    case .running: "running"
+    case .attention: "attention"
+    case .done: "done"
+    case .unknown(let raw): raw
+    }
+}
+
+func mergeableText(_ value: CheckoutMergeable) -> String {
+    switch value {
+    case .mergeable: "MERGEABLE"
+    case .conflicting: "CONFLICTING"
+    case .unknownState: "UNKNOWN"
+    case .unknown(let raw): raw
+    }
+}
+
+@MainActor
+func waitForDirectory(_ session: HostSession, seconds: Int = 15) async -> Bool {
+    let deadline = Date().addingTimeInterval(Double(seconds))
+    while Date() < deadline {
+        if session.workspaceDirectory.hasLoaded { return true }
+        try? await Task.sleep(for: .milliseconds(50))
+    }
+    return session.workspaceDirectory.hasLoaded
+}
+
+@MainActor
+func waitForCheckout(_ store: CheckoutStore, seconds: Int = 15) async -> Bool {
+    let deadline = Date().addingTimeInterval(Double(seconds))
+    while Date() < deadline {
+        if store.phase != .loading, store.diffPhase != .loading { return true }
+        try? await Task.sleep(for: .milliseconds(50))
+    }
+    return false
+}
+
+@MainActor
+func runWorkspaces(_ connection: DaemonConnection) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    guard await waitForDirectory(session) else {
+        throw ProbeError("workspace directory did not load: \(session.workspaceDirectory.error ?? "unknown error")")
+    }
+    let directory = session.workspaceDirectory
+    print("projects: \(directory.projects.count)  workspaces: \(directory.workspaces.count)")
+    for group in directory.groups {
+        let project = group.project
+        print("project \(project.projectId)  \(project.projectDisplayName)  [\(projectKindText(project.projectKind))]  \(project.projectRootPath)")
+        for workspace in group.workspaces {
+            let branch = workspace.branch ?? "-"
+            let dirty = workspace.isDirty ? "dirty" : "clean"
+            let stat = workspace.diffStat.map { "+\($0.additions)-\($0.deletions)" } ?? "-"
+            let scripts = workspace.scripts.isEmpty ? "-" : workspace.scripts.map(\.scriptName).joined(separator: ",")
+            let pinned = workspace.isPinned ? " pinned" : ""
+            print("  \(workspace.id)  \(workspaceKindText(workspace.workspaceKind))  \(bucketText(workspace.status))\(pinned)  \(workspace.name)  branch=\(branch)  \(dirty)  \(stat)  scripts=\(scripts)")
+            print("    cwd=\(workspace.cwd)")
+        }
+    }
+    if let error = directory.error { print("error: \(error)") }
+}
+
+@MainActor
+func runCheckout(_ connection: DaemonConnection, workspaceId: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    guard await waitForDirectory(session) else {
+        throw ProbeError("workspace directory did not load")
+    }
+    guard let workspace = session.workspaceDirectory.workspace(id: workspaceId) else {
+        throw ProbeError("unknown workspace \(workspaceId)")
+    }
+    let store = session.checkout(for: workspace)
+    _ = await waitForCheckout(store)
+
+    print("workspace \(workspace.id)  \(workspace.name)  cwd=\(store.cwd)")
+    if let status = store.status {
+        let ahead = status.aheadBehind.map { "+\($0.ahead)/-\($0.behind)" } ?? "-"
+        print("status isGit=\(status.isGit) branch=\(status.currentBranch ?? "-") dirty=\(status.isDirty.map(String.init) ?? "-") aheadBehind=\(ahead) upstream=\(status.upstreamRef ?? "-") remote=\(status.remoteUrl ?? "-")")
+        print("base=\(status.baseRef ?? "-") comparisonBase=\(status.comparisonBaseRef ?? "-")")
+    } else {
+        print("status: \(store.statusError ?? "unavailable")")
+    }
+    if let pr = store.prStatus {
+        print("pr #\(pr.number.map(String.init) ?? "-") \(pr.state) \(pr.title) mergeable=\(mergeableText(pr.mergeable)) checks=\(pr.checksStatus ?? "-")")
+    } else {
+        print("pr: \(store.prStatusError ?? "none")")
+    }
+    if let diff = store.diff {
+        print("diff \(diff.files.count) files +\(diff.additions)-\(diff.deletions) tooLarge=\(diff.isTooLarge)")
+        for file in diff.files {
+            let flag = file.isNew ? "new" : (file.isDeleted ? "deleted" : "modified")
+            print("  \(flag)  +\(file.additions)-\(file.deletions)  \(file.path)")
+        }
+    } else {
+        print("diff: \(store.diffError ?? "none")")
+    }
+    if let error = store.actionError { print("actionError: \(error)") }
+    await session.closeCheckout(workspaceId)
+}
+
+@MainActor
+func runFiles(_ connection: DaemonConnection, workspaceId: String, path: String?) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    guard await waitForDirectory(session) else {
+        throw ProbeError("workspace directory did not load")
+    }
+    guard let workspace = session.workspaceDirectory.workspace(id: workspaceId) else {
+        throw ProbeError("unknown workspace \(workspaceId)")
+    }
+    let store = session.checkout(for: workspace)
+    await store.files.list(path)
+    print("workspace \(workspace.id)  cwd=\(store.cwd)  path=\(store.files.path ?? path ?? ".")  entries=\(store.files.entries.count)")
+    for entry in store.files.entries {
+        let kind = entry.isDirectory ? "dir " : "file"
+        print("  \(kind)  \(entry.size)  \(entry.name)")
+    }
+    if let error = store.files.error { print("error: \(error)") }
+    await session.closeCheckout(workspaceId)
 }

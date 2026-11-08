@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.title.set.response",
+    "payload": {
+      "requestId": "t7-10",
+      "workspaceId": "wks_147d5ce71e935b83",
+      "accepted": true,
+      "title": null,
+      "error": null
+    }
+  }
+}
