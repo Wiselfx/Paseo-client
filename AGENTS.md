@@ -24,10 +24,13 @@ There is no Xcode here. `Packages/PaseoUI` and `App/` cannot be compiled on this
    in new files.
 4. **No new dependencies.** Foundation, Observation and Swift Testing only in PaseoCore.
 5. **No force unwraps or `fatalError`** in your implementation, except where the ticket says so.
-6. **Swift 6 strict concurrency.** Code must build with no warnings about Sendable or isolation.
-7. **Done means:** `swift build --build-tests` has no errors or warnings in your files, and
+6. **No untested platform branches.** Code under `#if os(...)` / `#if canImport(...)` that only
+   compiles on Apple platforms is never built here. Avoid such branches; if one is unavoidable,
+   keep it tiny and list it in your final message so it gets checked in Xcode.
+7. **Swift 6 strict concurrency.** Code must build with no warnings about Sendable or isolation.
+8. **Done means:** `swift build --build-tests` has no errors or warnings in your files, and
    `swift test` passes the suites named in your ticket.
-8. **Commit** on your branch when done, with a message that names the ticket (for example
+9. **Commit** on your branch when done, with a message that names the ticket (for example
    `T2: timeline reducer`). Do not push, merge or rebase.
-9. **Final message:** what you did, the test output summary, and anything you were unsure about.
+10. **Final message:** what you did, the test output summary, and anything you were unsure about.
    If you couldn't finish, say exactly what's missing. Don't claim tests pass unless you ran them.
