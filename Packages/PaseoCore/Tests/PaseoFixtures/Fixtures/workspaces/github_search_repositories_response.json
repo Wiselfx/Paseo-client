@@ -1,0 +1,59 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.github.search_repositories.response",
+    "payload": {
+      "requestId": "t7-18",
+      "repositories": [
+        {
+          "id": "R_kgDOU5pQTA",
+          "name": "Orchestrator",
+          "nameWithOwner": "denmercs/Orchestrator",
+          "description": "your modern paseo dashboard",
+          "visibility": "public",
+          "updatedAt": "2026-11-08T22:18:24Z",
+          "cloneUrl": "https://github.com/denmercs/Orchestrator"
+        },
+        {
+          "id": "R_kgDOU0oQzw",
+          "name": "loadout",
+          "nameWithOwner": "Enjoyoer/loadout",
+          "description": "Agent skills for Claude Code and Codex, a verified fleet sync, and Paseo daemon plugins",
+          "visibility": "public",
+          "updatedAt": "2026-11-08T22:15:38Z",
+          "cloneUrl": "https://github.com/Enjoyoer/loadout"
+        },
+        {
+          "id": "R_kgDOUMAWBQ",
+          "name": "frogg",
+          "nameWithOwner": "frogg-app/frogg",
+          "description": "Frogg Development Environment: Tauri desktop client for remote AI coding agents (fork of Paseo)",
+          "visibility": "public",
+          "updatedAt": "2026-11-08T22:15:09Z",
+          "cloneUrl": "https://github.com/frogg-app/frogg"
+        },
+        {
+          "id": "R_kgDOVfNzYg",
+          "name": "VibeSquad",
+          "nameWithOwner": "Pizzarar/VibeSquad",
+          "description": "Team-first UI for running squads of coding agents (works with Paseo)",
+          "visibility": "public",
+          "updatedAt": "2026-11-08T22:15:03Z",
+          "cloneUrl": "https://github.com/Pizzarar/VibeSquad"
+        },
+        {
+          "id": "R_kgDOVnf3cg",
+          "name": "agent-manager-guide",
+          "nameWithOwner": "techtaek77/agent-manager-guide",
+          "description": "Paseo·Orca·Herdr 코딩 에이전트 매니저 비교 (TECHTAEK, 벨로키)",
+          "visibility": "public",
+          "updatedAt": "2026-11-08T22:08:02Z",
+          "cloneUrl": "https://github.com/techtaek77/agent-manager-guide"
+        }
+      ],
+      "status": "success",
+      "available": true,
+      "error": null
+    }
+  }
+}

@@ -36,6 +36,7 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
         @Sendable (StartWorkspaceScriptRequest) async throws -> StartWorkspaceScriptRequest.Response
     typealias StopScriptHandler =
         @Sendable (StopWorkspaceScriptRequest) async throws -> StopWorkspaceScriptRequest.Response
+    typealias GenericHandler = @Sendable (any PaseoRequest) async throws -> Any
 
     let events: AsyncStream<DaemonEvent>
     let states: AsyncStream<ConnectionState>
@@ -60,9 +61,9 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
     private var stopScriptHandler: StopScriptHandler?
     /// Every outbound fire-and-forget message, in order (`terminal_input`, subscribes, …).
     var messages: [any PaseoOutboundMessage] { locked { recordedMessages } }
-    /// Type-keyed handlers for request types that don't deserve a named property. Checked before
-    /// the switch, so a test can add a new wire type without touching this file's existing API.
-    private var genericHandlers: [String: @Sendable (any PaseoRequest) async throws -> Any] = [:]
+    /// Type-erased handlers for request types added after the original fake. Keyed by wire type.
+    /// Checked before the named handlers, so a new wire type needs no change to this file's API.
+    private var genericHandlers: [String: GenericHandler] = [:]
 
     init() {
         let (events, eventContinuation) = AsyncStream<DaemonEvent>.makeStream(bufferingPolicy: .unbounded)
@@ -132,12 +133,17 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
     func onSend<R: PaseoRequest>(
         _ type: R.Type = R.self, _ handler: @escaping @Sendable (R) async throws -> R.Response
     ) {
+        on(R.self, handler)
+    }
+
+    /// Answers any request type without extending the switch below. Takes precedence over the
+    /// built-in handlers when both exist.
+    func on<R: PaseoRequest>(_ type: R.Type, _ handler: @escaping @Sendable (R) async throws -> R.Response) {
+        let key = R.type
         locked {
-            genericHandlers[R.type] = { request in
-                guard let typed = request as? R else {
-                    throw FakeError.unexpectedResponse(R.type)
-                }
-                return try await handler(typed)
+            genericHandlers[key] = { any in
+                guard let request = any as? R else { throw FakeError.unexpectedResponse(key) }
+                return try await handler(request)
             }
         }
     }

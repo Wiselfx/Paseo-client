@@ -486,7 +486,12 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
             return
         }
 
-        if let requestId = header.requestId, resolvePending(requestId, with: .success(data)) {
+        // Some events carry a requestId-shaped field in their payload (the daemon's
+        // `subscription:<cwd>` status id). Only a message whose type is a response may settle a
+        // pending request; everything else is an event.
+        if let requestId = header.requestId, Self.isResponseType(header.messageType),
+            resolvePending(requestId, with: .success(data))
+        {
             return
         }
 
@@ -519,9 +524,15 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
             }
         default:
             // A response for a request we already gave up on: drop it silently.
-            if header.requestId != nil { return }
+            if header.requestId != nil, Self.isResponseType(messageType) { return }
             emitEvent(.unhandled(messageType: messageType, raw: data))
         }
+    }
+
+    /// Every response message type in the protocol ends in `_response` or `.response`.
+    private static func isResponseType(_ messageType: String?) -> Bool {
+        guard let messageType else { return false }
+        return messageType.hasSuffix("_response") || messageType.hasSuffix(".response")
     }
 
     private struct TimelineReplacement: Decodable, Sendable {

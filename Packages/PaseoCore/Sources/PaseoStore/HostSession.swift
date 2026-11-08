@@ -17,6 +17,8 @@ public final class HostSession {
     public private(set) var agents: [AgentSnapshot] = []
     /// Project placement by agent id, for grouping and titles.
     public private(set) var projects: [String: ProjectPlacement] = [:]
+    /// The sidebar's live project/workspace directory.
+    public private(set) var workspaceDirectory: WorkspaceDirectory
     /// Last error from loading the agent list, for display.
     public private(set) var agentsError: String?
     /// Live terminals and workspace scripts for every opened workspace.
@@ -26,6 +28,7 @@ public final class HostSession {
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
+    private var checkouts: [String: CheckoutStore] = [:]
     private var stateTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     private var isStarted = false
@@ -38,6 +41,7 @@ public final class HostSession {
         self.client = client
         self.terminals = TerminalsStore(client: client)
         self.agentControl = AgentControlStore(client: client)
+        self.workspaceDirectory = WorkspaceDirectory(client: client)
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
@@ -79,6 +83,26 @@ public final class HostSession {
         return store
     }
 
+    /// The checkout store for one open workspace. Same instance for the same id while it is open.
+    /// Creating it loads git status, the PR badge and the working diff.
+    public func checkout(for workspace: WorkspaceDescriptor) -> CheckoutStore {
+        if let existing = checkouts[workspace.id] {
+            existing.update(workspace: workspace)
+            return existing
+        }
+        let store = CheckoutStore(workspace: workspace, client: client)
+        store.update(serverInfo: serverInfo)
+        checkouts[workspace.id] = store
+        Task { await store.load() }
+        return store
+    }
+
+    /// Call when the checkout screen goes away. Releases its diff subscription.
+    public func closeCheckout(_ workspaceId: String) async {
+        guard let store = checkouts.removeValue(forKey: workspaceId) else { return }
+        await store.close()
+    }
+
     /// Call when the conversation screen goes away. Unsubscribes its stream; the store is dropped.
     public func closeConversation(_ agentId: String) {
         guard conversations.removeValue(forKey: agentId) != nil else { return }
@@ -116,9 +140,13 @@ public final class HostSession {
         case .connected(let info):
             serverInfo = info
             agentControl.serverInfoChanged(info)
+            workspaceDirectory.update(serverInfo: info)
+            for store in checkouts.values { store.update(serverInfo: info) }
             if sawReconnect {
                 sawReconnect = false
                 await resync()
+            } else {
+                await workspaceDirectory.reload()
             }
         case .reconnecting:
             sawReconnect = true
@@ -134,6 +162,12 @@ public final class HostSession {
         let stores = Array(conversations.values)
         for store in stores {
             await store.catchUp()
+        }
+        workspaceDirectory.prepareForReconnect()
+        await workspaceDirectory.reload()
+        let openCheckouts = Array(checkouts.values)
+        for store in openCheckouts {
+            await store.resubscribe()
         }
     }
 
@@ -155,9 +189,39 @@ public final class HostSession {
         case .unhandled(let messageType, let raw):
             terminals.handle(messageType: messageType, raw: raw)
             agentControl.handle(messageType: messageType, raw: raw, conversations: conversations)
+            await handleUnhandled(messageType: messageType, raw: raw)
 
         case .binaryFrame(let data):
             terminals.handle(binaryFrame: data)
+        }
+    }
+
+    /// Newer daemon message types this ticket owns. Decoded here, from `raw`, so PaseoKit's
+    /// `DaemonEvent` stays small.
+    private func handleUnhandled(messageType: String, raw: Data) async {
+        let decoder = JSONDecoder()
+        switch messageType {
+        case "workspace_update":
+            if let update = try? decoder.decode(SessionPayloadEnvelope<WorkspaceUpdate>.self, from: raw).payload {
+                workspaceDirectory.apply(update)
+            }
+        case "project.update":
+            if let update = try? decoder.decode(SessionPayloadEnvelope<ProjectUpdate>.self, from: raw).payload {
+                workspaceDirectory.apply(update)
+            }
+        case "checkout_status_update":
+            if let update = try? decoder.decode(SessionPayloadEnvelope<CheckoutStatusUpdate>.self, from: raw)
+                .payload
+            {
+                workspaceDirectory.apply(status: update.status)
+                for store in checkouts.values { store.handle(update) }
+            }
+        case "checkout_diff_update":
+            if let update = try? decoder.decode(SessionPayloadEnvelope<CheckoutDiff>.self, from: raw).payload {
+                for store in checkouts.values { store.handle(update) }
+            }
+        default:
+            break
         }
     }
 

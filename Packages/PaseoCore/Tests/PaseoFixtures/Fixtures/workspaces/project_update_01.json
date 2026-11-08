@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "project.update",
+    "payload": {
+      "kind": "remove",
+      "projectId": "prj_2ec6cf6153016267",
+      "generation": "00000000-0000-0000-0000-000000000000",
+      "seq": 18
+    }
+  }
+}

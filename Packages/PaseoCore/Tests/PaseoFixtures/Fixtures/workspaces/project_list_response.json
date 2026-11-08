@@ -1,0 +1,21 @@
+{
+  "type": "session",
+  "message": {
+    "type": "project.list.response",
+    "payload": {
+      "requestId": "t7-1",
+      "projects": [
+        {
+          "projectId": "prj_9f675e179792b526",
+          "projectKey": "host:srv_FIXTURE:/tmp/fixture-sandbox",
+          "projectDisplayName": "fixture-sandbox",
+          "projectCustomName": null,
+          "projectCustomIconRevision": null,
+          "projectIconRevision": "automatic:none:v1",
+          "projectRootPath": "/tmp/fixture-sandbox",
+          "projectKind": "git"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.title.set.response",
+    "payload": {
+      "requestId": "t7-9",
+      "workspaceId": "wks_147d5ce71e935b83",
+      "accepted": true,
+      "title": "Fixture T7 worktree",
+      "error": null
+    }
+  }
+}
