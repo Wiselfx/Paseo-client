@@ -1,0 +1,3727 @@
+{
+  "type": "session",
+  "message": {
+    "type": "get_providers_snapshot_response",
+    "payload": {
+      "generatedAt": "2026-11-08T22:06:01.699Z",
+      "entries": [
+        {
+          "provider": "claude",
+          "status": "ready",
+          "enabled": true,
+          "source": "builtin",
+          "label": "Claude",
+          "description": "Anthropic's multi-tool assistant with MCP support, streaming, and deep reasoning",
+          "defaultModeId": "auto",
+          "models": [
+            {
+              "provider": "claude",
+              "id": "claude-opus-5-5",
+              "label": "Opus 5.5",
+              "description": "Opus 5.5 · Latest release",
+              "isDefault": true,
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-opus-5",
+              "label": "Opus 5",
+              "description": "Opus 5 · Previous release",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-fable-5-1",
+              "label": "Fable 5.1",
+              "description": "Fable 5.1 · Most powerful model",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-fable-5",
+              "label": "Fable 5",
+              "description": "Fable 5 · Previous release",
+              "aliases": [
+                "claude-fable-5[1m]"
+              ],
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-fable-5[1m]",
+              "label": "Fable 5",
+              "description": "Fable 5 · Previous release",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high",
+              "isSelectable": false
+            },
+            {
+              "provider": "claude",
+              "id": "claude-opus-4-8[1m]",
+              "label": "Opus 4.8 1M",
+              "description": "Opus 4.8 with 1M context window",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-opus-4-8",
+              "label": "Opus 4.8",
+              "description": "Opus 4.8 · Previous release",
+              "contextWindowMaxTokens": 200000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-sonnet-5-5",
+              "label": "Sonnet 5.5",
+              "description": "Sonnet 5.5 · Best for everyday tasks",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-sonnet-5",
+              "label": "Sonnet 5",
+              "description": "Sonnet 5 · Previous release",
+              "contextWindowMaxTokens": 200000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-sonnet-5[1m]",
+              "label": "Sonnet 5 1M",
+              "description": "Sonnet 5 with 1M context window",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-opus-4-7[1m]",
+              "label": "Opus 4.7 1M",
+              "description": "Opus 4.7 with 1M context window",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-opus-4-7",
+              "label": "Opus 4.7",
+              "description": "Opus 4.7 · Previous release",
+              "contextWindowMaxTokens": 200000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-opus-4-6[1m]",
+              "label": "Opus 4.6 1M",
+              "description": "Opus 4.6 with 1M context window",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-opus-4-6",
+              "label": "Opus 4.6",
+              "description": "Opus 4.6 · Most capable for complex work",
+              "contextWindowMaxTokens": 200000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-sonnet-4-6[1m]",
+              "label": "Sonnet 4.6 1M",
+              "description": "Sonnet 4.6 with 1M context window",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-sonnet-4-6",
+              "label": "Sonnet 4.6",
+              "description": "Sonnet 4.6 · Best for everyday tasks",
+              "contextWindowMaxTokens": 200000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-haiku-5-5",
+              "label": "Haiku 5.5",
+              "description": "Haiku 5.5 · Fastest for quick answers",
+              "contextWindowMaxTokens": 1000000,
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off"
+                },
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra High"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                },
+                {
+                  "id": "ultracode",
+                  "label": "Ultra Code"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "claude",
+              "id": "claude-haiku-4-5",
+              "label": "Haiku 4.5",
+              "description": "Haiku 4.5 · Previous release",
+              "contextWindowMaxTokens": 200000
+            }
+          ],
+          "modes": [
+            {
+              "id": "plan",
+              "label": "Plan Mode",
+              "description": "Analyze the codebase without executing tools or edits",
+              "icon": "ShieldCheck",
+              "colorTier": "planning"
+            },
+            {
+              "id": "default",
+              "label": "Always Ask",
+              "description": "Prompts for permission the first time a tool is used",
+              "icon": "ShieldCheck",
+              "colorTier": "safe"
+            },
+            {
+              "id": "acceptEdits",
+              "label": "Accept File Edits",
+              "description": "Automatically approves edit-focused tools without prompting",
+              "icon": "ShieldCheck",
+              "colorTier": "moderate"
+            },
+            {
+              "id": "auto",
+              "label": "Auto mode",
+              "description": "Uses a model classifier to review permission prompts automatically",
+              "icon": "ShieldCheck",
+              "colorTier": "moderate"
+            },
+            {
+              "id": "bypassPermissions",
+              "label": "Bypass",
+              "description": "Skip all permission prompts (use with caution)",
+              "icon": "ShieldOff",
+              "colorTier": "dangerous"
+            }
+          ],
+          "fetchedAt": "2026-11-08T20:38:01.202Z"
+        },
+        {
+          "provider": "codex",
+          "status": "unavailable",
+          "enabled": false,
+          "source": "builtin",
+          "label": "Codex",
+          "description": "OpenAI's Codex workspace agent with sandbox controls and optional network access",
+          "defaultModeId": "auto-review"
+        },
+        {
+          "provider": "copilot",
+          "status": "unavailable",
+          "enabled": false,
+          "source": "builtin",
+          "label": "Copilot",
+          "description": "GitHub Copilot via Agent Client Protocol with dynamic modes and session support",
+          "defaultModeId": "https://agentclientprotocol.com/protocol/session-modes#agent"
+        },
+        {
+          "provider": "opencode",
+          "status": "ready",
+          "enabled": true,
+          "source": "builtin",
+          "label": "OpenCode",
+          "description": "Open-source coding assistant with multi-provider model support",
+          "defaultModeId": null,
+          "models": [
+            {
+              "provider": "opencode",
+              "id": "opencode/iceman-free",
+              "label": "Iceman Free",
+              "contextWindowMaxTokens": 262144,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "iceman-free",
+                "supportsAttachments": false,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 262144
+              },
+              "thinkingOptions": []
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/inkling-2-small-free",
+              "label": "Inkling 2 Small Free",
+              "contextWindowMaxTokens": 1048576,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "inkling-2-small-free",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1048576
+              },
+              "thinkingOptions": [
+                {
+                  "id": "none",
+                  "label": "none"
+                },
+                {
+                  "id": "minimal",
+                  "label": "minimal"
+                },
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode-go/hy4",
+              "label": "Hy4",
+              "contextWindowMaxTokens": 1048576,
+              "metadata": {
+                "providerId": "opencode-go",
+                "modelId": "hy4",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1048576
+              },
+              "thinkingOptions": [
+                {
+                  "id": "none",
+                  "label": "none"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/crouton-alpha-free",
+              "label": "Crouton Alpha Free",
+              "contextWindowMaxTokens": 1048576,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "crouton-alpha-free",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1048576
+              },
+              "thinkingOptions": [
+                {
+                  "id": "minimal",
+                  "label": "minimal"
+                },
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode-go/crouton-alpha-free",
+              "label": "Crouton Alpha Free",
+              "contextWindowMaxTokens": 1048576,
+              "metadata": {
+                "providerId": "opencode-go",
+                "modelId": "crouton-alpha-free",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1048576
+              },
+              "thinkingOptions": [
+                {
+                  "id": "minimal",
+                  "label": "minimal"
+                },
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode-go/iceman-contributor-free",
+              "label": "Iceman Contributor Free",
+              "contextWindowMaxTokens": 262144,
+              "metadata": {
+                "providerId": "opencode-go",
+                "modelId": "iceman-contributor-free",
+                "supportsAttachments": false,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 262144
+              },
+              "thinkingOptions": []
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/flint-40b-free",
+              "label": "Flint 40B Free",
+              "contextWindowMaxTokens": 262144,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "flint-40b-free",
+                "supportsAttachments": false,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 262144
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/nemotron-3.5-super-vl-free",
+              "label": "Nemotron 3.5 Super VL Free",
+              "contextWindowMaxTokens": 1048576,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "nemotron-3.5-super-vl-free",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1048576
+              },
+              "thinkingOptions": [
+                {
+                  "id": "none",
+                  "label": "none"
+                },
+                {
+                  "id": "minimal",
+                  "label": "minimal"
+                },
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/beam-free",
+              "label": "Beam Free",
+              "contextWindowMaxTokens": 1048576,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "beam-free",
+                "supportsAttachments": false,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1048576
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode-go/beam-free",
+              "label": "Beam Free",
+              "contextWindowMaxTokens": 1048576,
+              "metadata": {
+                "providerId": "opencode-go",
+                "modelId": "beam-free",
+                "supportsAttachments": false,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1048576
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/mimo-v2.6-flash-free",
+              "label": "MiMo-V2.6-Flash Free",
+              "contextWindowMaxTokens": 200000,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "mimo-v2.6-flash-free",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 200000
+              },
+              "thinkingOptions": []
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/deepseek-v4.1-flash-free",
+              "label": "DeepSeek V4.1 Flash Free",
+              "contextWindowMaxTokens": 200000,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "deepseek-v4.1-flash-free",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 200000
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode-go/deepseek-v4.1-flash",
+              "label": "DeepSeek V4.1 Flash",
+              "contextWindowMaxTokens": 1000000,
+              "metadata": {
+                "providerId": "opencode-go",
+                "modelId": "deepseek-v4.1-flash",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1000000
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/glm-5.3-flash-free",
+              "label": "GLM-5.3-Flash Free",
+              "contextWindowMaxTokens": 200000,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "glm-5.3-flash-free",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 200000
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode-go/glm-5.3-flash",
+              "label": "GLM-5.3-Flash",
+              "contextWindowMaxTokens": 1000000,
+              "metadata": {
+                "providerId": "opencode-go",
+                "modelId": "glm-5.3-flash",
+                "supportsAttachments": true,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 1000000
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                }
+              ]
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/nemotron-3.5-lightning-free",
+              "label": "Nemotron 3.5 Lightning Free",
+              "contextWindowMaxTokens": 262144,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "nemotron-3.5-lightning-free",
+                "supportsAttachments": false,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 262144
+              },
+              "thinkingOptions": []
+            },
+            {
+              "provider": "opencode",
+              "id": "opencode/big-pickle",
+              "label": "Big Pickle",
+              "contextWindowMaxTokens": 200000,
+              "metadata": {
+                "providerId": "opencode",
+                "modelId": "big-pickle",
+                "supportsAttachments": false,
+                "supportsToolCall": true,
+                "contextWindowMaxTokens": 200000
+              },
+              "thinkingOptions": []
+            }
+          ],
+          "modes": [
+            {
+              "id": "build",
+              "label": "Build",
+              "description": "The default agent. Executes tools based on configured permissions.",
+              "icon": "ShieldCheck",
+              "colorTier": "moderate"
+            },
+            {
+              "id": "plan",
+              "label": "Plan",
+              "description": "Read-only agent for exploring the codebase and planning work before implementation.",
+              "icon": "ShieldCheck",
+              "colorTier": "planning"
+            }
+          ],
+          "fetchedAt": "2026-11-08T08:46:21.223Z"
+        },
+        {
+          "provider": "pi",
+          "status": "ready",
+          "enabled": true,
+          "source": "builtin",
+          "label": "Pi",
+          "description": "Minimal terminal-based coding agent with multi-provider LLM support",
+          "defaultModeId": null,
+          "models": [
+            {
+              "provider": "pi",
+              "id": "mistral/codestral-2508",
+              "label": "Codestral 25.08",
+              "description": "mistral/codestral-2508",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "codestral-2508"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/codestral-latest",
+              "label": "Codestral (latest)",
+              "description": "mistral/codestral-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "codestral-latest"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/devstral-2512",
+              "label": "Devstral 2",
+              "description": "mistral/devstral-2512",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "devstral-2512"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/devstral-latest",
+              "label": "Devstral 2",
+              "description": "mistral/devstral-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "devstral-latest"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/devstral-medium-2507",
+              "label": "Devstral Medium",
+              "description": "mistral/devstral-medium-2507",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "devstral-medium-2507"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/devstral-medium-latest",
+              "label": "Devstral 2 (latest)",
+              "description": "mistral/devstral-medium-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "devstral-medium-latest"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/devstral-small-2505",
+              "label": "Devstral Small 2505",
+              "description": "mistral/devstral-small-2505",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "devstral-small-2505"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/devstral-small-2507",
+              "label": "Devstral Small",
+              "description": "mistral/devstral-small-2507",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "devstral-small-2507"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/glm-5-2",
+              "label": "GLM-5.2",
+              "description": "mistral/glm-5-2",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "glm-5-2"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/labs-devstral-small-2512",
+              "label": "Devstral Small 2",
+              "description": "mistral/labs-devstral-small-2512",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "labs-devstral-small-2512"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/labs-leanstral-1-5-1",
+              "label": "Leanstral 1.5",
+              "description": "mistral/labs-leanstral-1-5-1",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "labs-leanstral-1-5-1"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/magistral-medium-latest",
+              "label": "Magistral Medium (latest)",
+              "description": "mistral/magistral-medium-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "magistral-medium-latest"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/ministral-14b-2512",
+              "label": "Ministral 3 14B",
+              "description": "mistral/ministral-14b-2512",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "ministral-14b-2512"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/ministral-3b-2512",
+              "label": "Ministral 3 3B",
+              "description": "mistral/ministral-3b-2512",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "ministral-3b-2512"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/ministral-3b-latest",
+              "label": "Ministral 3B (latest)",
+              "description": "mistral/ministral-3b-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "ministral-3b-latest"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/ministral-8b-2512",
+              "label": "Ministral 3 8B",
+              "description": "mistral/ministral-8b-2512",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "ministral-8b-2512"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/ministral-8b-latest",
+              "label": "Ministral 8B (latest)",
+              "description": "mistral/ministral-8b-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "ministral-8b-latest"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-large-2411",
+              "label": "Mistral Large 2.1",
+              "description": "mistral/mistral-large-2411",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-large-2411"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-large-2512",
+              "label": "Mistral Large 3",
+              "description": "mistral/mistral-large-2512",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-large-2512"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-large-4",
+              "label": "Mistral Large 4",
+              "description": "mistral/mistral-large-4",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-large-4"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-large-latest",
+              "label": "Mistral Large (latest)",
+              "description": "mistral/mistral-large-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-large-latest"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-medium-2505",
+              "label": "Mistral Medium 3",
+              "description": "mistral/mistral-medium-2505",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-medium-2505"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-medium-2508",
+              "label": "Mistral Medium 3.1",
+              "description": "mistral/mistral-medium-2508",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-medium-2508"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-medium-2604",
+              "label": "Mistral Medium 3.5",
+              "description": "mistral/mistral-medium-2604",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-medium-2604"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-medium-3.5",
+              "label": "Mistral Medium 3.5",
+              "description": "mistral/mistral-medium-3.5",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-medium-3.5"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-medium-latest",
+              "label": "Mistral Medium (latest)",
+              "description": "mistral/mistral-medium-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-medium-latest"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-nemo",
+              "label": "Mistral Nemo",
+              "description": "mistral/mistral-nemo",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-nemo"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-small-2506",
+              "label": "Mistral Small 3.2",
+              "description": "mistral/mistral-small-2506",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-small-2506"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-small-2603",
+              "label": "Mistral Small 4",
+              "description": "mistral/mistral-small-2603",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-small-2603"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-small-latest",
+              "label": "Mistral Small (latest)",
+              "description": "mistral/mistral-small-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-small-latest"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/open-mistral-nemo",
+              "label": "Open Mistral Nemo",
+              "description": "mistral/open-mistral-nemo",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "open-mistral-nemo"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/pixtral-12b",
+              "label": "Pixtral 12B",
+              "description": "mistral/pixtral-12b",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "pixtral-12b"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/pixtral-large-latest",
+              "label": "Pixtral Large (latest)",
+              "description": "mistral/pixtral-large-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "pixtral-large-latest"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/voxtral-small-2507",
+              "label": "Voxtral Small",
+              "description": "mistral/voxtral-small-2507",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "voxtral-small-2507"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/voxtral-small-latest",
+              "label": "Voxtral Small (latest)",
+              "description": "mistral/voxtral-small-latest",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "voxtral-small-latest"
+              }
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/zai-glm-5-2",
+              "label": "GLM-5.2",
+              "description": "mistral/zai-glm-5-2",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "zai-glm-5-2"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/zai-glm-5-3",
+              "label": "GLM-5.3",
+              "description": "mistral/zai-glm-5-3",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "zai-glm-5-3"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/deepseek-v4-1-flash-1017",
+              "label": "DeepSeek V4.1 Flash 1017",
+              "description": "mistral/deepseek-v4-1-flash-1017",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "deepseek-v4-1-flash-1017"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/mistral-large-4-0-8",
+              "label": "Mistral Large 4.0.8",
+              "description": "mistral/mistral-large-4-0-8",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "mistral-large-4-0-8"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "mistral/zai-glm-5-3-flash",
+              "label": "GLM-5.3-Flash",
+              "description": "mistral/zai-glm-5-3-flash",
+              "metadata": {
+                "provider": "mistral",
+                "modelId": "zai-glm-5-3-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/claude-haiku-5-5",
+              "label": "Claude Haiku 5.5",
+              "description": "opencode-go/claude-haiku-5-5",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "claude-haiku-5-5"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/minimax-m3",
+              "label": "MiniMax-M3",
+              "description": "opencode-go/minimax-m3",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "minimax-m3"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/qwen3.7-plus",
+              "label": "Qwen3.7 Plus",
+              "description": "opencode-go/qwen3.7-plus",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "qwen3.7-plus"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/qwen3.8-flash",
+              "label": "Qwen3.8 Flash",
+              "description": "opencode-go/qwen3.8-flash",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "qwen3.8-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/qwen3.8-max",
+              "label": "Qwen3.8 Max",
+              "description": "opencode-go/qwen3.8-max",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "qwen3.8-max"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/gemini-4-argon-contributor",
+              "label": "Gemini 4 Argon Contributor",
+              "description": "opencode-go/gemini-4-argon-contributor",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "gemini-4-argon-contributor"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/beam-free",
+              "label": "Beam Free",
+              "description": "opencode-go/beam-free",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "beam-free"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/deepseek-v4-pro",
+              "label": "DeepSeek V4 Pro",
+              "description": "opencode-go/deepseek-v4-pro",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "deepseek-v4-pro"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/deepseek-v4.1-flash",
+              "label": "DeepSeek V4.1 Flash",
+              "description": "opencode-go/deepseek-v4.1-flash",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "deepseek-v4.1-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/glm-5.2",
+              "label": "GLM-5.2",
+              "description": "opencode-go/glm-5.2",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "glm-5.2"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/glm-5.3",
+              "label": "GLM-5.3",
+              "description": "opencode-go/glm-5.3",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "glm-5.3"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/glm-5.3-flash",
+              "label": "GLM-5.3-Flash",
+              "description": "opencode-go/glm-5.3-flash",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "glm-5.3-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/hy3",
+              "label": "Hy3",
+              "description": "opencode-go/hy3",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "hy3"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/hy4-preview",
+              "label": "Hy4 preview",
+              "description": "opencode-go/hy4-preview",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "hy4-preview"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/kimi-k2.7-code",
+              "label": "Kimi K2.7 Code",
+              "description": "opencode-go/kimi-k2.7-code",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "kimi-k2.7-code"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/kimi-k3",
+              "label": "Kimi K3",
+              "description": "opencode-go/kimi-k3",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "kimi-k3"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "max"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/longcat-2.0",
+              "label": "LongCat-2.0",
+              "description": "opencode-go/longcat-2.0",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "longcat-2.0"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/longcat-2.5-preview-free",
+              "label": "LongCat 2.5 Preview Free",
+              "description": "opencode-go/longcat-2.5-preview-free",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "longcat-2.5-preview-free"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/mimo-v2.5",
+              "label": "MiMo V2.5",
+              "description": "opencode-go/mimo-v2.5",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "mimo-v2.5"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/mimo-v2.5-pro",
+              "label": "MiMo V2.5 Pro",
+              "description": "opencode-go/mimo-v2.5-pro",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "mimo-v2.5-pro"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/mimo-v2.6-flash",
+              "label": "MiMo-V2.6-Flash",
+              "description": "opencode-go/mimo-v2.6-flash",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "mimo-v2.6-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/mimo-v2.6-pro",
+              "label": "MiMo-V2.6-Pro",
+              "description": "opencode-go/mimo-v2.6-pro",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "mimo-v2.6-pro"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/minimax-m3.1-flash-free",
+              "label": "MiniMax M3.1 Flash Free",
+              "description": "opencode-go/minimax-m3.1-flash-free",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "minimax-m3.1-flash-free"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/step-5-preview",
+              "label": "Step 5 Preview",
+              "description": "opencode-go/step-5-preview",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "step-5-preview"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/gpt-5.6-luna",
+              "label": "GPT-5.6 Luna",
+              "description": "opencode-go/gpt-5.6-luna",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "gpt-5.6-luna"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/gpt-6-luna",
+              "label": "GPT-6 Luna",
+              "description": "opencode-go/gpt-6-luna",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "gpt-6-luna"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/grok-4.7",
+              "label": "Grok 4.7",
+              "description": "opencode-go/grok-4.7",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "grok-4.7"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/muse-spark-1.2-contributor",
+              "label": "Muse Spark 1.2 Contributor",
+              "description": "opencode-go/muse-spark-1.2-contributor",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "muse-spark-1.2-contributor"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/muse-spark-1.3-contributor",
+              "label": "Muse Spark 1.3 Contributor",
+              "description": "opencode-go/muse-spark-1.3-contributor",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "muse-spark-1.3-contributor"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/crouton-alpha-free",
+              "label": "Crouton Alpha Free",
+              "description": "opencode-go/crouton-alpha-free",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "crouton-alpha-free"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/gemini-4-argon",
+              "label": "Gemini 4 Argon",
+              "description": "opencode-go/gemini-4-argon",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "gemini-4-argon"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/hy4",
+              "label": "Hy4",
+              "description": "opencode-go/hy4",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "hy4"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/iceman-contributor-free",
+              "label": "Iceman Contributor Free",
+              "description": "opencode-go/iceman-contributor-free",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "iceman-contributor-free"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/kimi-k3.1-pro",
+              "label": "Kimi K3.1 Pro",
+              "description": "opencode-go/kimi-k3.1-pro",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "kimi-k3.1-pro"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "opencode-go/minimax-m3.1-flash",
+              "label": "MiniMax M3.1 Flash",
+              "description": "opencode-go/minimax-m3.1-flash",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "minimax-m3.1-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Very deep reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "zai/glm-4.7",
+              "label": "GLM-4.7",
+              "description": "zai/glm-4.7",
+              "metadata": {
+                "provider": "zai",
+                "modelId": "glm-4.7"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "zai/glm-5-turbo",
+              "label": "GLM-5-Turbo",
+              "description": "zai/glm-5-turbo",
+              "metadata": {
+                "provider": "zai",
+                "modelId": "glm-5-turbo"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "zai/glm-5.2",
+              "label": "GLM-5.2",
+              "description": "zai/glm-5.2",
+              "metadata": {
+                "provider": "zai",
+                "modelId": "glm-5.2"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "zai/glm-5.2-highspeed",
+              "label": "GLM-5.2 Highspeed",
+              "description": "zai/glm-5.2-highspeed",
+              "metadata": {
+                "provider": "zai",
+                "modelId": "glm-5.2-highspeed"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "zai/glm-5.3",
+              "label": "GLM-5.3",
+              "description": "zai/glm-5.3",
+              "metadata": {
+                "provider": "zai",
+                "modelId": "glm-5.3"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high",
+              "isDefault": true
+            },
+            {
+              "provider": "pi",
+              "id": "zai/glm-5.3-flash",
+              "label": "GLM-5.3-Flash",
+              "description": "zai/glm-5.3-flash",
+              "metadata": {
+                "provider": "zai",
+                "modelId": "glm-5.3-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "zai/glm-5.3-highspeed",
+              "label": "GLM-5.3 Highspeed",
+              "description": "zai/glm-5.3-highspeed",
+              "metadata": {
+                "provider": "zai",
+                "modelId": "glm-5.3-highspeed"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Extreme reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "pi",
+              "id": "zai/glm-4.7-flash",
+              "label": "GLM-4.7 Flash",
+              "description": "zai/glm-4.7-flash",
+              "metadata": {
+                "provider": "zai",
+                "modelId": "glm-4.7-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "pi",
+              "id": "custom-local/ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit",
+              "label": "Ornith-1.5-35B-A3B (4bit)",
+              "description": "custom-local/ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit",
+              "metadata": {
+                "provider": "custom-local",
+                "modelId": "ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            }
+          ],
+          "modes": [],
+          "fetchedAt": "2026-11-08T08:46:20.950Z"
+        },
+        {
+          "provider": "omp",
+          "status": "ready",
+          "enabled": true,
+          "source": "builtin",
+          "label": "Oh My Pi",
+          "description": "Multi-provider coding agent with native approvals, host tools, and subagents",
+          "defaultModeId": "full",
+          "models": [
+            {
+              "provider": "omp",
+              "id": "opencode-go/beam-free",
+              "label": "Beam Free",
+              "description": "opencode-go/beam-free",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "beam-free"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "auto",
+                  "label": "Auto",
+                  "description": "OMP picks the effort each turn"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Extra-high reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Maximum reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "low"
+            },
+            {
+              "provider": "omp",
+              "id": "opencode-go/deepseek-v4.1-flash",
+              "label": "DeepSeek V4.1 Flash",
+              "description": "opencode-go/deepseek-v4.1-flash",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "deepseek-v4.1-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "auto",
+                  "label": "Auto",
+                  "description": "OMP picks the effort each turn"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Maximum reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "minimal"
+            },
+            {
+              "provider": "omp",
+              "id": "opencode-go/glm-5.3-flash",
+              "label": "GLM-5.3-Flash",
+              "description": "opencode-go/glm-5.3-flash",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "glm-5.3-flash"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "auto",
+                  "label": "Auto",
+                  "description": "OMP picks the effort each turn"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Maximum reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "minimal"
+            },
+            {
+              "provider": "omp",
+              "id": "opencode-go/crouton-alpha-free",
+              "label": "Crouton Alpha Free",
+              "description": "opencode-go/crouton-alpha-free",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "crouton-alpha-free"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "auto",
+                  "label": "Auto",
+                  "description": "OMP picks the effort each turn"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Extra-high reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "minimal"
+            },
+            {
+              "provider": "omp",
+              "id": "opencode-go/hy4",
+              "label": "Hy4",
+              "description": "opencode-go/hy4",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "hy4"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "auto",
+                  "label": "Auto",
+                  "description": "OMP picks the effort each turn"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning",
+                  "isDefault": true
+                }
+              ],
+              "defaultThinkingOptionId": "high"
+            },
+            {
+              "provider": "omp",
+              "id": "opencode-go/iceman-contributor-free",
+              "label": "Iceman Contributor Free",
+              "description": "opencode-go/iceman-contributor-free",
+              "metadata": {
+                "provider": "opencode-go",
+                "modelId": "iceman-contributor-free"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "auto",
+                  "label": "Auto",
+                  "description": "OMP picks the effort each turn"
+                },
+                {
+                  "id": "off",
+                  "label": "Off",
+                  "description": "No extra reasoning"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning"
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Extra-high reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Maximum reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "medium"
+            },
+            {
+              "provider": "omp",
+              "id": "llama.cpp/ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit",
+              "label": "Ornith-1.5-35B-A3B-uncensored-MLX-4bit",
+              "description": "llama.cpp/ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit",
+              "metadata": {
+                "provider": "llama.cpp",
+                "modelId": "ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit"
+              },
+              "thinkingOptions": [
+                {
+                  "id": "auto",
+                  "label": "Auto",
+                  "description": "OMP picks the effort each turn"
+                },
+                {
+                  "id": "minimal",
+                  "label": "Minimal",
+                  "description": "Light reasoning",
+                  "isDefault": true
+                },
+                {
+                  "id": "low",
+                  "label": "Low",
+                  "description": "Faster reasoning"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "description": "Balanced reasoning"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "description": "Deeper reasoning"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "XHigh",
+                  "description": "Extra-high reasoning"
+                },
+                {
+                  "id": "max",
+                  "label": "Max",
+                  "description": "Maximum reasoning"
+                }
+              ],
+              "defaultThinkingOptionId": "minimal"
+            }
+          ],
+          "modes": [
+            {
+              "id": "full",
+              "label": "Full Access",
+              "description": "Launches OMP with yolo approval mode so tools run without prompts.",
+              "icon": "ShieldOff",
+              "colorTier": "dangerous",
+              "isUnattended": true
+            },
+            {
+              "id": "write",
+              "label": "Write Approval",
+              "description": "Launches OMP with write approval mode — reads are free, writes require approval.",
+              "icon": "ShieldAlert",
+              "colorTier": "moderate"
+            },
+            {
+              "id": "ask",
+              "label": "Always Ask",
+              "description": "Launches OMP with always-ask approval mode for write and exec tools.",
+              "icon": "ShieldCheck",
+              "colorTier": "safe"
+            }
+          ],
+          "fetchedAt": "2026-11-08T08:46:22.575Z"
+        },
+        {
+          "provider": "antigravity",
+          "status": "unavailable",
+          "enabled": false,
+          "source": "custom",
+          "label": "Antigravity",
+          "description": "Antigravity CLI on your host",
+          "iconSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\">\n  <path transform=\"translate(12 12) scale(0.24) translate(-55.738 -56.945)\" d=\"M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z\"/>\n</svg>\n",
+          "defaultModeId": null
+        },
+        {
+          "provider": "muse",
+          "status": "unavailable",
+          "enabled": false,
+          "source": "custom",
+          "label": "Muse Code",
+          "description": "Plugin provider Muse Code",
+          "iconSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path transform=\"scale(0.24)\" d=\"M24.6257 16.1214C28.2365 16.1214 30.8187 18.9408 30.8187 23.3643C30.8185 27.7868 30.1055 31.7765 28.9225 40.2466C28.0743 46.1813 26.62 55.2418 26.0132 59.0088C27.1782 56.7815 29.9074 51.5757 30.3914 50.5982C36.1081 39.061 42.0657 28.7544 43.7826 26.0254C46.0594 22.382 48.062 20.9229 51.1597 20.9229C52.7685 20.923 54.6826 21.7357 55.6315 22.819C56.9178 24.2895 57.1859 26.6602 57.1411 29.244C57.0738 33.2073 56.5599 39.5264 55.8553 46.5698C55.5416 49.7057 54.9365 56.1066 54.5288 60.4004C58.1883 53.8532 64.9609 41.8109 67.6921 37.6058C70.0727 33.9402 72.466 31.5797 75.6836 31.5796C78.4595 31.5796 81.8809 33.5416 81.6772 38.7573C81.3774 46.4556 80.2673 63.2232 79.7607 70.7479C83.1662 65.7913 87.6377 58.4543 89.3148 55.6966C91.0104 52.908 92.75 50.6542 95.3898 50.5778C98.0987 50.4995 99.913 52.341 99.9959 55.1839C100.078 58.0277 98.3835 61.2256 96.1344 64.856C93.6937 68.7957 90.9621 73.0123 87.6383 76.9491C84.3148 80.8856 81.2604 83.8782 76.5991 83.8786C72.4243 83.8786 69.4869 81.1043 69.283 76.0254C69.1768 73.364 69.6804 67.6405 70.0602 63.1673C70.5 57.9875 71.0315 52.9861 71.403 49.6786C67.7337 56.3979 60.0101 70.4676 56.5348 75.9603C53.1343 81.3339 51.4774 83.2269 47.8882 83.2275C44.2977 83.2275 42.7226 80.6416 42.6717 76.7497C42.6142 72.5285 45.7852 47.1821 46.8587 38.737C45.1183 42.4616 40.839 51.6056 38.1551 57.0435C35.5587 62.3055 31.204 71.3978 28.0436 76.6357C25.7668 80.4094 23.2092 83.2273 19.4173 83.2275C15.6252 83.2275 13.4847 80.6784 13.4847 76.5788C13.4847 72.4794 14.6716 65.6492 15.9465 57.1777C16.5839 53.0781 17.3108 48.6133 18.1315 43.8761C18.7324 40.448 19.7764 34.4169 20.4183 30.7129C17.502 35.2539 12.2536 43.4278 10.6567 45.8903C8.88113 48.6291 7.28747 50.626 4.64681 50.6266C1.7329 50.6266 0.000532901 48.3522 0 45.7113C0 43.0703 1.34323 41.0344 3.52376 37.4512C6.32403 32.8465 11.3578 26.57 14.1154 23.2747C17.3656 19.3912 20.6139 16.1219 24.6257 16.1214Z\"/></svg>\n",
+          "defaultModeId": null
+        }
+      ],
+      "requestId": "snapshot"
+    }
+  }
+}

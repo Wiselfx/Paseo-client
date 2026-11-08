@@ -19,6 +19,8 @@ public final class HostSession {
     public private(set) var projects: [String: ProjectPlacement] = [:]
     /// Last error from loading the agent list, for display.
     public private(set) var agentsError: String?
+    /// Provider catalogue, agent creation, and live permission routing.
+    public private(set) var agentControl: AgentControlStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -32,6 +34,7 @@ public final class HostSession {
     /// so it can show login errors before this exists).
     public init(client: any DaemonClient) {
         self.client = client
+        self.agentControl = AgentControlStore(client: client)
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
@@ -108,6 +111,7 @@ public final class HostSession {
         switch state {
         case .connected(let info):
             serverInfo = info
+            agentControl.serverInfoChanged(info)
             if sawReconnect {
                 sawReconnect = false
                 await resync()
@@ -144,8 +148,8 @@ public final class HostSession {
             guard let store = conversations[agentId] else { return }
             await store.reloadTail()
 
-        case .unhandled:
-            break
+        case .unhandled(let messageType, let raw):
+            agentControl.handle(messageType: messageType, raw: raw, conversations: conversations)
         }
     }
 
@@ -225,7 +229,13 @@ public final class ConversationStore: Identifiable {
     /// stream events.
     public private(set) var activeTurnId: String?
     public private(set) var isLoadingOlder = false
-    /// Last failed send or cancel, for a transient error banner. Cleared by the next success.
+    /// Pending permission requests, oldest first. Seeded from the agent snapshot and kept live by
+    /// `agent_permission_request`/`agent_permission_resolved` (and the stream's permission events).
+    public private(set) var pendingPermissions: [AgentPermissionRequest] = []
+    /// The provider's notice from the last accepted change, e.g. "applies next turn". Render as a
+    /// toast; `clearNotice()` once shown.
+    public private(set) var lastNotice: AgentProviderNotice?
+    /// Last failed send, cancel or agent change, for a transient error banner. Cleared by the next success.
     public private(set) var actionError: String?
     /// The composer text. Lives here so it survives navigating away and back.
     public var draft = ""
@@ -256,6 +266,8 @@ public final class ConversationStore: Identifiable {
             if let snapshot = page.agent { applyAgent(snapshot) }
             updateTurns()
             phase = .ready
+            // Opening a conversation is deliberate focus: acknowledge attention on the daemon.
+            if agent?.requiresAttention == true { await clearAttention() }
         } catch {
             if timeline.rows.isEmpty {
                 phase = .failed(errorText(error))
@@ -327,12 +339,94 @@ public final class ConversationStore: Identifiable {
         }
     }
 
+    // MARK: Permissions
+
+    /// Answers one pending request. The card disappears when the daemon reports the resolution
+    /// (`agent_permission_resolved`), not optimistically, so a rejected answer keeps it visible.
+    public func respond(to requestId: String, with response: AgentPermissionResponse) async {
+        guard let client else { return }
+        client.sendExpectingEvent(
+            RespondToAgentPermissionRequest(
+                agentId: agentId, permissionRequestId: requestId, response: response))
+    }
+
+    // MARK: Agent settings
+
+    /// Switches the agent's approval mode. A provider may stage the change for the next turn and
+    /// say so in `lastNotice`.
+    public func setMode(_ modeId: String) async {
+        await perform(SetAgentModeRequest(agentId: agentId, modeId: modeId), change: .mode(modeId))
+    }
+
+    /// Sets, or with `nil` clears, the model override.
+    public func setModel(_ modelId: String?) async {
+        await perform(SetAgentModelRequest(agentId: agentId, modelId: modelId), change: .model(modelId))
+    }
+
+    /// Sets, or with `nil` clears, the thinking level.
+    public func setThinking(_ thinkingOptionId: String?) async {
+        await perform(
+            SetAgentThinkingRequest(agentId: agentId, thinkingOptionId: thinkingOptionId),
+            change: .thinking(thinkingOptionId))
+    }
+
+    /// Renames the agent. Empty or whitespace-only names are ignored.
+    public func rename(to title: String) async {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        await perform(UpdateAgentRequest(agentId: agentId, name: trimmed), change: .rename(trimmed))
+    }
+
+    /// Archives (soft-deletes) the agent. `HostSession` drops it from the list on the resulting
+    /// `agent_update`.
+    public func archive() async {
+        guard let client else { return }
+        do {
+            let response = try await client.send(ArchiveAgentRequest(agentId: agentId))
+            agent?.archivedAt = response.archivedAt
+            actionError = nil
+        } catch {
+            actionError = errorText(error)
+        }
+    }
+
+    /// Clears the unread badge on the daemon. Failures are ignored: attention is advisory and a
+    /// stale badge must never block opening a conversation.
+    public func clearAttention() async {
+        guard let client else { return }
+        guard let response = try? await client.send(ClearAgentAttentionRequest(agentId: agentId)) else {
+            return
+        }
+        if let snapshot = response.agents.first(where: { $0.id == agentId }) {
+            applyAgent(snapshot)
+        } else if var snapshot = agent {
+            snapshot.requiresAttention = false
+            snapshot.attentionReason = nil
+            agent = snapshot
+        }
+    }
+
+    /// Dismisses `lastNotice` once the UI has shown it.
+    public func clearNotice() { lastNotice = nil }
+
     // MARK: HostSession handoff
 
     /// Takes an agent snapshot from `HostSession` and follows its running turn.
     internal func applyAgent(_ snapshot: AgentSnapshot) {
         agent = snapshot
+        pendingPermissions = snapshot.permissionRequests
         setActiveTurn(snapshot.activeTurn?.turnId)
+    }
+
+    /// Adds a live permission request unless it is already showing.
+    internal func addPermission(_ request: AgentPermissionRequest) {
+        guard !pendingPermissions.contains(where: { $0.id == request.id }) else { return }
+        pendingPermissions.append(request)
+    }
+
+    /// Removes a resolved request, whoever answered it.
+    internal func removePermission(requestId: String) {
+        pendingPermissions.removeAll { $0.id == requestId }
     }
 
     /// Applies one live `agent_stream` payload routed by `HostSession`.
@@ -344,6 +438,14 @@ public final class ConversationStore: Identifiable {
 
         case .turnCompleted, .turnFailed, .turnCanceled:
             setActiveTurn(nil)
+
+        case .permissionRequested(let raw):
+            if let request = try? raw.decoded(as: AgentPermissionRequest.self) {
+                addPermission(request)
+            }
+
+        case .permissionResolved(let requestId):
+            removePermission(requestId: requestId)
 
         case .timeline:
             switch timeline.applyStream(payload) {
@@ -398,6 +500,46 @@ public final class ConversationStore: Identifiable {
     }
 
     // MARK: Internals
+
+    private enum AgentChange {
+        case mode(String)
+        case model(String?)
+        case thinking(String?)
+        case rename(String)
+    }
+
+    private func perform<R: PaseoRequest>(_ request: R, change: AgentChange) async
+    where R.Response == AgentActionResponse {
+        guard let client else { return }
+        do {
+            let response = try await client.send(request)
+            if let error = response.error {
+                actionError = error
+                return
+            }
+            guard response.accepted else {
+                actionError = "The daemon rejected the change."
+                return
+            }
+            actionError = nil
+            lastNotice = response.notice
+            guard var snapshot = agent else { return }
+            switch change {
+            case .mode(let modeId):
+                snapshot.currentModeId = modeId
+            case .model(let modelId):
+                snapshot.model = modelId
+            case .thinking(let optionId):
+                snapshot.thinkingOptionId = optionId
+                snapshot.effectiveThinkingOptionId = optionId
+            case .rename(let title):
+                snapshot.title = title
+            }
+            agent = snapshot
+        } catch {
+            actionError = errorText(error)
+        }
+    }
 
     private func rollBackSend(clientId: String, text: String, error: String) {
         timeline.removePendingUserMessage(clientMessageId: clientId)

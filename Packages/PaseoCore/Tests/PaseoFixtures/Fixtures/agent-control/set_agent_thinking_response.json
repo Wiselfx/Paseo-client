@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "set_agent_thinking_response",
+    "payload": {
+      "requestId": "thinking",
+      "agentId": "e02d8100-d528-4dae-ad00-88d911bc3777",
+      "accepted": true,
+      "error": null,
+      "notice": null
+    }
+  }
+}

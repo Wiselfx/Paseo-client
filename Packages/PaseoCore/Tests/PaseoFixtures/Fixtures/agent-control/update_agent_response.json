@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "update_agent_response",
+    "payload": {
+      "requestId": "rename",
+      "agentId": "e02d8100-d528-4dae-ad00-88d911bc3777",
+      "accepted": true,
+      "error": null
+    }
+  }
+}

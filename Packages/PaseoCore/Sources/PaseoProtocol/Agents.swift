@@ -32,6 +32,10 @@ public struct AgentSnapshot: Sendable, Hashable, Decodable, Identifiable {
     public var cwd: String
     public var workspaceId: String?
     public var model: String?
+    /// Requested thinking level; `nil` means the provider default. Added by T6 (agent control).
+    public var thinkingOptionId: String?
+    /// The level the provider actually runs, which may be downgraded from `thinkingOptionId`.
+    public var effectiveThinkingOptionId: String?
     public var title: String?
     public var status: AgentStatus
     public var createdAt: String

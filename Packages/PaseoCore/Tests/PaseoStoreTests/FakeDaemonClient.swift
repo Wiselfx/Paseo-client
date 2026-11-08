@@ -33,6 +33,9 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
     private var sendMessageHandler: SendMessageHandler?
     private var cancelHandler: CancelHandler?
     private var subscriptionHandler: SubscriptionHandler?
+    /// Type-keyed handlers for request types that don't deserve a named property. Checked before
+    /// the switch, so a test can add a new wire type without touching this file's existing API.
+    private var genericHandlers: [String: @Sendable (any PaseoRequest) async throws -> Any] = [:]
 
     init() {
         let (events, eventContinuation) = AsyncStream<DaemonEvent>.makeStream(bufferingPolicy: .unbounded)
@@ -65,6 +68,21 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
         locked { subscriptionHandler = handler }
     }
 
+    /// Answers any `PaseoRequest` type by its wire name. Checked before the named handlers, so a
+    /// new wire type needs no change to this file's existing API.
+    func onSend<R: PaseoRequest>(
+        _ type: R.Type = R.self, _ handler: @escaping @Sendable (R) async throws -> R.Response
+    ) {
+        locked {
+            genericHandlers[R.type] = { request in
+                guard let typed = request as? R else {
+                    throw FakeError.unexpectedResponse(R.type)
+                }
+                return try await handler(typed)
+            }
+        }
+    }
+
     // MARK: Pushing traffic
 
     func push(_ event: DaemonEvent) {
@@ -92,6 +110,14 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
 
     func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
         locked { recorded.append(request) }
+
+        if let handler = locked({ genericHandlers[R.type] }) {
+            let value = try await handler(request)
+            guard let typed = value as? R.Response else {
+                throw FakeError.unexpectedResponse(R.type)
+            }
+            return typed
+        }
 
         switch request {
         case let request as FetchAgentsRequest:
