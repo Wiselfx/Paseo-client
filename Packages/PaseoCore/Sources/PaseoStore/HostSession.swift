@@ -20,23 +20,186 @@ public final class HostSession {
     /// Last error from loading the agent list, for display.
     public private(set) var agentsError: String?
 
+    private let client: any DaemonClient
+    private var conversations: [String: ConversationStore] = [:]
+    private var stateTask: Task<Void, Never>?
+    private var eventTask: Task<Void, Never>?
+    private var isStarted = false
+    /// True after a `.reconnecting` state; the next `.connected` must resync.
+    private var sawReconnect = false
+
     /// `client` should already be connected (the app calls `DaemonConnection.connect()` first,
     /// so it can show login errors before this exists).
-    public init(client: any DaemonClient) { fatalError("T4: not implemented") }
+    public init(client: any DaemonClient) {
+        self.client = client
+    }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
     /// Call once. Safe to call while the connection is still settling.
-    public func start() async { fatalError("T4: not implemented") }
+    public func start() async {
+        guard !isStarted else { return }
+        isStarted = true
+
+        let client = self.client
+        stateTask = Task { [weak self] in
+            for await state in client.states {
+                guard let self else { return }
+                await self.handle(state: state)
+            }
+        }
+        eventTask = Task { [weak self] in
+            for await event in client.events {
+                guard let self else { return }
+                await self.handle(event: event)
+            }
+        }
+
+        await refreshAgents()
+    }
 
     /// The store for one agent's conversation. Same instance for the same id while it is open.
     /// Opening subscribes the session to that agent's live stream.
-    public func conversation(for agentId: String) -> ConversationStore { fatalError("T4: not implemented") }
+    public func conversation(for agentId: String) -> ConversationStore {
+        if let existing = conversations[agentId] { return existing }
+
+        let store = ConversationStore(agentId: agentId, client: client)
+        if let snapshot = agents.first(where: { $0.id == agentId }) {
+            store.applyAgent(snapshot)
+        }
+        conversations[agentId] = store
+        sendSubscription()
+
+        Task { await store.load() }
+        return store
+    }
 
     /// Call when the conversation screen goes away. Unsubscribes its stream; the store is dropped.
-    public func closeConversation(_ agentId: String) { fatalError("T4: not implemented") }
+    public func closeConversation(_ agentId: String) {
+        guard conversations.removeValue(forKey: agentId) != nil else { return }
+        sendSubscription()
+    }
 
     /// Re-fetches the agent list (pull to refresh).
-    public func refreshAgents() async { fatalError("T4: not implemented") }
+    public func refreshAgents() async {
+        do {
+            let response = try await client.send(FetchAgentsRequest(page: .init(limit: 200), subscribe: true))
+            let entries = response.entries
+
+            agents = entries
+                .filter { $0.agent.archivedAt == nil }
+                .map(\.agent)
+                .sorted { isNewer($0, than: $1) }
+
+            var placements: [String: ProjectPlacement] = [:]
+            for entry in entries {
+                if let project = entry.project { placements[entry.agent.id] = project }
+            }
+            projects = placements
+            agentsError = nil
+        } catch {
+            agentsError = errorText(error)
+        }
+    }
+
+    // MARK: State loop
+
+    private func handle(state: ConnectionState) async {
+        connection = state
+        switch state {
+        case .connected(let info):
+            serverInfo = info
+            if sawReconnect {
+                sawReconnect = false
+                await resync()
+            }
+        case .reconnecting:
+            sawReconnect = true
+        case .idle, .connecting, .failed:
+            break
+        }
+    }
+
+    /// A reconnect means the daemon forgot our subscriptions and may have moved on without us.
+    private func resync() async {
+        sendSubscription()
+        await refreshAgents()
+        let stores = Array(conversations.values)
+        for store in stores {
+            await store.catchUp()
+        }
+    }
+
+    // MARK: Event loop
+
+    private func handle(event: DaemonEvent) async {
+        switch event {
+        case .agentStream(let payload):
+            guard let store = conversations[payload.agentId] else { return }
+            await store.handleStream(payload)
+
+        case .agentUpdate(let update):
+            apply(update)
+
+        case .timelineReplacement(let agentId, _):
+            guard let store = conversations[agentId] else { return }
+            await store.reloadTail()
+
+        case .unhandled:
+            break
+        }
+    }
+
+    private func apply(_ update: AgentUpdate) {
+        switch update {
+        case .upsert(let agent, let project):
+            if agent.archivedAt != nil {
+                agents.removeAll { $0.id == agent.id }
+                projects[agent.id] = nil
+                return
+            }
+            if let index = agents.firstIndex(where: { $0.id == agent.id }) {
+                agents[index] = agent
+            } else {
+                agents.append(agent)
+            }
+            agents.sort { isNewer($0, than: $1) }
+            if let project { projects[agent.id] = project }
+            conversations[agent.id]?.applyAgent(agent)
+
+        case .remove(let agentId):
+            agents.removeAll { $0.id == agentId }
+            projects[agentId] = nil
+
+        case .unknown:
+            break
+        }
+    }
+
+    // MARK: Helpers
+
+    /// Sends the complete set of open agent ids, replacing whatever the daemon held before.
+    private func sendSubscription() {
+        let agentIds = conversations.keys.sorted()
+        let client = self.client
+        Task {
+            _ = try? await client.send(SetAgentTimelineSubscriptionRequest(agentIds: agentIds))
+        }
+    }
+
+    private func isNewer(_ lhs: AgentSnapshot, than rhs: AgentSnapshot) -> Bool {
+        let left = PaseoDate.parse(lhs.updatedAt)
+        let right = PaseoDate.parse(rhs.updatedAt)
+        switch (left, right) {
+        case let (left?, right?) where left != right:
+            return left > right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        default:
+            return lhs.id < rhs.id
+        }
+    }
 }
 
 /// One agent's conversation: the rows, the turns built from them, and the actions on them.
@@ -67,24 +230,203 @@ public final class ConversationStore: Identifiable {
     /// The composer text. Lives here so it survives navigating away and back.
     public var draft = ""
 
+    private let client: (any DaemonClient)?
+    private var isCatchingUp = false
+
     /// True while the agent works: an active turn, or status `.running`.
-    public var isRunning: Bool { fatalError("T4: not implemented") }
+    public var isRunning: Bool { activeTurnId != nil || agent?.status == .running }
 
     init(agentId: String) {
         self.agentId = agentId
+        self.client = nil
+    }
+
+    internal init(agentId: String, client: any DaemonClient) {
+        self.agentId = agentId
+        self.client = client
     }
 
     /// Loads the tail page. Called by `HostSession` when the conversation opens.
-    public func load() async { fatalError("T4: not implemented") }
+    public func load() async {
+        guard let client else { return }
+        do {
+            let page = try await client.send(
+                FetchAgentTimelineRequest(agentId: agentId, direction: .tail, limit: 40))
+            timeline.applyPage(page)
+            if let snapshot = page.agent { applyAgent(snapshot) }
+            updateTurns()
+            phase = .ready
+        } catch {
+            if timeline.rows.isEmpty {
+                phase = .failed(errorText(error))
+            } else {
+                actionError = errorText(error)
+            }
+        }
+    }
 
     /// Loads one page of older history. No-op while loading or when `!timeline.hasOlder`.
-    public func loadOlder() async { fatalError("T4: not implemented") }
+    public func loadOlder() async {
+        guard !isLoadingOlder, timeline.hasOlder, let cursor = timeline.startCursor, let client else { return }
+        isLoadingOlder = true
+        defer { isLoadingOlder = false }
+        do {
+            let page = try await client.send(
+                FetchAgentTimelineRequest(agentId: agentId, direction: .before, cursor: cursor, limit: 40))
+            timeline.applyPage(page)
+            if let snapshot = page.agent { applyAgent(snapshot) }
+            updateTurns()
+        } catch {
+            actionError = errorText(error)
+        }
+    }
 
     /// Sends `text` (trimmed; no-op when empty). Shows it at once as a pending row, then sends
     /// `SendAgentMessageRequest` with a fresh `messageId`. If the agent is running, uses
     /// `activeTurnBehavior: "steer"`. Clears `draft` when `text == draft`.
-    public func send(_ text: String) async { fatalError("T4: not implemented") }
+    public func send(_ text: String) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let client else { return }
+
+        let clientId = UUID().uuidString
+        timeline.addPendingUserMessage(text: trimmed, clientMessageId: clientId, timestamp: Self.nowTimestamp())
+        updateTurns()
+        if trimmed == draft.trimmingCharacters(in: .whitespacesAndNewlines) {
+            draft = ""
+        }
+
+        do {
+            let response = try await client.send(
+                SendAgentMessageRequest(
+                    agentId: agentId,
+                    text: trimmed,
+                    messageId: clientId,
+                    activeTurnBehavior: isRunning ? "steer" : nil))
+            if response.accepted {
+                actionError = nil
+            } else {
+                rollBackSend(clientId: clientId, text: trimmed, error: response.error ?? "The daemon rejected the message.")
+            }
+        } catch {
+            rollBackSend(clientId: clientId, text: trimmed, error: errorText(error))
+        }
+    }
 
     /// Stops the running turn (`CancelAgentRequest`).
-    public func cancel() async { fatalError("T4: not implemented") }
+    public func cancel() async {
+        guard let client else { return }
+        do {
+            let response = try await client.send(CancelAgentRequest(agentId: agentId))
+            if let error = response.error {
+                actionError = error
+            } else {
+                actionError = nil
+            }
+        } catch {
+            actionError = errorText(error)
+        }
+    }
+
+    // MARK: HostSession handoff
+
+    /// Takes an agent snapshot from `HostSession` and follows its running turn.
+    internal func applyAgent(_ snapshot: AgentSnapshot) {
+        agent = snapshot
+        setActiveTurn(snapshot.activeTurn?.turnId)
+    }
+
+    /// Applies one live `agent_stream` payload routed by `HostSession`.
+    internal func handleStream(_ payload: AgentStreamPayload) async {
+        guard payload.agentId == agentId else { return }
+        switch payload.event {
+        case .turnStarted(let turnId):
+            setActiveTurn(turnId)
+
+        case .turnCompleted, .turnFailed, .turnCanceled:
+            setActiveTurn(nil)
+
+        case .timeline:
+            switch timeline.applyStream(payload) {
+            case .applied:
+                updateTurns()
+            case .gap:
+                await catchUp()
+            case .epochChanged:
+                await load()
+            case .duplicate, .ignored:
+                break
+            }
+
+        default:
+            break
+        }
+    }
+
+    /// The daemon rebuilt this timeline: drop local rows and fetch the tail again.
+    internal func reloadTail() async {
+        timeline = TimelineState()
+        updateTurns()
+        await load()
+    }
+
+    /// Fetches everything after the last known seq. Repeats while the daemon reports newer rows.
+    internal func catchUp() async {
+        guard !isCatchingUp, let client else { return }
+        isCatchingUp = true
+        defer { isCatchingUp = false }
+
+        guard var cursor = timeline.endCursor else {
+            await load()
+            return
+        }
+
+        while true {
+            do {
+                let page = try await client.send(
+                    FetchAgentTimelineRequest(agentId: agentId, direction: .after, cursor: cursor, limit: 0))
+                timeline.applyPage(page)
+                if let snapshot = page.agent { applyAgent(snapshot) }
+                updateTurns()
+                guard page.hasNewer else { return }
+                guard let next = timeline.endCursor, next != cursor else { return }
+                cursor = next
+            } catch {
+                actionError = errorText(error)
+                return
+            }
+        }
+    }
+
+    // MARK: Internals
+
+    private func rollBackSend(clientId: String, text: String, error: String) {
+        timeline.removePendingUserMessage(clientMessageId: clientId)
+        updateTurns()
+        if draft.isEmpty { draft = text }
+        actionError = error
+    }
+
+    private func setActiveTurn(_ turnId: String?) {
+        guard activeTurnId != turnId else { return }
+        activeTurnId = turnId
+        updateTurns()
+    }
+
+    private func updateTurns() {
+        turns = TurnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
+    }
+
+    private static func nowTimestamp() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date())
+    }
+}
+
+/// One readable line for an error, for `agentsError` / `actionError`.
+private func errorText(_ error: Error) -> String {
+    if let error = error as? LocalizedError, let description = error.errorDescription {
+        return description
+    }
+    return String(describing: error)
 }
