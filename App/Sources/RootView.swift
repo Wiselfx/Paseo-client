@@ -40,15 +40,17 @@ private struct ConversationScreen: View {
     let session: HostSession
     let agentId: String
     @State private var store: ConversationStore?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
             if let store {
-                ConversationView(store: store)
+                ClaudeChatView(session: session, store: store, onBack: { dismiss() })
             } else {
-                Palette.background.ignoresSafeArea()
+                Color.clear
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear { if store == nil { store = session.conversation(for: agentId) } }
         .onDisappear {
             session.closeConversation(agentId)
