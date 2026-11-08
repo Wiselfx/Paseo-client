@@ -1,30 +1,27 @@
 // swift-tools-version: 6.2
-// PaseoUI: SwiftUI. Apple platforms only; build in Xcode.
-// Features depend on PaseoStore + DesignSystem, never on each other. The App composes them.
 import PackageDescription
 
+// PaseoUI: the app's SwiftUI layer. Apple platforms only; build in Xcode.
+// One module: the ClaudeUI parts bin plus the Paseo screens built on it.
 let package = Package(
     name: "PaseoUI",
     platforms: [.iOS(.v26)],
     products: [
-        .library(name: "DesignSystem", targets: ["DesignSystem"]),
-        .library(name: "HostsFeature", targets: ["HostsFeature"]),
-        .library(name: "AgentsFeature", targets: ["AgentsFeature"]),
-        .library(name: "ConversationFeature", targets: ["ConversationFeature"]),
+        .library(name: "PaseoUI", targets: ["PaseoUI"])
     ],
     dependencies: [
         .package(path: "../PaseoCore"),
-        .package(path: "../ClaudeUI"),
+        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.9.0"),
+        .package(url: "https://github.com/smittytone/HighlighterSwift.git", from: "3.1.0"),
     ],
     targets: [
-        // Look and feel. No Paseo types: everything here could render any chat app.
-        .target(name: "DesignSystem", dependencies: [.product(name: "ClaudeUI", package: "ClaudeUI")]),
-        .target(name: "HostsFeature", dependencies: ["DesignSystem"]),
         .target(
-            name: "AgentsFeature",
-            dependencies: ["DesignSystem", .product(name: "PaseoStore", package: "PaseoCore")]),
-        .target(
-            name: "ConversationFeature",
-            dependencies: ["DesignSystem", .product(name: "PaseoStore", package: "PaseoCore")]),
-    ]
-)
+            name: "PaseoUI",
+            dependencies: [
+                .product(name: "PaseoStore", package: "PaseoCore"),
+                .product(name: "Markdown", package: "swift-markdown"),
+                .product(name: "Highlighter", package: "HighlighterSwift"),
+            ],
+            resources: [.process("Resources")]),
+        .testTarget(name: "PaseoUITests", dependencies: ["PaseoUI"]),
+    ])

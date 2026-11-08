@@ -1,7 +1,7 @@
 import Foundation
-import HostsFeature
 import Observation
 import PaseoStore
+import PaseoUI
 
 /// App-level state: which daemon, how to log in, and the live session once connected.
 /// The only place that creates a `DaemonConnection`.
