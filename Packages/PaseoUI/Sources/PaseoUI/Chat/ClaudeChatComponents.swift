@@ -126,6 +126,7 @@ struct ClaudeRollingNumber: View {
 struct ClaudeUserBubble: View {
     var text: String
     var isPending: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack {
@@ -138,7 +139,7 @@ struct ClaudeUserBubble: View {
                 .padding(.vertical, 14)
                 .background(ClaudePalette.userBubble, in: .rect(cornerRadius: 28))
                 .opacity(isPending ? 0.6 : 1)
-                .animation(.easeOut(duration: 0.2), value: isPending)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isPending)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }

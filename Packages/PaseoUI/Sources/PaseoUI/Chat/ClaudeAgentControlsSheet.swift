@@ -62,9 +62,13 @@ struct ClaudeAgentControlsSheet: View {
         .presentationDetents([.height(430)])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(38)
-        .task {
-            if session.agentControl.phase == .idle {
-                await session.agentControl.loadCatalog(cwd: store.agent?.cwd)
+        .onAppear {
+            switch session.agentControl.phase {
+            case .idle, .failed:
+                let cwd = store.agent?.cwd
+                Task { await session.agentControl.loadCatalog(cwd: cwd) }
+            case .loading, .ready:
+                break
             }
         }
     }

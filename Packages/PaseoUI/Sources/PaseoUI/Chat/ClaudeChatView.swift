@@ -15,6 +15,8 @@ public struct ClaudeChatView: View {
 
     /// The drawer affordance in the shell. Nil keeps the leading edge empty.
     var onOpenSidebar: (() -> Void)?
+    /// Selects another agent in the same workspace from the header's tab chips.
+    var onSelectAgent: ((String) -> Void)?
     /// Back affordance for a plain navigation stack.
     var onBack: (() -> Void)?
     /// Called with the composer's text so a new agent can start with it.
@@ -30,11 +32,13 @@ public struct ClaudeChatView: View {
 
     public init(
         session: HostSession, store: ConversationStore, onOpenSidebar: (() -> Void)? = nil,
-        onBack: (() -> Void)? = nil, onNewAgent: ((String) -> Void)? = nil
+        onSelectAgent: ((String) -> Void)? = nil, onBack: (() -> Void)? = nil,
+        onNewAgent: ((String) -> Void)? = nil
     ) {
         self.session = session
         self.store = store
         self.onOpenSidebar = onOpenSidebar
+        self.onSelectAgent = onSelectAgent
         self.onBack = onBack
         self.onNewAgent = onNewAgent
         ClaudeFontResources.register()
@@ -43,6 +47,7 @@ public struct ClaudeChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            agentTabs
             if let banner = connectionBanner {
                 banner.padding(.horizontal, 16).padding(.bottom, 6)
             }
@@ -52,13 +57,8 @@ public struct ClaudeChatView: View {
         .background(ClaudePalette.background.ignoresSafeArea())
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
-        .sheet(item: $sheet) { selection in
-            switch selection {
-            case .controls:
-                ClaudeAgentControlsSheet(session: session, store: store)
-            case .newAgent:
-                EmptyView()
-            }
+        .sheet(item: $sheet) { _ in
+            ClaudeAgentControlsSheet(session: session, store: store)
         }
         .overlay(alignment: .top) {
             if let toast {
@@ -165,6 +165,53 @@ public struct ClaudeChatView: View {
         onNewAgent?(draft)
     }
 
+    /// The workspace's agents as tab chips, the way Paseo keeps them together.
+    @ViewBuilder private var agentTabs: some View {
+        if let onSelectAgent, workspaceAgents.count > 1 {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(workspaceAgents) { agent in
+                        let selected = agent.id == store.agentId
+                        Button {
+                            Haptics.selection()
+                            onSelectAgent(agent.id)
+                        } label: {
+                            HStack(spacing: 6) {
+                                if agent.requiresAttention == true && !selected {
+                                    Circle().fill(ClaudePalette.warning).frame(width: 6, height: 6)
+                                }
+                                Text(agent.title ?? "New agent")
+                                    .font(.system(size: 14, weight: selected ? .medium : .regular))
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                            .foregroundStyle(selected ? ClaudePalette.background : ClaudePalette.ink)
+                            .background(
+                                selected ? ClaudePalette.ink : ClaudePalette.chip, in: .capsule)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(agent.title ?? "New agent")
+                        .accessibilityAddTraits(selected ? [.isSelected] : [])
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 2)
+            }
+            .scrollIndicators(.hidden)
+            .padding(.bottom, 6)
+        }
+    }
+
+    private var workspaceAgents: [AgentSnapshot] {
+        guard let agent = store.agent else { return [] }
+        guard let workspaceId = agent.workspaceId else { return [agent] }
+        var siblings = session.agents.filter { $0.workspaceId == workspaceId }
+        // A just-created agent can be live here before the refreshed list arrives.
+        if !siblings.contains(where: { $0.id == agent.id }) { siblings.insert(agent, at: 0) }
+        return siblings
+    }
+
     // MARK: Connection
 
     private var connectionBanner: AnyView? {
@@ -259,7 +306,8 @@ public struct ClaudeChatView: View {
                     .padding(.vertical, 20)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onChange(of: store.turns) { _, _ in scrollToBottom(proxy) }
+                // Follows the tail as it streams; loading older pages at the top does not jump.
+                .onChange(of: store.turns.last) { _, _ in scrollToBottom(proxy) }
                 .onChange(of: store.pendingPermissions) { _, _ in
                     withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { scrollToBottom(proxy) }
                 }
@@ -292,9 +340,11 @@ public struct ClaudeChatView: View {
                         .frame(height: 30)
                 }
                 .buttonStyle(.plain)
-                .task { await store.loadOlder() }
             }
         }
+        .frame(height: 30)
+        // Reaching the top fetches one older page; the row stays put so it does not loop.
+        .onAppear { Task { await store.loadOlder() } }
     }
 
     // MARK: Composer
@@ -430,7 +480,6 @@ public struct ClaudeChatView: View {
 
 enum ClaudeChatSheet: String, Identifiable {
     case controls
-    case newAgent
     var id: String { rawValue }
 }
 
@@ -733,16 +782,13 @@ struct ClaudeStepRow: View {
     @ViewBuilder private var detail: some View {
         switch row.item {
         case .reasoning(let reasoning):
-            ScrollView(.vertical) {
-                Text(reasoning.text)
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: 400)
-            .defaultScrollAnchor(.bottom)
+            // The opened thought scrolls with the group and holds no scrollbar of its own.
+            Text(reasoning.text)
+                .font(.system(size: 15))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         case .toolCall(let call):
             ClaudeToolCallDetail(call: call)
         default:
@@ -773,7 +819,7 @@ struct ClaudeSweepBand: View {
                         startPoint: .leading, endPoint: .trailing
                     )
                     .frame(width: geometry.size.width)
-                    .offset(x: (phase * 2 - 1) * geometry.size.width)
+                    .offset(x: CGFloat(phase * 2 - 1) * geometry.size.width)
                 }
             }
             .clipped()

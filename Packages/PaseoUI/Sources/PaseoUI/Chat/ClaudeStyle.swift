@@ -1,5 +1,4 @@
 #if canImport(UIKit)
-import CoreText
 import SwiftUI
 
 /// The bundled serif, as a value the views can pass around.

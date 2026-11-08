@@ -17,7 +17,6 @@ final class AppModel {
     /// Persisted to the Keychain on a successful connect only.
     var password: String
     private(set) var phase: Phase = .setup(.idle)
-    var path: [String] = []
 
     private let defaults = UserDefaults.standard
     private var connection: DaemonConnection?
@@ -72,7 +71,6 @@ final class AppModel {
     func disconnect() {
         connection?.disconnect()
         connection = nil
-        path = []
         phase = .setup(.idle)
     }
 
