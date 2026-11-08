@@ -1,0 +1,139 @@
+import Foundation
+import PaseoKit
+import PaseoProtocol
+
+/// Test double for `DaemonClient`. Records every request, answers from per-type handlers and lets
+/// a test push daemon events and connection states in order.
+final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
+    enum FakeError: Error, Sendable, Equatable {
+        case noHandler(String)
+        case unexpectedResponse(String)
+    }
+
+    typealias FetchAgentsHandler =
+        @Sendable (FetchAgentsRequest) async throws -> FetchAgentsRequest.Response
+    typealias FetchTimelineHandler =
+        @Sendable (FetchAgentTimelineRequest) async throws -> FetchAgentTimelineRequest.Response
+    typealias SendMessageHandler =
+        @Sendable (SendAgentMessageRequest) async throws -> SendAgentMessageRequest.Response
+    typealias CancelHandler =
+        @Sendable (CancelAgentRequest) async throws -> CancelAgentRequest.Response
+    typealias SubscriptionHandler =
+        @Sendable (SetAgentTimelineSubscriptionRequest) async throws -> SetAgentTimelineSubscriptionRequest.Response
+
+    let events: AsyncStream<DaemonEvent>
+    let states: AsyncStream<ConnectionState>
+    private let eventContinuation: AsyncStream<DaemonEvent>.Continuation
+    private let stateContinuation: AsyncStream<ConnectionState>.Continuation
+
+    private let lock = NSLock()
+    private var recorded: [any PaseoRequest] = []
+    private var fetchAgentsHandler: FetchAgentsHandler?
+    private var fetchTimelineHandler: FetchTimelineHandler?
+    private var sendMessageHandler: SendMessageHandler?
+    private var cancelHandler: CancelHandler?
+    private var subscriptionHandler: SubscriptionHandler?
+
+    init() {
+        let (events, eventContinuation) = AsyncStream<DaemonEvent>.makeStream(bufferingPolicy: .unbounded)
+        let (states, stateContinuation) = AsyncStream<ConnectionState>.makeStream(bufferingPolicy: .unbounded)
+        self.events = events
+        self.states = states
+        self.eventContinuation = eventContinuation
+        self.stateContinuation = stateContinuation
+    }
+
+    // MARK: Handlers
+
+    func onFetchAgents(_ handler: @escaping FetchAgentsHandler) {
+        locked { fetchAgentsHandler = handler }
+    }
+
+    func onFetchTimeline(_ handler: @escaping FetchTimelineHandler) {
+        locked { fetchTimelineHandler = handler }
+    }
+
+    func onSendMessage(_ handler: @escaping SendMessageHandler) {
+        locked { sendMessageHandler = handler }
+    }
+
+    func onCancel(_ handler: @escaping CancelHandler) {
+        locked { cancelHandler = handler }
+    }
+
+    func onSetSubscription(_ handler: @escaping SubscriptionHandler) {
+        locked { subscriptionHandler = handler }
+    }
+
+    // MARK: Pushing traffic
+
+    func push(_ event: DaemonEvent) {
+        eventContinuation.yield(event)
+    }
+
+    func push(_ state: ConnectionState) {
+        stateContinuation.yield(state)
+    }
+
+    func finish() {
+        eventContinuation.finish()
+        stateContinuation.finish()
+    }
+
+    // MARK: Recorded requests
+
+    var requests: [any PaseoRequest] { locked { recorded } }
+
+    func requests<R: PaseoRequest>(_ type: R.Type) -> [R] {
+        requests.compactMap { $0 as? R }
+    }
+
+    // MARK: DaemonClient
+
+    func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
+        locked { recorded.append(request) }
+
+        switch request {
+        case let request as FetchAgentsRequest:
+            guard let handler = locked({ fetchAgentsHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as FetchAgentTimelineRequest:
+            guard let handler = locked({ fetchTimelineHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as SendAgentMessageRequest:
+            guard let handler = locked({ sendMessageHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as CancelAgentRequest:
+            guard let handler = locked({ cancelHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as SetAgentTimelineSubscriptionRequest:
+            guard let handler = locked({ subscriptionHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        default:
+            throw FakeError.noHandler(R.type)
+        }
+    }
+
+    // MARK: Helpers
+
+    private func locked<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+}

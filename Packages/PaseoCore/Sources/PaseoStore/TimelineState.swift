@@ -122,6 +122,12 @@ public struct TimelineState: Sendable, Equatable {
         rows.append(TimelineRow(id: "local:\(clientMessageId)", turnId: nil, item: item, timestamp: timestamp, seqStart: seq, seqEnd: seq, isPending: true))
     }
 
+    /// Drops an optimistic user message that the daemon never accepted. A confirmed message is
+    /// kept: only rows still marked pending are removed.
+    public mutating func removePendingUserMessage(clientMessageId: String) {
+        rows.removeAll { $0.isPending && $0.id == "local:\(clientMessageId)" }
+    }
+
     private mutating func merge(item: TimelineItem, turnId: String?, seq: Int, timestamp: String) {
         switch item {
         case .reasoning:
