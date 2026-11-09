@@ -13,6 +13,7 @@ let package = Package(
         .package(path: "../PaseoCore"),
         .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.9.0"),
         .package(url: "https://github.com/smittytone/HighlighterSwift.git", from: "3.1.0"),
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.99.3"),
     ],
     targets: [
         .target(
@@ -21,6 +22,7 @@ let package = Package(
                 .product(name: "PaseoStore", package: "PaseoCore"),
                 .product(name: "Markdown", package: "swift-markdown"),
                 .product(name: "Highlighter", package: "HighlighterSwift"),
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
             resources: [.process("Resources")]),
         .testTarget(name: "PaseoUITests", dependencies: ["PaseoUI"]),
