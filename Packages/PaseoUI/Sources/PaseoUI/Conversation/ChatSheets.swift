@@ -17,4 +17,18 @@ struct PendingRewind: Identifiable {
     var id: String { "\(messageId)/\(scope)" }
 }
 
+/// What kind of rewind-based action is pending confirmation (M7h).
+enum MessageActionKind: String {
+    case edit
+    case rerun
+}
+
+/// A message action awaiting the can't-undo confirmation (M7h).
+struct PendingMessageAction: Identifiable {
+    let messageId: String
+    let text: String
+    let kind: MessageActionKind
+    var id: String { "\(kind.rawValue)/\(messageId)" }
+}
+
 #endif

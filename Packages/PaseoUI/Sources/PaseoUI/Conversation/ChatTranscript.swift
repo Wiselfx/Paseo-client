@@ -32,6 +32,22 @@ extension ClaudeChatView {
             await store.subagents.load()
             await store.backgroundWork.load()
         }
+        .confirmationDialog(
+            messageActionTitle,
+            isPresented: Binding(
+                get: { pendingMessageAction != nil },
+                set: { if !$0 { pendingMessageAction = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingMessageAction
+        ) { action in
+            Button(action.kind == .edit ? "Rewind and edit" : "Rewind and rerun", role: .destructive) {
+                pendingMessageAction = nil
+                Task { await performMessageAction(action) }
+            }
+            Button("Cancel", role: .cancel) { pendingMessageAction = nil }
+        } message: { action in
+            Text(messageActionDescription(for: action))
+        }
     }
 
     /// A quiet pill under the header while the agent has provider subagents. Nil when the
@@ -83,7 +99,17 @@ extension ClaudeChatView {
                                 onRewind: { scope, messageId in
                                     pendingRewind = PendingRewind(messageId: messageId, scope: scope)
                                 },
-                                isLatestTurn: index == store.turns.count - 1
+                                isLatestTurn: index == store.turns.count - 1,
+                                canRewrite: canRewrite,
+                                onEdit: { messageId, text in
+                                    pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .edit)
+                                },
+                                onRerun: { messageId, text in
+                                    pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .rerun)
+                                },
+                                onFork: session.isForkContextSupportedByHost && onForkAgent != nil
+                                    ? { row in performFork(from: row) }
+                                    : nil
                             )
                             .id(turn.id)
                             .onAppear { lastTrackedTurn = turn.id }
@@ -255,6 +281,62 @@ extension ClaudeChatView {
             proxy.scrollTo(target, anchor: .top)
         } else {
             withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .top) }
+        }
+    }
+
+    /// Scope used by Edit/Rerun (M7h): prefer conversation-only rewind; fall back to both.
+    /// Nil when the provider can't rewind the conversation — the actions hide.
+    var rewriteScope: RewindScope? {
+        let scopes = rewindMenuScopes
+        return scopes.contains(.conversation) ? .conversation : (scopes.contains(.both) ? .both : nil)
+    }
+
+    var canRewrite: Bool { rewriteScope != nil }
+
+    var messageActionTitle: String {
+        pendingMessageAction?.kind == .edit ? "Rewind and edit?" : "Rewind and rerun?"
+    }
+
+    func messageActionDescription(for action: PendingMessageAction) -> String {
+        let scopeName = rewriteScope == .both ? "the conversation and files" : "the conversation"
+        switch action.kind {
+        case .edit:
+            return "Rewinds \(scopeName) to before this message, and puts its text back in your draft. This action cannot be undone."
+        case .rerun:
+            return "Rewinds \(scopeName) to before this message, and runs the same prompt again. This action cannot be undone."
+        }
+    }
+
+    /// Runs the confirmed action: Edit rewinds and returns the text to the composer; Rerun
+    /// rewinds and resends the same text.
+    func performMessageAction(_ action: PendingMessageAction) async {
+        guard let scope = rewriteScope else { return }
+        let failure = await store.rewind(toMessageId: action.messageId, scope: scope)
+        if let failure {
+            showToast(failure)
+            return
+        }
+        switch action.kind {
+        case .edit:
+            store.draft = action.text
+            showToast("Rewound — the text is back in your draft.")
+        case .rerun:
+            await store.send(action.text)
+        }
+    }
+
+    /// Creates the forked agent and hands its id to the shell (which navigates to it).
+    func performFork(from row: TimelineRow) {
+        Task {
+            let result = await store.forkConversation(fromBoundarySeq: row.seqEnd)
+            if let failure = result.error {
+                showToast(failure)
+                return
+            }
+            guard let newId = result.agentId else { return }
+            await session.refreshAgents()
+            showToast("Forked")
+            onForkAgent?(newId)
         }
     }
 

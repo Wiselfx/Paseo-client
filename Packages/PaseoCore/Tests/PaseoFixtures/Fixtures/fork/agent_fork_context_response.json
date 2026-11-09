@@ -1,0 +1,24 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent.fork_context.response",
+    "payload": {
+      "requestId": "fork-context",
+      "agentId": "fork-fixture-1",
+      "attachment": {
+        "type": "text",
+        "mimeType": "text/plain",
+        "contextKind": "chat_history",
+        "title": "Chat history",
+        "text": "<chat-history-summary>\nChat history from a previous Paseo agent.\nSource agent: M7h fork probe: reply with exactly READY and nothing else.\nSource directory: /tmp/fixture-sandbox\n\n[User] M7h fork probe: reply with exactly READY and nothing else.\n</chat-history-summary>"
+      },
+      "itemCount": 2,
+      "boundaryCursor": {
+        "epoch": "fork-fixture-3",
+        "seq": 2
+      },
+      "boundaryMessageId": null,
+      "error": null
+    }
+  }
+}
