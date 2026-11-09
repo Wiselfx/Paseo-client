@@ -56,6 +56,7 @@ public struct ClaudeChatView: View {
     @State private var archiveAgentConfirm = false
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     /// M5a: the DSH crab above the composer, driven by the conversation's turns.
     @AppStorage(PaseoSettingsKeys.mascot) private var mascotEnabled = true
     /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
@@ -83,6 +84,14 @@ public struct ClaudeChatView: View {
     @State private var showCameraPicker = false
     @State private var showFileImporter = false
     @State private var attachmentViewerImage: UIImage?
+    /// M8d: @-mentions of workspace files.
+    @State private var mentionIndex = MentionIndex()
+    @State private var mentionDebounce: Task<Void, Never>?
+    @State private var mentionMatches: [MentionIndexRow] = []
+    /// Paths picked this session; they rank first in the popover.
+    @State private var recentMentions: [String] = []
+    /// M8d: on-device dictation into the draft.
+    @State private var dictation = DictationController()
 
     private enum SlashCommandState {
         case idle, loading, ready
@@ -186,12 +195,29 @@ public struct ClaudeChatView: View {
         }
         .onAppear { seedMascotBaselines() }
         .onAppear { seedSavedDraft() }
+        .onAppear { dictation.onDraft = { [weak store] text in store.draft = text } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { dictation.stop(keepingDraft: true) }
+        }
         .task { await loadSlashCommands() }
         .onChange(of: store.activeTurnId) { oldId, newId in
             if newId == nil, oldId != nil { flushQueuedMessage() }
         }
         .onChange(of: store.draft) { _, newValue in
             scheduleDraftSave(newValue)
+        }
+        .onChange(of: mentionQuery) { _, query in
+            mentionDebounce?.cancel()
+            if query != nil {
+                Task { await loadMentionIndexIfNeeded() }
+                mentionDebounce = Task {
+                    try? await Task.sleep(for: .milliseconds(150))
+                    guard !Task.isCancelled, let query = mentionQuery else { return }
+                    mentionMatches = mentionIndex.matches(query: query, recent: recentMentions)
+                }
+            } else {
+                mentionMatches = []
+            }
         }
         .onChange(of: photoSelection) { _, items in
             guard !items.isEmpty else { return }
@@ -891,7 +917,8 @@ public struct ClaudeChatView: View {
 
     @ViewBuilder private var slashMenu: some View {
         if slashQuery != nil {
-            Group {
+            ComposerMenuContainer(accessibilityIdentifier: "composer.slashMenu") {
+                Group {
                 if slashState == .loading {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
@@ -930,14 +957,9 @@ public struct ClaudeChatView: View {
                     .frame(maxHeight: 276)
                     .scrollIndicators(.hidden)
                 }
-            }
-            .frame(maxWidth: .infinity)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 14))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                }
             }
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
-            .accessibilityIdentifier("composer.slashMenu")
         }
     }
 
@@ -1248,17 +1270,82 @@ public struct ClaudeChatView: View {
         }
     }
 
+    // MARK: Mentions (M8d)
+
+    /// The `@token` query while the draft is exactly one mention token after whitespace/start.
+    private var mentionQuery: String? {
+        let text = store.draft
+        guard let at = text.lastIndex(of: "@") else { return nil }
+        let before = text[..<at]
+        let preceded =
+            before.isEmpty || before.hasSuffix(" ") || before.hasSuffix("\n") || before.hasSuffix("\t")
+        guard preceded else { return nil }
+        let query = String(text[text.index(after: at)...])
+        if query.contains(where: { $0.isWhitespace }) { return nil }
+        return query
+    }
+
+    /// The open workspace's checkout (same pattern as `localImageLoader`).
+    private var mentionCheckout: CheckoutStore? {
+        guard let workspaceId = store.agent?.workspaceId,
+            let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
+        else { return nil }
+        return session.checkout(for: descriptor)
+    }
+
+    /// Builds the file index once, then filters locally.
+    private func loadMentionIndexIfNeeded() async {
+        guard let checkout = mentionCheckout else { return }
+        await mentionIndex.build(using: checkout.files)
+        if let query = mentionQuery {
+            mentionMatches = mentionIndex.matches(query: query, recent: recentMentions)
+        }
+    }
+
+    private func handleMentionPick(_ row: MentionIndexRow) {
+        Haptics.selection()
+        if row.isDirectory {
+            // Drill in: keep the popover open, token becomes `@path/`.
+            replaceMentionToken(with: row.path + "/")
+        } else {
+            replaceMentionToken(with: row.path + " ")
+            recentMentions.removeAll { $0 == row.path }
+            recentMentions.insert(row.path, at: 0)
+            if recentMentions.count > 8 { recentMentions.removeLast() }
+        }
+    }
+
+    /// Replaces the trailing `@token` with `replacement` (mention insert / drill-in).
+    private func replaceMentionToken(with replacement: String) {
+        let text = store.draft
+        guard let at = text.lastIndex(of: "@") else { return }
+        let before = text[..<at]
+        store.draft = String(before) + "@" + replacement
+        focused = true
+    }
+
+    @ViewBuilder private var mentionMenu: some View {
+        if mentionQuery != nil, !mentionMatches.isEmpty || mentionIndex.isBuilding {
+            MentionMenu(rows: mentionMatches, isBuilding: mentionIndex.isBuilding) { row in
+                handleMentionPick(row)
+            }
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
+        }
+    }
+
     // MARK: Composer
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 6) {
             slashMenu
+            mentionMenu
             queueStack
             composerCard
         }
         .padding(.horizontal, focused ? 8 : 16)
         .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: focused)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: slashQuery != nil)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: mentionQuery != nil)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isQueueNonEmpty)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: !trayItems.isEmpty)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: fastModeActive)
@@ -1267,6 +1354,29 @@ public struct ClaudeChatView: View {
     private var composerCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             attachmentTray
+            if dictation.isDenied {
+                HStack(spacing: 8) {
+                    Image(systemName: "mic.slash")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                    Text("Dictation is off. Enable Microphone and Speech Recognition in Settings.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    Button("Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            openURL(url)
+                        }
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.orange)
+                    .accessibilityLabel("Open Settings")
+                    .accessibilityIdentifier("composer.dictation.settings")
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            }
             if let error = store.actionError {
                 Text(error)
                     .font(.system(size: 13))
@@ -1338,9 +1448,26 @@ public struct ClaudeChatView: View {
                 .accessibilityIdentifier("composer.model")
                 fastModeChip
                 Spacer(minLength: 0)
-                roundButton("mic", label: "Dictate", color: ClaudePalette.chip, ink: ClaudePalette.ink) {
-                    focused = true
+                Button {
+                    if dictation.isListening {
+                        dictation.stop(keepingDraft: true)
+                    } else {
+                        Task { await dictation.toggle(currentDraft: store.draft) }
+                    }
+                } label: {
+                    Image(systemName: dictation.isListening ? "mic.fill" : "mic")
+                        .font(.system(size: 17, weight: .medium))
+                        .frame(width: 36, height: 36)
+                        .foregroundStyle(dictation.isListening ? .white : ClaudePalette.ink)
+                        .background(
+                            dictation.isListening ? ClaudePalette.orange : ClaudePalette.chip,
+                            in: .circle)
+                        .scaleEffect(
+                            dictation.isListening && !reduceMotion
+                                ? 1 + CGFloat(dictation.level) * 0.18 : 1)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: dictation.level)
                 }
+                .accessibilityLabel(dictation.isListening ? "Stop dictation" : "Dictate")
                 .accessibilityIdentifier("composer.dictate")
                 if store.isRunning && trimmedDraft.isEmpty {
                     roundButton("stop.fill", label: "Stop response", color: ClaudePalette.ink, ink: ClaudePalette.background) {
@@ -1512,6 +1639,7 @@ public struct ClaudeChatView: View {
     }
 
     private func send(behavior: String? = nil) {
+        dictation.stop(keepingDraft: true)
         let text = trimmedDraft
         // Send is disabled while an upload is in flight; the tray keeps the failed pills,
         // everything ready rides this send.
