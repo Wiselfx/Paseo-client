@@ -28,7 +28,14 @@ let package = Package(
         // Captured daemon traffic shared by every test target. Test-only; never linked by the app.
         .target(name: "PaseoFixtures", path: "Tests/PaseoFixtures", resources: [.copy("Fixtures")]),
         .testTarget(name: "PaseoProtocolTests", dependencies: ["PaseoProtocol", "PaseoFixtures"]),
-        .testTarget(name: "PaseoKitTests", dependencies: ["PaseoKit", "PaseoProtocol", "PaseoFixtures"]),
+        // The relay tests need the responder half of Noise, which ships to nobody: it is written in
+        // the test target against the same `Crypto` product PaseoKit uses.
+        .testTarget(
+            name: "PaseoKitTests",
+            dependencies: [
+                "PaseoKit", "PaseoProtocol", "PaseoFixtures",
+                .product(name: "Crypto", package: "swift-crypto"),
+            ]),
         .testTarget(
             name: "PaseoStoreTests", dependencies: ["PaseoStore", "PaseoKit", "PaseoProtocol", "PaseoFixtures"]),
     ]
