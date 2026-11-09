@@ -71,6 +71,19 @@ enum WorkspaceFilesRoute: Hashable {
     case file(String)
 }
 
+/// The list ordering keys. Folders always come first regardless of key.
+private enum FileSort: String, CaseIterable {
+    case name, modified, size
+
+    var title: String {
+        switch self {
+        case .name: "Name"
+        case .modified: "Modified"
+        case .size: "Size"
+        }
+    }
+}
+
 /// One directory's rows: the back row when nested, then folders first and files after (the store
 /// sorts), pull-to-refresh, and a calm error with Retry when the read fails.
 private struct WorkspaceFilesDirectoryList: View {
@@ -86,9 +99,13 @@ private struct WorkspaceFilesDirectoryList: View {
     @State private var toast: String?
     /// Hidden files (dotfiles) are filtered out unless this is on; persisted per device.
     @AppStorage("paseo.files.showHidden") private var showHidden = false
+    /// List ordering; folders always come first regardless of key. Persisted per device.
+    @AppStorage("paseo.files.sortOrder") private var sortRaw = "name"
     @State private var namePrompt: NamePrompt?
     @State private var nameText = ""
     @State private var pendingDelete: FileExplorerEntry?
+    @State private var sharingPath: String?
+    @State private var shareTarget: SharePayload?
     private let typography = ClaudeTypography()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// "Mention in chat" from a row's long-press; nil disables the action.
@@ -110,6 +127,9 @@ private struct WorkspaceFilesDirectoryList: View {
                 .autocorrectionDisabled()
             Button(namePromptAction, action: submitNamePrompt)
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(item: $shareTarget) { target in
+            ActivityView(items: [target.url])
         }
         .confirmationDialog(
             "Delete “\(pendingDelete?.name ?? "")”?",
@@ -168,6 +188,27 @@ private struct WorkspaceFilesDirectoryList: View {
                     .contentShape(.rect)
             }
             .accessibilityLabel("Refresh")
+            Menu {
+                ForEach(FileSort.allCases, id: \.self) { choice in
+                    Button {
+                        sortRaw = choice.rawValue
+                        Haptics.selection()
+                    } label: {
+                        if currentSort == choice {
+                            Label(choice.title, systemImage: "checkmark")
+                        } else {
+                            Text(choice.title)
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(width: 34, height: 34)
+                    .contentShape(.rect)
+            }
+            .accessibilityLabel("Sort by")
             Menu {
                 Button("New file", systemImage: "doc") {
                     nameText = ""
@@ -233,7 +274,7 @@ private struct WorkspaceFilesDirectoryList: View {
         case .failure(let message):
             errorView(message)
         case .success(let entries):
-            let visible = entries.filter { showHidden || !$0.name.hasPrefix(".") }
+            let visible = sortedVisible(entries)
             if visible.isEmpty { emptyView } else { list(visible) }
         }
     }
@@ -241,6 +282,32 @@ private struct WorkspaceFilesDirectoryList: View {
     private var hiddenCount: Int {
         guard case .success(let entries) = listing else { return 0 }
         return entries.filter { $0.name.hasPrefix(".") }.count
+    }
+
+    private var currentSort: FileSort { FileSort(rawValue: sortRaw) ?? .name }
+
+    /// Folders first always, then the chosen key: name (A–Z), modified (newest first), size (largest first).
+    private func sortedVisible(_ entries: [FileExplorerEntry]) -> [FileExplorerEntry] {
+        let visible = entries.filter { showHidden || !$0.name.hasPrefix(".") }
+        let dirs = sortEntries(visible.filter { $0.isDirectory })
+        let files = sortEntries(visible.filter { !$0.isDirectory })
+        return dirs + files
+    }
+
+    private func sortEntries(_ entries: [FileExplorerEntry]) -> [FileExplorerEntry] {
+        switch currentSort {
+        case .name:
+            return entries.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        case .modified:
+            return entries.sorted {
+                (PaseoDate.parse($0.modifiedAt) ?? .distantPast)
+                    > (PaseoDate.parse($1.modifiedAt) ?? .distantPast)
+            }
+        case .size:
+            return entries.sorted { $0.size > $1.size }
+        }
     }
 
     private func list(_ visible: [FileExplorerEntry]) -> some View {
@@ -282,7 +349,9 @@ private struct WorkspaceFilesDirectoryList: View {
                     }
                 }
                 Spacer(minLength: 6)
-                if entry.isDirectory {
+                if sharingPath == entry.path {
+                    ProgressView().controlSize(.small)
+                } else if entry.isDirectory {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(ClaudePalette.tertiaryInk)
@@ -295,9 +364,12 @@ private struct WorkspaceFilesDirectoryList: View {
         .buttonStyle(.plain)
         .contextMenu {
             if !entry.isDirectory {
-                Button("Mention in chat", systemImage: "at") {
+                Button("Add to chat", systemImage: "at") {
                     mentionInChat?(relative(entry))
                 }
+            }
+            Button("Share…", systemImage: "square.and.arrow.up") {
+                share(entry)
             }
             Button("Rename…", systemImage: "pencil") {
                 nameText = entry.name
@@ -480,6 +552,32 @@ private struct WorkspaceFilesDirectoryList: View {
                 showToast(renamed != nil ? "Renamed" : (files.error ?? "Couldn't rename."))
             }
             await refresh()
+        }
+    }
+
+    private struct SharePayload: Identifiable {
+        let id = UUID()
+        let url: URL
+        let name: String
+    }
+
+    /// Reads the bytes through the files store, writes to a temp file, hands the URL to the
+    /// share sheet. The read RPC does not stream, so the row shows an indeterminate spinner.
+    private func share(_ entry: FileExplorerEntry) {
+        guard sharingPath == nil else { return }
+        sharingPath = entry.path
+        Haptics.selection()
+        Task {
+            do {
+                let url = try await WorkspaceShare.prepare(
+                    checkout, path: relative(entry), name: entry.name)
+                shareTarget = SharePayload(url: url, name: entry.name)
+            } catch let error as WorkspaceShare.ShareError {
+                if case .unreadable(let message) = error { showToast(message) }
+            } catch {
+                showToast("Couldn't prepare the file for sharing.")
+            }
+            sharingPath = nil
         }
     }
 

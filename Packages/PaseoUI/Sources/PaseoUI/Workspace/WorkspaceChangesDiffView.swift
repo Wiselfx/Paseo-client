@@ -17,15 +17,19 @@ struct WorkspaceChangesDiffView: View {
 
     @State private var confirmDiscard = false
     @State private var discardError: String?
+    @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
+    @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
+    @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
+    @State private var expandedHunks: Set<Int> = []
+    @State private var collapsedHunks: Set<Int> = []
 
     private let typography = ClaudeTypography()
-    private let model: DiffModel
+    private var model: DiffModel { DiffModel(file: file, hideWhitespaceChanges: hideWhitespace) }
 
     init(file: ParsedDiffFile, extras: WorkspaceGitExtras, allowsDiscard: Bool = true) {
         self.file = file
         self.extras = extras
         self.allowsDiscard = allowsDiscard
-        self.model = DiffModel(file: file)
     }
 
     var body: some View {
@@ -146,10 +150,37 @@ struct WorkspaceChangesDiffView: View {
         .padding(.horizontal, 32)
     }
 
+    private var visibleRows: [DiffModel.Row] {
+        var out: [DiffModel.Row] = []
+        for row in model.rows {
+            if let hunk = row.hunk, isCollapsed(hunk), row.kind != .hunkHeader { continue }
+            out.append(row)
+        }
+        return out
+    }
+
+    private func isCollapsed(_ hunk: Int) -> Bool {
+        if collapsedHunks.contains(hunk) { return true }
+        if expandedHunks.contains(hunk) { return false }
+        return collapseAllHunks
+    }
+
+    private func toggleHunk(_ hunk: Int) {
+        if isCollapsed(hunk) {
+            expandedHunks.insert(hunk)
+            collapsedHunks.remove(hunk)
+        } else {
+            collapsedHunks.insert(hunk)
+            expandedHunks.remove(hunk)
+        }
+    }
+
+    private var scrollAxes: Axis.Set { wrapLongLines ? .vertical : [.vertical, .horizontal] }
+
     private var diffScroll: some View {
-        ScrollView([.vertical, .horizontal]) {
+        ScrollView(scrollAxes) {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(model.rows) { row in
+                ForEach(visibleRows) { row in
                     lineRow(row)
                 }
             }
@@ -160,26 +191,56 @@ struct WorkspaceChangesDiffView: View {
     }
 
     private func lineRow(_ row: DiffModel.Row) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text(row.old)
-                .foregroundStyle(ClaudePalette.tertiaryInk)
-                .frame(width: 38, alignment: .trailing)
-                .padding(.trailing, 6)
-            Text(row.new)
-                .foregroundStyle(ClaudePalette.tertiaryInk)
-                .frame(width: 38, alignment: .trailing)
-                .padding(.trailing, 10)
-            Text(row.sign)
-                .foregroundStyle(signTint(row.kind))
-                .frame(width: 13, alignment: .leading)
-            Text(row.text.isEmpty ? " " : row.text)
-                .fixedSize(horizontal: true, vertical: false)
-                .foregroundStyle(contentTint(row.kind))
+        Group {
+            if row.kind == .hunkHeader, let hunk = row.hunk {
+                Button {
+                    Haptics.selection()
+                    toggleHunk(hunk)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Image(systemName: isCollapsed(hunk) ? "chevron.right" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .frame(width: 14)
+                        Text(row.text)
+                            .foregroundStyle(contentTint(row.kind))
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(typography.mono(12.5))
+                    .frame(width: wrapLongLines ? nil : model.totalWidth, alignment: .leading)
+                    .padding(.vertical, 2)
+                    .background(rowFill(row.kind))
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Hunk \(hunk + 1), \(isCollapsed(hunk) ? "collapsed" : "expanded")")
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text(row.old)
+                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .frame(width: 38, alignment: .trailing)
+                        .padding(.trailing, 6)
+                    Text(row.new)
+                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .frame(width: 38, alignment: .trailing)
+                        .padding(.trailing, 10)
+                    Text(row.sign)
+                        .foregroundStyle(signTint(row.kind))
+                        .frame(width: 13, alignment: .leading)
+                    Text(row.text.isEmpty ? " " : row.text)
+                        .fixedSize(horizontal: wrapLongLines ? false : true, vertical: false)
+                        .lineLimit(wrapLongLines ? nil : 1)
+                        .frame(maxWidth: wrapLongLines ? .infinity : nil, alignment: .leading)
+                        .foregroundStyle(contentTint(row.kind))
+                }
+                .font(typography.mono(12.5))
+                .frame(width: wrapLongLines ? nil : model.totalWidth, alignment: .leading)
+                .frame(maxWidth: wrapLongLines ? .infinity : nil, alignment: .leading)
+                .padding(.vertical, 2)
+                .background(rowFill(row.kind))
+            }
         }
-        .font(typography.mono(12.5))
-        .frame(width: model.totalWidth, alignment: .leading)
-        .padding(.vertical, 2)
-        .background(rowFill(row.kind))
     }
 
     private func contentTint(_ kind: DiffModel.RowKind) -> Color {
@@ -253,15 +314,31 @@ private struct DiffModel {
         let sign: String
         let kind: RowKind
         let text: String
+        /// Index into `file.hunks`; nil on rows that aren't tied to one (none today).
+        var hunk: Int? = nil
     }
 
     let rows: [Row]
     let totalWidth: CGFloat
 
-    init(file: ParsedDiffFile) {
+    init(file: ParsedDiffFile, hideWhitespaceChanges: Bool = false) {
         var rows: [Row] = []
         var nextId = 0
-        for hunk in file.hunks {
+        for (hunkIndex, hunk) in file.hunks.enumerated() {
+            // Client-side whitespace filter: a hunk whose changed lines all match on
+            // trimmed content carries no real change (indent moves). Mixed hunks stay.
+            if hideWhitespaceChanges {
+                let adds = hunk.lines.compactMap { $0.type == .add ? $0.content : nil }
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                let removes = hunk.lines.compactMap { $0.type == .remove ? $0.content : nil }
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                if !adds.isEmpty,
+                    adds.count == removes.count,
+                    adds.sorted() == removes.sorted()
+                {
+                    continue
+                }
+            }
             var oldLine = hunk.oldStart
             var newLine = hunk.newStart
             let hasHeaderLine = hunk.lines.contains { $0.type == .header }
@@ -269,7 +346,8 @@ private struct DiffModel {
                 rows.append(
                     Row(
                         id: nextId, old: "", new: "", sign: "", kind: .hunkHeader,
-                        text: "@@ -\(hunk.oldStart),\(hunk.oldCount) +\(hunk.newStart),\(hunk.newCount) @@"))
+                        text: "@@ -\(hunk.oldStart),\(hunk.oldCount) +\(hunk.newStart),\(hunk.newCount) @@",
+                        hunk: hunkIndex))
                 nextId += 1
             }
             for line in hunk.lines {
@@ -278,13 +356,13 @@ private struct DiffModel {
                     rows.append(
                         Row(
                             id: nextId, old: "", new: "", sign: "", kind: .hunkHeader,
-                            text: line.content))
+                            text: line.content, hunk: hunkIndex))
                     nextId += 1
                 case .context, .unknown:
                     rows.append(
                         Row(
                             id: nextId, old: "\(oldLine)", new: "\(newLine)", sign: " ",
-                            kind: .context, text: line.content))
+                            kind: .context, text: line.content, hunk: hunkIndex))
                     nextId += 1
                     oldLine += 1
                     newLine += 1
@@ -292,14 +370,14 @@ private struct DiffModel {
                     rows.append(
                         Row(
                             id: nextId, old: "", new: "\(newLine)", sign: "+",
-                            kind: .add, text: line.content))
+                            kind: .add, text: line.content, hunk: hunkIndex))
                     nextId += 1
                     newLine += 1
                 case .remove:
                     rows.append(
                         Row(
                             id: nextId, old: "\(oldLine)", new: "", sign: "-",
-                            kind: .remove, text: line.content))
+                            kind: .remove, text: line.content, hunk: hunkIndex))
                     nextId += 1
                     oldLine += 1
                 }

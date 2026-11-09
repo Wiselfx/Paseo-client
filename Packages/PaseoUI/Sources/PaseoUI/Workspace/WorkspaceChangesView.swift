@@ -28,6 +28,9 @@ struct WorkspaceChangesView: View {
     @State private var createPRBody = ""
     @State private var createPRFailure: String?
     @State private var mergeCandidate: PullRequestMergeMethod?
+    @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
+    @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
+    @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
@@ -109,22 +112,48 @@ struct WorkspaceChangesView: View {
             if showsConflictBanner {
                 conflictBanner
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    summary
-                    if files.isEmpty {
-                        listPlaceholder
-                    } else {
-                        ForEach(files) { file in
-                            fileRow(file)
-                            if file.id != files.last?.id {
-                                ClaudeDivider().padding(.leading, 46)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        summary
+                        if files.isEmpty {
+                            listPlaceholder
+                        } else {
+                            ForEach(files) { file in
+                                fileRow(file)
+                                    .id(file.id)
+                                if file.id != files.last?.id {
+                                    ClaudeDivider().padding(.leading, 46)
+                                }
                             }
+                            .padding(.bottom, 12)
                         }
-                        .padding(.bottom, 12)
+                        if gitActions.supportsCommitsList {
+                            commitsSection
+                        }
                     }
-                    if gitActions.supportsCommitsList {
-                        commitsSection
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if files.count >= 3 {
+                        Menu {
+                            ForEach(files) { file in
+                                Button(shortFileName(file.path)) {
+                                    Haptics.selection()
+                                    withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+                                        proxy.scrollTo(file.id, anchor: .top)
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "list.bullet")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(ClaudePalette.ink)
+                                .frame(width: 44, height: 44)
+                                .glassEffect()
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 20)
+                        .accessibilityLabel("Jump to file")
                     }
                 }
             }
@@ -480,6 +509,10 @@ struct WorkspaceChangesView: View {
         }
     }
 
+    private func shortFileName(_ path: String) -> String {
+        (path as NSString).lastPathComponent
+    }
+
     private func statusStyle(for file: ParsedDiffFile) -> (letter: String, tint: Color, word: String) {
         if file.oldPath != nil { return ("R", ClaudePalette.unread, "Renamed") }
         if file.isNew { return ("A", ClaudePalette.successInk, "Added") }
@@ -614,6 +647,13 @@ struct WorkspaceChangesView: View {
     /// and the auto-merge toggle when the host supports it. Disabled items carry a one-line reason.
     private var moreMenu: some View {
         Menu {
+            Section("Diff options") {
+                Toggle("Hide whitespace changes", isOn: $hideWhitespace)
+                Toggle("Wrap long lines", isOn: $wrapLongLines)
+                Button(collapseAllHunks ? "Expand all files" : "Collapse all files") {
+                    collapseAllHunks.toggle()
+                }
+            }
             gitMenuItem("Pull", reason: pullReason) {
                 Task { await performPull() }
             }

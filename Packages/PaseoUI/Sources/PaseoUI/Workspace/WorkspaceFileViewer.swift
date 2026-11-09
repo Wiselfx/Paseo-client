@@ -12,7 +12,6 @@ struct WorkspaceFileViewer: View {
     let onBack: () -> Void
     let backLabel: String
 
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.mentionInChat) private var mentionInChat
     @Environment(\.workspaceGitExtras) private var gitExtras
     @State private var copied = false
@@ -24,10 +23,25 @@ struct WorkspaceFileViewer: View {
     @State private var showConflict = false
     @State private var conflictModifiedAt = ""
     @State private var savedFlash = false
+    @State private var previewAsSource = false
+    @State private var shareTarget: SharePayload?
+    @State private var isSharing = false
+    @State private var shareFailure: String?
+    @Environment(\.openURL) private var openURL
     private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
     private var fileName: String { WorkspaceFileFormat.lastComponent(relPath) }
+    private static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mdwn", "mdx"]
+
+    /// Whether this file renders through the Markdown preview path (text-like only).
+    private var isMarkdown: Bool {
+        guard let file, file.kind == .text || file.kind == .image else { return false }
+        let ext = file.path.split(separator: ".", omittingEmptySubsequences: true).last
+            .map { $0.lowercased() }
+        return ext.map(Self.markdownExtensions.contains) ?? false
+    }
+
     /// Text files under ~512 KB, when the host allows editing (`features.workspaceFileEditing`).
     private var editableFile: FileExplorerFile? {
         guard files.supportsFileEditing, let file, file.kind == .text,
@@ -55,8 +69,14 @@ struct WorkspaceFileViewer: View {
             if let saveFailure {
                 saveFailureBanner(saveFailure)
             }
+            if let shareFailure {
+                saveFailureBanner(shareFailure)
+            }
             if isEditing {
                 editingContent
+            } else if isMarkdownPreview {
+                previewToggleRow
+                markdownContent
             } else {
                 content
             }
@@ -76,6 +96,9 @@ struct WorkspaceFileViewer: View {
         .onDisappear {
             guard let gitExtras else { return }
             Task { await gitExtras.stopWatchingFile() }
+        }
+        .sheet(item: $shareTarget) { target in
+            ActivityView(items: [target.url])
         }
         .alert("Changed on disk", isPresented: $showConflict) {
             Button("Reload") { Task { await reloadForConflict() } }
@@ -324,11 +347,11 @@ struct WorkspaceFileViewer: View {
         if let file {
             switch file.kind {
             case .image:
-                imageView(file)
+                zoomableImage(file)
             case .binary:
-                unsupportedView(
+                unsupportedShareableView(
                     icon: "doc", title: "Binary file",
-                    detail: "This file can't be shown here.\n\(WorkspaceFileFormat.bytes(file.size)) · \(WorkspaceFileFormat.relativeModified(file.modifiedAt))")
+                    detail: "\(WorkspaceFileFormat.bytes(file.size)) · \(WorkspaceFileFormat.relativeModified(file.modifiedAt))")
             default:
                 textView(file)
             }
@@ -337,6 +360,11 @@ struct WorkspaceFileViewer: View {
         } else {
             ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Markdown files only: whether the user flipped to source view.
+    private var isMarkdownPreview: Bool {
+        isMarkdown && !isEditing
     }
 
     @ViewBuilder private func textView(_ file: FileExplorerFile) -> some View {
@@ -355,22 +383,133 @@ struct WorkspaceFileViewer: View {
         }
     }
 
-    private func imageView(_ file: FileExplorerFile) -> some View {
-        Group {
-            if let data = imageData, let uiImage = UIImage(data: data) {
-                ScrollView {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity)
-                        .padding(12)
-                }
-            } else {
-                unsupportedView(
-                    icon: "photo", title: "Image can't be shown",
-                    detail: "The daemon sent image bytes this view can't decode.")
+    private var previewToggleRow: some View {
+        HStack {
+            HStack(spacing: 2) {
+                previewSegment(false, label: "Preview")
+                previewSegment(true, label: "Source")
             }
+            .padding(2)
+            .background(ClaudePalette.chip, in: .capsule)
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(ClaudePalette.background)
+    }
+
+    private func previewSegment(_ source: Bool, label: String) -> some View {
+        let selected = previewAsSource == source
+        return Button {
+            Haptics.selection()
+            withAnimation(.easeOut(duration: 0.18)) { previewAsSource = source }
+        } label: {
+            Text(label)
+                .font(typography.sans(12, weight: .medium))
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .foregroundStyle(selected ? ClaudePalette.ink : ClaudePalette.secondaryInk)
+                .background(selected ? ClaudePalette.background : Color.clear, in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(selected ? "Selected" : "")
+    }
+
+    @ViewBuilder private var markdownContent: some View {
+        if let text = file?.textContent {
+            if previewAsSource {
+                WorkspaceCodeView(source: text, language: "markdown")
+            } else if text.utf16.count > 200_000 {
+                unsupportedView(
+                    icon: "doc.text", title: "File too large to preview",
+                    detail: "\(WorkspaceFileFormat.bytes(file?.size ?? 0)) · Switch to Source.")
+            } else {
+                ScrollView {
+                    ClaudeMarkdownView(text, theme: ClaudeProse.theme(typography)) { action in
+                        if case .openLink(let url) = action { openURL(url) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                }
+            }
+        } else {
+            unsupportedView(
+                icon: "doc.text", title: "No content",
+                detail: "The daemon returned no text for this file.")
+        }
+    }
+
+    /// Images render zoomable: pinch, drag while zoomed, double-tap to toggle 1x/2x.
+    @ViewBuilder private func zoomableImage(_ file: FileExplorerFile) -> some View {
+        if let data = imageData, let uiImage = UIImage(data: data) {
+            ZoomableImageView(image: uiImage)
+        } else {
+            unsupportedView(
+                icon: "photo", title: "Image can't be shown",
+                detail: "The daemon sent image bytes this view can't decode.")
+        }
+    }
+
+    /// Binary, non-image files: a calm message and a share action.
+    private func unsupportedShareableView(icon: String, title: String, detail: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(ClaudePalette.tertiaryInk)
+            Text(title)
+                .font(typography.sans(15, weight: .medium))
+                .foregroundStyle(ClaudePalette.ink)
+            Text(detail)
+                .font(typography.sans(13))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .multilineTextAlignment(.center)
+            Button {
+                shareCurrentFile()
+            } label: {
+                if isSharing {
+                    ProgressView().controlSize(.small)
+                        .frame(height: 36)
+                        .padding(.horizontal, 20)
+                } else {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .font(typography.sans(14, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                        .frame(height: 36)
+                        .padding(.horizontal, 16)
+                        .background(ClaudePalette.chip, in: .capsule)
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isSharing)
+            .accessibilityLabel("Share file")
+        }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func shareCurrentFile() {
+        guard !isSharing, let file else { return }
+        isSharing = true
+        shareFailure = nil
+        Haptics.selection()
+        Task {
+            do {
+                let name = file.path.split(separator: "/").last.map(String.init)
+                let url = try await WorkspaceShare.prepare(checkout, path: relativePath, name: name)
+                shareTarget = SharePayload(url: url, name: name ?? "file")
+            } catch let error as WorkspaceShare.ShareError {
+                if case .unreadable(let message) = error { shareFailure = message }
+            } catch {
+                shareFailure = "Couldn't prepare the file for sharing."
+            }
+            isSharing = false
+        }
+    }
+
+    private struct SharePayload: Identifiable {
+        let id = UUID()
+        let url: URL
+        let name: String
     }
 
     private func language(for path: String) -> String? {
@@ -496,6 +635,71 @@ struct WorkspaceCodeView: View {
             let digits = max(2, String(count).count)
             return CGFloat(digits) * 8 + 4
         }
+    }
+}
+/// A zoomable image: pinch to zoom, drag to pan while zoomed, double-tap to toggle 1x/2x.
+private struct ZoomableImageView: View {
+    let image: UIImage
+
+    @State private var scale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { proxy in
+            let fitted = fittedSize(in: proxy.size)
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: fitted.width, height: fitted.height)
+                .scaleEffect(scale)
+                .offset(offset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(.rect)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            scale = min(5, max(1, value))
+                        }
+                        .onEnded { _ in
+                            if scale <= 1.05 { scale = 1; offset = .zero; lastOffset = .zero }
+                        })
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            guard scale > 1 else { return }
+                            offset = CGSize(
+                                width: lastOffset.width + value.translation.width,
+                                height: lastOffset.height + value.translation.height)
+                        }
+                        .onEnded { _ in lastOffset = offset })
+                .onTapGesture(count: 2) {
+                    withAnimation(reduceMotion ? nil : .spring(duration: 0.32)) {
+                        if scale > 1 {
+                            scale = 1
+                            offset = .zero
+                            lastOffset = .zero
+                        } else {
+                            scale = 2
+                        }
+                    }
+                }
+                .accessibilityLabel("Zoomable image")
+        }
+        .background(ClaudePalette.codeBackground)
+    }
+
+    private func fittedSize(in size: CGSize) -> CGSize {
+        let aspect = image.size.width / max(image.size.height, 1)
+        let bounds = CGSize(width: size.width, height: size.height)
+        var width = bounds.width
+        var height = width / aspect
+        if height > bounds.height {
+            height = bounds.height
+            width = height * aspect
+        }
+        return CGSize(width: width, height: height)
     }
 }
 #endif
