@@ -365,7 +365,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Notifications settings (notification permission row, Play sound, Test notification) — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:282`
 - [ ] Feature: Permissions settings (Microphone row) — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:283`
 - [ ] Feature: Open location section (where files/changes/PR/service URLs open: Main panel / On the side / Explorer sidebar / Ask/In Paseo/External browser) — Status: `missing` — Source: `docs/research/01-app-features.md:289`
-- [ ] Feature: Host sections (Overview, Projects, Connections, Pair device, Agents, Metadata, Voice, Workspaces, Providers, Usage, Terminals, Plugins) — See Connection & hosts — Status: `done` (M4c shipped Overview, Agents, Metadata, Workspaces, Projects and Providers pages; Connections, Pair device, Voice, Plugins and Usage remain `missing`) — Source: this client `PaseoSettingsView.swift`; `docs/research/01-app-features.md:293`
+- [ ] Feature: Host sections (Overview, Projects, Connections, Pair device, Agents, Metadata, Voice, Workspaces, Providers, Usage, Terminals, Plugins) — See Connection & hosts — Status: `done` (M4c shipped Overview, Agents, Metadata, Workspaces, Projects and Providers pages; M13 shipped Voice; Connections, Pair device, Plugins and Usage remain `missing`) — Source: this client `PaseoSettingsView.swift`; `docs/research/01-app-features.md:293`
 - [ ] Feature: Project settings (paseo.json: name, icon, hooks, scripts, metadata prompts) — See Workspaces & projects — Status: `done` (M2.11; metadata generation prompts remain `missing`; see Workspaces & projects) — Source: `docs/research/01-app-features.md:141`
 - [ ] Feature: Sidebar identity/avatar initial from Your name — Status: `done` — Source: this client `…/Sidebar/PaseoSidebar.swift` (`initial`, footer avatar)
 
@@ -431,12 +431,12 @@ Status counts are in `## Counts` at the very bottom.
 
 - [x] Feature: Dictation (mic → overlay with timer + live volume meter + transcript; cancel / insert / insert-and-send; retry; mic glyph red while recording; `dictation-toggle` shortcut) — Status: `done` (M8d: on-device `SFSpeechRecognizer` + `AVAudioEngine`, partial results rewritten live into the draft, stops on send/background/2 s silence, inline mic in the composer with orange fill + level pulse; not: timer overlay, insert-and-send button, `dictation-toggle` key) — Source: `docs/research/01-app-features.md:350`; docs/research/04-protocol-agents-permissions-settings.md:1280; this client `…/Chat/DictationController.swift`, `…/Conversation/ChatComposer.swift` (mic)
 - [ ] Feature: Voice mode (realtime conversation, mic-disc button in the composer, live volume meter, mute, interrupt, thinking tone) — Status: `missing` — Source: `docs/research/01-app-features.md:349`; docs/research/04-protocol-agents-permissions-settings.md:1253-1343
-- [ ] Feature: Voice settings (host → Voice: Dictation switch, STT row; Voice mode switch; Listening/Speaking provider rows) — Status: `missing` — Source: `docs/research/01-app-features.md:301,351`
-- [ ] Feature: Speech provider sheets (Local: model catalog + download/delete, sizes, recommended; OpenAI: API key/Base URL/model/language/voice) — Status: `missing` — Source: `docs/research/01-app-features.md:352`
-- [ ] Feature: Local speech model management (`speech.local_models.list/download/delete`) — Status: `missing` — Source: docs/research/04-protocol-agents-permissions-settings.md:1343
+- [ ] Feature: Voice settings (host → Voice: Dictation switch, STT row; Voice mode switch; Listening/Speaking provider rows) — Status: `done` (M13: `VoicePage` in Settings host group, read/written through `set_daemon_config_request` deep-partial `features` patch, gated on `features.speechSettings`; “Set by” env-var hints; unknown providers stay read-only) — Source: `docs/research/01-app-features.md:301,351`; docs/research/04-protocol-agents-permissions-settings.md:1240; this client `Packages/PaseoUI/Sources/PaseoUI/Settings/VoicePage.swift`, `Packages/PaseoCore/Sources/PaseoProtocol/SpeechSettings.swift`, `Packages/PaseoCore/Sources/PaseoStore/VoiceSettingsStore.swift`
+- [ ] Feature: Speech provider sheets (Local: model catalog + download/delete, sizes, recommended; OpenAI: API key/Base URL/model/language/voice) — Status: `done` (M13: `SpeechProviderSheet` — Local catalog with sizes/`Recommended`/`Downloaded`/`In use` badges, download progress and delete confirmation; OpenAI sheet with secure API-key field that only ever writes the patch — the read model carries `hasApiKey`, the field shows “Saved” and is cleared on dismiss; “Set by” env-var read-only fields) — Source: `docs/research/01-app-features.md:352`; this client `Packages/PaseoUI/Sources/PaseoUI/Settings/SpeechProviderSheet.swift`
+- [ ] Feature: Local speech model management (`speech.local_models.list/download/delete`) — Status: `done` (M13: list/download/delete through `VoiceSettingsStore` with FakeDaemonClient tests; download progress polled from the list every 1 s while any model is downloading/extracting — the daemon has no speech progress push or subscription family, so polling is the mechanism on modern sockets too) — Source: docs/research/04-protocol-agents-permissions-settings.md:1343; this client `Packages/PaseoCore/Sources/PaseoStore/VoiceSettingsStore.swift`, `Packages/PaseoCore/Sources/PaseoProtocol/SpeechSettings.swift`
 - [ ] Feature: Test audio diagnostic — See Settings — Status: `missing` — Source: `docs/research/01-app-features.md:284`
 - [ ] Feature: Keep awake while voice mode is live — Status: `missing` — Source: `docs/research/01-app-features.md:354`
-- [ ] Feature: Voice presence/config in daemon config (`HostSettings.Usage` is decoded; speech config block not mapped) — Status: `store only (no UI)` (partial) — Source: this client `Packages/PaseoProtocol/HostSettings.swift:114-180`; docs/research/04-protocol-agents-permissions-settings.md:1240
+- [ ] Feature: Voice presence/config in daemon config (`HostSettings.Usage` is decoded; speech config block not mapped) — Status: `done` (M13: `config.features` decoded as `SpeechSettings` in PaseoProtocol, written as a deep-partial patch; Diagnostics report never includes speech config or keys — daemon bundle scrub redacts JSON `apiKey`) — Source: this client `Packages/PaseoProtocol/SpeechSettings.swift`; docs/research/04-protocol-agents-permissions-settings.md:1240; `Settings/DiagnosticsPage.swift` (`scrubHostDiagnostic`)
 
 ## Desktop-only
 
@@ -530,10 +530,10 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 302 | 71.6 % |
-| `missing` | 46 | 10.9 % |
+| `done` | 306 | 72.5 % |
+| `missing` | 43 | 10.2 % |
 | `desktop-only (flag)` | 48 | 11.4 % |
-| `store only (no UI)` | 6 | 1.4 % |
+| `store only (no UI)` | 5 | 1.2 % |
 | `in flight` | 0 | 0.0 % |
 | `not applicable` | 20 | 4.7 % |
 | **Total** | **422** | 100 % |
