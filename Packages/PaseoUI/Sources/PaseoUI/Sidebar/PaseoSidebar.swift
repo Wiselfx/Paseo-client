@@ -39,6 +39,7 @@ struct PaseoSidebar: View {
     /// Shared with the Settings → General toggle, which owns this row. Hidden by default.
     @AppStorage("paseo.usage.showInSidebar") var showUsageInSidebar = false
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.hostSwitch) var hostSwitch
 
     let typography = ClaudeTypography()
 
@@ -350,6 +351,56 @@ struct PaseoSidebar: View {
         .accessibilityIdentifier("sidebar.usage.\(source).\(window.id)")
     }
 
+        // MARK: Host switch
+
+    /// Host name → menu of saved hosts + "Add host…". Shown only when the app injects the
+    /// host context (RootView does); otherwise the footer is avatar + capsule as before.
+    @ViewBuilder private var hostChip: some View {
+        if let hostSwitch {
+            let name = session.serverInfo?.hostname ?? "Daemon"
+            Menu {
+                ForEach(hostSwitch.hosts) { host in
+                    Button {
+                        Haptics.selection()
+                        hostSwitch.switchTo(host.id)
+                    } label: {
+                        Label(
+                            host.label,
+                            systemImage: host.isCurrent ? "checkmark.circle.fill" : "desktopcomputer")
+                    }
+                    .accessibilityIdentifier("sidebar.hosts.\(host.id.uuidString)")
+                }
+                if !hostSwitch.hosts.isEmpty { Divider() }
+                Button {
+                    Haptics.selection()
+                    hostSwitch.addHost()
+                } label: {
+                    Label("Add host…", systemImage: "plus")
+                }
+                .accessibilityIdentifier("sidebar.hosts.add")
+            } label: {
+                HStack(spacing: 4) {
+                    Text(name)
+                        .font(typography.sans(13, weight: .medium))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 120)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                }
+                .padding(.horizontal, 12)
+                .padding(.trailing, 2)
+                .frame(height: 36)
+                .background(ClaudePalette.chip, in: .capsule)
+            }
+            .accessibilityLabel("Hosts, current host \(name)")
+            .accessibilityIdentifier("sidebar.hosts")
+            .padding(.trailing, 10)
+        }
+    }
+
         // MARK: Footer
 
     private var footer: some View {
@@ -368,6 +419,8 @@ struct PaseoSidebar: View {
             .accessibilityLabel("Settings")
 
             Spacer(minLength: 0)
+
+            hostChip
 
             Button {
                 Haptics.selection()

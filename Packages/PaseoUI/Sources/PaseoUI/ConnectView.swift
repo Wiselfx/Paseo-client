@@ -2,7 +2,8 @@
 import SwiftUI
 
 /// Where is your daemon, and what's its password. The app does the connecting; this view only
-/// collects the details and shows the outcome. ClaudeUI's sheet chrome, Paseo's fields.
+/// collects the details and shows the outcome. Saved hosts come first (tap to connect, swipe to
+/// forget, rename), then the direct form (host / port / password / TLS / Advanced URI).
 public struct ConnectView: View {
     public enum Status: Equatable {
         case idle
@@ -13,63 +14,104 @@ public struct ConnectView: View {
     @Binding var host: String
     @Binding var port: String
     @Binding var password: String
+    @Binding var useTLS: Bool
+    @Binding var connectionURI: String
     var status: Status
+    /// Every saved daemon, most recent first. Provided by the app.
+    var hosts: [HostSwitchEntry]
     var onConnect: () -> Void
+    var onConnectSaved: (UUID) -> Void
+    var onForgetSaved: (UUID) -> Void
+    var onRenameSaved: (UUID, String) -> Void
+
+    @State private var showAddForm: Bool
+    @State private var showAdvanced = false
+    @State private var renameTarget: HostSwitchEntry?
+    @State private var renameText = ""
+    @State private var forgetTarget: HostSwitchEntry?
 
     private let typography = ClaudeTypography()
 
     public init(
-        host: Binding<String>, port: Binding<String>, password: Binding<String>, status: Status,
-        onConnect: @escaping () -> Void
+        host: Binding<String>, port: Binding<String>, password: Binding<String>,
+        useTLS: Binding<Bool>, connectionURI: Binding<String>, status: Status,
+        hosts: [HostSwitchEntry], onConnect: @escaping () -> Void,
+        onConnectSaved: @escaping (UUID) -> Void,
+        onForgetSaved: @escaping (UUID) -> Void,
+        onRenameSaved: @escaping (UUID, String) -> Void
     ) {
         _host = host
         _port = port
         _password = password
+        _useTLS = useTLS
+        _connectionURI = connectionURI
         self.status = status
+        self.hosts = hosts
         self.onConnect = onConnect
+        self.onConnectSaved = onConnectSaved
+        self.onForgetSaved = onForgetSaved
+        self.onRenameSaved = onRenameSaved
+        let failed: Bool
+        if case .failed = status { failed = true } else { failed = false }
+        _showAddForm = State(initialValue: hosts.isEmpty || failed)
         ClaudeFontResources.register()
     }
 
     private var connecting: Bool { status == .connecting }
-
+    private var uriState: ConnectionURI.Result { ConnectionURI.parse(connectionURI) }
+    private var trimmedHost: String { host.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var portNumber: Int? {
+        guard let value = Int(port.trimmingCharacters(in: .whitespacesAndNewlines)),
+            (1...65535).contains(value)
+        else { return nil }
+        return value
+    }
+    private var portError: String? {
+        let trimmed = port.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, portNumber == nil else { return nil }
+        return "Port must be a number between 1 and 65535."
+    }
+    private var uriError: String? { ConnectionURI.validationError(connectionURI) }
+    private var hostError: String? {
+        trimmedHost.contains(" ") ? "The host can't contain spaces." : nil
+    }
     private var canConnect: Bool {
-        !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !connecting
+        guard !connecting else { return false }
+        switch uriState {
+        case .valid: return true
+        case .invalid: return false
+        case .empty:
+            return !trimmedHost.isEmpty && hostError == nil && portNumber != nil
+        }
     }
 
     public var body: some View {
         ZStack {
             ClaudePalette.background.ignoresSafeArea()
-            VStack(spacing: 22) {
-                Spacer(minLength: 20)
+            VStack(spacing: 18) {
+                Spacer(minLength: 12)
                 VStack(spacing: 6) {
                     Text("Paseo").font(typography.serif(34, relativeTo: .largeTitle))
                     Text("Connect to your daemon")
                         .font(typography.sans(15))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                 }
-                VStack(spacing: 12) {
-                    RowGroup {
-                        field(
-                            "Host", text: $host, prompt: "192.168.1.20 or my-box",
-                            symbol: "desktopcomputer", keyboard: .URL,
-                            contentType: .URL
-                        )
-                        RowDivider()
-                        field("Port", text: $port, prompt: "6767", symbol: "number", keyboard: .numberPad)
-                        RowDivider()
-                        secureField("Password", text: $password, prompt: "Daemon password")
-                    }
-                    connectButton
-                    if case .failed(let message) = status {
-                        Text(message)
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.failureInk)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .transition(.opacity)
+                Group {
+                    if showAddForm || hosts.isEmpty {
+                        directForm
+                    } else {
+                        savedHostsList
                     }
                 }
-                .padding(.horizontal, 16)
+                if case .failed(let message) = status {
+                    Text(message)
+                        .font(typography.sans(13))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .transition(.opacity)
+                }
+                if showAddForm || hosts.isEmpty { connectButton }
                 Spacer()
                 Text(
                     "Use your machine's LAN or Tailscale address. Set a password with `paseo daemon set-password`."
@@ -86,14 +128,271 @@ public struct ConnectView: View {
         .sensoryFeedback(.error, trigger: status) { _, new in
             if case .failed = new { true } else { false }
         }
+        .onChange(of: status) { _, new in
+            // A failed connect lands on the form with that host preselected and Retry in reach.
+            if case .failed = new { showAddForm = true }
+        }
+        .sheet(item: $renameTarget) { target in renameSheet(target) }
+        .confirmationDialog(
+            "Forget \(forgetTarget?.label ?? "this host")?",
+            isPresented: Binding(
+                get: { forgetTarget != nil }, set: { if !$0 { forgetTarget = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Forget host", role: .destructive) {
+                if let id = forgetTarget?.id { onForgetSaved(id) }
+                forgetTarget = nil
+            }
+            Button("Cancel", role: .cancel) { forgetTarget = nil }
+        } message: {
+            Text("The password stored on this device for this host is removed too. The daemon itself is not changed.")
+        }
+    }
+
+    // MARK: Saved hosts
+
+    private var savedHostsList: some View {
+        VStack(spacing: 10) {
+            List {
+                ForEach(hosts) { host in
+                    Button {
+                        Haptics.selection()
+                        onConnectSaved(host.id)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: host.isCurrent ? "checkmark.circle.fill" : "desktopcomputer")
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundStyle(host.isCurrent ? ClaudePalette.ink : ClaudePalette.secondary)
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(host.label)
+                                    .font(typography.sans(17, weight: .medium))
+                                    .foregroundStyle(ClaudePalette.ink)
+                                    .lineLimit(1)
+                                Text(host.urlLine)
+                                    .font(typography.mono(11.5, relativeTo: .footnote))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            Spacer(minLength: 8)
+                            if connecting {
+                                ProgressView().controlSize(.small).tint(ClaudePalette.ink)
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                            }
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(connecting)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            forgetTarget = host
+                        } label: {
+                            Label("Forget", systemImage: "trash")
+                        }
+                    }
+                    .contextMenu {
+                        Button {
+                            renameText = host.label
+                            renameTarget = host
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            forgetTarget = host
+                        } label: {
+                            Label("Forget", systemImage: "trash")
+                        }
+                    }
+                    .accessibilityIdentifier("connect.saved.\(host.id.uuidString)")
+                }
+                Button {
+                    Haptics.selection()
+                    showAddForm = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 20, weight: .light))
+                            .foregroundStyle(ClaudePalette.ink)
+                            .frame(width: 24)
+                        Text("Add host")
+                            .font(typography.sans(17))
+                            .foregroundStyle(ClaudePalette.ink)
+                        Spacer(minLength: 8)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("connect.addHost")
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .frame(height: min(64 * CGFloat(hosts.count + 1) + 8, 380))
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func renameSheet(_ target: HostSwitchEntry) -> some View {
+        VStack(spacing: 16) {
+            SheetHeader(title: "Rename host", close: { renameTarget = nil })
+            RowGroup {
+                TextField("Label", text: $renameText)
+                    .font(typography.sans(17))
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .onSubmit { saveRename(target) }
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .accessibilityIdentifier("connect.rename.field")
+            }
+            Button {
+                saveRename(target)
+            } label: {
+                Text("Save")
+                    .font(typography.sans(16, weight: .medium))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .foregroundStyle(ClaudePalette.background)
+                    .background(ClaudePalette.ink, in: .capsule)
+                    .opacity(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+            }
+            .buttonStyle(.plain)
+            .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .padding(.horizontal, 16)
+            .accessibilityIdentifier("connect.rename.save")
+            Spacer(minLength: 0)
+        }
+        .background(ClaudePalette.background)
+        .foregroundStyle(ClaudePalette.ink)
+        .presentationDetents([.height(260)])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(38)
+    }
+
+    private func saveRename(_ target: HostSwitchEntry) {
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        Haptics.selection()
+        onRenameSaved(target.id, trimmed)
+        renameTarget = nil
+    }
+
+    // MARK: Direct form
+
+    private var directForm: some View {
+        VStack(spacing: 12) {
+            if !hosts.isEmpty {
+                HStack {
+                    Button {
+                        Haptics.selection()
+                        showAddForm = false
+                    } label: {
+                        Label("Saved hosts", systemImage: "chevron.left")
+                            .font(typography.sans(15, weight: .medium))
+                            .foregroundStyle(ClaudePalette.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("connect.backToHosts")
+                    Spacer()
+                }
+            }
+            RowGroup {
+                field(
+                    "Host", text: $host, prompt: "example.com or 192.0.2.10",
+                    symbol: "desktopcomputer", keyboard: .URL, contentType: .URL)
+                RowDivider()
+                field("Port", text: $port, prompt: "6767", symbol: "number", keyboard: .numberPad)
+                if let portError {
+                    errorCaption(portError)
+                }
+                if let hostError {
+                    errorCaption(hostError)
+                }
+                RowDivider()
+                secureField("Password", text: $password, prompt: "Daemon password")
+                RowDivider()
+                Toggle(isOn: $useTLS) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Use TLS (wss)")
+                            .font(typography.sans(17))
+                        Text("For daemons behind a TLS terminator (Caddy, nginx).")
+                            .font(typography.sans(12))
+                            .foregroundStyle(ClaudePalette.secondary)
+                    }
+                }
+                .tint(.blue)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .accessibilityIdentifier("connect.tls")
+                RowDivider()
+                Button {
+                    Haptics.selection()
+                    withAnimation(.easeOut(duration: 0.18)) { showAdvanced.toggle() }
+                } label: {
+                    HStack(spacing: 12) {
+                        fieldSymbol("chevron.down.chevron.up")
+                        Text("Advanced")
+                            .font(typography.sans(17))
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(ClaudePalette.secondary)
+                            .rotationEffect(.degrees(showAdvanced ? 180 : 0))
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("connect.advanced")
+                if showAdvanced {
+                    RowDivider()
+                    VStack(alignment: .leading, spacing: 2) {
+                        TextField(
+                            "", text: $connectionURI,
+                            prompt: Text("wss://host:6767/ws").foregroundStyle(ClaudePalette.captionInk)
+                        )
+                        .font(typography.mono(15, relativeTo: .body))
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .textContentType(.URL)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .accessibilityIdentifier("connect.uri")
+                        Text(uriError ?? "Overrides host, port and the TLS switch while filled.")
+                            .font(typography.sans(12))
+                            .foregroundStyle(uriError == nil ? ClaudePalette.secondary : ClaudePalette.failureInk)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 10)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func errorCaption(_ message: String) -> some View {
+        Text(message)
+            .font(typography.sans(12))
+            .foregroundStyle(ClaudePalette.failureInk)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
     }
 
     private var connectButton: some View {
         Button(action: onConnect) {
             HStack(spacing: 8) {
-                Text(connecting ? "Connecting…" : "Connect")
-                    .font(typography.sans(16, weight: .medium))
-                if connecting { ProgressView().controlSize(.small).tint(ClaudePalette.background) }
+                if connecting {
+                    ProgressView().controlSize(.small).tint(ClaudePalette.background)
+                    Text("Connecting…").font(typography.sans(16, weight: .medium))
+                } else {
+                    Text(status.isFailed ? "Retry" : "Connect").font(typography.sans(16, weight: .medium))
+                }
             }
             .frame(maxWidth: .infinity)
             .frame(height: 48)
@@ -103,6 +402,7 @@ public struct ConnectView: View {
         }
         .buttonStyle(.plain)
         .disabled(!canConnect)
+        .padding(.horizontal, 16)
         .accessibilityIdentifier("connect.submit")
     }
 
@@ -157,6 +457,13 @@ public struct ConnectView: View {
 
     private func fieldTitle(_ title: String) -> some View {
         Text(title).font(typography.sans(12)).foregroundStyle(ClaudePalette.secondaryInk)
+    }
+}
+
+extension ConnectView.Status {
+    var isFailed: Bool {
+        if case .failed = self { return true }
+        return false
     }
 }
 #endif
