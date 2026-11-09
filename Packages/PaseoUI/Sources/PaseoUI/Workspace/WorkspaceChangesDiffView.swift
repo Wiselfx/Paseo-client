@@ -10,6 +10,8 @@ import PaseoStore
 struct WorkspaceChangesDiffView: View {
     let file: ParsedDiffFile
     let extras: WorkspaceGitExtras
+    /// Commit diffs can't be discarded; hide the destructive affordance there.
+    var allowsDiscard = true
 
     @Environment(\.dismiss) private var dismiss
 
@@ -19,9 +21,10 @@ struct WorkspaceChangesDiffView: View {
     private let typography = ClaudeTypography()
     private let model: DiffModel
 
-    init(file: ParsedDiffFile, extras: WorkspaceGitExtras) {
+    init(file: ParsedDiffFile, extras: WorkspaceGitExtras, allowsDiscard: Bool = true) {
         self.file = file
         self.extras = extras
+        self.allowsDiscard = allowsDiscard
         self.model = DiffModel(file: file)
     }
 
@@ -44,7 +47,7 @@ struct WorkspaceChangesDiffView: View {
         .navigationTitle((file.path as NSString).lastPathComponent)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if extras.capabilities.supportsDiscardChanges {
+            if allowsDiscard, extras.capabilities.supportsDiscardChanges {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .destructive) {
                         confirmDiscard = true

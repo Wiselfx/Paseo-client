@@ -84,6 +84,11 @@ private struct WorkspaceFilesDirectoryList: View {
     /// store keeps a single listing, so pages snapshot it rather than watch it change.
     @State private var listing: Result<[FileExplorerEntry], String>?
     @State private var toast: String?
+    /// Hidden files (dotfiles) are filtered out unless this is on; persisted per device.
+    @AppStorage("paseo.files.showHidden") private var showHidden = false
+    @State private var namePrompt: NamePrompt?
+    @State private var nameText = ""
+    @State private var pendingDelete: FileExplorerEntry?
     private let typography = ClaudeTypography()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// "Mention in chat" from a row's long-press; nil disables the action.
@@ -99,6 +104,29 @@ private struct WorkspaceFilesDirectoryList: View {
         }
         .onAppear { Task { await refresh() } }
         .overlay(alignment: .bottom) { toastView }
+        .alert(namePromptTitle, isPresented: namePromptBinding) {
+            TextField(namePromptPlaceholder, text: $nameText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button(namePromptAction, action: submitNamePrompt)
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.name ?? "")”?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                guard let target = pendingDelete else { return }
+                pendingDelete = nil
+                Task { await deleteEntry(target) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes it. This cannot be undone.")
+        }
     }
 
     // MARK: Header row
@@ -140,6 +168,37 @@ private struct WorkspaceFilesDirectoryList: View {
                     .contentShape(.rect)
             }
             .accessibilityLabel("Refresh")
+            Menu {
+                Button("New file", systemImage: "doc") {
+                    nameText = ""
+                    namePrompt = .newFile(parent: relPath)
+                }
+                Button("New folder", systemImage: "folder") {
+                    nameText = ""
+                    namePrompt = .newFolder(parent: relPath)
+                }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .frame(width: 34, height: 34)
+                    .contentShape(.rect)
+            }
+            .accessibilityLabel("New file or folder")
+            Menu {
+                Toggle("Show hidden files", isOn: $showHidden)
+                Button("Refresh", systemImage: "arrow.clockwise") {
+                    Task { await refresh() }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .frame(width: 34, height: 34)
+                    .background(ClaudePalette.chip, in: .circle)
+                    .contentShape(.rect)
+            }
+            .accessibilityLabel("More file actions")
         }
         .padding(.horizontal, 10)
         .frame(height: 38)
@@ -174,14 +233,20 @@ private struct WorkspaceFilesDirectoryList: View {
         case .failure(let message):
             errorView(message)
         case .success(let entries):
-            if entries.isEmpty { emptyView } else { list(entries) }
+            let visible = entries.filter { showHidden || !$0.name.hasPrefix(".") }
+            if visible.isEmpty { emptyView } else { list(visible) }
         }
     }
 
-    private func list(_ entries: [FileExplorerEntry]) -> some View {
-        ScrollView {
+    private var hiddenCount: Int {
+        guard case .success(let entries) = listing else { return 0 }
+        return entries.filter { $0.name.hasPrefix(".") }.count
+    }
+
+    private func list(_ visible: [FileExplorerEntry]) -> some View {
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
                     if index > 0 {
                         ClaudeDivider().padding(.leading, 46)
                     }
@@ -234,6 +299,26 @@ private struct WorkspaceFilesDirectoryList: View {
                     mentionInChat?(relative(entry))
                 }
             }
+            Button("Rename…", systemImage: "pencil") {
+                nameText = entry.name
+                namePrompt = .rename(path: entry.path, currentName: entry.name)
+            }
+            Button("Duplicate", systemImage: "plus.square.on.square") {
+                Task { await duplicate(entry) }
+            }
+            if entry.isDirectory {
+                Button("New file", systemImage: "doc") {
+                    nameText = ""
+                    namePrompt = .newFile(parent: entry.path)
+                }
+                Button("New folder", systemImage: "folder") {
+                    nameText = ""
+                    namePrompt = .newFolder(parent: entry.path)
+                }
+            }
+            Button("Delete…", systemImage: "trash", role: .destructive) {
+                pendingDelete = entry
+            }
             Button("Copy path", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = absolute(entry)
                 showToast("Path copied")
@@ -247,13 +332,30 @@ private struct WorkspaceFilesDirectoryList: View {
     }
 
     private var emptyView: some View {
-        VStack(spacing: 6) {
-            Text("Empty folder")
+        let allHidden = !showHidden && hiddenCount > 0
+        return VStack(spacing: 10) {
+            Text(allHidden ? "No visible files" : "Empty folder")
                 .font(typography.sans(15, weight: .medium))
                 .foregroundStyle(ClaudePalette.ink)
-            Text("There is nothing to show here yet.")
+            Text(allHidden
+                 ? "\(hiddenCount) hidden \(hiddenCount == 1 ? "item is" : "items are") dot-prefixed."
+                 : "There is nothing to show here yet.")
                 .font(typography.sans(13))
                 .foregroundStyle(ClaudePalette.secondaryInk)
+            if allHidden {
+                Button {
+                    Haptics.selection()
+                    showHidden = true
+                } label: {
+                    Text("Show hidden files")
+                        .font(typography.sans(13, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                        .padding(.horizontal, 18)
+                        .frame(height: 32)
+                        .background(ClaudePalette.chip, in: .capsule)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -305,6 +407,102 @@ private struct WorkspaceFilesDirectoryList: View {
             try? await Task.sleep(for: .seconds(2))
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = nil }
         }
+    }
+
+    // MARK: Entry operations
+
+    private enum NamePrompt: Identifiable {
+        case newFile(parent: String)
+        case newFolder(parent: String)
+        case rename(path: String, currentName: String)
+
+        var id: String {
+            switch self {
+            case .newFile(let parent): "new-file:\(parent)"
+            case .newFolder(let parent): "new-folder:\(parent)"
+            case .rename(let path, _): "rename:\(path)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .newFile: "New file"
+            case .newFolder: "New folder"
+            case .rename: "Rename"
+            }
+        }
+
+        var actionTitle: String {
+            switch self {
+            case .newFile: "Create"
+            case .newFolder: "Create"
+            case .rename: "Rename"
+            }
+        }
+
+        var placeholder: String {
+            switch self {
+            case .newFile: "File name"
+            case .newFolder: "Folder name"
+            case .rename: "Name"
+            }
+        }
+    }
+
+    private var namePromptTitle: String { namePrompt?.title ?? "" }
+    private var namePromptAction: String { namePrompt?.actionTitle ?? "OK" }
+    private var namePromptPlaceholder: String { namePrompt?.placeholder ?? "Name" }
+
+    private var namePromptBinding: Binding<Bool> {
+        Binding(
+            get: { namePrompt != nil },
+            set: { if !$0 { namePrompt = nil } })
+    }
+
+    private func submitNamePrompt() {
+        guard let prompt = namePrompt else { return }
+        let name = nameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        namePrompt = nil
+        guard !name.isEmpty else { return }
+        Haptics.selection()
+        Task {
+            switch prompt {
+            case .newFile(let parent):
+                let created = await files.createEntry(
+                    parentPath: parent.isEmpty ? nil : parent, name: name, kind: .file)
+                showToast(created != nil ? "Created \(name)" : (files.error ?? "Couldn't create the file."))
+            case .newFolder(let parent):
+                let created = await files.createEntry(
+                    parentPath: parent.isEmpty ? nil : parent, name: name, kind: .directory)
+                showToast(created != nil ? "Created \(name)" : (files.error ?? "Couldn't create the folder."))
+            case .rename(let path, _):
+                let renamed = await files.rename(path: path, to: name)
+                showToast(renamed != nil ? "Renamed" : (files.error ?? "Couldn't rename."))
+            }
+            await refresh()
+        }
+    }
+
+    private func duplicate(_ entry: FileExplorerEntry) async {
+        Haptics.selection()
+        let duplicated = await files.duplicate(path: entry.path)
+        if duplicated != nil {
+            showToast("Duplicated \(entry.name)")
+        } else {
+            showToast(files.error ?? "Couldn't duplicate.")
+        }
+        await refresh()
+    }
+
+    private func deleteEntry(_ entry: FileExplorerEntry) async {
+        let ok = await files.delete(path: entry.path)
+        if ok {
+            Haptics.selection()
+            showToast("Deleted \(entry.name)")
+        } else {
+            showToast(files.error ?? "Couldn't delete.")
+        }
+        await refresh()
     }
 
     // MARK: Path helpers

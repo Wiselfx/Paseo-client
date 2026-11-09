@@ -16,10 +16,25 @@ struct WorkspaceFileViewer: View {
     @Environment(\.mentionInChat) private var mentionInChat
     @Environment(\.workspaceGitExtras) private var gitExtras
     @State private var copied = false
+    @State private var isEditing = false
+    @State private var editText: String?
+    @State private var editBaseline = ""
+    @State private var isSaving = false
+    @State private var saveFailure: String?
+    @State private var showConflict = false
+    @State private var conflictModifiedAt = ""
+    @State private var savedFlash = false
     private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
     private var fileName: String { WorkspaceFileFormat.lastComponent(relPath) }
+    /// Text files under ~512 KB, when the host allows editing (`features.workspaceFileEditing`).
+    private var editableFile: FileExplorerFile? {
+        guard files.supportsFileEditing, let file, file.kind == .text,
+            file.textContent != nil, file.size <= 512 * 1024
+        else { return nil }
+        return file
+    }
     /// Workspace-relative path for the "Mention in chat" action and the live-file watch.
     private var relativePath: String {
         WorkspaceFileFormat.relativePath(relPath, cwd: checkout.cwd)
@@ -37,7 +52,14 @@ struct WorkspaceFileViewer: View {
         VStack(spacing: 0) {
             topRow
             ClaudeDivider()
-            content
+            if let saveFailure {
+                saveFailureBanner(saveFailure)
+            }
+            if isEditing {
+                editingContent
+            } else {
+                content
+            }
         }
         .onAppear {
             Task {
@@ -55,6 +77,116 @@ struct WorkspaceFileViewer: View {
             guard let gitExtras else { return }
             Task { await gitExtras.stopWatchingFile() }
         }
+        .alert("Changed on disk", isPresented: $showConflict) {
+            Button("Reload") { Task { await reloadForConflict() } }
+            Button("Overwrite", role: .destructive) { Task { await overwriteForConflict() } }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("This file changed on disk since you started editing. Reloading discards your changes.")
+        }
+    }
+
+    // MARK: Editing
+
+    /// A plain monospaced TextEditor, deliberately without syntax highlighting.
+    @ViewBuilder private var editingContent: some View {
+        TextEditor(text: Binding(get: { editText ?? "" }, set: { editText = $0 }))
+            .font(typography.mono(WorkspaceCodeView.fontSize))
+            .scrollContentBackground(.hidden)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(ClaudePalette.codeBackground)
+            .accessibilityLabel("Edit file contents")
+    }
+
+    private func saveFailureBanner(_ message: String) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "exclamationmark.circle")
+                .foregroundStyle(ClaudePalette.failureInk)
+            Text(message)
+                .font(typography.sans(12))
+                .foregroundStyle(ClaudePalette.failureInk)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Button {
+                saveFailure = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.failureInk)
+                    .frame(width: 26, height: 26)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(ClaudePalette.failureInk.opacity(0.08))
+    }
+
+    private func beginEdit() {
+        guard let file = editableFile else { return }
+        editText = file.textContent
+        editBaseline = file.modifiedAt
+        saveFailure = nil
+        isEditing = true
+    }
+
+    private func cancelEdit() {
+        editText = nil
+        saveFailure = nil
+        isEditing = false
+    }
+
+    private func saveEdit() async {
+        guard let text = editText, !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+        let outcome = await files.write(path: relativePath, content: text, expectedModifiedAt: editBaseline)
+        await applyWriteOutcome(outcome)
+    }
+
+    private func applyWriteOutcome(_ outcome: FileWriteOutcome) async {
+        switch outcome {
+        case .written:
+            isEditing = false
+            editText = nil
+            saveFailure = nil
+            savedFlash = true
+            await files.read(relativePath)
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                savedFlash = false
+            }
+        case .conflict(let modifiedAt):
+            conflictModifiedAt = modifiedAt ?? ""
+            showConflict = true
+        case .failed(let message):
+            saveFailure = message
+        }
+    }
+
+    /// The user chose Reload: throw away their edits and read the on-disk version.
+    private func reloadForConflict() async {
+        await files.read(relativePath)
+        guard let file = files.file, file.kind == .text, let text = file.textContent else {
+            saveFailure = files.error ?? "The file could not be reloaded."
+            return
+        }
+        editText = text
+        editBaseline = file.modifiedAt
+        saveFailure = nil
+    }
+
+    /// The user chose Overwrite: save with the current on-disk version as the expectation.
+    private func overwriteForConflict() async {
+        guard let text = editText, !conflictModifiedAt.isEmpty else {
+            await saveEdit()
+            return
+        }
+        isSaving = true
+        defer { isSaving = false }
+        let outcome = await files.write(path: relativePath, content: text, expectedModifiedAt: conflictModifiedAt)
+        await applyWriteOutcome(outcome)
     }
 
     // MARK: Top row
@@ -75,29 +207,78 @@ struct WorkspaceFileViewer: View {
             }
             .accessibilityLabel("Back to \(backLabel)")
             Spacer(minLength: 4)
-            Text(fileName)
+            Text(isEditing ? "Editing \(fileName)" : fileName)
                 .font(typography.mono(12))
                 .foregroundStyle(ClaudePalette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
-            if let mentionInChat {
+            if isEditing {
+                Button("Cancel") { cancelEdit() }
+                    .font(typography.sans(13))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(height: 28)
+                    .accessibilityLabel("Discard edits")
                 Button {
-                    mentionInChat(relativePath)
+                    Haptics.selection()
+                    Task { await saveEdit() }
                 } label: {
-                    Image(systemName: "at")
-                        .font(.system(size: 15, weight: .light))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
-                        .frame(width: 28, height: 28)
-                        .contentShape(.rect)
+                    if isSaving {
+                        ProgressView().controlSize(.small).frame(width: 40, height: 28)
+                    } else {
+                        Text("Save")
+                            .font(typography.sans(13, weight: .semibold))
+                            .foregroundStyle(ClaudePalette.ink)
+                            .frame(height: 28)
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Mention in chat")
+                .disabled(isSaving)
+                .accessibilityLabel("Save file")
+            } else {
+                if let mentionInChat {
+                    Button {
+                        mentionInChat(relativePath)
+                    } label: {
+                        Image(systemName: "at")
+                            .font(.system(size: 15, weight: .light))
+                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .frame(width: 28, height: 28)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Mention in chat")
+                }
+                if savedFlash {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(ClaudePalette.successInk)
+                        .frame(width: 28, height: 28)
+                        .accessibilityLabel("Saved")
+                } else if canCopy {
+                    copyButton
+                } else {
+                    Color.clear.frame(width: 28, height: 28)
+                }
+                if editableFile != nil { editButton } else { Color.clear.frame(width: 28, height: 28) }
             }
-            if canCopy { copyButton } else { Color.clear.frame(width: 28, height: 28) }
         }
         .padding(.horizontal, 10)
         .frame(height: 38)
+    }
+
+    private var editButton: some View {
+        Button {
+            Haptics.selection()
+            beginEdit()
+        } label: {
+            Image(systemName: "pencil")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .frame(width: 28, height: 28)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit file")
     }
 
     private var canCopy: Bool {
