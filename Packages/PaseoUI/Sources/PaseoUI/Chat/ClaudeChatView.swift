@@ -65,6 +65,12 @@ public struct ClaudeChatView: View {
     @State private var slashCommands: [AgentSlashCommand] = []
     @State private var slashState: SlashCommandState = .idle
     @State private var slashError: String?
+    /// M8b: the queue for this agent, kept app-side so it survives switching agents.
+    @State private var composerQueue = ComposerQueueStore.shared
+    /// M8b: the full-height editor for long drafts (expand control in the card's top-right).
+    @State private var showFullScreenComposer = false
+    /// M8b: debounce for saved-draft writes (~500 ms).
+    @State private var draftSaveTask: Task<Void, Never>?
 
     private enum SlashCommandState {
         case idle, loading, ready
@@ -132,7 +138,14 @@ public struct ClaudeChatView: View {
             if wasRunning && !isRunning { Haptics.settle() }
         }
         .onAppear { seedMascotBaselines() }
+        .onAppear { seedSavedDraft() }
         .task { await loadSlashCommands() }
+        .onChange(of: store.activeTurnId) { oldId, newId in
+            if newId == nil, oldId != nil { flushQueuedMessage() }
+        }
+        .onChange(of: store.draft) { _, newValue in
+            scheduleDraftSave(newValue)
+        }
         .onChange(of: store.activeTurnId) { _, newId in
             let now = Date()
             if newId != nil {
@@ -916,16 +929,151 @@ public struct ClaudeChatView: View {
                 .joined(separator: ", "))
     }
 
+    // MARK: Queue & saved drafts (M8b)
+
+    private var isQueueNonEmpty: Bool {
+        !composerQueue.queue(for: store.agentId).isEmpty
+    }
+
+    /// The quiet stack of queued messages: ink at secondary emphasis, one line each,
+    /// max 3 visible then "+N more"; Edit (back into the draft) and Send now (steers).
+    @ViewBuilder private var queueStack: some View {
+        let queue = composerQueue.queue(for: store.agentId)
+        if !queue.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(queue.messages.prefix(3)) { message in
+                    queuedMessageRow(message)
+                }
+                if queue.count > 3 {
+                    Text("+\(queue.count - 3) more")
+                        .font(typography.sans(12))
+                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .frame(height: 24)
+                        .padding(.leading, 27)
+                        .accessibilityLabel("\(queue.count - 3) more queued messages")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 2)
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
+        }
+    }
+
+    private func queuedMessageRow(_ message: MessageQueue.QueuedMessage) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(ClaudePalette.tertiaryInk)
+            Text(message.text)
+                .font(typography.sans(14))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+            Button {
+                Haptics.selection()
+                editQueuedMessage(message)
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit queued message")
+            Button {
+                Haptics.selection()
+                sendQueuedNow(message)
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Send queued message now")
+        }
+        .frame(height: 32)
+        .padding(.horizontal, 14)
+        .contentShape(.rect)
+    }
+
+    /// Long-press on the send button: holds the draft back until the running turn ends.
+    private func queueDraft() {
+        let text = trimmedDraft
+        guard !text.isEmpty else { return }
+        composerQueue.mutate(store.agentId) { _ = $0.enqueue(text) }
+        store.draft = ""
+        QueueHaptics.mediumImpact()
+    }
+
+    /// A turn ended: dequeue the head and send it (steers when the next turn is already running).
+    /// The in-flight send holds the `isSending` mark until it settles, so an `activeTurnId`
+    /// flicker can't fire the same message twice.
+    private func flushQueuedMessage() {
+        var next: MessageQueue.QueuedMessage?
+        composerQueue.mutate(store.agentId) { next = $0.dequeueNext(isIdle: true) }
+        guard let next else { return }
+        Task {
+            await store.send(next.text)
+            composerQueue.mutate(store.agentId) { $0.finishSending() }
+        }
+    }
+
+    /// Moves a queued message back into the draft (replacing it, or appending on a new line).
+    private func editQueuedMessage(_ message: MessageQueue.QueuedMessage) {
+        var taken: String?
+        composerQueue.mutate(store.agentId) { taken = $0.take(message.id) }
+        guard let text = taken else { return }
+        if store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            store.draft = text
+        } else {
+            store.draft += "\n" + text
+        }
+        focused = true
+    }
+
+    /// Immediate steer of a queued message, cutting the line.
+    private func sendQueuedNow(_ message: MessageQueue.QueuedMessage) {
+        var taken: String?
+        composerQueue.mutate(store.agentId) { taken = $0.take(message.id) }
+        guard let text = taken else { return }
+        Haptics.send()
+        Task { await store.send(text) }
+    }
+
+    // MARK: Saved drafts (M8b)
+
+    /// Restores the persisted draft when the conversation opens and the store's draft is empty.
+    private func seedSavedDraft() {
+        guard store.draft.isEmpty else { return }
+        let saved = SavedDraftStore.load(store.agentId)
+        if !saved.isEmpty { store.draft = saved }
+    }
+
+    /// Debounced write of the draft (~500 ms) to UserDefaults, cleared on send.
+    private func scheduleDraftSave(_ value: String) {
+        draftSaveTask?.cancel()
+        let agentId = store.agentId
+        draftSaveTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            SavedDraftStore.save(agentId, value)
+        }
+    }
+
     // MARK: Composer
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 6) {
             slashMenu
+            queueStack
             composerCard
         }
         .padding(.horizontal, focused ? 8 : 16)
         .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: focused)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: slashQuery != nil)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isQueueNonEmpty)
     }
 
     private var composerCard: some View {
@@ -999,14 +1147,13 @@ public struct ClaudeChatView: View {
                     }
                     .accessibilityIdentifier("composer.stop")
                 } else {
-                    roundButton(
-                        "arrow.up", label: store.isRunning ? "Send and steer" : "Send message",
-                        color: ClaudePalette.orange, ink: .white
+                    QueueSendButton(
+                        isRunning: store.isRunning, canSend: !trimmedDraft.isEmpty
                     ) {
                         send()
+                    } onQueue: {
+                        queueDraft()
                     }
-                    .disabled(trimmedDraft.isEmpty)
-                    .opacity(trimmedDraft.isEmpty ? 0.4 : 1)
                     .accessibilityIdentifier("composer.send")
                 }
             }
@@ -1022,8 +1169,33 @@ public struct ClaudeChatView: View {
             focused = true
             composerFocusRequested.wrappedValue = false
         }
+        // M8b: expand control for tall drafts, left of the crab's spot.
+        .overlay(alignment: .topTrailing) { expandComposerButton }
         // The crab stands on the card's top edge, flush with its trailing edge.
         .overlay(alignment: .topTrailing) { mascotCrab }
+        .fullScreenCover(isPresented: $showFullScreenComposer) {
+            FullScreenComposer(draft: $store.draft, isRunning: store.isRunning) { send() }
+        }
+    }
+
+    /// M8b: the expand control — visible only when the draft is ~5 lines tall or more.
+    @ViewBuilder private var expandComposerButton: some View {
+        if DraftMetrics.isTall(store.draft) {
+            Button {
+                Haptics.selection()
+                showFullScreenComposer = true
+            } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(width: 28, height: 28)
+                    .background(ClaudePalette.chip, in: .circle)
+            }
+            .padding(.trailing, 112)
+            .padding(.top, 9)
+            .accessibilityLabel("Expand composer")
+            .transition(.opacity)
+        }
     }
 
     private var trimmedDraft: String {
@@ -1046,6 +1218,7 @@ public struct ClaudeChatView: View {
     private func send() {
         let text = trimmedDraft
         guard !text.isEmpty else { return }
+        SavedDraftStore.clear(store.agentId)
         focused = false
         Haptics.send()
         Task { await store.send(text) }
