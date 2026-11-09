@@ -112,13 +112,18 @@ extension PaseoSidebar {
 
     var emptyDirectoryState: some View {
         let error = session.workspaceDirectory.error
+        let filtered = labelFilterName != nil
         return Text(
             session.workspaceDirectory.isLoading
                 ? "Loading workspaces…"
-                : (error ?? "No workspaces on this host yet.")
+                : (filtered
+                    ? "No workspaces with this label."
+                    : (error ?? "No workspaces on this host yet."))
         )
         .font(typography.sans(14))
-        .foregroundStyle(error == nil ? ClaudePalette.secondaryInk : ClaudePalette.failureInk)
+        .foregroundStyle(
+            error == nil || filtered ? ClaudePalette.secondaryInk : ClaudePalette.failureInk
+        )
         .padding(.vertical, 24)
     }
 
@@ -153,7 +158,9 @@ extension PaseoSidebar {
     /// Pinned workspaces, newest activity first.
     func pinnedWorkspaces() -> [WorkspaceDescriptor] {
         sortedWorkspaces(
-            session.workspaceDirectory.workspaces.filter { $0.isPinned && isVisible($0) })
+            session.workspaceDirectory.workspaces.filter {
+                $0.isPinned && isVisible($0) && matchesLabelFilter($0)
+            })
     }
 
     func sortedWorkspaces(_ workspaces: [WorkspaceDescriptor]) -> [WorkspaceDescriptor] {
@@ -183,7 +190,9 @@ extension PaseoSidebar {
 
     var flatWorkspaces: [WorkspaceDescriptor] {
         sortedWorkspaces(
-            session.workspaceDirectory.workspaces.filter { !$0.isPinned && isVisible($0) })
+            session.workspaceDirectory.workspaces.filter {
+                !$0.isPinned && isVisible($0) && matchesLabelFilter($0)
+            })
     }
 
     /// Workspaces within a project per the sidebar sort; projects ordered by their newest
@@ -195,7 +204,9 @@ extension PaseoSidebar {
                 WorkspaceGroup(
                     project: group.project,
                     workspaces: sortedWorkspaces(
-                        group.workspaces.filter { !$0.isPinned && isVisible($0) }))
+                        group.workspaces.filter {
+                            !$0.isPinned && isVisible($0) && matchesLabelFilter($0)
+                        }))
             }
             .sorted { left, right in
                 if sidebarSort == .name {

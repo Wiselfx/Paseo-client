@@ -326,6 +326,14 @@ public final class WorkspaceDirectory {
         supportsWorkspaceArchiveUndo = serverInfo?.hasFeature("workspaceArchiveUndo") ?? false
     }
 
+    /// Mirrors an assignment RPC's answer into the workspace descriptors, so the sidebar shows
+    /// the new label without waiting for the next `workspace_update` push. Internal so
+    /// `WorkspaceLabelsStore` can call it.
+    internal func patchLabels(_ workspaceId: String, _ labels: [String]) {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else { return }
+        workspaces[index].labels = labels.isEmpty ? nil : labels
+    }
+
     /// A reconnect means the daemon forgot the event subscription too.
     internal func prepareForReconnect() {
         eventSubscriptionId = nil

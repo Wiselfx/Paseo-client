@@ -1,0 +1,10 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.label.delete.response",
+    "payload": {
+      "requestId": "delete1",
+      "affectedWorkspaceCount": 1
+    }
+  }
+}

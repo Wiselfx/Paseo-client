@@ -1,0 +1,21 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.label.list.response",
+    "payload": {
+      "requestId": "list3",
+      "labels": [
+        {
+          "name": "M2.12 capture label",
+          "color": "teal"
+        }
+      ],
+      "sync": {
+        "mode": "snapshot",
+        "generation": "fixture-generation",
+        "headSeq": 1,
+        "removals": []
+      }
+    }
+  }
+}
