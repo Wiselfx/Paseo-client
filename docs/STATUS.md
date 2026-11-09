@@ -1,6 +1,6 @@
 # Status and handoff
 
-Last updated 2026-11-08. Read `ARCHITECTURE.md` and `AGENTS.md` first. All work is local on
+Last updated 2026-11-09. Read `ARCHITECTURE.md` and `AGENTS.md` first. All work is local on
 branch `foundation`; nothing has been pushed, and `main` is untouched.
 
 ## Vision (agreed with the user)
@@ -22,6 +22,9 @@ wording and assets; don't invent quips. Never reuse `~/workspace/claude-ios-ui` 
 - Research specs `docs/research/01–07`, audited by DeepSeek (07 not audited).
 - M1: ClaudeUI became `Packages/PaseoUI`, Claude-only screens deleted. The app builds in Xcode
   (user confirmed) but still shows the old generic screens until M2.
+- M2 merged (816a491): ClaudeUI chat + shell on live data (`Chat/`), old generic screens deleted.
+  Waiting on the user's Xcode build. T9–T13 all finished; `integration-phase3` (DeepSeek) is
+  merging them (worktree `/home/paseo/.paseo/worktrees/0264elgj/integration-phase3`).
 
 ## In flight (Paseo agents, each in its own worktree; branch = ticket)
 
