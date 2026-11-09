@@ -1,0 +1,32 @@
+# Shared rules for the U-round (first on-device fix round)
+
+- **The spec:** `docs/UX-SPEC.md` is the spec. Read all of it, not just your sections; the global rules in §0 apply to every line you touch.
+- **Evidence:** `/tmp/reviews/ux-audit-A.md` and `/tmp/reviews/ux-audit-B.md` are investigations with file:line evidence. Use them to find code fast, but verify them: they may be stale or wrong. When the spec and an audit's "fix direction" disagree, the spec wins.
+- **Wording:**
+  - Port upstream wording verbatim from `/home/paseo/dev/paseo-reference/packages/app/src/i18n/resources/en.ts` (cite path:line in your final message). Never invent copy.
+  - The only lead-approved exception this round is "New session".
+- **Files:** stay inside the files your ticket names, plus new files you add. If something outside them must change, stop and say so.
+- **Compiling:** PaseoUI cannot compile here.
+  - Run `swiftc -parse` on every touched UI file.
+  - Be careful with exact Apple API signatures, because `-parse` does not catch wrong labels. List every Apple API call you were unsure of.
+  - Keep `body` expressions small. The user's Xcode keeps timing out on long modifier chains, so split views into computed properties and functions: no chain of more than ~10 modifiers, and no closures with mixed `cond ? closure : nil` without an explicit type.
+  - Swift 6 strict concurrency:
+    - closures handed to Apple frameworks that may run off-main must be `@Sendable` or formed in `nonisolated` functions;
+    - no `private` declarations used from another file;
+    - memberwise inits follow declaration order;
+    - a `let` with a default value is not an init parameter.
+- **Done:**
+  - PaseoCore `rm -rf .build && swift build --build-tests && swift test` green, if you touched PaseoCore. New logic in PaseoCore gets unit tests in new test files.
+  - Don't edit existing tests.
+  - `swiftc -parse` clean.
+  - Commit on your branch with the ticket name; do not push.
+  - No background tasks or subagents; don't end your turn while waiting.
+- **Safety:**
+  - Never touch the user's real agents or daemon config.
+  - No `set_daemon_config_request` or `get_pairing_offer` against the real daemon.
+  - No secrets or hostnames in the repo.
+- **Final message:**
+  - what changed, per spec section;
+  - wording sources;
+  - unsure Apple APIs;
+  - anything you deliberately left out, and why.
