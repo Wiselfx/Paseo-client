@@ -122,6 +122,7 @@ struct WorkspaceChangesView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        WorkspacePRSection(session: session, checkout: checkout)
                         summary
                         if files.isEmpty {
                             listPlaceholder
