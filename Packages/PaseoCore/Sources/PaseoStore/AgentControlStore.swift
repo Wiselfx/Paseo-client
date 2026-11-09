@@ -114,6 +114,7 @@ public final class AgentControlStore {
         model: String,
         modeId: String? = nil,
         thinkingOptionId: String? = nil,
+        featureValues: [String: JSONValue]? = nil,
         prompt: String? = nil,
         title: String? = nil
     ) async -> String? {
@@ -124,7 +125,9 @@ public final class AgentControlStore {
         let request = CreateAgentRequest(
             config: AgentSessionConfig(
                 provider: provider, cwd: cwd, modeId: modeId, model: model,
-                thinkingOptionId: thinkingOptionId, title: title),
+                thinkingOptionId: thinkingOptionId,
+                featureValues: (featureValues?.isEmpty == false) ? featureValues : nil,
+                title: title),
             initialPrompt: (trimmedPrompt?.isEmpty == false) ? trimmedPrompt : nil,
             workspaceId: workspaceId)
 

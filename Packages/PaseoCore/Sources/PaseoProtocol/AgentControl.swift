@@ -57,18 +57,23 @@ public struct AgentSessionConfig: Encodable, Sendable {
     public var modeId: String?
     public var model: String?
     public var thinkingOptionId: String?
+    /// Provider feature values applied at creation (e.g. from an agent profile);
+    /// `AgentSessionConfigSchema.featureValues`, messages.ts:511.
+    public var featureValues: [String: JSONValue]?
     public var title: String?
     public var systemPrompt: String?
 
     public init(
         provider: String, cwd: String, modeId: String? = nil, model: String? = nil,
-        thinkingOptionId: String? = nil, title: String? = nil, systemPrompt: String? = nil
+        thinkingOptionId: String? = nil, featureValues: [String: JSONValue]? = nil,
+        title: String? = nil, systemPrompt: String? = nil
     ) {
         self.provider = provider
         self.cwd = cwd
         self.modeId = modeId
         self.model = model
         self.thinkingOptionId = thinkingOptionId
+        self.featureValues = featureValues
         self.title = title
         self.systemPrompt = systemPrompt
     }
