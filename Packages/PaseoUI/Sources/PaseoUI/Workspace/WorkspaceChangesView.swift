@@ -28,6 +28,7 @@ struct WorkspaceChangesView: View {
     @State private var createPRBody = ""
     @State private var createPRFailure: String?
     @State private var mergeCandidate: PullRequestMergeMethod?
+    @State private var showBaseBranchPicker = false
     @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
     @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
     @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
@@ -47,6 +48,11 @@ struct WorkspaceChangesView: View {
     /// T15's git actions for this checkout. Created through the store (never by hand).
     private var gitActions: WorkspaceGitActions {
         session.gitExtras.gitActions(for: checkout)
+    }
+
+    /// T17's PR timeline for this checkout. Created through the store (never by hand).
+    private var timeline: PullRequestTimelineStore {
+        session.gitExtras.timeline(for: checkout)
     }
 
     /// The ref the "vs base" comparison diffs against. Daemons with the modern pipeline prefer
@@ -93,6 +99,7 @@ struct WorkspaceChangesView: View {
                 // The panel may open long after `checkout.load()` ran; only subscribe when idle.
                 if extras.diffPhase == .idle { await reloadDiff() }
                 if gitActions.supportsCommitsList { await gitActions.loadCommits() }
+                await loadTimeline()
             }
             .onChange(of: compare) { _, _ in
                 Task { await reloadDiff() }
@@ -178,6 +185,13 @@ struct WorkspaceChangesView: View {
             WorkspaceChangesCommitSheet(checkout: checkout) {
                 Task { await reload() }
             }
+        }
+        .sheet(isPresented: $showBaseBranchPicker) {
+            WorkspaceBaseBranchSheet(
+                extras: extras,
+                session: session,
+                workspaceId: checkout.workspaceId,
+                onApplied: { Task { await reload() } })
         }
         .sheet(isPresented: $showCreatePRSheet) {
             WorkspaceCreatePRSheet(
@@ -977,6 +991,15 @@ struct WorkspaceChangesView: View {
         if checkout.status?.hasRemote == true { await extras.loadPrStatus() }
         await reloadDiff()
         if gitActions.supportsCommitsList { await gitActions.loadCommits() }
+        await loadTimeline()
+    }
+
+    private func loadTimeline() async {
+        guard let status = extras.prStatus ?? checkout.prStatus,
+            let number = status.number,
+            let owner = status.repoOwner, let repo = status.repoName
+        else { return }
+        await timeline.load(prNumber: number, repoOwner: owner, repoName: repo)
     }
 
     private func reloadDiff() async {
