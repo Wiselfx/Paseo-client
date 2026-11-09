@@ -16,6 +16,7 @@ struct PaseoSidebar: View {
     var onDisconnect: () -> Void
 
     @State private var sheet: PaseoSidebarSheet?
+    @State private var showHidden = false
     @State private var renamingWorkspace: WorkspaceDescriptor?
     @State private var renamingProject: WorkspaceProjectDescriptor?
     @State private var projectPendingRemoval: WorkspaceProjectDescriptor?
@@ -27,7 +28,27 @@ struct PaseoSidebar: View {
     @State private var toast: String?
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
     @AppStorage("paseo.sidebar.collapsedProjects") private var collapsedProjects = ""
+    @AppStorage("paseo.sidebar.sort") private var sortRaw = SidebarSort.activity.rawValue
+    @AppStorage("paseo.sidebar.showBranch") private var showBranch = true
+    @AppStorage("paseo.sidebar.showDiffStats") private var showDiffStats = true
+    @AppStorage("paseo.sidebar.showPRBadge") private var showPRBadge = true
+    @AppStorage("paseo.sidebar.groupByProject") private var groupByProject = true
+    @AppStorage("paseo.sidebar.hiddenWorkspaces") private var hiddenWorkspaces = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Row sort: last activity (default), creation date or name. Persisted per device.
+    private enum SidebarSort: String, CaseIterable, Identifiable {
+        case activity, created, name
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .activity: "Last activity"
+            case .created: "Created"
+            case .name: "Name"
+            }
+        }
+    }
 
     private let typography = ClaudeTypography()
 
@@ -38,6 +59,7 @@ struct PaseoSidebar: View {
                     .font(typography.serif(27))
                     .foregroundStyle(ClaudePalette.ink)
                 Spacer()
+                displayOptionsMenu
             }
             .padding(.horizontal, 16)
             .frame(height: 52)
@@ -225,6 +247,36 @@ struct PaseoSidebar: View {
         }
     }
 
+    // MARK: Display options
+
+    /// The "…" menu in the sidebar header: sort, row metadata and grouping; persisted in
+    /// `@AppStorage("paseo.sidebar.*")`.
+    private var displayOptionsMenu: some View {
+        Menu {
+            Picker(
+                "Sort",
+                selection: Binding(
+                    get: { sidebarSort },
+                    set: { sortRaw = $0.rawValue })
+            ) {
+                ForEach(SidebarSort.allCases) { sort in
+                    Text(sort.title).tag(sort)
+                }
+            }
+            Divider()
+            Toggle("Show branch", isOn: $showBranch)
+            Toggle("Show diff stats", isOn: $showDiffStats)
+            Toggle("Show PR badge", isOn: $showPRBadge)
+            Toggle("Group by project", isOn: $groupByProject)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 21, weight: .light))
+                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Sidebar options")
+    }
+
     // MARK: Navigation
 
     private var navigation: some View {
@@ -255,16 +307,21 @@ struct PaseoSidebar: View {
     @ViewBuilder private var directory: some View {
         let groups = sortedGroups(session.workspaceDirectory.groups)
         let pinned = pinnedWorkspaces()
-        if groups.allSatisfy({ $0.workspaces.isEmpty }), pinned.isEmpty {
-            let error = session.workspaceDirectory.error
-            Text(
-                session.workspaceDirectory.isLoading
-                    ? "Loading workspaces…"
-                    : (error ?? "No workspaces on this host yet.")
-            )
-            .font(typography.sans(14))
-            .foregroundStyle(error == nil ? ClaudePalette.secondaryInk : ClaudePalette.failureInk)
-            .padding(.vertical, 24)
+        if groupByProject {
+            groupedDirectory(groups: groups, pinned: pinned)
+        } else {
+            flatDirectory(flat: flatWorkspaces, pinned: pinned)
+        }
+    }
+
+    @ViewBuilder private func groupedDirectory(
+        groups: [WorkspaceGroup], pinned: [WorkspaceDescriptor]
+    ) -> some View {
+        let isEmpty =
+            groups.allSatisfy { $0.workspaces.isEmpty } && pinned.isEmpty
+            && hiddenWorkspacesSet.isEmpty
+        if isEmpty {
+            emptyDirectoryState
         } else {
             if !pinned.isEmpty {
                 sectionHeader("Pinned")
@@ -282,42 +339,168 @@ struct PaseoSidebar: View {
                     }
                 }
             }
+            trailingRows
+        }
+    }
+
+    @ViewBuilder private func flatDirectory(
+        flat: [WorkspaceDescriptor], pinned: [WorkspaceDescriptor]
+    ) -> some View {
+        if flat.isEmpty, pinned.isEmpty, hiddenWorkspacesSet.isEmpty {
+            emptyDirectoryState
+        } else {
+            if !pinned.isEmpty {
+                sectionHeader("Pinned")
+                ForEach(pinned) { workspace in
+                    workspaceRow(workspace)
+                }
+            }
+            ForEach(flat) { workspace in
+                workspaceRow(workspace)
+            }
+            trailingRows
+        }
+    }
+
+    @ViewBuilder private var trailingRows: some View {
+        VStack(alignment: .leading, spacing: 0) {
             if session.workspaceDirectory.supportsProjectAdd {
                 addProjectRow
+            }
+            if !hiddenWorkspacesSet.isEmpty {
+                hiddenWorkspacesRow
             }
         }
     }
 
-    /// Pinned workspaces, most recent first. Displayed at the top; pin/unpin itself is not
-    /// wired — the stores expose no pin action — so this section is read-only.
-    private func pinnedWorkspaces() -> [WorkspaceDescriptor] {
-        session.workspaceDirectory.workspaces
-            .filter(\.isPinned)
-            .sorted {
-                (activityDate(for: $0) ?? .distantPast) > (activityDate(for: $1) ?? .distantPast)
+    private var hiddenWorkspacesRow: some View {
+        Button {
+            Haptics.selection()
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { showHidden.toggle() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: showHidden ? "eye" : "eye.slash")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(width: 24, height: 24)
+                    .background(ClaudePalette.chip, in: .circle)
+                Text("Hidden workspaces (\(hiddenWorkspacesSet.count))")
+                    .font(typography.sans(15))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                Spacer(minLength: 0)
+                ClaudeChevron(expanded: showHidden)
             }
+            .padding(.top, 12)
+            .frame(height: 46)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            showHidden
+                ? "Hide hidden workspaces"
+                : "Show hidden workspaces")
     }
 
-    /// Workspaces within a project, newest activity first; projects ordered by their newest
-    /// workspace. Activity is the max of the workspace's agents' `updatedAt`/`lastUserMessageAt`,
-    /// falling back to the workspace's own `activityAt` → `lastUserMessageAt` → `createdAt`.
-    /// Pinned workspaces live in their own section and are excluded here.
+    private var emptyDirectoryState: some View {
+        let error = session.workspaceDirectory.error
+        return Text(
+            session.workspaceDirectory.isLoading
+                ? "Loading workspaces…"
+                : (error ?? "No workspaces on this host yet.")
+        )
+        .font(typography.sans(14))
+        .foregroundStyle(error == nil ? ClaudePalette.secondaryInk : ClaudePalette.failureInk)
+        .padding(.vertical, 24)
+    }
+
+    // MARK: Visibility and ordering
+
+    private var sidebarSort: SidebarSort {
+        SidebarSort(rawValue: sortRaw) ?? .activity
+    }
+
+    private var hiddenWorkspacesSet: Set<String> {
+        Set(hiddenWorkspaces.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+    }
+
+    /// Hidden rows show up only while the "Hidden workspaces" row is expanded.
+    private func isVisible(_ workspace: WorkspaceDescriptor) -> Bool {
+        showHidden || !hiddenWorkspacesSet.contains(workspace.id)
+    }
+
+    /// Persisted client-side set of hidden workspace ids (`paseo.sidebar.hiddenWorkspaces`).
+    private func isHiddenFromSidebar(_ workspace: WorkspaceDescriptor) -> Bool {
+        hiddenWorkspacesSet.contains(workspace.id)
+    }
+
+    private func toggleHiddenFromSidebar(_ workspace: WorkspaceDescriptor) {
+        var set = hiddenWorkspacesSet
+        if set.contains(workspace.id) { set.remove(workspace.id) } else { set.insert(workspace.id) }
+        hiddenWorkspaces = set.sorted().joined(separator: ",")
+    }
+
+    /// Pinned workspaces, newest activity first.
+    private func pinnedWorkspaces() -> [WorkspaceDescriptor] {
+        sortedWorkspaces(
+            session.workspaceDirectory.workspaces.filter { $0.isPinned && isVisible($0) })
+    }
+
+    private func sortedWorkspaces(_ workspaces: [WorkspaceDescriptor]) -> [WorkspaceDescriptor] {
+        switch sidebarSort {
+        case .activity:
+            workspaces.sorted {
+                (activityDate(for: $0) ?? .distantPast) > (activityDate(for: $1) ?? .distantPast)
+            }
+        case .created:
+            workspaces.sorted {
+                let l = createdDate($0) ?? .distantPast
+                let r = createdDate($1) ?? .distantPast
+                if l == r { return $0.id > $1.id }
+                return l > r
+            }
+        case .name:
+            workspaces.sorted {
+                workspaceTitle($0).localizedCaseInsensitiveCompare(workspaceTitle($1))
+                    == .orderedAscending
+            }
+        }
+    }
+
+    private func createdDate(_ workspace: WorkspaceDescriptor) -> Date? {
+        workspace.createdAt.flatMap(PaseoDate.parse)
+    }
+
+    private var flatWorkspaces: [WorkspaceDescriptor] {
+        sortedWorkspaces(
+            session.workspaceDirectory.workspaces.filter { !$0.isPinned && isVisible($0) })
+    }
+
+    /// Workspaces within a project per the sidebar sort; projects ordered by their newest
+    /// workspace (max of the sidebar sort key), name-sorted in "Name" mode. Pinned workspaces
+    /// live in their own section and are excluded here, as are hidden rows.
     private func sortedGroups(_ groups: [WorkspaceGroup]) -> [WorkspaceGroup] {
         groups
             .map { group in
                 WorkspaceGroup(
                     project: group.project,
-                    workspaces: group.workspaces.filter { !$0.isPinned }.sorted {
-                        (activityDate(for: $0) ?? .distantPast) > (activityDate(for: $1) ?? .distantPast)
-                    })
+                    workspaces: sortedWorkspaces(
+                        group.workspaces.filter { !$0.isPinned && isVisible($0) }))
             }
             .sorted { left, right in
-                let leftDate = left.workspaces.compactMap { activityDate(for: $0) }.max() ?? .distantPast
-                let rightDate = right.workspaces.compactMap { activityDate(for: $0) }.max() ?? .distantPast
+                if sidebarSort == .name {
+                    return left.project.projectDisplayName.localizedCaseInsensitiveCompare(
+                        right.project.projectDisplayName) == .orderedAscending
+                }
+                let leftDate = left.workspaces.compactMap(groupSortDate).max() ?? .distantPast
+                let rightDate = right.workspaces.compactMap(groupSortDate).max() ?? .distantPast
                 if leftDate != rightDate { return leftDate > rightDate }
                 return left.project.projectDisplayName.localizedCaseInsensitiveCompare(
                     right.project.projectDisplayName) == .orderedAscending
             }
+    }
+
+    private func groupSortDate(_ workspace: WorkspaceDescriptor) -> Date? {
+        sidebarSort == .created ? createdDate(workspace) : activityDate(for: workspace)
     }
 
     private func activityDate(for workspace: WorkspaceDescriptor) -> Date? {
@@ -490,6 +673,10 @@ struct PaseoSidebar: View {
                     }
                 }
             }
+            Button(isHiddenFromSidebar(workspace) ? "Unhide from sidebar" : "Hide from sidebar", systemImage: isHiddenFromSidebar(workspace) ? "eye" : "eye.slash") {
+                Haptics.selection()
+                toggleHiddenFromSidebar(workspace)
+            }
             Button("Archive workspace", systemImage: "archivebox", role: .destructive) {
                 if session.workspaceDirectory.supportsWorkspaceArchiveUndo {
                     archiveWorkspace(workspace)
@@ -527,10 +714,13 @@ struct PaseoSidebar: View {
 
     @ViewBuilder private func metaRow(_ workspace: WorkspaceDescriptor) -> some View {
         HStack(spacing: 4) {
-            Text(workspace.branch ?? workspaceKindLabel(workspace))
-                .foregroundStyle(ClaudePalette.secondaryInk)
-            if let stat = workspace.diffStat, stat.additions > 0 || stat.deletions > 0 {
-                Text("·").foregroundStyle(ClaudePalette.captionInk)
+            if showBranch {
+                Text(workspace.branch ?? workspaceKindLabel(workspace))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .lineLimit(1)
+            }
+            if showDiffStats, let stat = workspace.diffStat, stat.additions > 0 || stat.deletions > 0 {
+                if showBranch { Text("·").foregroundStyle(ClaudePalette.captionInk) }
                 if stat.additions > 0 {
                     Text("+\(stat.additions)")
                         .foregroundStyle(ClaudePalette.successInk.opacity(0.75))
@@ -541,13 +731,81 @@ struct PaseoSidebar: View {
                 }
             }
             if let stamp = activityDate(for: workspace) {
-                Text("·").foregroundStyle(ClaudePalette.captionInk)
+                if showBranch || hasVisibleDiffStat(workspace) {
+                    Text("·").foregroundStyle(ClaudePalette.captionInk)
+                }
                 Text(relativeAge(stamp))
                     .foregroundStyle(ClaudePalette.secondaryInk)
+            }
+            Spacer(minLength: 6)
+            if showPRBadge, let pullRequest = pullRequest(workspace), let number = pullRequest.number {
+                Text("#\(number)")
+                    .font(typography.sans(11, weight: .semibold))
+                    .foregroundStyle(pullRequestTint(workspace))
+            }
+            if let dots = scriptDots(workspace), !dots.isEmpty {
+                HStack(spacing: 3) {
+                    ForEach(0..<dots.count, id: \.self) { index in
+                        Circle().fill(dots[index]).frame(width: 5, height: 5)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(scriptDotsLabel(workspace, count: dots.count))
             }
         }
         .font(typography.sans(12))
         .lineLimit(1)
+    }
+
+    private func hasVisibleDiffStat(_ workspace: WorkspaceDescriptor) -> Bool {
+        guard showDiffStats, let stat = workspace.diffStat else { return false }
+        return stat.additions > 0 || stat.deletions > 0
+    }
+
+    /// The descriptor carries the PR summary (`githubRuntime.pullRequest`); per-checkout PR state
+    /// (GitExtras) would need a checkout per row, which we don't want on a hot list.
+    private func pullRequest(_ workspace: WorkspaceDescriptor) -> WorkspaceGitHubRuntime.WorkspacePullRequest? {
+        workspace.githubRuntime?.pullRequest
+    }
+
+    private func pullRequestTint(_ workspace: WorkspaceDescriptor) -> Color {
+        guard let pr = pullRequest(workspace) else { return ClaudePalette.secondaryInk }
+        if pr.isMerged { return ClaudePalette.unread }
+        if pr.isDraft == true { return ClaudePalette.tertiaryInk }
+        switch pr.state.lowercased() {
+        case "open": return ClaudePalette.successInk
+        case "closed": return ClaudePalette.failureInk
+        default: return ClaudePalette.secondaryInk
+        }
+    }
+
+    /// One dot per script in trouble: green running, red when it exited non-zero. Live state from
+    /// the terminals store when it has it, else the pushed descriptor payload.
+    private func scriptDots(_ workspace: WorkspaceDescriptor) -> [Color] {
+        let storeScripts = session.terminals.scripts(in: workspace.id)
+        let scripts = storeScripts.isEmpty ? workspace.scripts : storeScripts
+        var dots: [Color] = []
+        for script in scripts {
+            if script.lifecycle == .running {
+                dots.append(ClaudePalette.successInk)
+            } else if let code = script.exitCode, code != 0 {
+                dots.append(ClaudePalette.failureInk)
+            }
+        }
+        return Array(dots.prefix(3))
+    }
+
+    private func scriptDotsLabel(_ workspace: WorkspaceDescriptor, count: Int) -> String {
+        let storeScripts = session.terminals.scripts(in: workspace.id)
+        let scripts = storeScripts.isEmpty ? workspace.scripts : storeScripts
+        let running = scripts.filter { $0.lifecycle == .running }.count
+        let crashed = scripts.filter { script in
+            script.lifecycle != .running && (script.exitCode ?? 0) != 0
+        }.count
+        var parts: [String] = []
+        if running > 0 { parts.append("\(running) running") }
+        if crashed > 0 { parts.append("\(crashed) exited") }
+        return "Scripts: " + (parts.isEmpty ? "\(count)" : parts.joined(separator: ", "))
     }
 
     /// "now", "5m", "3h", "2d", "4mo" — compact ages for the meta line.
