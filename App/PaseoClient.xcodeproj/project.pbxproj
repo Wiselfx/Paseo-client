@@ -15,10 +15,12 @@
 		8EA2C4203BFC6D5F3E4D36FB /* SavedHosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */; };
 		A171A48B81A851AF22D95177 /* PaseoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 63BF84ADEB1A8868F43ED3F6 /* PaseoUI */; };
 		CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64108FA9FC10EE10BE16975 /* Keychain.swift */; };
+		FE9768F7EBE6971D19A0BABA /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedHosts.swift; sourceTree = "<group>"; };
+		3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationCoordinator.swift; sourceTree = "<group>"; };
 		67A6CDB060911D3A7AA1CF59 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		9088EF8AC3E2485FA76459E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		93A7A34FF872890A0D7B1BE1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -57,6 +59,7 @@
 			children = (
 				67A6CDB060911D3A7AA1CF59 /* AppModel.swift */,
 				B64108FA9FC10EE10BE16975 /* Keychain.swift */,
+				3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */,
 				C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */,
 				B5BA54415A9997E52BAA8657 /* RootView.swift */,
 				08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */,
@@ -171,6 +174,7 @@
 			files = (
 				021D7A4965E87D4DB3C858D1 /* AppModel.swift in Sources */,
 				CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */,
+				FE9768F7EBE6971D19A0BABA /* NotificationCoordinator.swift in Sources */,
 				7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */,
 				049611178B625E349F188C4E /* RootView.swift in Sources */,
 				8EA2C4203BFC6D5F3E4D36FB /* SavedHosts.swift in Sources */,

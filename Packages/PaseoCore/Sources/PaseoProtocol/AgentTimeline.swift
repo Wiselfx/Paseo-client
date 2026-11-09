@@ -73,6 +73,27 @@ public struct AgentStreamPayload: Decodable, Sendable {
     /// and must catch up with `FetchAgentTimelineRequest(direction: .after)`.
     public var seq: Int?
     public var epoch: String?
+    /// Present when `event` is `.attentionRequired`: the daemon's notification plan for this
+    /// client (legacy `agent_attention_required` delivery). Nil for every other event.
+    public var attention: AgentAttentionDetail?
+
+    private enum K: String, CodingKey { case agentId, event, timestamp, seq, epoch }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: K.self)
+        agentId = try c.decode(String.self, forKey: .agentId)
+        event = try c.decode(AgentStreamEvent.self, forKey: .event)
+        timestamp = try c.decode(String.self, forKey: .timestamp)
+        seq = try c.decodeIfPresent(Int.self, forKey: .seq)
+        epoch = try c.decodeIfPresent(String.self, forKey: .epoch)
+        if case .attentionRequired = event {
+            // Never fail the stream over an attention payload a newer daemon re-shaped: the
+            // event itself is still valid and the badge already updates from the snapshot.
+            attention = (try? c.decodeIfPresent(AgentAttentionDetail.self, forKey: .event)) ?? nil
+        } else {
+            attention = nil
+        }
+    }
 }
 
 public enum AgentStreamEvent: Sendable, Decodable {
