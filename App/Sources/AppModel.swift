@@ -218,7 +218,7 @@ final class AppModel {
             endpoint: endpoint, clientId: clientId, appVersion: Self.appVersion)
         self.connection = connection
         do {
-            try await connection.connect()
+            let serverInfo = try await connection.connect()
             let savedID: UUID
             if let relayOffer {
                 // S4: a changed daemon key must not inherit the old key's password.
@@ -231,7 +231,8 @@ final class AppModel {
                 relaySecrets.savePassword(passwordToSave ?? "", serverID: relayOffer.serverID)
             } else {
                 savedID = savedHosts.markConnected(
-                    url: endpoint.url, preferredLabel: defaultLabel, id: existingSavedID)
+                    url: endpoint.url, preferredLabel: defaultLabel, id: existingSavedID,
+                    daemonServerID: serverInfo.serverId)
                 SavedHosts.savePassword(password, for: savedID)
             }
             currentHostID = savedID

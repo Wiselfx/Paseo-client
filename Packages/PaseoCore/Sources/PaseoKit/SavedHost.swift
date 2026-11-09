@@ -5,10 +5,13 @@ import Foundation
 //
 // Identity: a relay host is keyed on `serverID` (+ the daemon public key), never on the URL —
 // re-pairing the same daemon must find the same host and its password (R17 item 2). A direct
-// host keeps its credential-free `ws(s)://…/ws` URL as the identity.
+// host keeps its credential-free `ws(s)://…/ws` URL as the identity, but learns the daemon's
+// `serverId` from `server_info` on the first successful connect (`directServerID`, M20b) so
+// deep links can find it before it is the live host.
 //
-// Migration: hosts saved before relay pairing decode with nil relay fields; id, label, URL
-// and password (Keychain, untouched) all survive — see `relayFields` and the migration test.
+// Migration: hosts saved before relay pairing decode with nil relay fields; hosts saved before
+// M20b decode with nil `directServerID`. id, label, URL and password (Keychain, untouched) all
+// survive — see the migration tests.
 
 public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID
@@ -20,6 +23,10 @@ public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
     public var lastConnectedAt: Date?
     /// Relay only: `srv_…` daemon identity and relay session id.
     public var serverID: String?
+    /// Direct only: the daemon's `serverId` from `server_info`, learned on a successful
+    /// connect (M20b). Nil until the first connect; relay hosts leave it nil because
+    /// `serverID` already carries the same identity.
+    public var directServerID: String?
     /// Relay only: the daemon's static X25519 key, base64 (public — the trust anchor).
     public var daemonPublicKeyB64: String?
     /// Relay only: relay `host:port`.
@@ -29,7 +36,8 @@ public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
     public init(
         id: UUID = UUID(), label: String, url: String, lastConnectedAt: Date? = nil,
         serverID: String? = nil, daemonPublicKeyB64: String? = nil,
-        relayEndpoint: String? = nil, relayUseTLS: Bool? = nil
+        relayEndpoint: String? = nil, relayUseTLS: Bool? = nil,
+        directServerID: String? = nil
     ) {
         self.id = id
         self.label = label
@@ -39,17 +47,47 @@ public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
         self.daemonPublicKeyB64 = daemonPublicKeyB64
         self.relayEndpoint = relayEndpoint
         self.relayUseTLS = relayUseTLS
+        self.directServerID = directServerID
     }
 
     public var isRelay: Bool { serverID != nil }
 
     /// The dedupe identity: relay hosts collapse onto their daemon identity, direct hosts
-    /// onto their endpoint URL.
+    /// onto their endpoint URL. A known `directServerID` deliberately does not join this key:
+    /// collapsing a direct row onto a relay row needs a UX decision (which row wins, which
+    /// Keychain account keeps the password), so the list only detects it
+    /// (`SavedHostDuplicates`).
     public var identityKey: String { serverID.map { "relay:\($0)" } ?? url }
+
+    /// The daemon's `serverId` when this row knows it, for relay and direct hosts alike.
+    public var daemonServerID: String? { serverID ?? directServerID }
+
+    /// Whether two saved rows name the same daemon. Detection only — see `identityKey`.
+    public func isSameDaemon(as other: SavedHost) -> Bool {
+        guard let mine = daemonServerID, let theirs = other.daemonServerID else { return false }
+        return mine == theirs
+    }
+
+    /// Records the `serverId` learned from a live `server_info` (M20b). A different id is
+    /// reported rather than silently dropped; the caller decides what to do with it.
+    @discardableResult
+    public mutating func learnDirectServerID(_ daemonServerID: String?) -> SavedHostServerIDChange {
+        // A relay row already carries the same identity in `serverID`.
+        guard self.serverID == nil, let daemonServerID else { return .unchanged }
+        let trimmed = daemonServerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .unchanged }
+        guard let existing = directServerID else {
+            directServerID = trimmed
+            return .learned(trimmed)
+        }
+        guard existing != trimmed else { return .unchanged }
+        directServerID = trimmed
+        return .replaced(previous: existing, current: trimmed)
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id, label, url, lastConnectedAt, serverID, daemonPublicKeyB64, relayEndpoint
-        case relayUseTLS
+        case relayUseTLS, directServerID
     }
 
     /// Tolerant: pre-relay blobs (no relay keys at all) decode with nil relay fields.
@@ -63,6 +101,42 @@ public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
         daemonPublicKeyB64 = try c.decodeIfPresent(String.self, forKey: .daemonPublicKeyB64)
         relayEndpoint = try c.decodeIfPresent(String.self, forKey: .relayEndpoint)
         relayUseTLS = try c.decodeIfPresent(Bool.self, forKey: .relayUseTLS)
+        directServerID = try c.decodeIfPresent(String.self, forKey: .directServerID)
+    }
+}
+
+/// What learning a direct host's daemon identity did (M20b).
+public enum SavedHostServerIDChange: Sendable, Equatable {
+    /// First identity seen for this row.
+    case learned(String)
+    /// Same id as before, or nothing to learn.
+    case unchanged
+    /// The daemon reported a different id than the one stored. The new id is stored; the
+    /// caller is told rather than left with a silent overwrite.
+    case replaced(previous: String, current: String)
+}
+
+/// Saved rows that name the same daemon more than once — usually a direct row and a relay
+/// row for one machine. Detection only: merging needs a UX decision (which row wins, which
+/// Keychain account keeps the password), so the saved-host list keeps showing both.
+public enum SavedHostDuplicates {
+    /// Groups of two or more rows sharing a daemon id, ordered by id; input order inside a
+    /// group. Rows with no known daemon id are never grouped.
+    public static func groups(_ hosts: [SavedHost]) -> [[SavedHost]] {
+        var byServerID: [String: [SavedHost]] = [:]
+        for host in hosts {
+            guard let serverID = host.daemonServerID else { continue }
+            byServerID[serverID, default: []].append(host)
+        }
+        return byServerID.keys.sorted().compactMap { key in
+            guard let group = byServerID[key], group.count > 1 else { return nil }
+            return group
+        }
+    }
+
+    /// The daemon ids with more than one saved row.
+    public static func serverIDs(_ hosts: [SavedHost]) -> [String] {
+        groups(hosts).compactMap { $0.first?.daemonServerID }
     }
 }
 
