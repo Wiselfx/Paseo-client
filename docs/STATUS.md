@@ -109,7 +109,7 @@ saved host), Help & support page, Always expand reasoning (General → Chat), R1
 positives). PaseoCore 637 green; PARITY 288 done / 60 missing of 422. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
-Running (inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
+Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 - T17 `t17-owned-subscriptions` on DeepSeek 8872f024-782e-46a0-b371-3f2f19526184: advertise owned_subscriptions.
