@@ -1,23 +1,33 @@
 #if canImport(UIKit)
+import Charts
 import PaseoStore
 import SwiftUI
 
-/// Every account the host reports usage for, with each window, balance and detail the host
-/// knows. Calm secondary text for problems; pull to refresh re-asks the host (`forceRefresh`).
+/// Usage, in two layers: a calm overview on top (DSH home figures, rolled up from the agent
+/// list's `lastUsage` — see `UsageOverviewBuilder`), then every account the host reports
+/// quota windows for, with pull to refresh re-asking the host (`forceRefresh`).
 struct ClaudeUsageReportsSheet: View {
     let session: HostSession
 
     @Environment(\.dismiss) private var dismiss
     private let typography = ClaudeTypography()
 
+    private var overview: UsageOverview {
+        UsageOverviewBuilder.compute(agents: session.agents)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Usage", close: { dismiss() })
             Group {
-                if session.hostUsage.reports.isEmpty {
+                if session.hostUsage.reports.isEmpty && overview.sessions == 0 {
                     emptyState
                 } else {
                     List {
+                        overviewCard
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         ForEach(session.hostUsage.reports) { report in
                             usageCard(report)
                                 .listRowSeparator(.hidden)
@@ -73,6 +83,92 @@ struct ClaudeUsageReportsSheet: View {
                 .foregroundStyle(ClaudePalette.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    // MARK: Overview (DSH home figures)
+
+    /// The six stat cells, the 14-day token chart and the per-model split, from the agent
+    /// list's `lastUsage` (DSH's session-list fallback). A figure no source can answer is a
+    /// dash, not a zero.
+    private var overviewCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Overview")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(ClaudePalette.ink)
+            LazyVGrid(
+                columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+                spacing: 12
+            ) {
+                statCell(label: "Sessions", value: "\(overview.sessions)")
+                statCell(label: "Messages", value: "—")
+                statCell(label: "Total tokens", value: Self.compactTokens(overview.tokens))
+                statCell(label: "Active days", value: "\(overview.activeDays)")
+                statCell(label: "Peak hour", value: overview.peakHourLabel ?? "—")
+                statCell(label: "Favorite model", value: overview.favoriteModel ?? "—")
+            }
+            if overview.tokens > 0 {
+                Text("Tokens by day")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(ClaudePalette.secondary)
+                Chart(overview.days) { day in
+                    BarMark(
+                        x: .value("Day", day.date, unit: .day),
+                        y: .value("Tokens", day.tokens))
+                        .foregroundStyle(ClaudePalette.ink.opacity(0.85))
+                }
+                .chartXAxis { AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                    AxisGridLine()
+                    AxisValueLabel(format: .dateTime.month())
+                } }
+                .frame(height: 110)
+                .accessibilityLabel("Tokens by day, last 14 days")
+                .accessibilityValue(Self.compactTokens(overview.tokens) + " tokens total")
+                if !overview.models.isEmpty {
+                    Text("Tokens by model")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(ClaudePalette.secondary)
+                    Chart(overview.models.prefix(6)) { model in
+                        BarMark(
+                            x: .value("Model", model.model),
+                            y: .value("Tokens", model.tokens))
+                            .foregroundStyle(ClaudePalette.ink.opacity(0.85))
+                    }
+                    .frame(height: 110)
+                    .accessibilityLabel("Tokens by model")
+                    .accessibilityValue(Self.compactTokens(overview.tokens) + " tokens total")
+                }
+                if let fun = UsageBooks.funLine(forTokens: overview.tokens) {
+                    Text(fun)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.secondary)
+                }
+            } else {
+                Text("No usage yet.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(ClaudePalette.secondary)
+            }
+        }
+        .padding(16)
+        .background(ClaudePalette.panel, in: .rect(cornerRadius: 20))
+    }
+
+    private func statCell(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(ClaudePalette.secondary)
+            Text(value)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(ClaudePalette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    static func compactTokens(_ value: Int) -> String {
+        if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
+        if value >= 1_000 { return String(format: "%.1fk", Double(value) / 1_000) }
+        return "\(value)"
     }
 
     // MARK: A report

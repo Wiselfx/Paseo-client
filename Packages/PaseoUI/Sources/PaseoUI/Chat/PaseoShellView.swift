@@ -184,8 +184,52 @@ public struct PaseoShellView: View {
 
     // MARK: Main
 
+    /// The offline/reconnecting banner, from the live `DaemonConnection` state (M14). Calm
+    /// one-liners; the reconnect itself is the connection's own retry, not a second spinner
+    /// system. A failed (gave-up) connection offers Disconnect back to the connect screen.
+    @ViewBuilder private var connectionBanner: some View {
+        switch session.connection {
+        case .reconnecting(let attempt, _):
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small).tint(ClaudePalette.secondary)
+                Text("Reconnecting… (attempt \(attempt))")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(ClaudePalette.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 40)
+            .background(ClaudePalette.panel)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Reconnecting, attempt \(attempt)")
+        case .failed:
+            HStack(spacing: 8) {
+                Image(systemName: "wifi.slash")
+                    .font(.system(size: 14))
+                    .foregroundStyle(ClaudePalette.failureInk)
+                Text("Connection lost.")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(ClaudePalette.failureInk)
+                Spacer(minLength: 8)
+                Button("Disconnect") {
+                    onDisconnect()
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("shell.connection.disconnect")
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 40)
+            .background(ClaudePalette.panel)
+        case .idle, .connecting, .connected:
+            EmptyView()
+        }
+    }
+
     @ViewBuilder private var main: some View {
-        if let conversation {
+        VStack(spacing: 0) {
+            connectionBanner
+            if let conversation {
             ClaudeChatView(
                 session: session,
                 store: conversation,
@@ -198,6 +242,7 @@ public struct PaseoShellView: View {
             .id(conversation.agentId)
         } else {
             emptyMain
+        }
         }
     }
 
