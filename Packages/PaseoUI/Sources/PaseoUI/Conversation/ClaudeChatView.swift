@@ -50,6 +50,10 @@ public struct ClaudeChatView: View {
     @State var historyAnchor: HistoryAnchor?
     /// One older-page fetch at a time, driven by the top of the transcript.
     @State var historyLoadInFlight = false
+    /// The transcript's viewport height, for the outline rail's slot math.
+    @State var transcriptHeight: CGFloat = 0
+    /// Turns the lazy stack has mounted, for the outline's reading position.
+    @State var visibleTurnIds: Set<String> = []
     /// The last turn row that appeared; the find restore anchors to it.
     @State var lastTrackedTurn: String?
     @FocusState var findFocused: Bool
@@ -207,9 +211,11 @@ public struct ClaudeChatView: View {
         case .backgroundWork:
             ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork, typography: typography)
         case .turnNav:
-            ChatTurnNavSheet(store: store, currentTurnId: lastTrackedTurn) { id in
+            ChatTurnNavSheet(
+                store: store, items: outlineItems, activeSeq: store.promptOutline.activeSeq
+            ) { seq in
                 sheet = nil
-                jumpToTurn(id)
+                jumpToPrompt(seq)
             }
         }
     }

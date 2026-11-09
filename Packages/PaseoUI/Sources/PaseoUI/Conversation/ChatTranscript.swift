@@ -121,7 +121,12 @@ extension ClaudeChatView {
                         ForEach(Array(store.turns.enumerated()), id: \.element.id) { index, turn in
                             turnView(turn, index: index)
                             .id(turn.id)
-                            .onAppear { lastTrackedTurn = turn.id }
+                            .onAppear {
+                                lastTrackedTurn = turn.id
+                                visibleTurnIds.insert(turn.id)
+                                reportReadingPosition()
+                            }
+                            .onDisappear { visibleTurnIds.remove(turn.id) }
                         }
                         if !store.pendingPermissions.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -153,10 +158,7 @@ extension ClaudeChatView {
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
-                    .padding(.leading, 16)
-                    // The turn rail is an overlay in the trailing margin; reserve its width so a
-                    // message never runs under it (UX spec §4.3).
-                    .padding(.trailing, 16 + ClaudeTurnRail.reservedWidth)
+                    .padding(.horizontal, 16)
                     .padding(.vertical, 20)
                 }
                 .scrollPosition($scrollPosition)
@@ -173,7 +175,7 @@ extension ClaudeChatView {
                     }
                 }
                 .overlay(alignment: .bottom) { transcriptFade }
-                .overlay(alignment: .trailing) { turnRail }
+                .overlay(alignment: .trailing) { outlineRail }
                 // Follows the tail as it streams; loading older pages at the top does not jump.
                 .onChange(of: store.turns.last) { _, _ in
                     guard !findOpen, isFollowing else { return }
@@ -210,6 +212,7 @@ extension ClaudeChatView {
                     scrollProxy = proxy
                     isFollowing = true
                     if !findOpen { scrollToBottom(proxy, animated: false) }
+                    reportReadingPosition()
                 }
                 .onChange(of: findOpen) { _, isOpen in
                     if !isOpen { restoreScroll(proxy: proxy) }
@@ -227,9 +230,13 @@ extension ClaudeChatView {
                         offsetY: geometry.contentOffset.y,
                         viewportHeight: geometry.bounds.height)
                 } action: { _, metrics in
+                    if transcriptHeight != metrics.viewportHeight {
+                        transcriptHeight = metrics.viewportHeight
+                    }
                     // A prepended page moved the content down by its own height; put the reader
                     // back before anything else reacts to the new offsets.
                     if restoreHistoryAnchor(metrics) { return }
+                    reportReadingPosition()
                     revealTurnRail()
                     loadOlderIfNeeded(metrics)
                     if anchoringToAnswer {
@@ -507,27 +514,67 @@ extension ClaudeChatView {
         }
     }
 
-    /// M7i turn rail: your messages numbered, trailing edge, shown only while scrolling and
-    /// only for chats with enough messages to be worth it. Tap jumps to that turn.
-    @ViewBuilder var turnRail: some View {
-        if turnNavVisible, case .ready = store.phase, store.turns.count >= ClaudeTurnRail.minimumTurns {
-            ClaudeTurnRail(turns: store.turns, currentTurnId: lastTrackedTurn) { id in
-                jumpToTurn(id)
-            }
-            .padding(.trailing, 4)
-            .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
+    /// U5: the prompt rail — every prompt of the conversation as a tick at the trailing edge,
+    /// drawn over the transcript with no reserved margin. It appears while scrolling and for a
+    /// moment after; its 24 pt touch strip is live even while faded.
+    @ViewBuilder var outlineRail: some View {
+        let items = outlineItems
+        if case .ready = store.phase, items.count >= ChatOutlineRail.minimumPrompts {
+            ChatOutlineRail(
+                items: items,
+                activeSeq: store.promptOutline.activeSeq,
+                viewportHeight: transcriptHeight,
+                isRevealed: turnNavVisible,
+                onJump: { seq in jumpToPrompt(seq) },
+                onReveal: { revealTurnRail() })
+            .transition(.opacity)
         }
+    }
+
+    /// The chat outline: the daemon's prompt index when the host serves it (the whole
+    /// conversation, loaded or not), otherwise the loaded turns. Never pages history in.
+    var outlineItems: [ChatOutlineItem] {
+        let indexed = store.promptOutline.prompts
+        if store.promptOutline.isSupported, !indexed.isEmpty {
+            return indexed.map { ChatOutlineItem(seq: $0.seq, preview: $0.preview) }
+        }
+        return store.turns.compactMap { turn in
+            guard let row = turn.userMessage, case .userMessage(let message) = row.item else {
+                return nil
+            }
+            return ChatOutlineItem(
+                seq: row.seqStart, preview: PromptOutline.previewText(message.text))
+        }
+    }
+
+    /// The timeline position under the top of the viewport: the first row of the topmost turn the
+    /// lazy stack has mounted. Turns appear as they approach the viewport, so the earliest mounted
+    /// turn is the one the reader is inside or just below.
+    func reportReadingPosition() {
+        var seq = store.turns.first(where: { visibleTurnIds.contains($0.id) })?.firstRowSeq
+        if seq == nil, isFollowing { seq = outlineItems.last?.seq }
+        store.promptOutline.reportReadingPosition(anchorSeq: seq)
     }
 
     /// Scroll-reveals the rail and keeps it up briefly; hidden again shortly after scrolling stops.
     func revealTurnRail() {
-        guard store.turns.count >= ClaudeTurnRail.minimumTurns else { return }
-        turnNavVisible = true
+        guard outlineItems.count >= ChatOutlineRail.minimumPrompts else { return }
+        if !turnNavVisible { turnNavVisible = true }
         turnNavIdleTask?.cancel()
         turnNavIdleTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
             turnNavVisible = false
+        }
+    }
+
+    /// A rail tick or a sheet row: a loaded prompt scrolls there now; an unloaded one fetches just
+    /// its window first (the store's `jump(toPromptSeq:)`), then scrolls.
+    func jumpToPrompt(_ seq: Int) {
+        isFollowing = false
+        Task {
+            guard let rowId = await store.jump(toPromptSeq: seq) else { return }
+            jumpToTurn(rowId)
         }
     }
 
@@ -553,6 +600,22 @@ extension ClaudeChatView {
         .foregroundStyle(ClaudePalette.tertiaryInk)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityLabel(text)
+    }
+}
+/// The timeline position of a turn's first row, for the outline's reading-position report. A turn
+/// without a leading user message (rewinds, streamed tails) starts at its first segment row.
+private extension Turn {
+    var firstRowSeq: Int? {
+        if let row = userMessage { return row.seqStart }
+        for segment in segments {
+            switch segment {
+            case .work(let group):
+                if let row = group.rows.first { return row.seqStart }
+            case .prose(let row), .todo(let row), .notice(let row):
+                return row.seqStart
+            }
+        }
+        return nil
     }
 }
 #endif

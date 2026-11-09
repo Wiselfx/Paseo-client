@@ -10,6 +10,7 @@ public enum Haptics {
     private static let selectionGenerator = UISelectionFeedbackGenerator()
     private static let softImpact = UIImpactFeedbackGenerator(style: .soft)
     private static let rigidImpact = UIImpactFeedbackGenerator(style: .rigid)
+    private static let lightImpact = UIImpactFeedbackGenerator(style: .light)
     private static let notification = UINotificationFeedbackGenerator()
 
     /// The user's Haptics switch in Settings → General. Read per event so toggling takes effect
@@ -22,6 +23,8 @@ public enum Haptics {
     public static func selection() { guard isEnabled else { return }; selectionGenerator.selectionChanged() }
     /// Sending a message.
     public static func send() { guard isEnabled else { return }; rigidImpact.impactOccurred(intensity: 0.7) }
+    /// Releasing a scrubber onto its target: one light tap (the prompt rail's jump).
+    public static func light() { guard isEnabled else { return }; lightImpact.impactOccurred() }
     /// Something arrived or settled: a turn finished, a tool completed.
     public static func settle() { guard isEnabled else { return }; softImpact.impactOccurred(intensity: 0.6) }
     public static func success() { guard isEnabled else { return }; notification.notificationOccurred(.success) }
@@ -32,5 +35,6 @@ public enum Haptics {
         guard isEnabled else { return }
         selectionGenerator.prepare()
         rigidImpact.prepare()
+        lightImpact.prepare()
     }
 }

@@ -1,96 +1,245 @@
 #if canImport(UIKit)
+import Foundation
 import PaseoStore
 import SwiftUI
 
-/// M7i — the turn navigator: a slim numbered rail of your messages at the transcript's trailing
-/// edge. It shows while scrolling (and on demand via the edge strip), never for short chats,
-/// and jumps to a turn on tap. Current turn highlighted. Reduce Motion respected.
-struct ClaudeTurnRail: View {
-    let turns: [Turn]
-    let currentTurnId: String?
-    let onJump: (String) -> Void
+/// One prompt in the chat outline: the daemon's index entry, or a loaded turn in fallback.
+struct ChatOutlineItem: Identifiable, Hashable {
+    /// The prompt's timeline position (its user row's `seqStart`).
+    let seq: Int
+    /// What the rail's preview bubble and the sheet show.
+    let preview: String
+    var id: Int { seq }
+}
+
+/// U5: the prompt rail — the iPhone port of upstream's `ChatOutlineRail`
+/// (`packages/app/src/agent-stream/chat-outline/rail.web.tsx`).
+///
+/// No plate, no material, no reserved margin: a column of tick marks hugging the trailing edge,
+/// drawn over the transcript. Only the ticks are visible; the column itself is a 24 pt touch
+/// strip that magnifies the slots around the finger and previews the prompt under it.
+///
+/// Dragging along it feels like an iOS picker wheel (the user's request): one selection tick per
+/// slot crossing, prepared on touch-down, throttled on dense rails; releasing on a prompt jumps
+/// there with one light impact; dragging off the rail gives nothing.
+struct ChatOutlineRail: View {
+    let items: [ChatOutlineItem]
+    let activeSeq: Int?
+    /// Height of the transcript viewport, for the slot math and the 80% column.
+    let viewportHeight: CGFloat
+    /// Shown while scrolling and briefly after; the touch strip itself is always live.
+    let isRevealed: Bool
+    let onJump: (Int) -> Void
+    let onReveal: () -> Void
+
+    /// Everything but the panel-width rule comes from `rail.web.tsx:13-22`. The strip is the touch
+    /// target; the pills sit at its trailing edge (upstream grows them rightward from the left).
+    static let stripWidth: CGFloat = 24
+    static let slotHeight: CGFloat = 8
+    static let restingPillHeight: CGFloat = 2
+    static let magnifiedPillHeight: CGFloat = 4
+    static let restingPillWidth: CGFloat = 10
+    static let activePillWidth: CGFloat = 18
+    static let magnifiedPillWidth: CGFloat = 26
+    static let previewWidth: CGFloat = 260
+    static let previewHeight: CGFloat = 48
+    static let previewGap: CGFloat = 4
+    /// Upstream shows the rail for two prompts; the sheet's "Jump to message" uses four, and a
+    /// rail for three messages is noise (UX spec §4.3).
+    static let minimumPrompts = 4
+    /// Upstream's `OUTLINE_MAGNIFY_RADIUS` (`chat-outline/model.ts:13`).
+    static let magnifyRadius = 3
+    /// Dense rails tick at most this often, so a fast drag stays crisp instead of buzzing.
+    static let tickInterval: TimeInterval = 0.035
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hoveredIndex: Int?
+    @State private var isTouching = false
+    @State private var lastTickAt: Date?
 
     private let typography = ClaudeTypography()
 
-    /// Only chats with at least this many user messages show the rail.
-    static let minimumTurns = 4
-
-    /// Width the transcript's trailing padding reserves so no message text ever sits under the
-    /// rail (UX spec §4.3). 26 pt mark + 3 pt padding each side + the 4 pt inset from the edge.
-    static let reservedWidth: CGFloat = 36
-
-    /// The rail's rows: the user message of each turn, in order.
-    var railTurns: [Turn] {
-        turns.filter { $0.userMessage != nil }
+    /// Upstream slots tile the rail with no gaps and shrink when they don't fit
+    /// (`rail.web.tsx:204-212`): `flexBasis: 8`, `flexShrink: 1` over an 80% column.
+    private var slot: CGFloat {
+        guard !items.isEmpty else { return Self.slotHeight }
+        return min(Self.slotHeight, max(1, viewportHeight * 0.8 / CGFloat(items.count)))
     }
+
+    private var railHeight: CGFloat { slot * CGFloat(items.count) }
 
     var body: some View {
-        if railTurns.count >= Self.minimumTurns {
-            VStack(alignment: .center, spacing: 2) {
-                ScrollView(.vertical) {
-                    VStack(spacing: 6) {
-                        ForEach(Array(railTurns.enumerated()), id: \.element.id) { index, turn in
-                            railMark(index: index, turn: turn)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
-                .scrollIndicators(.hidden)
-                .frame(maxHeight: 340)
-            }
-            .padding(3)
-            // A thin, translucent strip: the transcript stays readable under it.
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: 12))
-            .accessibilityIdentifier("transcript.turnRail")
-        }
+        rail
     }
 
-    private func railMark(index: Int, turn: Turn) -> some View {
-        let isCurrent = currentTurnId == turn.id
-        return Button {
-            Haptics.selection()
-            onJump(turn.id)
-        } label: {
-            Text(PaseoFormat.integer(index + 1))
-                .font(typography.mono(10, weight: isCurrent ? .semibold : .regular))
-                .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
-                .frame(width: 26, height: 26)
-                .background(isCurrent ? ClaudePalette.ink.opacity(0.10) : .clear, in: .circle)
-                .contentShape(.rect)
+    private var rail: some View {
+        ZStack(alignment: .topTrailing) {
+            slots
+            if let index = hoveredIndex, items.indices.contains(index) {
+                previewBubble(items[index].preview)
+                    .offset(x: -(Self.stripWidth + Self.previewGap), y: previewOffset(index))
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isCurrent ? "Message \(index + 1), current" : "Jump to message \(index + 1)")
+        .frame(width: Self.stripWidth, height: railHeight)
+        // The touch strip is exactly the tick column; the trailing padding only insets it from
+        // the screen edge, so the transcript keeps the rest.
+        .contentShape(.rect)
+        .padding(.trailing, 8)
+        .opacity(isRevealed || isTouching ? 1 : 0)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isRevealed)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hoveredIndex)
+        .gesture(scrub)
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("transcript.turnRail")
+        .accessibilityLabel("Jump to message")
+        .accessibilityValue(accessibilityPosition)
+    }
+
+    private var slots: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                slotView(index: index, item: item)
+            }
+        }
+        .frame(width: Self.stripWidth, height: railHeight)
+    }
+
+    private func slotView(index: Int, item: ChatOutlineItem) -> some View {
+        let magnification: CGFloat =
+            reduceMotion ? 0 : (hoveredIndex.map { Self.promptMagnification(index - $0) } ?? 0)
+        let isActive = item.seq == activeSeq
+        let restingWidth = isActive ? Self.activePillWidth : Self.restingPillWidth
+        let width = restingWidth + magnification * (Self.magnifiedPillWidth - restingWidth)
+        let height =
+            Self.restingPillHeight
+            + magnification * (Self.magnifiedPillHeight - Self.restingPillHeight)
+        return HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Capsule(style: .continuous)
+                .fill(magnification > 0 || isActive ? ClaudePalette.ink : ClaudePalette.tertiaryInk)
+                .frame(width: width, height: height)
+        }
+        .frame(width: Self.stripWidth, height: slot)
+    }
+
+    private func previewBubble(_ text: String) -> some View {
+        Text(text)
+            .font(typography.sans(13))
+            .foregroundStyle(ClaudePalette.ink)
+            .lineLimit(2)
+            .truncationMode(.tail)
+            .padding(.horizontal, 12)
+            .frame(width: Self.previewWidth, height: Self.previewHeight, alignment: .leading)
+            .background(.ultraThinMaterial, in: .rect(cornerRadius: 12))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private func previewOffset(_ index: Int) -> CGFloat {
+        (CGFloat(index) + 0.5) * slot - Self.previewHeight / 2
+    }
+
+    // MARK: Gesture
+
+    /// The picker wheel. `minimumDistance: 0` so touch-down already picks a slot; a finger that
+    /// wanders left of the strip or past either end cancels, and release there does nothing.
+    private var scrub: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                if !isTouching {
+                    isTouching = true
+                    onReveal()
+                    Haptics.prepare()
+                    hoveredIndex = nil
+                    lastTickAt = nil
+                }
+                updateHover(at: value.location)
+            }
+            .onEnded { value in
+                let index = slotIndex(at: value.location)
+                isTouching = false
+                hoveredIndex = nil
+                lastTickAt = nil
+                guard let index else { return }
+                Haptics.light()
+                onJump(items[index].seq)
+            }
+    }
+
+    private func updateHover(at point: CGPoint) {
+        guard let index = slotIndex(at: point) else {
+            if hoveredIndex != nil { hoveredIndex = nil }
+            return
+        }
+        guard hoveredIndex != index else { return }
+        hoveredIndex = index
+        tick()
+    }
+
+    /// Zero-based slot under a point, or nil when the finger left the strip. The strip tolerates
+    /// straying a little past its ends (upstream's hover leaves only outside the rail); past that
+    /// it is a cancel.
+    private func slotIndex(at point: CGPoint) -> Int? {
+        guard !items.isEmpty else { return nil }
+        guard point.y >= -12, point.y <= railHeight + 12 else { return nil }
+        guard point.x >= -Self.stripWidth / 2 else { return nil }
+        let clamped = min(max(point.y, 0), railHeight - 0.001)
+        let index = Int(clamped / slot)
+        return min(max(index, 0), items.count - 1)
+    }
+
+    private func tick() {
+        let now = Date()
+        // Dense rails (slots under ~6 pt) would buzz; sparse ones tick on every crossing.
+        if slot < 6, let lastTickAt, now.timeIntervalSince(lastTickAt) < Self.tickInterval { return }
+        lastTickAt = now
+        Haptics.selection()
+    }
+
+    private var accessibilityPosition: String {
+        guard let index = items.firstIndex(where: { $0.seq == activeSeq }) else {
+            return "\(items.count)"
+        }
+        return "\(index + 1) of \(items.count)"
+    }
+
+    // MARK: Pure math (upstream `chat-outline/model.ts:13-27`)
+
+    /// Dock-style falloff: 1 under the finger, easing to 0 at the radius. The raised cosine has
+    /// no corner at either end, so sweeping reads as one bulge travelling with the finger.
+    static func promptMagnification(_ slotDistance: Int) -> CGFloat {
+        let distance = abs(slotDistance)
+        guard distance < magnifyRadius else { return 0 }
+        let radius = Double(magnifyRadius)
+        return CGFloat((1 + cos(Double.pi * Double(distance) / radius)) / 2)
     }
 }
 
-/// M7i: the on-demand list of your messages behind the header's "Jump to message…" — same rows as
-/// the rail, full text, current highlighted. Tap jumps and dismisses.
+/// U5: "Jump to message" — the chat outline's prompts, every one of them.
 ///
-/// The sheet owns "every prompt of the conversation", not just the loaded pages: opening it pages
-/// the rest of the history in (UX spec §4.3), rows appear as they arrive, and a spinner row sits
-/// at the end while `hasOlder` is still true.
+/// The list is the daemon's index for the whole conversation (UX spec §4.3), so opening the sheet
+/// never pages history in: choosing an unloaded prompt fetches just its window.
 struct ChatTurnNavSheet: View {
     let store: ConversationStore
-    let currentTurnId: String?
-    let onJump: (String) -> Void
+    let items: [ChatOutlineItem]
+    let activeSeq: Int?
+    let onJump: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
     private let typography = ClaudeTypography()
 
-    /// Only turns with a user message, in order.
-    var rows: [Turn] { store.turns.filter { $0.userMessage != nil } }
-
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            SheetHeader(title: "Jump to message", close: { dismiss() })
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, turn in
-                        row(index: index, turn: turn)
-                        if turn.id != rows.last?.id {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        row(index: index, item: item)
+                        if item.id != items.last?.id {
                             ClaudeDivider().padding(.leading, 56)
                         }
                     }
-                    if store.timeline.hasOlder {
+                    if store.promptOutline.isLoading {
                         ProgressView()
                             .controlSize(.small)
                             .frame(maxWidth: .infinity)
@@ -101,23 +250,16 @@ struct ChatTurnNavSheet: View {
                 .padding(.vertical, 4)
             }
             .background(ClaudePalette.background)
-            .navigationTitle("Jump to message")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .presentationDetents([.medium])
-            .task { await store.loadAllOlder() }
         }
+        .presentationDetents([.medium, .large])
+        .task { store.promptOutline.refresh(timelineEpoch: store.timeline.epoch) }
     }
 
-    private func row(index: Int, turn: Turn) -> some View {
-        let isCurrent = currentTurnId == turn.id
+    private func row(index: Int, item: ChatOutlineItem) -> some View {
+        let isCurrent = item.seq == activeSeq
         return Button {
             Haptics.selection()
-            onJump(turn.id)
+            onJump(item.seq)
             dismiss()
         } label: {
             HStack(spacing: 12) {
@@ -126,7 +268,7 @@ struct ChatTurnNavSheet: View {
                     .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
                     .frame(width: 32, height: 32)
                     .background(isCurrent ? ClaudePalette.ink.opacity(0.10) : .clear, in: .circle)
-                Text(userText(turn))
+                Text(item.preview)
                     .font(typography.sans(14))
                     .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
                     .lineLimit(1)
@@ -145,12 +287,6 @@ struct ChatTurnNavSheet: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("turnNav.\(index + 1)")
         .accessibilityLabel(isCurrent ? "Message \(index + 1), current" : "Jump to message \(index + 1)")
-    }
-
-    private func userText(_ turn: Turn) -> String {
-        guard let row = turn.userMessage, case .userMessage(let message) = row.item else { return "" }
-        return message.text.replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 #endif

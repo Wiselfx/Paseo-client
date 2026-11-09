@@ -51,6 +51,7 @@ extension ConversationStore {
     internal func update(serverInfo info: ServerInfo?) {
         subagents.update(serverInfo: info)
         backgroundWork.update(serverInfo: info)
+        promptOutline.update(serverInfo: info)
     }
 
     /// Routes one unsolicited message; ignores types and parents that are not ours.

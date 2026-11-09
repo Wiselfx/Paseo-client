@@ -93,6 +93,13 @@ public struct TimelineState: Sendable, Equatable {
         }
         switch page.direction {
         case .tail, .before:
+            // A window merged in above the loaded range (U5 prompt jump) does not move the floor:
+            // whatever was older before it is still older than it, so keep the flag as it was.
+            if page.direction == .before, let pageStart = pageRows.first?.seqStart,
+                let oldest = rows.first(where: { !$0.isPending })?.seqStart, pageStart > oldest
+            {
+                break
+            }
             hasOlder = page.hasOlder
         case .after:
             break
