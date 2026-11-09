@@ -105,6 +105,9 @@ struct ClaudeTurnView: View {
             && userExpandedTurn == true
     }
 
+    /// Overview sentence, or "View turn details" (upstream `summary-line.tsx:18`).
+    var turnSummaryLabel: String { TurnSummary(turn: turn).detailsLabel }
+
     var body: some View {
         if showsCollapsedTurn {
             collapsedTurn
@@ -130,6 +133,28 @@ struct ClaudeTurnView: View {
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
             }
+            // Upstream TurnSummaryLine sits under the user message, above the final reply, and
+            // opens the turn's work. "Sent by {{name}}" (user-message/index.tsx:95) cannot map
+            // here: the sender lives only on the agent_message tool call upstream, and neither
+            // PaseoProtocol.UserMessage nor ToolCall carries it in our timeline model.
+            Button {
+                Haptics.selection()
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                    userExpandedTurn = true
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(turnSummaryLabel)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .font(typography.sans(13))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(turnSummaryLabel)
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ZStack(alignment: .bottom) {
                     ClaudeProse(markdown: FilePathLinks.linkified(markdown: message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
