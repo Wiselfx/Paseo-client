@@ -53,6 +53,7 @@ struct PaseoSettingsView: View {
         case general
         case overview
         case connections
+        case pairDevice
         case hosts
         case agents
         case metadata
@@ -74,6 +75,7 @@ struct PaseoSettingsView: View {
             case .general: "General"
             case .overview: "Overview"
             case .connections: "Connections"
+            case .pairDevice: "Pair device"
             case .hosts: "Hosts"
             case .agents: "Agents"
             case .metadata: "Metadata"
@@ -95,6 +97,7 @@ struct PaseoSettingsView: View {
             case .general: "gearshape"
             case .overview: "server.rack"
             case .connections: "link"
+            case .pairDevice: "qrcode"
             case .hosts: "network"
             case .agents: "person.2"
             case .metadata: "wand.and.stars"
@@ -236,6 +239,10 @@ struct PaseoSettingsView: View {
                     rowDivider
                     settingsRow(.connections, symbol: Page.connections.symbol)
                     rowDivider
+                    if session.hostSettings.supportsPairingOffer {
+                        settingsRow(.pairDevice, symbol: Page.pairDevice.symbol)
+                        rowDivider
+                    }
                     settingsRow(.hosts, symbol: Page.hosts.symbol, value: hostsSummary)
                     rowDivider
                     settingsRow(
@@ -285,6 +292,7 @@ struct PaseoSettingsView: View {
         case .general: generalPage
         case .overview: overviewPage
         case .connections: ConnectionsPage()
+        case .pairDevice: PairDevicePage(session: session)
         case .hosts: HostsPage()
         case .agents: agentsPage
         case .metadata: metadataPage
