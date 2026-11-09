@@ -336,13 +336,13 @@ struct PaseoSettingsView: View {
                                         .frame(height: 68)
                                         .overlay {
                                             RoundedRectangle(cornerRadius: 14).stroke(
-                                                appearance == choice.rawValue ? ClaudePalette.orange : .clear,
+                                                appearance == choice.rawValue ? Color.blue : .clear,
                                                 lineWidth: 2)
                                         }
                                     Text(choice.rawValue)
-                                        .font(typography.sans(14))
+                                        .font(.system(size: 14))
                                         .foregroundStyle(
-                                            appearance == choice.rawValue ? ClaudePalette.orange : ClaudePalette.secondaryInk)
+                                            appearance == choice.rawValue ? .blue : ClaudePalette.secondaryInk)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -403,7 +403,7 @@ struct PaseoSettingsView: View {
                         )
                         .font(.system(size: 17))
                     }
-                    .tint(ClaudePalette.orange)
+                    .tint(.blue)
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.haptics")
@@ -412,7 +412,7 @@ struct PaseoSettingsView: View {
                         Label("Show mascot", systemImage: "sparkles")
                             .font(.system(size: 17))
                     }
-                    .tint(ClaudePalette.orange)
+                    .tint(.blue)
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.mascot")
@@ -423,7 +423,7 @@ struct PaseoSettingsView: View {
                         Label("Agent notifications", systemImage: "bell")
                             .font(.system(size: 17))
                     }
-                    .tint(ClaudePalette.orange)
+                    .tint(.blue)
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.notifications.enabled")
@@ -495,7 +495,7 @@ struct PaseoSettingsView: View {
                         Text("Always expand reasoning")
                             .font(.system(size: 17))
                     }
-                    .tint(ClaudePalette.orange)
+                    .tint(.blue)
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.alwaysExpandReasoning")
@@ -1419,7 +1419,7 @@ struct PaseoSettingsView: View {
                 }
             }
         }
-        .tint(ClaudePalette.orange)
+        .tint(.blue)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(minHeight: 52)

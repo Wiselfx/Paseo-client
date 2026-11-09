@@ -77,7 +77,7 @@ struct SidebarPage: View {
                 }
             }
         }
-        .tint(ClaudePalette.orange)
+        .tint(.blue)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minHeight: 52)

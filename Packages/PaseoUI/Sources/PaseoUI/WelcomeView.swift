@@ -182,14 +182,14 @@ private struct WelcomeAppearanceSheet: View {
                                         .frame(height: 64)
                                         .overlay {
                                             RoundedRectangle(cornerRadius: 14).stroke(
-                                                appearance == choice.rawValue ? ClaudePalette.orange : .clear,
+                                                appearance == choice.rawValue ? Color.blue : .clear,
                                                 lineWidth: 2)
                                         }
                                     Text(choice.rawValue)
-                                        .font(typography.sans(12))
+                                        .font(.system(size: 12))
                                         .foregroundStyle(
                                             appearance == choice.rawValue
-                                                ? ClaudePalette.orange : ClaudePalette.secondaryInk)
+                                                ? .blue : ClaudePalette.secondaryInk)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -251,7 +251,7 @@ private struct WelcomeAppearanceSheet: View {
     ) -> some View where Option.RawValue == String {
         HStack {
             Text(title)
-                .font(typography.sans(17))
+                .font(.system(size: 17))
             Spacer(minLength: 8)
             Menu {
                 ForEach(Array(options), id: \.rawValue) { option in
@@ -267,7 +267,7 @@ private struct WelcomeAppearanceSheet: View {
             } label: {
                 HStack(spacing: 5) {
                     Text(current)
-                        .font(typography.sans(15))
+                        .font(.system(size: 15))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 11, weight: .semibold))
