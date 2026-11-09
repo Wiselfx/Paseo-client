@@ -148,8 +148,9 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
-- R18 `r18-pairing-ui` on Crouton c2f9fb62: scan/paste/confirm + SavedHosts identity; DeepSeek 6db40c26 (R17 author) reviews before merge.
-- M15 `m15-voice-mode` (Crouton 6705fee4, done): DeepSeek 8872f024 reviewing before merge (rule: risky Crouton work gets a DeepSeek review pass).
+- R18 `r18-pairing-ui` (Crouton, done 6baa36e): DeepSeek 6db40c26 (R17 author) reviewing.
+- R19 `r19-pair-device` on Crouton c2f9fb62: host settings Pair device (QR, copy, enable-relay).
+- M15 `m15-voice-mode`: review by DeepSeek 8872f024 found a crash, 4 compile errors, unconnected playback; Crouton 6705fee4 fixing, then re-review.
 - Idle: DeepSeek 85844e34 (P1 polish context), DeepSeek 6db40c26 (R17; reviewer for R18).
 Known store gaps: fork can't carry provider feature values.
 
