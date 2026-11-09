@@ -113,7 +113,7 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 - T17 `t17-owned-subscriptions` on DeepSeek 8872f024-782e-46a0-b371-3f2f19526184: advertise owned_subscriptions.
-- T18 `t18-store-gaps` on Crouton (opencode, free) c344bf06-a681-4448-84e3-7da57df12564: commands cache, host diagnostics, stars, terminal font. Also a reliability trial for Crouton.
+- T18 `t18-store-gaps` on Crouton via pi (`pi/opencode-go/crouton-alpha-free`; the free opencode one hit its limit at once) c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: commands cache, host diagnostics, stars, terminal font. Also a reliability trial for Crouton.
 - M10 `m10-notifications` on DeepSeek 9b5b7aac-8465-40e9-9520-fa05685201f7: attention notifications.
 Known store gaps: commands cache never invalidated; GitHub search has no star count; host
 `diagnostics.request` has no store slot; fork can't carry provider feature values.
