@@ -106,12 +106,16 @@ review comments + Send feedback (persisted drafts, review attachment), M7i turn 
 "Jump to message…", Faster↔Smarter effort ladder, hero workspace/profile seats, M4g welcome screen (no
 saved host), Help & support page, Always expand reasoning (General → Chat), R14 API audit
 (`Tools/api-audit/README.md`: run before merges; current findings are generic-parameter false
-positives). PaseoCore 637 green; PARITY 288 done / 60 missing of 422. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+positives). PaseoCore 637 green; PARITY 288 done / 60 missing of 422. M10 local attention notifications
+(AttentionCenter + NotificationCoordinator; live socket only, no remote push without a relay/APNs;
+`docs/research/10`), PaseoCore 497/144/17 = 658 green. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
-Running: none. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
+Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
+- T17 `t17-owned-subscriptions` on DeepSeek 8872f024-782e-46a0-b371-3f2f19526184: advertise owned_subscriptions (done; contract `docs/research/09`; now merging foundation + proving attention and every push still arrive on the modern socket before merge).
+- T18 `t18-store-gaps` on Crouton via pi (`pi/opencode-go/crouton-alpha-free`; the free opencode one hit its limit at once) c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: commands cache, host diagnostics, stars, terminal font. Also a reliability trial for Crouton.
 Known store gaps: commands cache never invalidated; GitHub search has no star count; host
 `diagnostics.request` has no store slot; fork can't carry provider feature values.
 Next candidates: advertise `owned_subscriptions` (DeepSeek, off-peak; complex); notifications/push research (DeepSeek after 10:00 UTC).

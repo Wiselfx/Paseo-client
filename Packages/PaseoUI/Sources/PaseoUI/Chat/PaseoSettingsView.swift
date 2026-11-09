@@ -23,6 +23,10 @@ struct PaseoSettingsView: View {
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
     @AppStorage(PaseoSettingsKeys.haptics) private var haptics = true
     @AppStorage(PaseoSettingsKeys.mascot) private var mascot = true
+    /// M10: post local OS notifications when an agent or terminal needs you. On by default;
+    /// permission is requested the first time one arrives, or when this is switched on.
+    @AppStorage(AttentionNotificationKeys.enabled) private var notificationsEnabled = true
+    @Environment(\.notificationPermissionAction) private var requestNotificationPermission
     /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
     /// M7f: Full / Collapse tool calls / Collapse turns (Settings → General → Chat).
@@ -396,6 +400,24 @@ struct PaseoSettingsView: View {
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.mascot")
                 }
+                sectionLabel("Notifications")
+                RowGroup {
+                    Toggle(isOn: $notificationsEnabled) {
+                        Label("Agent notifications", systemImage: "bell")
+                            .font(.system(size: 17))
+                    }
+                    .tint(.blue)
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .accessibilityIdentifier("settings.notifications.enabled")
+                    .onChange(of: notificationsEnabled) { _, enabled in
+                        if enabled { requestNotificationPermission() }
+                    }
+                }
+                Text("Local notifications while Paseo is open or recently backgrounded. True push while the app is closed is not available without a relay.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .padding(.leading, 16)
                 sectionLabel("Chat")
                 RowGroup {
                     HStack(spacing: 12) {

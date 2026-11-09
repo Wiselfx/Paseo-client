@@ -106,6 +106,18 @@ subscription. `session.events.set_subscription.request { requestId, events[] }` 
 whole set (it is not additive) and answers with a `subscriptionId`
 (`packages/protocol/src/messages.ts:3380-3389`).
 
+**Attention is the sharpest case.** Every `attention_required` stream event also produces a
+separate `agent_attention_required` message (`session.ts:1433-1444`), and the stream frame itself
+is skipped for modern sources (`session.ts:1457-1463`). So once the client advertises, attention
+arrives *only* through the event subscription, never inside `agent_stream` — and terminal
+attention only as `terminal_attention_required`, published through
+`publishToSource` → `emitSubscribedEvent` (`websocket-server.ts:3026-3078`,
+`session.ts:2431-2434`). Both messages need `notifications: true` on the subscription: a modern
+source without it gets every event rewritten to `shouldNotify: false`
+(`session.ts:9031-9054` `emitEventToOwner`), which silences local notifications even though the
+badge still updates from `agent_update`. Legacy sockets see the same attention twice (message
+plus stream frame); dedupe by timestamp, as `AttentionCenter` does.
+
 `events` is a **closed enum** (`messages.ts:3359-3378`). One name the daemon does not know
 rejects the entire request — and because the request id is not echoed on failure, our client
 saw only a 30 s timeout that read as "disconnected". Live on 0.15.2
@@ -153,3 +165,6 @@ throws) so a dead socket cannot stall a `disconnect` or a view teardown.
   applied to the snapshot).
 - Workspace directory: loads over the owned subscription (earlier failure was the missing
   directory `requestId`, section 2).
+- Attention: not exercised against the sandbox (it needs a real agent turn, which is out of
+  scope here). The owned-mode delivery is covered by `OwnedAttentionTests`: message →
+  `AttentionCenter`, `notifications: true` on the wire, no directory subscription needed.

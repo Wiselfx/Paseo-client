@@ -105,6 +105,13 @@ public final class TerminalsStore {
         attachments[terminalId]?.subscriptionId
     }
 
+    /// The workspace whose list contains `terminalId`, when this store has seen that list.
+    public func workspaceId(forTerminal terminalId: String) -> String? {
+        terminalsByWorkspace.first { _, terminals in
+            terminals.contains { $0.id == terminalId }
+        }?.key
+    }
+
     public func clearError() { error = nil }
 
     // MARK: Directory

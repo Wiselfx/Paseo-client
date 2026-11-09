@@ -66,8 +66,11 @@ public final class OwnedEventSubscription {
             return
         }
         do {
+            // `notifications: true` is what lets the daemon keep `shouldNotify` set for this
+            // source (`session.ts:9031-9054` `emitEventToOwner`): without it every attention
+            // event arrives with `shouldNotify: false` and `AttentionCenter` drops it.
             let response = try await client.send(
-                SessionEventsSetSubscriptionRequest(events: events))
+                SessionEventsSetSubscriptionRequest(events: events, notifications: true))
             subscriptionId = response.subscriptionId
             error = nil
         } catch {
