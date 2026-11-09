@@ -38,36 +38,40 @@
                 HStack(spacing: 12) {
                     if let symbol {
                         Image(systemName: symbol).font(.system(size: 20, weight: .light)).frame(width: 23)
-                            .foregroundStyle(Color(white: 0.72))
+                            .foregroundStyle(ClaudePalette.tertiaryInk)
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 5) {
                             Text(title).font(.system(size: 17))
                             if let badge {
                                 Text(badge).font(.system(size: 11, weight: .semibold)).foregroundStyle(
-                                    badge.contains("usage") ? Color.orange : ClaudePalette.ink
+                                    badge.contains("usage") ? ClaudePalette.orange : ClaudePalette.ink
                                 ).padding(.horizontal, 8).padding(.vertical, 5).background(
-                                    badge.contains("usage") ? Color.orange.opacity(0.20) : .primary.opacity(0.05),
+                                    badge.contains("usage") ? ClaudePalette.orange.opacity(0.20) : ClaudePalette.chip,
                                     in: .capsule)
                             }
                         }
                         if let detail {
-                            Text(detail).font(.system(size: 13)).foregroundStyle(ClaudePalette.secondary).fixedSize(
+                            Text(detail).font(.system(size: 13)).foregroundStyle(ClaudePalette.secondaryInk).fixedSize(
                                 horizontal: false, vertical: true)
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     if let value {
-                        Text(value).font(.system(size: 16)).foregroundStyle(ClaudePalette.secondary).lineLimit(1)
+                        Text(value).font(.system(size: 16)).foregroundStyle(ClaudePalette.secondaryInk).lineLimit(1)
                     }
                     if checked {
-                        Image(systemName: "checkmark").font(.system(size: 19, weight: .semibold)).foregroundStyle(.blue)
+                        Image(systemName: "checkmark").font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(ClaudePalette.orange)
+                            .accessibilityHidden(true)
                     }
                     if chevron {
                         Image(systemName: "chevron.right").font(.system(size: 15)).foregroundStyle(
-                            ClaudePalette.secondary)
+                            ClaudePalette.secondaryInk)
                     }
                 }.padding(.horizontal, 16).padding(.vertical, detail == nil ? 14 : 14).contentShape(.rect)
-            }.buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(checked ? .isSelected : [])
         }
     }
     struct RowGroup<Content: View>: View {
@@ -76,5 +80,7 @@
             VStack(spacing: 0, content: content).background(ClaudePalette.panel, in: .rect(cornerRadius: 28))
         }
     }
-    struct RowDivider: View { var body: some View { Divider().padding(.horizontal, 16) } }
+    struct RowDivider: View {
+        var body: some View { ClaudeDivider().padding(.horizontal, 16) }
+    }
 #endif

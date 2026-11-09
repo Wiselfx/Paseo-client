@@ -30,10 +30,10 @@ extension ClaudeChatView {
             if dictation.isDenied {
                 HStack(spacing: 8) {
                     Image(systemName: "mic.slash")
-                        .font(.system(size: 12))
+                        .font(typography.sans(12))
                         .foregroundStyle(ClaudePalette.failureInk)
                     Text("Dictation is off. Enable Microphone and Speech Recognition in Settings.")
-                        .font(.system(size: 12))
+                        .font(typography.sans(12))
                         .foregroundStyle(ClaudePalette.failureInk)
                         .lineLimit(2)
                     Spacer(minLength: 4)
@@ -42,7 +42,7 @@ extension ClaudeChatView {
                             openURL(url)
                         }
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(typography.sans(12, weight: .semibold))
                     .foregroundStyle(ClaudePalette.orange)
                     .accessibilityLabel("Open Settings")
                     .accessibilityIdentifier("composer.dictation.settings")
@@ -52,7 +52,7 @@ extension ClaudeChatView {
             }
             if let error = store.actionError {
                 Text(error)
-                    .font(.system(size: 13))
+                    .font(typography.sans(13))
                     .foregroundStyle(ClaudePalette.failureInk)
                     .padding(.horizontal, 8)
                     .transition(.opacity)
@@ -249,9 +249,11 @@ extension ClaudeChatView {
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .frame(width: 28, height: 28)
                     .background(ClaudePalette.chip, in: .circle)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
             }
-            .padding(.trailing, 112)
-            .padding(.top, 9)
+            .padding(.trailing, 104)
+            .padding(.top, 1)
             .accessibilityLabel("Expand composer")
             .transition(.opacity)
         }

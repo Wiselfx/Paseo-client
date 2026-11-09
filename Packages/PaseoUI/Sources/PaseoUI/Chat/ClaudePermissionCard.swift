@@ -194,7 +194,7 @@ struct ClaudePermissionCard: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(ClaudePalette.adaptive(light: 1, dark: 0.16))
-            Divider()
+            ClaudeDivider()
             // Options: one list, hairline rules, no per-row capsules.
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(form.questions.enumerated()), id: \.offset) { index, question in
@@ -202,7 +202,7 @@ struct ClaudePermissionCard: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 8)
                     if index < form.questions.count - 1 {
-                        Divider().padding(.leading, 16)
+                        ClaudeDivider().padding(.leading, 16)
                     }
                 }
             }
@@ -412,7 +412,7 @@ private struct QuestionSection: View {
                 ForEach(Array(question.options.enumerated()), id: \.offset) { optionIndex, option in
                     optionRow(option, index: optionIndex)
                     if optionIndex < question.options.count - 1 {
-                        Divider().padding(.leading, 42)
+                        ClaudeDivider().padding(.leading, 42)
                     }
                 }
             }

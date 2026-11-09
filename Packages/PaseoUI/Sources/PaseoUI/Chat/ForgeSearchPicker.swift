@@ -73,7 +73,7 @@ struct ForgeSearchPicker: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15))
                 .foregroundStyle(ClaudePalette.secondaryInk)
-            TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(ClaudePalette.secondary))
+            TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(ClaudePalette.secondaryInk))
                 .font(typography.sans(17))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -233,7 +233,7 @@ struct ForgeSearchPicker: View {
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("#\(item.number ?? -1) \(item.title)")
+                    Text(Self.resultTitle(item))
                         .font(typography.sans(15))
                         .foregroundStyle(ClaudePalette.ink)
                         .lineLimit(1)
@@ -259,6 +259,12 @@ struct ForgeSearchPicker: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(item.title), select")
+        .accessibilityValue(selected ? "Selected" : "")
+    }
+
+    private static func resultTitle(_ item: ForgeSearchItem) -> String {
+        guard let number = item.number else { return item.title }
+        return "#\(number) \(item.title)"
     }
 
     /// Debounced like the Add project search (300 ms); the store picks the transport.

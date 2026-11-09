@@ -183,7 +183,7 @@ struct ProjectSettingsView: View {
             Text("Couldn't read paseo.json")
                 .font(typography.sans(16, weight: .medium))
                 .foregroundStyle(ClaudePalette.ink)
-            Text(store.error?.userMessage ?? store.sendError ?? "Unknown error")
+            Text(store.error?.userMessage ?? store.sendError ?? "Something went wrong. Try again.")
                 .font(typography.sans(13))
                 .foregroundStyle(ClaudePalette.secondaryInk)
                 .multilineTextAlignment(.center)
@@ -193,7 +193,7 @@ struct ProjectSettingsView: View {
                     seed()
                 }
             } label: {
-                Text("Try again")
+                Text("Retry")
                     .font(typography.sans(15, weight: .semibold))
                     .foregroundStyle(ClaudePalette.background)
                     .padding(.horizontal, 24)
@@ -377,7 +377,7 @@ struct ProjectSettingsView: View {
                 .padding(.horizontal, 16)
                 .frame(height: 51)
                 if !icons.supportsCustomIcon {
-                    Text("Setting an icon needs a host with projectCustomIcon support.")
+                    Text("This host can't set project icons.")
                         .font(.system(size: 12))
                         .foregroundStyle(ClaudePalette.tertiaryInk)
                         .padding(.horizontal, 16)
@@ -548,7 +548,7 @@ struct ProjectSettingsView: View {
                 callout(
                     title: "The change couldn't be saved.",
                     detail: error.userMessage,
-                    actionLabel: "Try again") {
+                    actionLabel: "Retry") {
                         Task { await save() }
                     }
             } else if let sendError = store.sendError {

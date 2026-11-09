@@ -22,8 +22,8 @@ struct ClaudeContextSheet: View {
                         costByModelSection(usage: usage)
                     } else {
                         Text("This agent's host does not report context usage yet.")
-                            .font(.system(size: 15))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(typography.sans(15))
+                            .foregroundStyle(ClaudePalette.secondaryInk)
                             .padding(.horizontal, 16)
                             .padding(.top, 32)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -52,7 +52,7 @@ struct ClaudeContextSheet: View {
                 if let max = usage.maxTokens {
                     Text("of \(Self.tokenCount(max)) tokens")
                         .font(typography.sans(14))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                 }
             }
             Spacer(minLength: 0)
@@ -129,11 +129,11 @@ struct ClaudeContextSheet: View {
                             Spacer(minLength: 8)
                             VStack(alignment: .trailing, spacing: 1) {
                                 Text(Self.cost(entry.costUsd, fractionDigits: 4))
-                                    .font(.system(size: 15, weight: .medium))
+                                    .font(typography.sans(15, weight: .medium))
                                     .foregroundStyle(ClaudePalette.ink)
                                 Text("\(Self.tokenCount(entry.tokens)) tokens")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(typography.sans(11))
+                                    .foregroundStyle(ClaudePalette.secondaryInk)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -149,8 +149,8 @@ struct ClaudeContextSheet: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(typography.sans(13, weight: .medium))
+            .foregroundStyle(ClaudePalette.secondaryInk)
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, -4)
@@ -159,12 +159,12 @@ struct ClaudeContextSheet: View {
     private func valueRow(_ label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 17))
+                .font(typography.sans(17))
                 .foregroundStyle(ClaudePalette.ink)
             Spacer(minLength: 8)
             Text(value)
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(typography.sans(15))
+                .foregroundStyle(ClaudePalette.secondaryInk)
                 .lineLimit(1)
         }
         .padding(.horizontal, 16)

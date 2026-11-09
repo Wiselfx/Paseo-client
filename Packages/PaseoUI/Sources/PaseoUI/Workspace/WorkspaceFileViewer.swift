@@ -36,6 +36,7 @@ struct WorkspaceFileViewer: View {
     @State private var exportName: String?
     @State private var saveSuccessFlash = false
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
@@ -461,7 +462,11 @@ struct WorkspaceFileViewer: View {
         let selected = previewAsSource == source
         return Button {
             Haptics.selection()
-            withAnimation(.easeOut(duration: 0.18)) { previewAsSource = source }
+            if reduceMotion {
+                previewAsSource = source
+            } else {
+                withAnimation(.easeOut(duration: 0.18)) { previewAsSource = source }
+            }
         } label: {
             Text(label)
                 .font(typography.sans(12, weight: .medium))
@@ -471,7 +476,7 @@ struct WorkspaceFileViewer: View {
                 .background(selected ? ClaudePalette.background : Color.clear, in: .capsule)
         }
         .buttonStyle(.plain)
-        .accessibilityValue(selected ? "Selected" : "")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     @ViewBuilder private var markdownContent: some View {
