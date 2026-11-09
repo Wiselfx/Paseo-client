@@ -15,7 +15,25 @@ enum SidebarSort: String, CaseIterable, Identifiable {
     }
 }
 
+/// Sidebar grouping: project buckets (default) or date buckets by last activity. Persisted per device.
+enum SidebarGrouping: String, CaseIterable, Identifiable {
+    case project, date
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .project: "Project"
+        case .date: "Date"
+        }
+    }
+}
+
 extension PaseoSidebar {
+    /// The grouping mode persisted by `paseo.sidebar.groupBy`; unknown values fall back to project.
+    var sidebarGrouping: SidebarGrouping {
+        SidebarGrouping(rawValue: groupByRaw) ?? .project
+    }
+
     /// The rows inside the "Labels" submenu of the display options: "All", then one row per
     /// known label (one at a time), then a way into the manage sheet.
     @ViewBuilder var labelsFilterContent: some View {
@@ -72,7 +90,17 @@ extension PaseoSidebar {
             Toggle("Show branch", isOn: $showBranch)
             Toggle("Show diff stats", isOn: $showDiffStats)
             Toggle("Show PR badge", isOn: $showPRBadge)
-            Toggle("Group by project", isOn: $groupByProject)
+            Picker(
+                "Group by",
+                selection: Binding(
+                    get: { sidebarGrouping },
+                    set: { groupByRaw = $0.rawValue })
+            ) {
+                ForEach(SidebarGrouping.allCases) { grouping in
+                    Text(grouping.title).tag(grouping)
+                }
+            }
+            Toggle("Active first", isOn: $activeFirst)
             if session.labels.supportsLabels
                 && (!labelCatalog.isEmpty || !labelFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             {

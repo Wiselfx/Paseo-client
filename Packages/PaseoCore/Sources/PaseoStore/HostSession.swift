@@ -45,6 +45,8 @@ public final class HostSession {
     public let agentLifecycle: AgentLifecycleStore
     /// The label catalog for this host (name + color). Assignments live on the workspace rows.
     public let labels: WorkspaceLabelsStore
+    /// M2.13: lazy worktree-setup probe powering the sidebar's "Set up worktree scripts" callout.
+    public let projectSetupProbe: ProjectSetupProbe
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -72,6 +74,7 @@ public final class HostSession {
         self.agentLifecycle = AgentLifecycleStore(client: client)
         self.labels = WorkspaceLabelsStore(client: client)
         self.fileUploader = ConversationUpload(client: client)
+        self.projectSetupProbe = ProjectSetupProbe(client: client)
         self.labels.workspaceDirectory = self.workspaceDirectory
     }
 
