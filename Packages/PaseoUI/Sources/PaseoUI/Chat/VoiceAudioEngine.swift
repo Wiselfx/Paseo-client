@@ -34,6 +34,9 @@ final class VoiceAudioEngine {
     /// The chunk the player is rendering. The schedule completion is `@Sendable`, so it
     /// captures the node id only and reads the completion back here on the main actor.
     private var inFlight: (nodeID: Int, completion: (Bool) -> Void)?
+    /// The previous `setActive(false)`, awaited before the next activation so an old teardown
+    /// can never land on a session we just turned on.
+    private var pendingDeactivation: Task<Void, Never>?
     private let playbackConverter = VoiceFormatConverter()
 
     /// Everything the player node plays is converted into this one format, and the node is
@@ -85,7 +88,22 @@ final class VoiceAudioEngine {
             userInfo: [NSLocalizedDescriptionKey: "Microphone permission is required to capture audio. Please enable microphone access in system settings."])
     }
 
-    private func activateSession() throws {
+    private func activateSession() async throws {
+        await pendingDeactivation?.value
+        pendingDeactivation = nil
+        try await Self.activateSessionOffMain()
+    }
+
+    private func deactivateSession() {
+        pendingDeactivation = Task { await Self.deactivateSessionOffMain() }
+    }
+
+    // MARK: Off-main session calls
+    //
+    // `setCategory`/`setActive` wait on the audio server; on the main actor that is an Xcode
+    // hang-risk fault. Nonisolated statics put the calls on the cooperative pool.
+
+    nonisolated private static func activateSessionOffMain() async throws {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(
             .playAndRecord, mode: .voiceChat,
@@ -93,8 +111,9 @@ final class VoiceAudioEngine {
         try session.setActive(true, options: .notifyOthersOnDeactivation)
     }
 
-    private func deactivateSession() {
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    nonisolated private static func deactivateSessionOffMain() async {
+        try? AVAudioSession.sharedInstance().setActive(
+            false, options: .notifyOthersOnDeactivation)
     }
 
     // MARK: Graph
@@ -132,9 +151,9 @@ final class VoiceAudioEngine {
 
     // MARK: Capture
 
-    func startCapture() throws {
+    func startCapture() async throws {
         guard !isCapturing else { return }
-        try activateSession()
+        try await activateSession()
         installInputTap()
         do {
             try ensureEngineRunning()
@@ -201,9 +220,12 @@ final class VoiceAudioEngine {
         case .ended:
             // Only resume when the system says so (call ended and media was playing).
             if options.contains(.shouldResume) {
-                try? activateSession()
-                if isCapturing { try? ensureEngineRunning() }
-                if playerAttached { player.play() }
+                Task { [weak self] in
+                    guard let self else { return }
+                    try? await self.activateSession()
+                    if self.isCapturing { try? self.ensureEngineRunning() }
+                    if self.playerAttached { self.player.play() }
+                }
             }
         @unknown default:
             break

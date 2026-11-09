@@ -14,8 +14,10 @@ final class DictationController: NSObject {
     private(set) var isListening = false
     /// Permissions were denied (or no recognizer for the locale). Inline note in the composer.
     private(set) var isDenied = false
-    /// Smoothed 0…1 from the input tap; drives the quiet mic pulse.
+    /// Smoothed 0…1 from the input tap; drives the quiet mic pulse and the overlay meter.
     private(set) var level: Float = 0
+    /// Seconds since recording started; the overlay's `mm:ss` timer.
+    private(set) var duration: TimeInterval = 0
 
     /// The host assigns this once and mirrors the emitted text into the draft verbatim.
     var onDraft: ((String) -> Void)?
@@ -27,9 +29,13 @@ final class DictationController: NSObject {
     private var committed = ""
     private var currentPartial = ""
     private var lastHeard = Date()
+    private var startedAt = Date()
     /// Set once the recognizer returns any text; before that, silence is "not started yet".
     private var hasHeardSpeech = false
     private var silenceTask: Task<Void, Never>?
+    /// The previous session teardown, kept so a new recording never activates the session while
+    /// an older `setActive(false)` is still in flight.
+    private var pendingDeactivation: Task<Void, Never>?
 
     /// Toggles listening. `currentDraft` snapshots what was already typed.
     func toggle(currentDraft: String) {
@@ -59,6 +65,7 @@ final class DictationController: NSObject {
         sessionBase = currentDraft
         committed = ""
         currentPartial = ""
+        duration = 0
 
         let engine = AVAudioEngine()
         let bufferRequest = SFSpeechAudioBufferRecognitionRequest()
@@ -67,11 +74,12 @@ final class DictationController: NSObject {
             bufferRequest.requiresOnDeviceRecognition = true
         }
 
-        let session = AVAudioSession.sharedInstance()
+        // `setCategory` and `setActive` block on the audio server; on the main actor that is a
+        // hang-risk fault (Xcode). The helpers are nonisolated statics, so they run off-main.
+        await pendingDeactivation?.value
+        pendingDeactivation = nil
         do {
-            try session.setCategory(
-                .playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            try await Self.activateSession()
         } catch {
             isDenied = true
             return
@@ -96,6 +104,7 @@ final class DictationController: NSObject {
         self.engine = engine
         self.request = bufferRequest
         lastHeard = Date()
+        startedAt = Date()
         hasHeardSpeech = false
 
         recognition = Self.startRecognition(recognizer, request: bufferRequest) {
@@ -112,6 +121,7 @@ final class DictationController: NSObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let self else { return }
+                self.duration = Date().timeIntervalSince(self.startedAt)
                 // Before any words: wait up to 8 s for the user to start. After: 2.5 s of quiet ends it.
                 let limit: TimeInterval = self.hasHeardSpeech ? 2.5 : 8
                 if Date().timeIntervalSince(self.lastHeard) > limit {
@@ -120,6 +130,14 @@ final class DictationController: NSObject {
                 }
             }
         }
+    }
+
+    /// Cancels dictation and puts the draft back the way it was when recording started.
+    func cancel() {
+        guard isListening || engine != nil else { return }
+        let base = sessionBase
+        stop(keepingDraft: false)
+        onDraft?(base)
     }
 
     /// Stops recording, keeping the draft text (partial output committed).
@@ -140,14 +158,18 @@ final class DictationController: NSObject {
         recognition = nil
         isListening = false
         level = 0
+        duration = 0
+        // Off-main, like activation: `setActive(false)` waits on the audio server too.
+        pendingDeactivation = Task { await Self.deactivateSession() }
         if keepingDraft { emitDraft() }
     }
 
     private func removeTapAndDeactivate(_ engine: AVAudioEngine) {
         engine.inputNode.removeTap(onBus: 0)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        pendingDeactivation = Task { await Self.deactivateSession() }
         isListening = false
         level = 0
+        duration = 0
     }
 
     private func updateLevel(_ raw: Float) {
@@ -193,6 +215,20 @@ final class DictationController: NSObject {
         await withCheckedContinuation { cont in
             SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0 == .authorized) }
         }
+    }
+
+    /// Both calls block on the audio server. Nonisolated, so the body runs on the cooperative
+    /// pool rather than the main actor.
+    nonisolated private static func activateSession() async throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(
+            .playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
+        try session.setActive(true, options: .notifyOthersOnDeactivation)
+    }
+
+    nonisolated private static func deactivateSession() async {
+        try? AVAudioSession.sharedInstance().setActive(
+            false, options: .notifyOthersOnDeactivation)
     }
 
     nonisolated private static func installLevelTap(
