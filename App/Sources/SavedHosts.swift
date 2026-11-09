@@ -204,30 +204,21 @@ final class UserDefaultsRelayPinStore: RelayPinStore, @unchecked Sendable {
     }
 }
 
-/// Relay secrets backed by the saved hosts' Keychain accounts (R17 item 3): the password
-/// lives under the saved host's id, keyed by `serverID` lookup. Same scheme as `SavedHosts`.
-/// Called from the main actor (endpoint building happens there); `@unchecked Sendable` for
-/// the protocol's requirement.
+/// Relay secrets (S5 review fix): the password lives in the Keychain under its own
+/// `relay.<serverID>` account, keyed by daemon identity — genuinely `Sendable`, no
+/// indirection through the saved-host list, and existing direct accounts are untouched.
+/// Relay identities are new in R18, so there is no migration here.
 final class SavedHostRelaySecrets: RelaySecretStore, @unchecked Sendable {
-    private let hosts: () -> [SavedHost]
-
-    init(hosts: @escaping () -> [SavedHost]) {
-        self.hosts = hosts
-    }
-
-    /// All callers build endpoints on the main actor; the host list is main-actor state.
-    private var savedHosts: [SavedHost] {
-        MainActor.assumeIsolated { hosts() }
+    static func account(_ serverID: String) -> String {
+        "relay.\(serverID.lowercased())"
     }
 
     func password(serverID: String) -> String? {
-        guard let host = savedHosts.first(where: { $0.serverID == serverID }) else { return nil }
-        let password = SavedHosts.readPassword(host.id)
+        let password = Keychain.read(account: Self.account(serverID)) ?? ""
         return password.isEmpty ? nil : password
     }
 
     func savePassword(_ password: String, serverID: String) {
-        guard let host = savedHosts.first(where: { $0.serverID == serverID }) else { return }
-        SavedHosts.savePassword(password, for: host.id)
+        Keychain.save(password, account: Self.account(serverID))
     }
 }

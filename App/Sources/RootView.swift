@@ -14,6 +14,38 @@ struct RootView: View {
     /// First-run welcome: shown before the first successful host connection, and only while
     /// no saved host exists and nothing has been attempted.
     @AppStorage("paseo.welcome.completed") private var welcomeCompleted = false
+    // Pairing flow (R18): one sheet, driven by this enum, so step transitions swap the
+    // content instead of racing dismiss-against-present (dismissals clear the item).
+    @State private var pairingSheet: PairingSheet?
+    /// The in-flight pairing attempt (S1): Connect is disabled and its completion is the
+    /// only one that may touch sheet state.
+    @State private var pairingAttempt: UUID?
+
+    /// One pairing question or prompt. `id` is fresh per instance: a new attempt must
+    /// re-present the password sheet (S2), not reuse the identity of the old one.
+    struct PendingPairing: Identifiable {
+        let id = UUID()
+        let offer: ConnectionOffer
+        let kind: HostConfirmationKind
+    }
+
+    enum PairingSheet: Identifiable {
+        case methods
+        case scan
+        case paste(error: String?)
+        case confirm(PendingPairing)
+        case password(PendingPairing, error: String?)
+
+        var id: String {
+            switch self {
+            case .methods: "methods"
+            case .scan: "scan"
+            case .paste(let error): "paste.\(error ?? "")"
+            case .confirm(let pending): "confirm.\(pending.id)"
+            case .password(let pending, let error): "password.\(pending.id).\(error ?? "")"
+            }
+        }
+    }
 
     private var colorScheme: ColorScheme? {
         (ClaudeAppearance(rawValue: appearance) ?? .system).colorScheme
@@ -44,8 +76,8 @@ struct RootView: View {
             case .setup(let status):
                 if !welcomeCompleted, model.savedHostsSnapshot.isEmpty, case .idle = status {
                     WelcomeView(
-                        onScan: { method = .scan },
-                        onPaste: { method = .paste }
+                        onScan: { pairingSheet = .scan },
+                        onPaste: { pairingSheet = .paste(error: nil) }
                     ) { connectForm(status: status) }
                 } else {
                     connectForm(status: status)
@@ -75,32 +107,52 @@ struct RootView: View {
         .sheet(isPresented: $model.addHostRequested) {
             AddHostMethodsSheet(
                 onDirect: { model.addHostRequested = false },
-                onScan: { model.addHostRequested = false; method = .scan },
-                onPaste: { model.addHostRequested = false; method = .paste })
+                onScan: { model.addHostRequested = false; pairingSheet = .scan },
+                onPaste: { model.addHostRequested = false; pairingSheet = .paste(error: nil) })
         }
-        .sheet(item: $method) { choice in
-            if choice == .scan {
-                PairScanSheet { payload in
-                    method = nil
+        .sheet(item: $pairingSheet) { sheet in
+            switch sheet {
+            case .methods:
+                AddHostMethodsSheet(
+                    onDirect: { pairingSheet = nil },
+                    onScan: { pairingSheet = .scan },
+                    onPaste: { pairingSheet = .paste(error: nil) })
+            case .scan:
+                PairScanSheet(
+                    onScanned: { payload in
+                        stagePairing(payload)
+                    },
+                    onUsePaste: { pairingSheet = .paste(error: nil) })
+            case .paste(let error):
+                PastePairingSheet(error: error) { payload in
                     stagePairing(payload)
                 }
-            } else {
-                PastePairingSheet { payload in
-                    method = nil
-                    stagePairing(payload)
-                }
+            case .confirm(let pending):
+                HostConfirmationPairingSheet(
+                    offer: pending.offer, kind: pending.kind,
+                    isAttempting: pairingAttempt != nil) {
+                        attemptPairing(pending, password: nil, fromPassword: false)
+                    }
+            case .password(let pending, let error):
+                PairingPasswordSheet(
+                    host: displayName(for: pending.offer),
+                    error: error,
+                    isAttempting: pairingAttempt != nil) { entered in
+                        attemptPairing(pending, password: entered, fromPassword: true)
+                    }
             }
         }
-        .sheet(item: $pendingPairing) { pending in
-            HostConfirmationPairingSheet(offer: pending.offer, kind: pending.kind) {
-                attemptPairing(pending.offer, password: nil)
-            }
+        .onChange(of: model.relayPasswordRequest) { _, request in
+            guard let request else { return }
+            // S3: a saved relay host rejected the stored password; ask again here.
+            pairingSheet = .password(
+                PendingPairing(offer: request.offer, kind: .newHost), error: nil)
         }
-        .sheet(item: $passwordPairing) { pending in
-            PairingPasswordSheet(host: pending.offer.serverID, error: pairingError) { entered in
-                attemptPairing(pending.offer, password: entered)
-            }
-        }
+    }
+
+    /// The daemon's shown name for the password title (`Password for {{host}}`, en.ts:1837).
+    private func displayName(for offer: ConnectionOffer) -> String {
+        model.savedHosts.allHosts.first { $0.serverID == offer.serverID }?.label ?? offer.serverID
     }
 
     /// A scanned/pasted payload: parse it (never log it), then confirm unless the link
@@ -108,37 +160,41 @@ struct RootView: View {
     private func stagePairing(_ payload: String) {
         do {
             let offer = try ConnectionOffer(link: payload)
-            let saved = model.savedHostsSnapshot.compactMap { entry in
-                model.savedHost(withId: entry.id)
-            }
-            if let kind = HostConfirmation.confirmationKind(offer: offer, savedHosts: saved) {
-                pendingPairing = PendingPairing(offer: offer, kind: kind)
+            if let kind = HostConfirmation.confirmationKind(
+                offer: offer, savedHosts: model.savedHosts.allHosts)
+            {
+                // Swap the sheet's content (same sheet, no dismiss/present race).
+                pairingSheet = .confirm(PendingPairing(offer: offer, kind: kind))
             } else {
-                attemptPairing(offer, password: nil)
+                attemptPairing(
+                    PendingPairing(offer: offer, kind: .newHost), password: nil, fromPassword: false)
             }
         } catch {
-            pairingError = "That link doesn't look right."
-            method = .paste
+            pairingSheet = .paste(error: "That link doesn't look right.")
         }
     }
 
-    @State private var passwordPairing: PendingPairing?
-
-    private func attemptPairing(_ offer: ConnectionOffer, password: String?) {
-        pairingError = nil
+    /// One attempt at a time (S1): the token disables Connect and admits only its own
+    /// completion; a newer attempt supersedes an older one (upstream cancels the older
+    /// question, host-confirmation.ts ask()).
+    private func attemptPairing(_ pending: PendingPairing, password: String?, fromPassword: Bool) {
+        let attempt = UUID()
+        pairingAttempt = attempt
         Task {
-            switch await model.connectRelay(offer: offer, password: password) {
+            let outcome = await model.connectRelay(offer: pending.offer, password: password)
+            guard pairingAttempt == attempt else { return }
+            pairingAttempt = nil
+            switch outcome {
             case .connected:
-                pendingPairing = nil
-                passwordPairing = nil
+                pairingSheet = nil
             case .passwordRequired:
-                pendingPairing = nil
-                passwordPairing = PendingPairing(offer: offer, kind: .newHost)
+                // S2: after a submitted password, come back fresh with the reason's own words.
+                let error = fromPassword ? "Incorrect password." : nil
+                pairingSheet = .password(
+                    PendingPairing(offer: pending.offer, kind: pending.kind), error: error)
             case .failed(let message):
-                pairingError = message
-                if passwordPairing == nil {
-                    method = .paste
-                }
+                // S6: connect failures land back on the paste sheet, error visible.
+                pairingSheet = .paste(error: message)
             }
         }
     }

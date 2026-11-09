@@ -24,7 +24,11 @@ final class AppModel {
     let savedHosts = SavedHosts()
     /// Relay pins (UserDefaults) + Keychain secrets (R17). One per app, owned here.
     let pins = RelayHostPins(store: UserDefaultsRelayPinStore())
-    private let relaySecrets: SavedHostRelaySecrets
+    let relaySecrets = SavedHostRelaySecrets()
+    /// A saved relay host rejected its stored password (S3): RootView asks for the new one
+    /// through the same password sheet the pairing flow uses. Set by `performConnect`,
+    /// cleared by RootView once it presents the sheet.
+    var relayPasswordRequest: (offer: ConnectionOffer, savedID: UUID)?
     /// Injected by the composition root so the sidebar footer and Settings → Hosts can switch.
     let hostContext = HostSwitchContext()
     /// Published snapshot for SwiftUI (phase and forms are observed directly).
@@ -62,9 +66,6 @@ final class AppModel {
         }
         migrateLegacyHostIfNeeded()
         wireHostContext()
-        relaySecrets = SavedHostRelaySecrets(hosts: { [weak savedHosts] in
-            savedHosts?.hosts ?? []
-        })
         hostContext.loadAppearances()
         refreshHostContext()
         if let last = savedHosts.mostRecent {
@@ -125,7 +126,8 @@ final class AppModel {
                 let endpoint = try offer.makeEndpoint(secrets: relaySecrets, pins: pins)
                 await performConnect(
                     endpoint: endpoint, defaultLabel: saved.label, existingSavedID: id,
-                    relayOffer: offer, passwordToSave: SavedHosts.readPassword(id).nilIfEmpty)
+                    relayOffer: offer,
+                    passwordToSave: relaySecrets.password(serverID: offer.serverID))
             } catch {
                 phase = .setup(.failed(Self.describeRelayFailure(error)))
             }
@@ -170,24 +172,15 @@ final class AppModel {
     /// identity), the password kept in the Keychain, and the pin recorded. On a password
     /// rejection nothing is saved and the session is torn down.
     func connectRelay(offer: ConnectionOffer, password: String?) async -> RelayConnectOutcome {
-        let credential = password?.isEmpty == false ? Credential.password(password!) : nil
         let endpoint: DaemonEndpoint
         do {
-            if let credential {
-                endpoint = DaemonEndpoint(
-                    url: try offer.relayWebSocketURL(), credential: credential,
-                    relay: DaemonEndpoint.RelayLink(
-                        offer: offer, minimumSecurityMode: pins.minimumSecurityMode(for: offer)))
-            } else {
-                endpoint = try offer.makeEndpoint(secrets: relaySecrets, pins: pins)
-            }
+            endpoint = try offer.makeEndpoint(secrets: relaySecrets, pins: pins, password: password)
         } catch {
             return .failed(Self.describeRelayFailure(error))
         }
         let failure = await performConnect(
             endpoint: endpoint, defaultLabel: offer.serverID, existingSavedID: nil,
-            relayOffer: offer,
-            passwordToSave: password?.isEmpty == false ? password! : offer.password)
+            relayOffer: offer, passwordToSave: password?.isEmpty == false ? password : offer.password)
         guard let failure else { return .connected }
         if case .rejected(let reason) = failure,
             reason == "password_required" || reason == "incorrect_password"
@@ -218,12 +211,14 @@ final class AppModel {
             try await connection.connect()
             let savedID: UUID
             if let relayOffer {
+                // S4: a changed daemon key must not inherit the old key's password.
+                let change = pins.record(relayOffer)
+                if case .daemonKeyChanged = change {
+                    relaySecrets.savePassword("", serverID: relayOffer.serverID)
+                }
                 savedID = try savedHosts.markConnected(
                     offer: relayOffer, preferredLabel: defaultLabel, id: existingSavedID)
                 relaySecrets.savePassword(passwordToSave ?? "", serverID: relayOffer.serverID)
-                // The connection is proven; the pin records it for next time (R17). The
-                // changed-link question was already asked by the confirmation sheet.
-                pins.record(relayOffer)
             } else {
                 savedID = savedHosts.markConnected(
                     url: endpoint.url, preferredLabel: defaultLabel, id: existingSavedID)
@@ -238,6 +233,17 @@ final class AppModel {
             await session.start()
             return nil
         } catch let error as ConnectionError {
+            // S3: a saved relay host rejecting its stored password reroutes into the
+            // password sheet (RootView reads relayPasswordRequest), not a dead-end failure.
+            if let relayOffer,
+                case .rejected(let reason) = error,
+                reason == "password_required" || reason == "incorrect_password",
+                passwordToSave == nil
+            {
+                relayPasswordRequest = (offer: relayOffer, savedID: existingSavedID ?? UUID())
+                phase = .setup(.idle)
+                return error
+            }
             phase = .setup(.failed(Self.describe(error)))
             return error
         } catch {

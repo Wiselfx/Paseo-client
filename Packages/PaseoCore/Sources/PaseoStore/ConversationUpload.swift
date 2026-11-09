@@ -17,11 +17,11 @@ public final class ConversationUpload {
     public static let maxBytes = 50 * 1024 * 1024
     /// Client-side chunk size; upstream sends the same (`chunkSize ?? 128 * 1024`).
     static let chunkSize = 128 * 1024
-    /// R18 item 6: the relay caps a plaintext frame at ~25 MB (32 MiB on the wire), so on a
-    /// relay connection an upload chunk is capped at one Noise record's data — it can never
-    /// trip `frameTooLarge` no matter how large the file is. Direct keeps upstream's size.
+    /// R18 review NIT 2: relay chunks are 1 MiB — far under the ~25 MB relay plaintext
+    /// bound (32 MiB wire), so a 50 MB upload is ~50 frames, not ~800. Direct keeps
+    /// upstream's 128 KiB.
     static func chunkSize(relay: Bool) -> Int {
-        relay ? min(chunkSize, RelayRecordCodec.maxChunkDataBytes) : chunkSize
+        relay ? 1 * 1024 * 1024 : chunkSize
     }
 
     /// True when this upload rides a protected relay channel (set by HostSession from the
