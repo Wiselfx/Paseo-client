@@ -87,13 +87,13 @@ M7f chat display (Full/Collapse
 tool calls/Collapse turns), provider-subagents pill + sheet, DSH question card (PaseoCore
 416/133/17 = 566 green). Store gap: background work (`agent.background_work.*`) has no wire/store (M7g).
 M8f profile picker in the new-agent sheet (feature values sent on create)
-(PaseoCore 416/135/17 = 568 green). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+M2.11 Project page (name, icon,
+setup/teardown, scripts via paseo.json with revision check) (PaseoCore 435/135/17 = 587 green). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - M1b `m1b-hosts` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: saved hosts, TLS/advanced URI, switch host.
 - R13 `r13-dead-code` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: remove unreachable ClaudeUI demo files (proof per file).
-- M2.11 `m211-project-settings` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: Settings projects list + project page (icon, paseo.json scripts/hooks).
 - M2.12 `m212-labels` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: workspace labels store + sidebar UI.
 - M7g `m7g-background-work` on worker 0778f3b0-0603-4eae-ab7a-3a01b367bf53: background work store + sheet, file mention cards.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
