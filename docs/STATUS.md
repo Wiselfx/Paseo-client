@@ -64,18 +64,18 @@ R9 `docs/PARITY.md` (the roadmap). Last user-built commit: dbad49b (M2.6b + unde
 When the user is back: pull, Reset Package Caches (SwiftTerm is new), build, paste errors.
 
 Also merged since: T14 file upload, M7b chat-follow + permission cards, M8b queue/drafts/full-screen
-composer (PaseoCore 289/118/17 = 424 green).
+composer, T15 git/file ops backend, M6a composer attachments (PaseoCore 323/118/17 = 458 green).
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
-- T15 `t15-git-files-ops` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e (backend).
 - M2.8 `m28-pin-rename` on worker 79dd09d6: pin, project rename, base branch, archive undo.
-- M6a `m6a-attachments` on worker 04d2d898: composer attachments (owns composer section).
 - M7c `m7c-chat-files` on worker 0778f3b0: DSH file-call rows, tool summaries (owns transcript).
 - M4c `m4c-host-settings` on worker 918fee9a: host settings pages.
+- M3f `m3f-panel-git-files` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: panel git toolbar,
+  commits, file context menu, text editing.
+- M8c `m8c-agent-features` on worker 04d2d898: provider features / fast mode, default send.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
-Next candidates: panel git toolbar + file context menu
-after T15, notifications/push research (DeepSeek after 10:00 UTC).
+Next candidates: notifications/push research (DeepSeek after 10:00 UTC).
 Roadmap order: see PARITY.md suggested milestones, renumbered below.
 
 UX decisions so far: left drawer = navigation (projects → workspaces), right panel = inside the
