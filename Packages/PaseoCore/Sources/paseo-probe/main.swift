@@ -430,6 +430,8 @@ do {
         try await runGitOps(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     case "fs-ops":
         try await runFsOps(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
+    case "setup":
+        try await runSetupObservation(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     case "usage":
         try await runUsage(connection)
     case "attachments-search":
@@ -1563,4 +1565,35 @@ func runUsage(_ connection: DaemonConnection) async throws {
         print("agent \(String(agentId.prefix(8))) context: no usage reported")
     }
     session.closeConversation(agentId)
+}
+
+// MARK: - Setup observation (M2.10)
+
+@MainActor
+func runSetupObservation(_ connection: DaemonConnection, cwd: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    guard await waitForDirectory(session) else {
+        throw ProbeError("workspace directory did not load: \(session.workspaceDirectory.error ?? "unknown error")")
+    }
+    guard let workspace = session.workspaceDirectory.workspaces.first(where: { $0.cwd == cwd }) else {
+        throw ProbeError("no workspace for \(cwd)")
+    }
+    let store = session.setupObservation
+    print("workspace \(workspace.id) observation=\(store.capabilities.observation) run=\(store.capabilities.run) owned=\(store.capabilities.ownedSubscriptions)")
+    await store.refresh(workspace.id)
+    if let snapshot = store.snapshot(for: workspace.id) {
+        print("status=\(snapshot.status) branch=\(snapshot.detail.branchName) logBytes=\(snapshot.detail.log.utf8.count) commands=\(snapshot.detail.commands.count)")
+        if let error = snapshot.error { print("error=\(error)") }
+        if let blocked = snapshot.blockedSource {
+            print("blocked=\(blocked.forge) #\(blocked.number) repo=\(blocked.headRepository)")
+        }
+        for command in snapshot.detail.commands.prefix(5) {
+            print("  [\(command.index)] \(command.command) status=\(command.status) exit=\(command.exitCode.map(String.init) ?? "-") ms=\(command.durationMs.map(String.init) ?? "-")")
+        }
+    } else {
+        print("status=none (the workspace has no setup snapshot)")
+    }
+    await store.stopObserving(workspace.id)
 }

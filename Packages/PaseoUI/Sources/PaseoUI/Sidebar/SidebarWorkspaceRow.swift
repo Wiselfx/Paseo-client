@@ -70,11 +70,7 @@ extension PaseoSidebar {
                 toggleHiddenFromSidebar(workspace)
             }
             Button("Archive workspace", systemImage: "archivebox", role: .destructive) {
-                if session.workspaceDirectory.supportsWorkspaceArchiveUndo {
-                    archiveWorkspace(workspace)
-                } else {
-                    workspacePendingArchive = workspace
-                }
+                requestArchive(workspace)
             }
         }
     }

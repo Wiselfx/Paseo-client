@@ -22,6 +22,8 @@ struct PaseoSidebar: View {
     @State var projectPendingRemoval: WorkspaceProjectDescriptor?
     /// Set only when the daemon can't undo an archive: then a confirmation guards it instead.
     @State var workspacePendingArchive: WorkspaceDescriptor?
+    /// Set when a worktree-kind workspace has uncommitted or unpushed changes.
+    @State var workspacePendingArchiveWarning: WorktreeArchiveWarning?
     @State var undoToast: (id: String, name: String)?
     @State var undoToastToken = UUID()
     @State var renameText = ""
@@ -155,6 +157,22 @@ struct PaseoSidebar: View {
             }
         } message: {
             Text("Empty restores the folder name.")
+        }
+        .confirmationDialog(
+            "Archive worktree?",
+            isPresented: Binding(
+                get: { workspacePendingArchiveWarning != nil },
+                set: { if !$0 { workspacePendingArchiveWarning = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Archive", role: .destructive) {
+                guard let warning = workspacePendingArchiveWarning else { return }
+                workspacePendingArchiveWarning = nil
+                archiveWorkspace(warning.workspace)
+            }
+            Button("Cancel", role: .cancel) { workspacePendingArchiveWarning = nil }
+        } message: {
+            Text(workspacePendingArchiveWarning?.message ?? "")
         }
         .confirmationDialog(
             "Archive workspace?",

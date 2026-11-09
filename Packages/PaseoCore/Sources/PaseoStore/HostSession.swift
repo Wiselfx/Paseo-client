@@ -31,6 +31,8 @@ public final class HostSession {
     public let schedules: SchedulesStore
     /// Host config, presence, slash commands and push registration for this daemon.
     public private(set) var hostSettings: HostSettingsStore
+    /// Worktree setup observation (running/failed/blocked snapshot per workspace).
+    public let setupObservation: WorkspaceSetupObservationStore
     /// Git extras for open workspaces: modern diffs, discard, branches, PR badge, live files.
     public let gitExtras: GitExtrasStore
 
@@ -54,6 +56,7 @@ public final class HostSession {
         self.hostSettings = HostSettingsStore(client: client)
         self.workspaceDirectory = WorkspaceDirectory(client: client)
         self.gitExtras = GitExtrasStore(client: client)
+        self.setupObservation = WorkspaceSetupObservationStore(client: client)
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
@@ -158,6 +161,7 @@ public final class HostSession {
             hostSettings.serverInfoChanged(info)
             hostUsage.update(serverInfo: info)
             workspaceDirectory.update(serverInfo: info)
+            setupObservation.update(serverInfo: info)
             gitExtras.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
             for store in conversations.values { store.update(serverInfo: info) }
@@ -211,6 +215,7 @@ public final class HostSession {
             terminals.handle(messageType: messageType, raw: raw)
             agentControl.handle(messageType: messageType, raw: raw, conversations: conversations)
             hostSettings.handle(messageType: messageType, raw: raw)
+            setupObservation.handle(messageType: messageType, raw: raw)
             for store in conversations.values { store.handleSubagentUpdate(messageType: messageType, raw: raw) }
             await handleUnhandled(messageType: messageType, raw: raw)
 
