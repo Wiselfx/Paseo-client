@@ -62,7 +62,7 @@ struct PaseoSidebar: View {
     let typography = ClaudeTypography()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let chrome = VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Paseo")
                     .font(typography.serif(27))
@@ -99,67 +99,79 @@ struct PaseoSidebar: View {
         .onChange(of: addProjectRequest) { _, _ in
             consumeAddProjectRequest()
         }
-        .sheet(item: $sheet) { selection in
-            switch selection {
-            case .settings:
-                PaseoSettingsView(session: session, onDisconnect: onDisconnect)
-            case .schedules:
-                ClaudeSchedulesView(session: session)
-            case .history:
-                ClaudeHistoryView(
-                    session: session,
-                    onClose: { sheet = nil },
-                    onOpenAgent: { agentId in
-                        sheet = nil
-                        onSelectAgent(agentId)
-                    })
-            case .search:
-                CommandCenterSheet(
-                    session: session,
-                    onOpenAgent: { agentId in
-                        sheet = nil
-                        onSelectAgent(agentId)
-                    },
-                    onNewAgent: { workspace in
-                        sheet = nil
-                        onNewAgent(workspace)
-                    },
-                    onNewWorkspace: { sheet = .newWorkspace },
-                    onOpenSettings: { sheet = .settings },
-                    onTogglePanel: onTogglePanel,
-                    onImportSession: session.agentControl.isSupported ? { sheet = .importSession } : nil,
-                    onShowToast: { showToast($0) },
-                    onClose: { sheet = nil },
-                    selectedAgentId: selectedAgentId)
-            case .newWorkspace:
-                ClaudeNewWorkspaceSheet(
-                    session: session, defaultProjectId: selectedWorkspaceProjectId
-                ) { agentId, message in
-                    if let agentId {
-                        onSelectAgent(agentId)
-                    } else {
-                        showToast(message ?? "Workspace created")
-                    }
-                }
-            case .addProject:
-                AddProjectSheet(session: session) { message in
-                    showToast(message)
-                }
-            case .importSession:
-                ImportSessionSheet(session: session) { agentId in
+        let sheeted = chrome.sheet(item: $sheet) { sheetContent($0) }
+        return withOverlays(withArchiveDialogs(withRenameAlerts(sheeted)))
+            .onAppear {
+                guard !session.workspaceDirectory.hasLoaded, session.workspaceDirectory.error == nil else { return }
+                Task { await session.workspaceDirectory.refresh() }
+            }
+    }
+
+    @ViewBuilder
+    func sheetContent(_ selection: PaseoSidebarSheet) -> some View {
+        switch selection {
+        case .settings:
+            PaseoSettingsView(session: session, onDisconnect: onDisconnect)
+        case .schedules:
+            ClaudeSchedulesView(session: session)
+        case .history:
+            ClaudeHistoryView(
+                session: session,
+                onClose: { sheet = nil },
+                onOpenAgent: { agentId in
                     sheet = nil
                     onSelectAgent(agentId)
+                })
+        case .search:
+            CommandCenterSheet(
+                session: session,
+                onOpenAgent: { agentId in
+                    sheet = nil
+                    onSelectAgent(agentId)
+                },
+                onNewAgent: { workspace in
+                    sheet = nil
+                    onNewAgent(workspace)
+                },
+                onNewWorkspace: { sheet = .newWorkspace },
+                onOpenSettings: { sheet = .settings },
+                onTogglePanel: onTogglePanel,
+                onImportSession: session.agentControl.isSupported ? { sheet = .importSession } : nil,
+                onShowToast: { showToast($0) },
+                onClose: { sheet = nil },
+                selectedAgentId: selectedAgentId)
+        case .newWorkspace:
+            ClaudeNewWorkspaceSheet(
+                session: session, defaultProjectId: selectedWorkspaceProjectId
+            ) { agentId, message in
+                if let agentId {
+                    onSelectAgent(agentId)
+                } else {
+                    showToast(message ?? "Workspace created")
                 }
-            case .usage:
-                ClaudeUsageReportsSheet(session: session)
-            case .newLabel(let target):
-                NewLabelSheet(session: session, workspace: target) { sheet = nil }
-            case .labelsManager:
-                LabelsManageSheet(session: session) { sheet = nil }
-            case .project(let target):
-                ProjectSettingsView(session: session, project: target)
             }
+        case .addProject:
+            AddProjectSheet(session: session) { message in
+                showToast(message)
+            }
+        case .importSession:
+            ImportSessionSheet(session: session) { agentId in
+                sheet = nil
+                onSelectAgent(agentId)
+            }
+        case .usage:
+            ClaudeUsageReportsSheet(session: session)
+        case .newLabel(let target):
+            NewLabelSheet(session: session, workspace: target) { sheet = nil }
+        case .labelsManager:
+            LabelsManageSheet(session: session) { sheet = nil }
+        case .project(let target):
+            ProjectSettingsView(session: session, project: target)
         }
+    }
+
+    func withRenameAlerts(_ content: some View) -> some View {
+        content
         .alert(
             "Rename workspace",
             isPresented: Binding(
@@ -211,6 +223,10 @@ struct PaseoSidebar: View {
         } message: {
             Text("Empty restores the folder name.")
         }
+    }
+
+    func withArchiveDialogs(_ content: some View) -> some View {
+        content
         .confirmationDialog(
             "Archive worktree?",
             isPresented: Binding(
@@ -267,6 +283,10 @@ struct PaseoSidebar: View {
                 "The project and its workspaces will be unregistered on this host. Files on disk will not be changed."
             )
         }
+    }
+
+    func withOverlays(_ content: some View) -> some View {
+        content
         .overlay(alignment: .top) {
             if let toast {
                 Text(toast)
@@ -307,10 +327,6 @@ struct PaseoSidebar: View {
                 .padding(.bottom, 76)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-        }
-        .onAppear {
-            guard !session.workspaceDirectory.hasLoaded, session.workspaceDirectory.error == nil else { return }
-            Task { await session.workspaceDirectory.refresh() }
         }
     }
 

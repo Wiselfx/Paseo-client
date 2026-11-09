@@ -8,7 +8,7 @@ import UIKit
 /// branch to fork from (free text, current branch prefilled — the store exposes branch
 /// suggestions only per checkout, which this sheet does not have), and an optional first prompt,
 /// which creates an agent in the new workspace right away with the catalogue's provider defaults.
-private struct ClaudeNewWorkspaceSheet: View {
+struct ClaudeNewWorkspaceSheet: View {
     let session: HostSession
     let defaultProjectId: String?
     /// `agentId` when a first prompt produced an agent; `message` carries a toast line for

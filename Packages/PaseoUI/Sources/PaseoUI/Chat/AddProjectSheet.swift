@@ -11,7 +11,7 @@ import UIKit
 /// "Stars" are not on the wire (`GithubRepository` carries id/name/owner/description/visibility/
 /// updatedAt), so rows show owner/name, description, a Private chip when applicable, and the
 /// last-update age.
-private struct AddProjectSheet: View {
+struct AddProjectSheet: View {
     let session: HostSession
     /// Called with a toast line once the project (and, for clones, its workspace) is ready.
     var onDone: (String) -> Void
