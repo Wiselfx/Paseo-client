@@ -19,7 +19,7 @@ struct ClaudeNewAgentSheet: View {
     @State private var prompt: String
     @State private var form = ClaudeNewAgentForm()
 
-    enum Page: Equatable { case root, providers, models, thinking, modes }
+    enum Page: Equatable { case root, providers, models, thinking, modes, profiles }
 
     init(
         session: HostSession, workspaceId: String?, cwd: String, initialPrompt: String,
@@ -58,6 +58,7 @@ struct ClaudeNewAgentSheet: View {
         case .models: "Model"
         case .thinking: "Thinking"
         case .modes: "Mode"
+        case .profiles: "Profile"
         }
     }
 
@@ -84,6 +85,7 @@ struct ClaudeNewAgentSheet: View {
                     case .models: modelPage
                     case .thinking: thinkingPage
                     case .modes: modePage
+                    case .profiles: profilesPage
                     }
                 }
                 .padding(.horizontal, 16)
@@ -130,6 +132,14 @@ struct ClaudeNewAgentSheet: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(minHeight: 48)
+            }
+            if showsProfileRow {
+                RowGroup {
+                    SheetRow(
+                        title: "Profile", symbol: "sparkles", value: profileLabel, chevron: true
+                    ) { Haptics.selection(); page = .profiles }
+                    .accessibilityIdentifier("newAgent.profile")
+                }
             }
             RowGroup {
                 SheetRow(
@@ -276,6 +286,7 @@ struct ClaudeNewAgentSheet: View {
             SheetRow(title: "Default", detail: "Use the provider's level for this model", checked: form.thinkingId == nil) {
                 Haptics.selection()
                 form.thinkingId = nil
+                form.profileId = nil
                 page = .root
             }
             ForEach(thinkingOptions) { option in
@@ -285,6 +296,7 @@ struct ClaudeNewAgentSheet: View {
                 ) {
                     Haptics.selection()
                     form.thinkingId = option.id
+                    form.profileId = nil
                     page = .root
                 }
             }
@@ -299,11 +311,73 @@ struct ClaudeNewAgentSheet: View {
                 ) {
                     Haptics.selection()
                     form.modeId = mode.id
+                    form.profileId = nil
                     page = .root
                 }
                 if index < modes.count - 1 { RowDivider() }
             }
         }
+    }
+
+    /// Named launch bundles from the host config: picking one prefills provider, model, mode,
+    /// thinking and feature values once. "None" clears back to the defaults.
+    private var profilesPage: some View {
+        VStack(spacing: 12) {
+            RowGroup {
+                SheetRow(
+                    title: "None",
+                    detail: "Clear the profile and reset to the host's defaults",
+                    checked: form.profileId == nil
+                ) {
+                    Haptics.selection()
+                    form.clearProfile(catalog: catalog)
+                    page = .root
+                }
+                .accessibilityIdentifier("newAgent.profile.none")
+                ForEach(applicableProfiles) { profile in
+                    RowDivider()
+                    SheetRow(
+                        title: profile.name,
+                        detail: profileSummary(profile),
+                        checked: form.profileId == profile.id
+                    ) {
+                        Haptics.selection()
+                        form.applyProfile(profile, catalog: catalog)
+                        page = .root
+                    }
+                    .accessibilityIdentifier("newAgent.profile.\(profile.id)")
+                }
+            }
+            Text("Applies once at creation; you can change any field afterwards.")
+                .font(.system(size: 12))
+                .foregroundStyle(ClaudePalette.captionInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    /// "claude · Opus 5 · Plan · Think hard"-style line from the catalogue.
+    private func profileSummary(_ profile: AgentProfile) -> String {
+        var parts = [catalog.provider(profile.provider)?.label ?? profile.provider]
+        if let model = profile.model, !model.isEmpty {
+            let label = catalog.models(forProvider: profile.provider)
+                .first(where: { $0.id == model })?.label ?? model
+            parts.append(label)
+        }
+        if let modeId = profile.modeId, !modeId.isEmpty,
+            let mode = catalog.modes(forProvider: profile.provider)
+                .first(where: { $0.id == modeId }) {
+            parts.append(mode.label)
+        }
+        if let thinkingId = profile.thinkingOptionId, !thinkingId.isEmpty,
+            let modelId = profile.model ?? catalog.defaultModel(forProvider: profile.provider)?.id {
+            let options = catalog.thinkingOptions(forProvider: profile.provider, modelId: modelId)
+            parts.append(options.first(where: { $0.id == thinkingId })?.label ?? thinkingId)
+        }
+        if let notes = profile.notes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(notes)
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: Labels
@@ -326,6 +400,24 @@ struct ClaudeNewAgentSheet: View {
     private var modeLabel: String {
         guard let id = form.modeId else { return "Default" }
         return modes.first(where: { $0.id == id })?.label ?? id
+    }
+
+    private var profileLabel: String {
+        guard let id = form.profileId else { return "None" }
+        return session.hostSettings.profiles.first(where: { $0.id == id })?.name ?? "None"
+    }
+
+    /// Profiles exist only on daemons advertising `features.agentProfiles`, and only
+    /// profiles whose provider this host offers are applicable (upstream hides the rest).
+    /// Every listed profile applies once at creation; the user can change fields afterwards.
+    private var applicableProfiles: [AgentProfile] {
+        let all = session.hostSettings.profiles
+        guard catalog.phase == .ready else { return all }
+        return all.filter { catalog.provider($0.provider) != nil }
+    }
+
+    private var showsProfileRow: Bool {
+        !session.hostSettings.profiles.isEmpty
     }
 
     // MARK: Create
@@ -352,6 +444,12 @@ final class ClaudeNewAgentForm {
     var modelId: String?
     var thinkingId: String?
     var modeId: String?
+    /// The profile last applied, if any. Any manual picker change clears it; "None" clears
+    /// it too and restores the defaults.
+    var profileId: String?
+    /// Feature values carried by the applied profile. Captured here for the create RPC; this
+    /// client's `AgentSessionConfig` cannot carry them yet (see the PARITY note for the gap).
+    var featureValues: [String: JSONValue]?
     var creating = false
     var error: String?
 
@@ -376,12 +474,59 @@ final class ClaudeNewAgentForm {
         modelId = nil
         thinkingId = nil
         modeId = nil
+        profileId = nil
         applyDefaults(catalog)
     }
 
     func selectModel(_ id: String, catalog: AgentControlStore) {
         modelId = id
         thinkingId = nil
+        profileId = nil
+        applyDefaults(catalog)
+    }
+
+    /// Applies one profile, once, at creation: provider, model, mode, thinking and the
+    /// profile's feature values. Each field is reconciled against the catalogue when it is
+    /// loaded (upstream hides profiles the host cannot run); anything that does not resolve
+    /// falls back to the catalogue default.
+    func applyProfile(_ profile: AgentProfile, catalog: AgentControlStore) {
+        profileId = profile.id
+        featureValues = profile.featureValues
+        providerId = profile.provider
+        modelId = profile.model
+        modeId = profile.modeId
+        thinkingId = profile.thinkingOptionId
+
+        if catalog.phase == .ready {
+            let models = catalog.models(forProvider: profile.provider)
+            if let modelId, !models.contains(where: { $0.id == modelId }) {
+                self.modelId = nil
+            }
+            let modes = catalog.modes(forProvider: profile.provider)
+            if let modeId, !modes.contains(where: { $0.id == modeId }) {
+                self.modeId = nil
+            }
+        }
+        applyDefaults(catalog)
+        if let thinkingId, let providerId, let modelId {
+            let options = catalog.thinkingOptions(forProvider: providerId, modelId: modelId)
+            if options.isEmpty || !options.contains(where: { $0.id == thinkingId }) {
+                self.thinkingId = nil
+            }
+        }
+    }
+
+    /// "None": drop the profile and any feature values it carried, back to a fresh default.
+    func clearProfile(catalog: AgentControlStore) {
+        profileId = nil
+        featureValues = nil
+        // Keep the current provider when the catalogue cannot name one (not loaded yet).
+        providerId = catalog.readyProviders.first?.provider
+            ?? catalog.providers.first { $0.enabled }?.provider
+            ?? providerId
+        modelId = nil
+        thinkingId = nil
+        modeId = nil
         applyDefaults(catalog)
     }
 
