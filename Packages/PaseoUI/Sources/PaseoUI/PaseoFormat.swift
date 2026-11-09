@@ -17,17 +17,32 @@ enum PaseoFormat {
         return formatter
     }
 
+    /// One reused formatter per fraction-digit count. Building and configuring a `NumberFormatter`
+    /// costs ~21 µs against ~0.7 µs to reuse one, and rows format several numbers per evaluation
+    /// (diff stats, counts), so it was showing up in list scrolling (P3). Display-only: every
+    /// caller is a view body on the main actor.
+    private static let zeroDigits = decimalFormatter(maximumFractionDigits: 0)
+    private static let oneDigit = decimalFormatter(maximumFractionDigits: 1)
+    private static let twoDigits = decimalFormatter(maximumFractionDigits: 2)
+
+    private static func formatter(_ maximumFractionDigits: Int) -> NumberFormatter {
+        switch maximumFractionDigits {
+        case 0: zeroDigits
+        case 1: oneDigit
+        default: twoDigits
+        }
+    }
+
     /// `119,900`, `0`, `-1,234`.
     static func integer(_ value: Int) -> String {
-        decimalFormatter(maximumFractionDigits: 0).string(from: NSNumber(value: value))
-            ?? String(value)
+        formatter(0).string(from: NSNumber(value: value)) ?? String(value)
     }
 
     /// `999`, `1.2k`, `3.4M`, `1.2B`. For tight spots like the context ring.
     static func compact(_ value: Double) -> String {
         let magnitude = abs(value)
         if magnitude < 1000 {
-            return decimalFormatter(maximumFractionDigits: value.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 2)
+            return formatter(value.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 2)
                 .string(from: NSNumber(value: value)) ?? String(value)
         }
         let scaled: (Double, String)
@@ -36,7 +51,7 @@ enum PaseoFormat {
         case 1_000_000..<1_000_000_000: scaled = (value / 1_000_000, "M")
         default: scaled = (value / 1_000_000_000, "B")
         }
-        let text = decimalFormatter(maximumFractionDigits: 1)
+        let text = formatter(1)
             .string(from: NSNumber(value: scaled.0)) ?? String(scaled.0)
         return text + scaled.1
     }
@@ -60,7 +75,7 @@ enum PaseoFormat {
             unit += 1
         }
         let digits = scaled < 10 && unit > 0 ? 1 : 0
-        let text = decimalFormatter(maximumFractionDigits: digits).string(from: NSNumber(value: scaled))
+        let text = formatter(digits).string(from: NSNumber(value: scaled))
             ?? String(Int(scaled.rounded()))
         return text + " " + units[unit]
     }
