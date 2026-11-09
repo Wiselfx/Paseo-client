@@ -148,8 +148,8 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
-- R18 `r18-pairing-ui` (Crouton, done 6baa36e): DeepSeek 6db40c26 (R17 author) reviewing.
-- R19 `r19-pair-device` on Crouton c2f9fb62: host settings Pair device (QR, copy, enable-relay).
+- R18 `r18-pairing-ui`: review (DeepSeek 6db40c26) found App/UI compile blockers (undeclared state, fake VisionKit API, PasteButton) + password-recovery gaps; Crouton c2f9fb62 fixing, then re-review.
+- R19 `r19-pair-device` (Crouton, done 1de41fc): waiting for DeepSeek 6db40c26 review.
 - M15 `m15-voice-mode`: review by DeepSeek 8872f024 found a crash, 4 compile errors, unconnected playback; Crouton 6705fee4 fixing, then re-review.
 - Idle: DeepSeek 85844e34 (P1 polish context), DeepSeek 6db40c26 (R17; reviewer for R18).
 Known store gaps: fork can't carry provider feature values.
