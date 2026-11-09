@@ -1,0 +1,16 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.label.list.response",
+    "payload": {
+      "requestId": "list1",
+      "labels": [],
+      "sync": {
+        "mode": "snapshot",
+        "generation": "fixture-generation",
+        "headSeq": 0,
+        "removals": []
+      }
+    }
+  }
+}

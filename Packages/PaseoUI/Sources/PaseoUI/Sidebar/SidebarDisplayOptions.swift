@@ -16,6 +16,44 @@ enum SidebarSort: String, CaseIterable, Identifiable {
 }
 
 extension PaseoSidebar {
+    /// The rows inside the "Labels" submenu of the display options: "All", then one row per
+    /// known label (one at a time), then a way into the manage sheet.
+    @ViewBuilder var labelsFilterContent: some View {
+        Button {
+            Haptics.selection()
+            labelFilter = ""
+        } label: {
+            HStack(spacing: 8) {
+                Text("All")
+                Spacer(minLength: 12)
+                if labelFilterName == nil {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        ForEach(labelCatalog, id: \.name) { label in
+            Button {
+                Haptics.selection()
+                toggleLabelFilter(label.name)
+            } label: {
+                HStack(spacing: 8) {
+                    WorkspaceLabelDot(color: label.color)
+                    Text(label.name)
+                    Spacer(minLength: 12)
+                    if labelFilter.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .caseInsensitiveCompare(label.name) == .orderedSame
+                    {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+        }
+        Divider()
+        Button("Manage labels…", systemImage: "slider.horizontal.3") {
+            sheet = .labelsManager
+        }
+    }
+
     /// The "…" menu in the sidebar header: sort, row metadata and grouping; persisted in
     /// `@AppStorage("paseo.sidebar.*")`.
     var displayOptionsMenu: some View {
@@ -35,6 +73,14 @@ extension PaseoSidebar {
             Toggle("Show diff stats", isOn: $showDiffStats)
             Toggle("Show PR badge", isOn: $showPRBadge)
             Toggle("Group by project", isOn: $groupByProject)
+            if session.labels.supportsLabels
+                && (!labelCatalog.isEmpty || !labelFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            {
+                Divider()
+                Menu("Labels", systemImage: "tag") {
+                    labelsFilterContent
+                }
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 21, weight: .light))

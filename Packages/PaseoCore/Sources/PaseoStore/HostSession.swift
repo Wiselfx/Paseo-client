@@ -38,6 +38,10 @@ public final class HostSession {
     public let projectIcons: ProjectIconStore
     /// Git extras for open workspaces: modern diffs, discard, branches, PR badge, live files.
     public let gitExtras: GitExtrasStore
+    /// History and lifecycle: archived agents, archive/unarchive/delete.
+    public let agentLifecycle: AgentLifecycleStore
+    /// The label catalog for this host (name + color). Assignments live on the workspace rows.
+    public let labels: WorkspaceLabelsStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -62,6 +66,9 @@ public final class HostSession {
         self.setupObservation = WorkspaceSetupObservationStore(client: client)
         self.projectConfig = ProjectConfigStore(client: client)
         self.projectIcons = ProjectIconStore(client: client)
+        self.agentLifecycle = AgentLifecycleStore(client: client)
+        self.labels = WorkspaceLabelsStore(client: client)
+        self.labels.workspaceDirectory = self.workspaceDirectory
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
@@ -169,6 +176,7 @@ public final class HostSession {
             setupObservation.update(serverInfo: info)
             projectIcons.update(serverInfo: info)
             gitExtras.update(serverInfo: info)
+            labels.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
             for store in conversations.values { store.update(serverInfo: info) }
             if sawReconnect {
@@ -176,6 +184,7 @@ public final class HostSession {
                 await resync()
             } else {
                 await workspaceDirectory.reload()
+                await labels.load()
             }
         case .reconnecting:
             sawReconnect = true
@@ -196,6 +205,7 @@ public final class HostSession {
         }
         workspaceDirectory.prepareForReconnect()
         await workspaceDirectory.reload()
+        await labels.load()
         let openCheckouts = Array(checkouts.values)
         for store in openCheckouts {
             await store.resubscribe()
@@ -240,6 +250,13 @@ public final class HostSession {
         hostUsage.handle(messageType: messageType, raw: raw)
         gitExtras.handle(messageType: messageType, raw: raw)
         switch messageType {
+        case "workspace.label.update":
+            if let update = try? decoder.decode(SessionPayloadEnvelope<WorkspaceLabelUpdate>.self, from: raw)
+                .payload
+            {
+                labels.handle(update)
+                await labels.resyncIfNeeded()
+            }
         case "workspace_update":
             if let update = try? decoder.decode(SessionPayloadEnvelope<WorkspaceUpdate>.self, from: raw).payload {
                 workspaceDirectory.apply(update)

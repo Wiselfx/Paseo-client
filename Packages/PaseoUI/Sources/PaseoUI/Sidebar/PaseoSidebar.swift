@@ -36,6 +36,8 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.showPRBadge") var showPRBadge = true
     @AppStorage("paseo.sidebar.groupByProject") var groupByProject = true
     @AppStorage("paseo.sidebar.hiddenWorkspaces") var hiddenWorkspaces = ""
+    /// The sidebar label filter: the raw label name, or "" for All (one at a time, by design).
+    @AppStorage("paseo.sidebar.labelFilter") var labelFilter = ""
     /// Shared with the Settings → General toggle, which owns this row. Hidden by default.
     @AppStorage("paseo.usage.showInSidebar") var showUsageInSidebar = false
     @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -106,6 +108,10 @@ struct PaseoSidebar: View {
                 }
             case .usage:
                 ClaudeUsageReportsSheet(session: session)
+            case .newLabel(let target):
+                NewLabelSheet(session: session, workspace: target) { sheet = nil }
+            case .labelsManager:
+                LabelsManageSheet(session: session) { sheet = nil }
             }
         }
         .alert(
@@ -471,6 +477,8 @@ private enum PaseoSidebarSheet: Identifiable {
     case newWorkspace
     case addProject
     case usage
+    case newLabel(WorkspaceDescriptor)
+    case labelsManager
 
     var id: String {
         switch self {
@@ -480,6 +488,8 @@ private enum PaseoSidebarSheet: Identifiable {
         case .newWorkspace: "newWorkspace"
         case .addProject: "addProject"
         case .usage: "usage"
+        case .newLabel(let target): "newLabel:\(target.id)"
+        case .labelsManager: "labelsManager"
         }
     }
 }

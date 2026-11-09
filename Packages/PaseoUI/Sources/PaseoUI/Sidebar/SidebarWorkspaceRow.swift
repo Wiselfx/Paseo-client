@@ -65,6 +65,11 @@ extension PaseoSidebar {
                     }
                 }
             }
+            if session.labels.supportsLabels {
+                Menu("Labels", systemImage: "tag") {
+                    labelsSubmenu(for: workspace)
+                }
+            }
             Button(isHiddenFromSidebar(workspace) ? "Unhide from sidebar" : "Hide from sidebar", systemImage: isHiddenFromSidebar(workspace) ? "eye" : "eye.slash") {
                 Haptics.selection()
                 toggleHiddenFromSidebar(workspace)
@@ -124,6 +129,13 @@ extension PaseoSidebar {
                 }
                 Text(relativeAge(stamp))
                     .foregroundStyle(ClaudePalette.secondaryInk)
+            }
+            let rowLabels = labelDefinitions(for: workspace)
+            if !rowLabels.isEmpty {
+                if showBranch || hasVisibleDiffStat(workspace) || activityDate(for: workspace) != nil {
+                    Text("·").foregroundStyle(ClaudePalette.captionInk)
+                }
+                labelChips(for: workspace)
             }
             Spacer(minLength: 6)
             if showPRBadge, let pullRequest = pullRequest(workspace), let number = pullRequest.number {
