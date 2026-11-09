@@ -10,14 +10,22 @@ extension ClaudeChatView {
         mascot.handle(event)
     }
 
-    /// Runs once when the view appears: baselines the one-shot histories so opening the
-    /// conversation doesn't re-fire them, then hands the machine the current levels.
+    /// Runs once, when the conversation's first load is ready (UX spec §4.4): baselines the
+    /// one-shot histories from the loaded state, then hands the machine the current levels.
+    /// Seeding on appear baselined an empty timeline, so history's failed tool calls arrived
+    /// afterwards looking new and played the error animation (B11).
     func seedMascotBaselines() {
+        guard !mascotSeeded else { return }
+        mascotSeeded = true
         let now = Date()
+        mascotSeqFloor = store.timeline.rows.map(\.seqStart).min() ?? 0
         signalledToolFailureIds = Set(failedToolCallIds)
         attentionActive = attentionCount > 0
         compactionOpen = lastCompactionStatus == "loading"
-        if store.activeTurnId != nil { feedMascot(.turnStarted(at: now)) }
+        if let activeTurnId = store.activeTurnId {
+            mascotLiveTurnId = activeTurnId
+            feedMascot(.turnStarted(at: now))
+        }
         feedMascot(.busySessionsChanged(count: busySessions, at: now))
         feedMascot(.pendingInteractionsChanged(count: pendingInteractions, at: now))
         feedMascot(.subagentsChanged(count: runningSubagents, at: now))
@@ -35,6 +43,20 @@ extension ClaudeChatView {
         case .reasoning: "reasoning"
         case .toolCall: "toolCall"
         default: "other"
+        }
+    }
+
+    /// Failed tool calls at or above the seed floor: failures the reader watched happen. Older
+    /// pages prepend rows below the floor, so loading history never feeds the mascot.
+    var liveFailedToolCallIds: [String] {
+        store.timeline.rows.compactMap { row in
+            guard row.seqEnd >= mascotSeqFloor else { return nil }
+            if case .toolCall(let call) = row.item, call.status == .failed,
+                MascotToolError.isFailure(call)
+            {
+                return call.callId
+            }
+            return nil
         }
     }
 
@@ -126,7 +148,7 @@ extension ClaudeChatView {
                     .foregroundStyle(ClaudePalette.ink)
             }
             if let tokens = tokenTotal(usage) {
-                Text("\(tokens.formatted()) tokens")
+                Text("\(PaseoFormat.integer(tokens)) tokens")
                     .font(.system(size: 12))
                     .foregroundStyle(ClaudePalette.secondary)
             }

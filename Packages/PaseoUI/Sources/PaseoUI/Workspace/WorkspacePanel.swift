@@ -42,6 +42,10 @@ struct WorkspacePanel: View {
     var onMentionInChat: ((String) -> Void)?
     /// A terminal to select when the panel reaches the Terminal page (notification tap).
     var initialTerminalId: String? = nil
+    /// Closes the panel: the header's back chevron (§1.3).
+    var onClose: () -> Void
+    /// The shared panel dismissal gesture, when the shell drives it (§1.3).
+    var dismissDrag: PanelDismissDrag?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage private var pageRaw: String
@@ -61,7 +65,9 @@ struct WorkspacePanel: View {
         onSelectAgent: @escaping (String) -> Void,
         onNewAgent: @escaping (WorkspaceDescriptor) -> Void,
         onMentionInChat: ((String) -> Void)? = nil,
-        initialTerminalId: String? = nil
+        initialTerminalId: String? = nil,
+        onClose: @escaping () -> Void = {},
+        dismissDrag: PanelDismissDrag? = nil
     ) {
         self.session = session
         self.workspace = workspace
@@ -70,6 +76,8 @@ struct WorkspacePanel: View {
         self.onNewAgent = onNewAgent
         self.onMentionInChat = onMentionInChat
         self.initialTerminalId = initialTerminalId
+        self.onClose = onClose
+        self.dismissDrag = dismissDrag
         // The last page is remembered per workspace; a notification tap lands on Terminal.
         let initial: Page = initialTerminalId != nil ? .terminal : .agents
         let id = workspace?.id ?? "none"
@@ -98,15 +106,15 @@ struct WorkspacePanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            withPanelDismiss(header)
             setupQuietLine
             segmented
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
             ClaudeDivider()
-            content
+            dismissableContent
         }
-        .background(ClaudePalette.background)
+        // Canvas comes from the shell's rounded, full-bleed card (UX-SPEC §1.1).
         .environment(\.mentionInChat, onMentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
         .onChange(of: initialTerminalId) { _, terminalId in
@@ -186,33 +194,36 @@ struct WorkspacePanel: View {
 
     // MARK: Header
 
+    /// The panel header (§1.3): a back chevron leading, the workspace name centered, and the
+    /// tabs below. The whole header is a horizontal drag surface that dismisses the panel.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        ZStack {
             Text(workspaceTitle)
                 .font(typography.serif(20, relativeTo: .title3))
                 .foregroundStyle(ClaudePalette.ink)
                 .lineLimit(1)
-            HStack(spacing: 6) {
-                if let branch = workspace?.branch {
-                    Text(branch)
-                        .font(typography.mono(12, relativeTo: .footnote))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                .padding(.horizontal, 56)
+            HStack(spacing: 0) {
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                        .frame(width: 44, height: 44)
                 }
-                if let stat = diffStatText {
-                    Text("·")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.captionInk)
-                    Text(stat)
-                        .font(typography.mono(12, relativeTo: .footnote))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+                Spacer(minLength: 0)
+                Color.clear
+                    .frame(width: 44, height: 44)
+                    .accessibilityHidden(true)
             }
-            .lineLimit(1)
+            .padding(.horizontal, 12)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 12)
+        .frame(height: 48)
+        .padding(.top, 6)
+        .contentShape(.rect)
     }
 
     /// Serif 20 headline: the workspace title, or the branch when there is no title.
@@ -226,9 +237,28 @@ struct WorkspacePanel: View {
         return workspace.branch ?? workspace.name
     }
 
-    private var diffStatText: String? {
-        guard let stat = workspace?.diffStat else { return nil }
-        return "+\(stat.additions) −\(stat.deletions)"
+    /// The shared panel dismissal (§1.3): the header, and the pages whose content does not
+    /// scroll sideways. Diff and code views keep only the back button and the leading edge.
+    @ViewBuilder private func withPanelDismiss(_ view: some View) -> some View {
+        if let dismissDrag {
+            // The leading 24 pt belongs to the shell's edge dismissal, so a drag and the edge
+            // strip can never drive the same progress twice.
+            view.edgeDrawerDrag(
+                edge: nil, screenWidth: dismissDrag.width, drawerWidth: dismissDrag.width,
+                isOpen: true, blocked: false, openDirection: .trailing,
+                excludeLeadingEdge: true,
+                progress: dismissDrag.progress, onSettle: dismissDrag.onSettle)
+        } else {
+            view
+        }
+    }
+
+    @ViewBuilder private var dismissableContent: some View {
+        if dismissDrag != nil, currentPage == .agents || currentPage == .files {
+            withPanelDismiss(content)
+        } else {
+            content
+        }
     }
 
     // MARK: Setup quiet line

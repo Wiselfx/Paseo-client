@@ -30,14 +30,16 @@ wording and assets; don't invent quips. Never reuse `~/workspace/claude-ios-ui` 
 
 ## In flight (Paseo agents, each in its own worktree; branch = ticket)
 
+U-round: the first on-device fix round (2026-11-09). Spec: `docs/UX-SPEC.md`. Audits: `/tmp/reviews/ux-audit-{A,B}.md` (Crouton). Fixed directly by the lead: the send wipe (dictation.stop emitted an empty draft) and the dictation off-main crash.
+
 | Ticket | Branch | Worker | What |
 | --- | --- | --- | --- |
-| M2 | `m2-claude-style-chat` | DeepSeek (pi) | ClaudeUI chat + shell on live data, DSH turn UX. Two commits: M2a conversation, M2b shell. |
-| T9 | `t9-schedules` | DeepSeek | Schedules/heartbeats store |
-| T10 | `t10-host-settings` | DeepSeek | Daemon config, heartbeat/presence, slash commands |
-| T11 | `t11-git-extras` | DeepSeek | Modern diff pipeline, discard, branches, PR status, live files |
-| T12 | `t12-attachments-search` | DeepSeek | Attachments, timeline search, subagents |
-| T13 | `t13-rich-mascot-logic` | inkling (max) | Rich content detection + mascot state machine (pure logic) |
+| U1 | `u1-shell` | DeepSeek 27f1fa81 | Full-bleed shell, drawers, full-screen panel, sidebar footer/nav, badge removal |
+| U2 | `u2-new-session` | DeepSeek 165363ff | Draft session replaces New Agent sheet, dynamic composer, DSH mark |
+| U3 | `u3-chat` | DeepSeek aa2f0c45 | Auto history, turn nav/rail, full messages, bubble menu, mascot, subagents pill, thinking list, SVG/HTML |
+| U4 | `u4-polish` | Crouton 56f70cd0 | PaseoFormat, cron describer, monochrome chips/ring, toggle tint, file sizes, search header |
+
+Open: voice-mode crash (needs the Xcode crash line), the terminal "link" icon (which button?), Add provider (needs a protocol patch shape; later ticket).
 
 Tickets: `docs/tickets/`. Worktrees: `/home/paseo/.paseo/worktrees/0264elgj/<branch>`.
 

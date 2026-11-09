@@ -56,7 +56,7 @@ struct WorkspacePRSection: View {
                 label: stateLabel(status),
                 tint: stateTint(status))
             VStack(alignment: .leading, spacing: 4) {
-                Text("#\(status.number ?? 0) · \(status.title)")
+                Text("#\(PaseoFormat.integer(status.number ?? 0)) · \(status.title)")
                     .font(typography.sans(15, weight: .semibold))
                     .foregroundStyle(ClaudePalette.ink)
                     .lineLimit(2)
@@ -413,7 +413,7 @@ struct WorkspacePRSection: View {
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .lineLimit(2)
                 if let location = comment.location {
-                    Text("\((location.path as NSString).lastPathComponent):\(location.line ?? 0)")
+                    Text("\((location.path as NSString).lastPathComponent):\(PaseoFormat.integer(location.line ?? 0))")
                         .font(typography.mono(11))
                         .foregroundStyle(ClaudePalette.tertiaryInk)
                         .lineLimit(1)

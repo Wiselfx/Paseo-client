@@ -196,7 +196,7 @@ struct WorkspaceChangesDiffView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "text.bubble")
                             .font(.system(size: 12, weight: .medium))
-                        Text("Comment on \(count) \(count == 1 ? "line" : "lines")")
+                        Text("Comment on \(PaseoFormat.integer(count)) \(count == 1 ? "line" : "lines")")
                             .font(typography.sans(13, weight: .medium))
                     }
                     .foregroundStyle(ClaudePalette.background)
@@ -389,9 +389,9 @@ struct WorkspaceChangesDiffView: View {
             }
             Spacer(minLength: 8)
             HStack(spacing: 6) {
-                Text("+\(file.additions)")
+                Text("+\(PaseoFormat.integer(file.additions))")
                     .foregroundStyle(ClaudePalette.successInk)
-                Text("−\(file.deletions)")
+                Text("−\(PaseoFormat.integer(file.deletions))")
                     .foregroundStyle(ClaudePalette.failureInk)
             }
             .font(typography.mono(12))

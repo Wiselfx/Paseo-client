@@ -35,7 +35,7 @@ extension PaseoSidebar {
             isManuallyUnread(workspace) ? "Manually marked unread" : (attention ? "Needs attention" : ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
-            Button("New agent here", systemImage: "plus") { onNewAgent(workspace) }
+            Button("New agent here", systemImage: "plus") { onNewSession(workspace.id) }
             Button("Rename workspace", systemImage: "pencil") {
                 renameText = workspace.title ?? workspace.name
                 renamingWorkspace = workspace
@@ -124,11 +124,11 @@ extension PaseoSidebar {
             if showDiffStats, let stat = workspace.diffStat, stat.additions > 0 || stat.deletions > 0 {
                 if showBranch { Text("·").foregroundStyle(ClaudePalette.captionInk) }
                 if stat.additions > 0 {
-                    Text("+\(stat.additions)")
+                    Text("+\(PaseoFormat.integer(stat.additions))")
                         .foregroundStyle(ClaudePalette.successInk.opacity(0.75))
                 }
                 if stat.deletions > 0 {
-                    Text("−\(stat.deletions)")
+                    Text("−\(PaseoFormat.integer(stat.deletions))")
                         .foregroundStyle(ClaudePalette.failureInk.opacity(0.75))
                 }
             }
@@ -148,7 +148,7 @@ extension PaseoSidebar {
             }
             Spacer(minLength: 6)
             if showPRBadge, let pullRequest = pullRequest(workspace), let number = pullRequest.number {
-                Text("#\(number)")
+                Text("#\(PaseoFormat.integer(number))")
                     .font(typography.sans(11, weight: .semibold))
                     .foregroundStyle(pullRequestTint(workspace))
             }

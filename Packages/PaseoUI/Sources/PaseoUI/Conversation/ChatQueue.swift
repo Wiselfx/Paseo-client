@@ -20,7 +20,7 @@ extension ClaudeChatView {
                     queuedMessageRow(message)
                 }
                 if queue.count > 3 {
-                    Text("+\(queue.count - 3) more")
+                    Text("+\(PaseoFormat.integer(queue.count - 3)) more")
                         .font(typography.sans(12))
                         .foregroundStyle(ClaudePalette.tertiaryInk)
                         .frame(height: 24)

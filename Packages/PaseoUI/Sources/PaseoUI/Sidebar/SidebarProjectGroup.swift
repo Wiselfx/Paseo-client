@@ -4,31 +4,6 @@ import SwiftUI
 import UIKit
 
 extension PaseoSidebar {
-/// A quiet row under the last project; opens the Add-project sheet.
-    var addProjectRow: some View {
-        Button {
-            Haptics.selection()
-            sheet = .addProject
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                    .frame(width: 24, height: 24)
-                    .background(ClaudePalette.chip, in: .circle)
-                Text("Add project")
-                    .font(typography.sans(15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 12)
-            .frame(height: 46)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add project")
-    }
-
     func projectRow(_ group: WorkspaceGroup) -> some View {
         let collapsed = isCollapsed(group.id)
         let title = projectTitle(group.project)
@@ -95,7 +70,7 @@ extension PaseoSidebar {
             return
         }
         Haptics.selection()
-        onNewAgent(workspace)
+        onNewSession(workspace.id)
     }
 
     // MARK: Collapse state

@@ -6,13 +6,17 @@ import UIKit
 /// The drawer: ClaudeUI's sidebar layout on `WorkspaceDirectory`'s project → workspace groups.
 /// Agents are not listed here; they are the tabs inside a workspace. Projects are the collapsible
 /// level (collapsed state persisted per project); workspace rows aggregate their agents' status and
-/// open the most recently active agent. The footer holds the Settings avatar and the New workspace
-/// capsule.
+/// open the most recently active agent. The footer holds the Settings avatar and the New session
+/// pill (UX-SPEC §2).
 struct PaseoSidebar: View {
     let session: HostSession
     var selectedAgentId: String?
     var onSelectAgent: (String) -> Void
+    /// Starts a session in the given workspace, or the most recently used one when nil (§2.2).
+    var onNewSession: (String?) -> Void
     var onNewAgent: (WorkspaceDescriptor) -> Void
+    /// The workspace of the conversation on screen; the New session pill targets it.
+    var currentWorkspaceId: String?
     var onDisconnect: () -> Void
     /// Toggles the right-side workspace panel; nil hides the Toggle panel action in Search.
     var onTogglePanel: (() -> Void)? = nil
@@ -57,7 +61,6 @@ struct PaseoSidebar: View {
     /// Shared with Settings → Sidebar; default shown.
     @AppStorage("paseo.sidebar.showSchedules") var showSchedules = true
     @Environment(\.accessibilityReduceMotion) var reduceMotion
-    @Environment(\.hostSwitch) var hostSwitch
 
     let typography = ClaudeTypography()
 
@@ -72,7 +75,6 @@ struct PaseoSidebar: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 52)
-            hostBadge
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -88,7 +90,9 @@ struct PaseoSidebar: View {
             footer
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(ClaudePalette.sidebarBackground)
+        // The sidebar canvas equals the conversation canvas (§1.1); only the card's hairline
+        // and dim separate the two surfaces.
+        .background(ClaudePalette.background)
         .foregroundStyle(ClaudePalette.ink)
         .onAppear {
             if showUsageInSidebar && session.hostUsage.isSupported {
@@ -332,45 +336,25 @@ struct PaseoSidebar: View {
 
     // MARK: Navigation
 
-    /// The quiet host badge (M16): only when more than one host is saved — the footer
-    /// switcher stays the one place to switch. Name or icon-only per the host's appearance.
-    @ViewBuilder private var hostBadge: some View {
-        if let context = hostSwitch, context.hosts.count > 1,
-            let entry = context.currentEntry
-        {
-            let appearance = context.appearance(for: entry.id)
-            if appearance.badgeDisplay != .hidden {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(appearance.color.swiftUIColor)
-                        .frame(width: 8, height: 8)
-                    if appearance.badgeDisplay == .name {
-                        Text(entry.label)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 6)
-                .accessibilityLabel("Host \(entry.label)")
-            }
-        }
-    }
-
     private var navigation: some View {
         VStack(spacing: 0) {
-            if showSchedules {
-                navigationRow("Schedules", symbol: "clock") { sheet = .schedules }
-            }
+            navigationRow("Search", symbol: "magnifyingglass") { sheet = .search }
             if showHistory {
                 navigationRow("History", symbol: "clock.arrow.2.circlepath") { sheet = .history }
             }
-            navigationRow("Search", symbol: "magnifyingglass") { sheet = .search }
+            if showSchedules {
+                navigationRow("Schedules", symbol: "clock") { sheet = .schedules }
+            }
             if session.agentControl.isSupported {
                 navigationRow("Import session", symbol: "square.and.arrow.down") {
                     sheet = .importSession
                 }
+            }
+            if session.workspaceDirectory.supportsProjectAdd {
+                navigationRow("Add project", symbol: "plus") { sheet = .addProject }
+            }
+            if session.workspaceDirectory.supportsWorkspaceCreate {
+                navigationRow("New workspace", symbol: "plus") { sheet = .newWorkspace }
             }
         }
         .padding(.top, 4)
@@ -455,60 +439,12 @@ struct PaseoSidebar: View {
         .accessibilityIdentifier("sidebar.usage.\(source).\(window.id)")
     }
 
-        // MARK: Host switch
-
-    /// Host name → menu of saved hosts + "Add host…". Shown only when the app injects the
-    /// host context (RootView does); otherwise the footer is avatar + capsule as before.
-    @ViewBuilder private var hostChip: some View {
-        if let hostSwitch {
-            let name = session.serverInfo?.hostname ?? "Daemon"
-            Menu {
-                ForEach(hostSwitch.hosts) { host in
-                    Button {
-                        Haptics.selection()
-                        hostSwitch.switchTo(host.id)
-                    } label: {
-                        Label(
-                            host.label,
-                            systemImage: host.isCurrent ? "checkmark.circle.fill" : "desktopcomputer")
-                    }
-                    .accessibilityIdentifier("sidebar.hosts.\(host.id.uuidString)")
-                }
-                if !hostSwitch.hosts.isEmpty { Divider() }
-                Button {
-                    Haptics.selection()
-                    hostSwitch.addHost()
-                } label: {
-                    Label("Add host…", systemImage: "plus")
-                }
-                .accessibilityIdentifier("sidebar.hosts.add")
-            } label: {
-                HStack(spacing: 4) {
-                    Text(name)
-                        .font(typography.sans(13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: 120)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                }
-                .padding(.horizontal, 12)
-                .padding(.trailing, 2)
-                .frame(height: 36)
-                .background(ClaudePalette.chip, in: .capsule)
-            }
-            .accessibilityLabel("Hosts, current host \(name)")
-            .accessibilityIdentifier("sidebar.hosts")
-            .padding(.trailing, 10)
-        }
-    }
-
         // MARK: Footer
 
+    /// Avatar leading, the inverted New session pill trailing, sized to its label and never
+    /// truncated (§0.3, §2.5). The host lives in Settings only; the host chip is gone.
     private var footer: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 12) {
             Button {
                 Haptics.selection()
                 sheet = .settings
@@ -522,31 +458,35 @@ struct PaseoSidebar: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
 
-            hostChip
-
-            Button {
-                Haptics.selection()
-                if session.workspaceDirectory.supportsWorkspaceCreate {
-                    sheet = .newWorkspace
-                } else {
-                    showToast("This daemon cannot create workspaces.")
-                }
-            } label: {
-                Label("New workspace", systemImage: "plus")
-                    .font(typography.sans(16, weight: .medium))
-                    .foregroundStyle(ClaudePalette.background)
-                    .padding(.horizontal, 17)
-                    .frame(height: 44)
-                    .background(ClaudePalette.ink, in: .capsule)
-                    .opacity(session.workspaceDirectory.supportsWorkspaceCreate ? 1 : 0.4)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("New workspace")
+            newSessionPill
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 6)
+    }
+
+    private var newSessionPill: some View {
+        Button {
+            Haptics.selection()
+            onNewSession(currentWorkspaceId)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("New session")
+                    .font(typography.sans(16, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .foregroundStyle(ClaudePalette.background)
+            .padding(.horizontal, 17)
+            .frame(height: 44)
+            .background(ClaudePalette.ink, in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("New session")
     }
 
     private var initial: String {

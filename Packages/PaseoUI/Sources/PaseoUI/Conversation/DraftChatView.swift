@@ -44,7 +44,7 @@ struct DraftChatView: View {
                 composer
             }
         }
-        .background(ClaudePalette.background.ignoresSafeArea())
+        // No background here: the shell's rounded card is the canvas (UX-SPEC §1.1).
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
         .task { await loadCatalogue() }

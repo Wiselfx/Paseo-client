@@ -281,7 +281,7 @@ private struct WorkspaceFilesDirectoryList: View {
             }
             .accessibilityLabel("New file or folder")
             Menu {
-                Toggle("Show hidden files", isOn: $showHidden)
+                Toggle("Show hidden files", isOn: $showHidden).tint(.blue)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 15, weight: .medium))
@@ -731,7 +731,10 @@ private struct WorkspaceFilesDirectoryList: View {
     }
 
     private func meta(_ entry: FileExplorerEntry) -> String? {
-        WorkspaceFileFormat.metaLine(size: entry.size, modifiedAt: entry.modifiedAt)
+        // The daemon sends the directory inode size for folders, not their contents
+        // (FileExplorerEntrySchema `size`, messages.ts:2937-2943; fs.stat in the daemon).
+        // Folders show only the modified time (UX-SPEC §6).
+        WorkspaceFileFormat.metaLine(size: entry.isDirectory ? 0 : entry.size, modifiedAt: entry.modifiedAt)
     }
 }
 #endif

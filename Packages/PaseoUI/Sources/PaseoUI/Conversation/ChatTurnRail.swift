@@ -15,6 +15,10 @@ struct ClaudeTurnRail: View {
     /// Only chats with at least this many user messages show the rail.
     static let minimumTurns = 4
 
+    /// Width the transcript's trailing padding reserves so no message text ever sits under the
+    /// rail (UX spec §4.3). 26 pt mark + 3 pt padding each side + the 4 pt inset from the edge.
+    static let reservedWidth: CGFloat = 36
+
     /// The rail's rows: the user message of each turn, in order.
     var railTurns: [Turn] {
         turns.filter { $0.userMessage != nil }
@@ -35,10 +39,8 @@ struct ClaudeTurnRail: View {
                 .frame(maxHeight: 340)
             }
             .padding(3)
-            .background(ClaudePalette.adaptive(light: 0.98, dark: 0.12), in: .rect(cornerRadius: 12))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12).strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5)
-            }
+            // A thin, translucent strip: the transcript stays readable under it.
+            .background(.ultraThinMaterial, in: .rect(cornerRadius: 12))
             .accessibilityIdentifier("transcript.turnRail")
         }
     }
@@ -49,11 +51,11 @@ struct ClaudeTurnRail: View {
             Haptics.selection()
             onJump(turn.id)
         } label: {
-            Text("\(index + 1)")
+            Text(PaseoFormat.integer(index + 1))
                 .font(typography.mono(10, weight: isCurrent ? .semibold : .regular))
-                .foregroundStyle(isCurrent ? ClaudePalette.orange : ClaudePalette.secondaryInk)
+                .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
                 .frame(width: 26, height: 26)
-                .background(isCurrent ? ClaudePalette.orange.opacity(0.14) : .clear, in: .circle)
+                .background(isCurrent ? ClaudePalette.ink.opacity(0.10) : .clear, in: .circle)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -63,8 +65,12 @@ struct ClaudeTurnRail: View {
 
 /// M7i: the on-demand list of your messages behind the header's "Jump to message…" — same rows as
 /// the rail, full text, current highlighted. Tap jumps and dismisses.
+///
+/// The sheet owns "every prompt of the conversation", not just the loaded pages: opening it pages
+/// the rest of the history in (UX spec §4.3), rows appear as they arrive, and a spinner row sits
+/// at the end while `hasOlder` is still true.
 struct ChatTurnNavSheet: View {
-    let turns: [Turn]
+    let store: ConversationStore
     let currentTurnId: String?
     let onJump: (String) -> Void
 
@@ -72,7 +78,7 @@ struct ChatTurnNavSheet: View {
     private let typography = ClaudeTypography()
 
     /// Only turns with a user message, in order.
-    var rows: [Turn] { turns.filter { $0.userMessage != nil } }
+    var rows: [Turn] { store.turns.filter { $0.userMessage != nil } }
 
     var body: some View {
         NavigationStack {
@@ -83,6 +89,13 @@ struct ChatTurnNavSheet: View {
                         if turn.id != rows.last?.id {
                             ClaudeDivider().padding(.leading, 56)
                         }
+                    }
+                    if store.timeline.hasOlder {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .accessibilityLabel("Loading earlier messages")
                     }
                 }
                 .padding(.vertical, 4)
@@ -96,6 +109,7 @@ struct ChatTurnNavSheet: View {
                 }
             }
             .presentationDetents([.medium])
+            .task { await store.loadAllOlder() }
         }
     }
 
@@ -107,11 +121,11 @@ struct ChatTurnNavSheet: View {
             dismiss()
         } label: {
             HStack(spacing: 12) {
-                Text("\(index + 1)")
+                Text(PaseoFormat.integer(index + 1))
                     .font(typography.mono(12, weight: isCurrent ? .semibold : .regular))
-                    .foregroundStyle(isCurrent ? ClaudePalette.orange : ClaudePalette.secondaryInk)
+                    .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
                     .frame(width: 32, height: 32)
-                    .background(isCurrent ? ClaudePalette.orange.opacity(0.14) : .clear, in: .circle)
+                    .background(isCurrent ? ClaudePalette.ink.opacity(0.10) : .clear, in: .circle)
                 Text(userText(turn))
                     .font(typography.sans(14))
                     .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
@@ -119,7 +133,9 @@ struct ChatTurnNavSheet: View {
                     .truncationMode(.tail)
                 Spacer(minLength: 8)
                 if isCurrent {
-                    Circle().fill(ClaudePalette.orange).frame(width: 6, height: 6)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(ClaudePalette.ink)
                 }
             }
             .padding(.horizontal, 16)

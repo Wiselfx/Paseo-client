@@ -197,11 +197,7 @@ extension ClaudeChatView {
     }
 
     var composerModelChip: some View {
-        ComposerModelChip(
-            modelLabel: modelChipTitle,
-            thinkingLabel: thinkingLabel,
-            hasCustomThinking: hasCustomThinking
-        ) {
+        ComposerModelChip(modelLabel: modelChipTitle, thinkingLabel: thinkingLabel) {
             focused = false
             sheet = .controls
         }
@@ -510,7 +506,7 @@ extension ClaudeChatView {
                     Text("Fast")
                         .font(typography.sans(13, weight: .semibold))
                 }
-                .foregroundStyle(ClaudePalette.orange.opacity(0.8))
+                .foregroundStyle(ClaudePalette.ink)
                 .padding(.horizontal, 12)
                 .frame(height: 36)
                 .background(ClaudePalette.chip, in: .capsule)
@@ -539,12 +535,6 @@ extension ClaudeChatView {
             .accessibilityLabel("Context window, \(Int(percent.rounded())) percent used")
             .accessibilityIdentifier("composer.contextMeter")
         }
-    }
-
-    /// True when the agent runs an explicitly picked thinking level (not the provider default) —
-    /// the chip tints accent in that case (DSH effort tint).
-    var hasCustomThinking: Bool {
-        store.agent?.thinkingOptionId != nil
     }
 
     var thinkingLabel: String? {
@@ -671,7 +661,7 @@ extension ClaudeChatView {
     /// The dictation mic, split out of the composer row so the type checker sees one small
     /// expression at a time.
     var dictateButton: some View {
-        ComposerMicButton(isListening: dictation.isListening, level: dictation.level) {
+        ComposerMicButton(isListening: dictation.isListening, level: Double(dictation.level)) {
             if dictation.isListening {
                 dictation.stop(keepingDraft: true)
             } else {
@@ -712,11 +702,10 @@ extension View {
 
 /// "Model *Thinking*" in one grey chip (§4.1b). A draft passes its provider's label, because the
 /// provider is still a choice there (§3.1); a live agent has one already and shows the model only.
+/// No accent in any state (§0.1).
 struct ComposerModelChip: View {
     var modelLabel: String
     var thinkingLabel: String?
-    /// True when the agent's thinking level was picked explicitly; U4 drops the accent here.
-    var hasCustomThinking: Bool = false
     /// Draft only: draws the provider's glyph in front of the model.
     var providerLabel: String?
     var action: () -> Void
@@ -731,25 +720,19 @@ struct ComposerModelChip: View {
                 }
                 Text(modelLabel)
                 if let thinkingLabel {
-                    Text(thinkingLabel).foregroundStyle(thinkingInk)
+                    Text(thinkingLabel).foregroundStyle(ClaudePalette.secondaryInk)
                 }
             }
             .font(typography.sans(14))
-            .foregroundStyle(hasCustomThinking ? ClaudePalette.orange : ClaudePalette.ink)
+            .foregroundStyle(ClaudePalette.ink)
             .lineLimit(1)
             .padding(.horizontal, 14)
             .frame(height: 36)
-            .background(
-                hasCustomThinking ? ClaudePalette.orange.opacity(0.15) : ClaudePalette.chip,
-                in: .capsule)
+            .background(ClaudePalette.chip, in: .capsule)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Model, thinking and mode")
         .accessibilityIdentifier("composer.model")
-    }
-
-    private var thinkingInk: Color {
-        hasCustomThinking ? ClaudePalette.orange.opacity(0.9) : ClaudePalette.secondaryInk
     }
 }
 

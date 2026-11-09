@@ -147,7 +147,7 @@ struct WorkspaceSetupSheet: View {
                     }
                     Spacer(minLength: 8)
                     if let duration = command.durationMs {
-                        Text("\(duration) ms")
+                        Text("\(PaseoFormat.integer(duration)) ms")
                             .font(typography.mono(10))
                             .foregroundStyle(ClaudePalette.tertiaryInk)
                     }
@@ -170,7 +170,7 @@ struct WorkspaceSetupSheet: View {
                 Text("Blocked on change request")
                     .font(typography.sans(13, weight: .medium))
                     .foregroundStyle(ClaudePalette.ink)
-                Text("\(source.forge) #\(source.number) · \(source.headRepository)")
+                Text("\(source.forge) #\(PaseoFormat.integer(source.number)) · \(source.headRepository)")
                     .font(typography.mono(11))
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .lineLimit(1)

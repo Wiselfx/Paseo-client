@@ -171,7 +171,7 @@ enum ComposerImageProcessor {
 
     /// Byte count for display.
     static func byteCountText(_ bytes: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        PaseoFormat.bytes(bytes)
     }
 }
 

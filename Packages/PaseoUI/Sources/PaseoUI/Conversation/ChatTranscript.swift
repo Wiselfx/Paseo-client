@@ -8,7 +8,6 @@ extension ClaudeChatView {
 
     @ViewBuilder var content: some View {
         VStack(spacing: 0) {
-            subagentPill
             if store.turns.isEmpty, store.pendingPermissions.isEmpty {
                 switch store.phase {
                 case .loading:
@@ -52,13 +51,16 @@ extension ClaudeChatView {
         }
     }
 
-    /// A quiet pill under the header while the agent has provider subagents. Nil when the
-    /// feature is off or everything finished (or was hidden this session).
+    /// The provider subagents track: one quiet pill in the strip directly above the composer,
+    /// where upstream puts its `ComposerTrackBar` pills (`app/src/panels/agent-tracks.tsx:127`,
+    /// `SubagentsTrack`). Nil when the feature is off, nothing is tracked, or every row was
+    /// hidden this session.
     @ViewBuilder var subagentPill: some View {
         if store.subagents.isSupported, !visibleSubagents.isEmpty {
             SubagentTrackPill(items: visibleSubagents) { sheet = .subagents }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -116,7 +118,6 @@ extension ClaudeChatView {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 27) {
-                        if store.timeline.hasOlder { olderHistoryRow }
                         ForEach(Array(store.turns.enumerated()), id: \.element.id) { index, turn in
                             turnView(turn, index: index)
                             .id(turn.id)
@@ -152,10 +153,25 @@ extension ClaudeChatView {
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.leading, 16)
+                    // The turn rail is an overlay in the trailing margin; reserve its width so a
+                    // message never runs under it (UX spec §4.3).
+                    .padding(.trailing, 16 + ClaudeTurnRail.reservedWidth)
                     .padding(.vertical, 20)
                 }
+                .scrollPosition($scrollPosition)
                 .scrollDismissesKeyboard(.interactively)
+                // Older history loads itself; the only affordance is this spinner at the top,
+                // overlaid so appearing/disappearing never moves the content (UX spec §4.3).
+                .overlay(alignment: .top) {
+                    if store.isLoadingOlder {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.top, 6)
+                            .allowsHitTesting(false)
+                            .accessibilityLabel("Loading earlier messages")
+                    }
+                }
                 .overlay(alignment: .bottom) { transcriptFade }
                 .overlay(alignment: .trailing) { turnRail }
                 // Follows the tail as it streams; loading older pages at the top does not jump.
@@ -206,9 +222,16 @@ extension ClaudeChatView {
                     ScrollFollowMetrics(
                         distanceFromBottom: geometry.contentSize.height - geometry.contentOffset.y
                             - geometry.bounds.height,
+                        distanceFromTop: geometry.contentOffset.y,
+                        contentHeight: geometry.contentSize.height,
+                        offsetY: geometry.contentOffset.y,
                         viewportHeight: geometry.bounds.height)
                 } action: { _, metrics in
+                    // A prepended page moved the content down by its own height; put the reader
+                    // back before anything else reacts to the new offsets.
+                    if restoreHistoryAnchor(metrics) { return }
                     revealTurnRail()
+                    loadOlderIfNeeded(metrics)
                     if anchoringToAnswer {
                         // While anchored, the message stays pinned to the top; only once the
                         // growing content overflows the viewport does tail-follow take over.
@@ -372,7 +395,66 @@ extension ClaudeChatView {
 
     struct ScrollFollowMetrics: Equatable {
         var distanceFromBottom: CGFloat
+        /// Offset below the top of the content. 0 at the very top.
+        var distanceFromTop: CGFloat
+        var contentHeight: CGFloat
+        var offsetY: CGFloat
         var viewportHeight: CGFloat
+    }
+
+    /// Where the viewport sat when an older page was requested, so the prepend can be undone.
+    struct HistoryAnchor: Equatable {
+        var contentHeight: CGFloat
+        var offsetY: CGFloat
+        /// The start cursor at request time; unchanged means the page prepended nothing.
+        var cursor: TimelineCursor?
+        var startedAt: Date
+        /// The growth already compensated; a correction is re-applied only when the content
+        /// grows further, so the reader can scroll freely right after a page lands.
+        var appliedGrowth: CGFloat = 0
+    }
+
+    /// Older history loads itself: no "Load earlier" row and no button. While the top of the
+    /// transcript is within about one screen of the viewport, the next page is fetched; the
+    /// prepend is compensated so the reader's place does not move (UX spec §4.3).
+    func loadOlderIfNeeded(_ metrics: ScrollFollowMetrics) {
+        guard !historyLoadInFlight, store.timeline.hasOlder, !store.isLoadingOlder else { return }
+        guard metrics.distanceFromTop <= metrics.viewportHeight else { return }
+        historyLoadInFlight = true
+        let cursor = store.timeline.startCursor
+        historyAnchor = HistoryAnchor(
+            contentHeight: metrics.contentHeight, offsetY: metrics.offsetY, cursor: cursor,
+            startedAt: Date())
+        Task {
+            await store.loadOlder()
+            historyLoadInFlight = false
+            // Nothing was prepended (an empty or failed page): there is nothing to anchor.
+            if let anchor = historyAnchor, store.timeline.startCursor == anchor.cursor {
+                historyAnchor = nil
+            }
+        }
+    }
+
+    /// Undoes a prepend by scrolling down by the height the content above the viewport grew.
+    /// Returns true when it scrolled, so the rest of the geometry handler can be skipped.
+    ///
+    /// The correction is absolute and repeats while the anchor lives: a lazy stack can report the
+    /// prepended height over more than one layout pass, and re-applying converges instead of
+    /// leaving the reader short. The anchor expires so a later tail growth can never reuse it.
+    func restoreHistoryAnchor(_ metrics: ScrollFollowMetrics) -> Bool {
+        guard let anchor = historyAnchor else { return false }
+        if Date().timeIntervalSince(anchor.startedAt) > 2 {
+            historyAnchor = nil
+            return false
+        }
+        let growth = metrics.contentHeight - anchor.contentHeight
+        if growth > 1, abs(growth - anchor.appliedGrowth) > 1 {
+            historyAnchor?.appliedGrowth = growth
+            scrollPosition.scrollTo(y: anchor.offsetY + growth)
+            return true
+        }
+        if !historyLoadInFlight { historyAnchor = nil }
+        return false
     }
 
     /// The 40 pt fade band: the transcript melts into the canvas just above the composer.
@@ -472,28 +554,5 @@ extension ClaudeChatView {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityLabel(text)
     }
-
-    var olderHistoryRow: some View {
-        Group {
-            if store.isLoadingOlder {
-                ProgressView().controlSize(.small).frame(maxWidth: .infinity)
-            } else {
-                Button {
-                    Task { await store.loadOlder() }
-                } label: {
-                    Text("Load earlier")
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 30)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(height: 30)
-        // Reaching the top fetches one older page; the row stays put so it does not loop.
-        .onAppear { Task { await store.loadOlder() } }
-    }
-
 }
 #endif

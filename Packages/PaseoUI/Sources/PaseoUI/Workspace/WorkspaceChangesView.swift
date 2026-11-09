@@ -235,7 +235,7 @@ struct WorkspaceChangesView: View {
             let method = mergeCandidate ?? .squash
             let number = extras.prBadge?.number.map { "#\($0)" } ?? ""
             let base = extras.prStatus?.baseRefName ?? checkout.prStatus?.baseRefName ?? baseRef ?? "base"
-            Text("This merges pull request \(number) into \(base) using \(method.rawValue). This cannot be undone.")
+            Text("This merges pull request \(PaseoFormat.integer(number)) into \(base) using \(method.rawValue). This cannot be undone.")
         }
         .confirmationDialog(
             "Discard changes?",
@@ -313,7 +313,7 @@ struct WorkspaceChangesView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "paperplane")
                                     .font(.system(size: 13, weight: .medium))
-                                Text("Send feedback (\(reviewDraftCount))")
+                                Text("Send feedback (\(PaseoFormat.integer(reviewDraftCount)))")
                                     .font(typography.sans(13, weight: .semibold))
                             }
                             .foregroundStyle(ClaudePalette.background)
@@ -365,7 +365,7 @@ struct WorkspaceChangesView: View {
             .padding(.top, 2)
             if !staleReviewDrafts.isEmpty {
                 HStack(spacing: 6) {
-                    Text("\(staleReviewDrafts.count) comments no longer match this diff")
+                    Text("\(PaseoFormat.integer(staleReviewDrafts.count)) comments no longer match this diff")
                         .font(typography.sans(12))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                     Button("Clear") {
@@ -468,7 +468,7 @@ struct WorkspaceChangesView: View {
             if aheadBehind.ahead > 0 {
                 HStack(spacing: 3) {
                     Image(systemName: "arrow.up").font(.system(size: 10, weight: .semibold))
-                    Text("\(aheadBehind.ahead)").font(typography.mono(12))
+                    Text("\(PaseoFormat.integer(aheadBehind.ahead))").font(typography.mono(12))
                 }
                 .foregroundStyle(ClaudePalette.secondaryInk)
                 .accessibilityLabel("\(aheadBehind.ahead) commits ahead")
@@ -476,7 +476,7 @@ struct WorkspaceChangesView: View {
             if aheadBehind.behind > 0 {
                 HStack(spacing: 3) {
                     Image(systemName: "arrow.down").font(.system(size: 10, weight: .semibold))
-                    Text("\(aheadBehind.behind)").font(typography.mono(12))
+                    Text("\(PaseoFormat.integer(aheadBehind.behind))").font(typography.mono(12))
                 }
                 .foregroundStyle(ClaudePalette.secondaryInk)
                 .accessibilityLabel("\(aheadBehind.behind) commits behind")
@@ -573,9 +573,9 @@ struct WorkspaceChangesView: View {
                 .foregroundStyle(ClaudePalette.secondaryInk)
             Spacer()
             if !files.isEmpty {
-                Text("+\(extras.additions)")
+                Text("+\(PaseoFormat.integer(extras.additions))")
                     .foregroundStyle(ClaudePalette.successInk)
-                Text("−\(extras.deletions)")
+                Text("−\(PaseoFormat.integer(extras.deletions))")
                     .foregroundStyle(ClaudePalette.failureInk)
             }
         }
@@ -676,10 +676,10 @@ struct WorkspaceChangesView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text("+\(file.additions)")
+                Text("+\(PaseoFormat.integer(file.additions))")
                     .font(typography.mono(12))
                     .foregroundStyle(ClaudePalette.successInk)
-                Text("−\(file.deletions)")
+                Text("−\(PaseoFormat.integer(file.deletions))")
                     .font(typography.mono(12))
                     .foregroundStyle(ClaudePalette.failureInk)
                 Image(systemName: "chevron.right")
@@ -851,10 +851,10 @@ struct WorkspaceChangesView: View {
         Menu {
             Section("Diff options") {
                 if horizontalSizeClass == .regular {
-                    Toggle("Side by side", isOn: $sideBySide)
+                    Toggle("Side by side", isOn: $sideBySide).tint(.blue)
                 }
-                Toggle("Hide whitespace changes", isOn: $hideWhitespace)
-                Toggle("Wrap long lines", isOn: $wrapLongLines)
+                Toggle("Hide whitespace changes", isOn: $hideWhitespace).tint(.blue)
+                Toggle("Wrap long lines", isOn: $wrapLongLines).tint(.blue)
                 Button(collapseAllHunks ? "Expand all files" : "Collapse all files") {
                     collapseAllHunks.toggle()
                 }
@@ -917,7 +917,7 @@ struct WorkspaceChangesView: View {
 
     @ViewBuilder private var autoMergeSection: some View {
         let state = autoMergeState
-        Toggle("Auto-merge (squash)", isOn: autoMergeBinding)
+        Toggle("Auto-merge (squash)", isOn: autoMergeBinding).tint(.blue)
             .disabled(state == nil && extras.prBadge == nil)
     }
 
@@ -1133,7 +1133,7 @@ struct WorkspaceChangesView: View {
                         .foregroundStyle(ClaudePalette.secondaryInk)
                     Spacer(minLength: 8)
                     if !gitActions.commits.isEmpty {
-                        Text("\(gitActions.commits.count)")
+                        Text("\(PaseoFormat.integer(gitActions.commits.count))")
                             .font(typography.mono(12))
                             .foregroundStyle(ClaudePalette.tertiaryInk)
                     }
