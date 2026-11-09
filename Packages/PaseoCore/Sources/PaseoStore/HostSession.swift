@@ -25,6 +25,8 @@ public final class HostSession {
     public let terminals: TerminalsStore
     /// Provider catalogue, agent creation, and live permission routing.
     public private(set) var agentControl: AgentControlStore
+    /// Schedules and heartbeats. No live push: the schedules screen calls `load()`.
+    public let schedules: SchedulesStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -41,6 +43,7 @@ public final class HostSession {
         self.client = client
         self.terminals = TerminalsStore(client: client)
         self.agentControl = AgentControlStore(client: client)
+        self.schedules = SchedulesStore(client: client)
         self.workspaceDirectory = WorkspaceDirectory(client: client)
     }
 
@@ -140,6 +143,7 @@ public final class HostSession {
         case .connected(let info):
             serverInfo = info
             agentControl.serverInfoChanged(info)
+            schedules.serverInfoChanged(info)
             workspaceDirectory.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
             if sawReconnect {

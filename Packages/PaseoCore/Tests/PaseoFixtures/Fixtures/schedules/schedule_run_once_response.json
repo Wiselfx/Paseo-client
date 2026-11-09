@@ -1,0 +1,50 @@
+{
+  "type": "session",
+  "message": {
+    "type": "schedule/run-once/response",
+    "payload": {
+      "requestId": "run-once",
+      "schedule": {
+        "id": "a9bffe73",
+        "name": "T9 fixture schedule renamed",
+        "prompt": "Reply with the single word: rescheduled",
+        "cadence": {
+          "type": "cron",
+          "expression": "0 0 1 2 *",
+          "timezone": "UTC"
+        },
+        "target": {
+          "type": "new-agent",
+          "config": {
+            "provider": "omp",
+            "cwd": "/tmp/fixture-sandbox",
+            "modeId": "full",
+            "model": "opencode-go/deepseek-v4.1-flash"
+          }
+        },
+        "status": "active",
+        "createdAt": "2026-11-08T23:12:17.750Z",
+        "updatedAt": "2026-11-08T23:12:21.353Z",
+        "nextRunAt": "2027-02-01T00:00:00.000Z",
+        "lastRunAt": "2026-11-08T23:12:21.353Z",
+        "pausedAt": null,
+        "expiresAt": null,
+        "maxRuns": 3,
+        "runs": [
+          {
+            "id": "99905b98-a6ea-479c-b36b-4ece0a6ad89d",
+            "scheduledFor": "2026-11-08T23:12:18.635Z",
+            "startedAt": "2026-11-08T23:12:18.635Z",
+            "endedAt": "2026-11-08T23:12:21.353Z",
+            "status": "succeeded",
+            "agentId": "517ffad9-6cec-4ec0-907f-6471f084a699",
+            "workspaceId": "wks_05b420ea4b0241b9",
+            "output": "rescheduled",
+            "error": null
+          }
+        ]
+      },
+      "error": null
+    }
+  }
+}
