@@ -7,13 +7,19 @@ import SwiftUI
 struct RootView: View {
     @Bindable var model: AppModel
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
+    @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
+    @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
 
     private var colorScheme: ColorScheme? {
-        switch ClaudeAppearance(rawValue: appearance) ?? .system {
-        case .system: nil
-        case .light: .light
-        case .dark: .dark
-        }
+        (ClaudeAppearance(rawValue: appearance) ?? .system).colorScheme
+    }
+
+    /// Fonts and the Pure black palette are read when views are built, so changing them rebuilds
+    /// the tree (shell state resets). Light / Dark / System stay live through
+    /// `preferredColorScheme` and never rebuild.
+    private var rebuildKey: String {
+        let pureBlack = ClaudeAppearance(rawValue: appearance) == .pureBlack
+        return "\(pureBlack)|\(contentTextSize)|\(codeFontSize)"
     }
 
     var body: some View {
@@ -32,6 +38,7 @@ struct RootView: View {
                 PaseoShellView(session: session, onDisconnect: { model.disconnect() })
             }
         }
+        .id(rebuildKey)
         .preferredColorScheme(colorScheme)
         .environment(\.hostSwitch, model.hostContext)
     }

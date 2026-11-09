@@ -18,6 +18,8 @@ struct PaseoSettingsView: View {
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
     /// Shared with the terminal view (Settings → Terminal).
     @AppStorage("paseo.terminal.scrollback") private var terminalScrollback = 2_000
+    @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
+    @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
     @AppStorage(PaseoSettingsKeys.haptics) private var haptics = true
     @AppStorage(PaseoSettingsKeys.mascot) private var mascot = true
@@ -287,7 +289,7 @@ struct PaseoSettingsView: View {
                 sectionLabel("Appearance")
                 RowGroup {
                     HStack(spacing: 10) {
-                        ForEach([ClaudeAppearance.light, .dark, .system], id: \.self) { choice in
+                        ForEach([ClaudeAppearance.light, .dark, .pureBlack, .system], id: \.self) { choice in
                             Button {
                                 Haptics.selection()
                                 appearance = choice.rawValue
@@ -315,6 +317,28 @@ struct PaseoSettingsView: View {
                     }
                     .padding(16)
                 }
+                sectionLabel("Fonts")
+                RowGroup {
+                    scaleMenuRow(
+                        "Content size", symbol: "textformat.size",
+                        options: ClaudeTextScale.Content.allCases,
+                        current: contentTextSize,
+                        identifier: "settings.fonts.content") { choice in
+                            contentTextSize = choice.rawValue
+                        }
+                    rowDivider
+                    scaleMenuRow(
+                        "Code size", symbol: "chevron.left.forwardslash.chevron.right",
+                        options: ClaudeTextScale.Code.allCases,
+                        current: codeFontSize,
+                        identifier: "settings.fonts.code") { choice in
+                            codeFontSize = choice.rawValue
+                        }
+                }
+                Text("Content size scales prose and headings on top of Dynamic Type; code size scales code blocks, diffs and tool output. Applies live.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .padding(.leading, 16)
                 sectionLabel("You")
                 RowGroup {
                     HStack {
@@ -461,7 +485,56 @@ struct PaseoSettingsView: View {
             }
             .clipShape(.rect(cornerRadius: 14))
             .frame(maxWidth: .infinity)
+        case .pureBlack:
+            ZStack {
+                Color(white: 0)
+                previewBars(dark: false)
+            }
+            .clipShape(.rect(cornerRadius: 14))
+            .frame(maxWidth: .infinity)
         }
+    }
+
+    /// A labeled menu row for an S/M/L/XL ladder (used by both font-size rows).
+    @ViewBuilder private func scaleMenuRow<Option: CaseIterable & RawRepresentable & Equatable>(
+        _ title: String, symbol: String, options: Option.AllCases, current: String,
+        identifier: String,
+        onSelect: @escaping (Option) -> Void
+    ) -> some View where Option.RawValue == String {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .light))
+                .frame(width: 24)
+                .foregroundStyle(ClaudePalette.ink.opacity(0.75))
+            Text(title)
+                .font(.system(size: 17))
+            Spacer(minLength: 8)
+            Menu {
+                ForEach(Array(options), id: \.rawValue) { option in
+                    Button {
+                        Haptics.selection()
+                        onSelect(option)
+                    } label: {
+                        Label(
+                            option.rawValue,
+                            systemImage: current == option.rawValue ? "checkmark" : "circle")
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(current)
+                        .font(.system(size: 15))
+                        .foregroundStyle(ClaudePalette.secondary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(ClaudePalette.secondary)
+                }
+            }
+            .accessibilityLabel("\(title), currently \(current)")
+            .accessibilityIdentifier(identifier)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 52)
     }
 
     private func previewBars(dark: Bool) -> some View {
