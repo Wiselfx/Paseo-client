@@ -27,6 +27,8 @@ public final class HostSession {
     public private(set) var agentControl: AgentControlStore
     /// Schedules and heartbeats. No live push: the schedules screen calls `load()`.
     public let schedules: SchedulesStore
+    /// Host config, presence, slash commands and push registration for this daemon.
+    public private(set) var hostSettings: HostSettingsStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -44,6 +46,7 @@ public final class HostSession {
         self.terminals = TerminalsStore(client: client)
         self.agentControl = AgentControlStore(client: client)
         self.schedules = SchedulesStore(client: client)
+        self.hostSettings = HostSettingsStore(client: client)
         self.workspaceDirectory = WorkspaceDirectory(client: client)
     }
 
@@ -144,6 +147,7 @@ public final class HostSession {
             serverInfo = info
             agentControl.serverInfoChanged(info)
             schedules.serverInfoChanged(info)
+            hostSettings.serverInfoChanged(info)
             workspaceDirectory.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
             if sawReconnect {
@@ -193,6 +197,7 @@ public final class HostSession {
         case .unhandled(let messageType, let raw):
             terminals.handle(messageType: messageType, raw: raw)
             agentControl.handle(messageType: messageType, raw: raw, conversations: conversations)
+            hostSettings.handle(messageType: messageType, raw: raw)
             await handleUnhandled(messageType: messageType, raw: raw)
 
         case .binaryFrame(let data):
