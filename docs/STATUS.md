@@ -127,7 +127,10 @@ download progress). Realtime voice mode not built (needs `voice` hello cap, PCM 
 PaseoCore 548/166/20 = 734 green; PARITY 306 done / 43 missing of 422. M16 (Crouton): host badge
 (>1 host, upstream identity colors), Connections page (the app's saved endpoints: no daemon RPC),
 Danger zone Remove host (also fixes forgetting the current host). No provider install RPC exists.
-PARITY 310 done / 39 missing. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+PARITY 310 done / 39 missing. R16 (DeepSeek): relay crypto core in PaseoKit/Relay (Noise NK passes the
+public cacophony vectors byte for byte, record codec with all rejection rules, offer/relay:// parsing,
+protected mode only); swift-crypto added to PaseoKit (user-approved). PaseoCore 548/166/86 = 800 green.
+Xcode: the new package needs File → Packages → Resolve/Reset Package Caches. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
@@ -136,7 +139,6 @@ work, start fresh when scope changes or its context drifts (256k context, compac
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
 - P1 `p1-polish-audit` on DeepSeek 85844e34-6c29-4638-ae82-0b781364abc7: UI/UX audit doc + low-risk fixes (frontend-design skill as a lens at /tmp/polish-skill, outside the repo; pinned ClaudeUI/DSH style wins).
 - M15 `m15-voice-mode` on Crouton 6705fee4-a9d1-4be4-9962-4524eff8f59c: realtime voice mode.
-- R16 `r16-relay-crypto` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: Noise NK, record codec, offer parsing (swift-crypto approved by the user). Plan: R17 transport, R18 pairing UI, R19 Pair device (`docs/research/11` §10).
 - Idle: DeepSeek 8872f024 (T17; deep protocol/subscription context).
 Known store gaps: fork can't carry provider feature values.
 
