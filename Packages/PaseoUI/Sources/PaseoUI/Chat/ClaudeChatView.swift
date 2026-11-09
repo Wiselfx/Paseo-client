@@ -15,8 +15,8 @@ public struct ClaudeChatView: View {
 
     /// The drawer affordance in the shell. Nil keeps the leading edge empty.
     var onOpenSidebar: (() -> Void)?
-    /// Selects another agent in the same workspace from the header's tab chips.
-    var onSelectAgent: ((String) -> Void)?
+    /// The panel affordance in the shell. Nil keeps the trailing edge a placeholder.
+    var onOpenPanel: (() -> Void)?
     /// Back affordance for a plain navigation stack.
     var onBack: (() -> Void)?
     /// Called with the composer's text so a new agent can start with it.
@@ -32,13 +32,13 @@ public struct ClaudeChatView: View {
 
     public init(
         session: HostSession, store: ConversationStore, onOpenSidebar: (() -> Void)? = nil,
-        onSelectAgent: ((String) -> Void)? = nil, onBack: (() -> Void)? = nil,
+        onOpenPanel: (() -> Void)? = nil, onBack: (() -> Void)? = nil,
         onNewAgent: ((String) -> Void)? = nil
     ) {
         self.session = session
         self.store = store
         self.onOpenSidebar = onOpenSidebar
-        self.onSelectAgent = onSelectAgent
+        self.onOpenPanel = onOpenPanel
         self.onBack = onBack
         self.onNewAgent = onNewAgent
         ClaudeFontResources.register()
@@ -47,7 +47,6 @@ public struct ClaudeChatView: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
-            agentTabs
             if let banner = connectionBanner {
                 banner.padding(.horizontal, 16).padding(.bottom, 6)
             }
@@ -103,58 +102,57 @@ public struct ClaudeChatView: View {
                 }
                 .glassEffect(in: .circle)
                 .accessibilityLabel("Back")
+            } else {
+                Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .center, spacing: 1) {
                 Text(store.agent?.title ?? "Agent")
                     .font(typography.serif(20, relativeTo: .headline))
                     .lineLimit(1)
-                if let subtitle {
-                    Text(subtitle)
+                if let workspaceLine {
+                    Text(workspaceLine)
                         .font(typography.sans(12))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 4)
-            if let onNewAgent {
-                HStack(spacing: 0) {
-                    Button { newAgent(draft: store.draft) } label: {
-                        Image(systemName: "bubble.left.fill")
-                            .overlay {
-                                Image(systemName: "plus").font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(.black)
-                            }
-                            .frame(width: 45, height: 44)
-                    }
-                    .accessibilityLabel("New agent")
-                    Menu {
-                        Button("Archive agent", systemImage: "archivebox", role: .destructive) {
-                            Task { await store.archive() }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis").frame(width: 49, height: 44)
-                    }
-                    .accessibilityLabel("Agent options")
+            .frame(maxWidth: .infinity, alignment: .center)
+            if let onOpenPanel {
+                Button(action: onOpenPanel) {
+                    Image(systemName: "sidebar.right").font(.system(size: 17, weight: .medium))
+                        .frame(width: 44, height: 44)
                 }
-                .glassEffect(in: .capsule)
+                .glassEffect(in: .circle)
+                .accessibilityLabel("Open workspace panel")
+            } else {
+                Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }
         }
         .frame(height: 48)
         .padding(.horizontal, 12)
     }
 
-    private var subtitle: String? {
-        var parts: [String] = []
-        if let agent = store.agent {
-            parts.append(providerLabel(agent.provider) ?? agent.provider)
-            if let model = modelLabel { parts.append(model) }
-            if let mode = modeLabel { parts.append(mode) }
+    /// `workspace · branch`, small and secondary under the agent title.
+    private var workspaceLine: String? {
+        guard
+            let workspaceId = store.agent?.workspaceId,
+            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+        else { return nil }
+        let title = workspaceTitle(workspace)
+        if let branch = workspace.branch, branch != title {
+            return "\(title) · \(branch)"
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return title
     }
 
-    private func providerLabel(_ id: String) -> String? {
-        session.agentControl.provider(id)?.label
+    /// Workspace title, or the branch when there is no title.
+    private func workspaceTitle(_ workspace: WorkspaceDescriptor) -> String {
+        if let title = workspace.title,
+            !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return title
+        }
+        return workspace.branch ?? workspace.name
     }
 
     private var modelLabel: String? {
@@ -167,61 +165,9 @@ public struct ClaudeChatView: View {
         return session.agentControl.defaultModel(forProvider: agent.provider)?.label ?? agent.model
     }
 
-    private var modeLabel: String? {
-        guard let id = store.agent?.currentModeId else { return nil }
-        return store.agent?.availableModes.first(where: { $0.id == id })?.label
-    }
-
     private func newAgent(draft: String) {
         focused = false
         onNewAgent?(draft)
-    }
-
-    /// The workspace's agents as tab chips, the way Paseo keeps them together.
-    @ViewBuilder private var agentTabs: some View {
-        if let onSelectAgent, workspaceAgents.count > 1 {
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(workspaceAgents) { agent in
-                        let selected = agent.id == store.agentId
-                        Button {
-                            Haptics.selection()
-                            onSelectAgent(agent.id)
-                        } label: {
-                            HStack(spacing: 6) {
-                                if agent.requiresAttention == true && !selected {
-                                    Circle().fill(ClaudePalette.warning).frame(width: 6, height: 6)
-                                }
-                                Text(agent.title ?? "New agent")
-                                    .font(typography.sans(14, weight: selected ? .medium : .regular))
-                                    .lineLimit(1)
-                            }
-                            .padding(.horizontal, 12)
-                            .frame(height: 32)
-                            .foregroundStyle(selected ? ClaudePalette.background : ClaudePalette.ink)
-                            .background(
-                                selected ? ClaudePalette.ink : ClaudePalette.chip, in: .capsule)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(agent.title ?? "New agent")
-                        .accessibilityAddTraits(selected ? [.isSelected] : [])
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 2)
-            }
-            .scrollIndicators(.hidden)
-            .padding(.bottom, 6)
-        }
-    }
-
-    private var workspaceAgents: [AgentSnapshot] {
-        guard let agent = store.agent else { return [] }
-        guard let workspaceId = agent.workspaceId else { return [agent] }
-        var siblings = session.agents.filter { $0.workspaceId == workspaceId }
-        // A just-created agent can be live here before the refreshed list arrives.
-        if !siblings.contains(where: { $0.id == agent.id }) { siblings.insert(agent, at: 0) }
-        return siblings
     }
 
     // MARK: Connection

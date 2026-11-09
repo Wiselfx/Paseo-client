@@ -2,9 +2,10 @@
 import PaseoStore
 import SwiftUI
 
-/// The app after connecting: a drawer of workspaces and their agents, and the selected agent's
-/// conversation. The content panel tracks the finger, settles on position and velocity, and takes
-/// the display's corner radius on all four sides.
+/// The app after connecting: a drawer of workspaces and their agents on the left, the selected
+/// agent's conversation in the middle, and the workspace panel sliding in from the right edge.
+/// Both edges share the `EdgeDrawer` physics; the main surface tracks the finger, settles by
+/// position and velocity, and takes the display's corner radius on all four sides.
 public struct PaseoShellView: View {
     let session: HostSession
     var onDisconnect: () -> Void
@@ -14,11 +15,12 @@ public struct PaseoShellView: View {
     @State private var newAgentRequest: NewAgentRequest?
     @State private var isDrawerOpen = false
     @State private var drawerProgress: CGFloat = 0
-    @State private var dragOrigin: CGFloat?
+    @State private var isPanelOpen = false
+    @State private var panelProgress: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let edgeZone: CGFloat = 24
     private let drawerFraction: CGFloat = 0.82
+    private let panelFraction: CGFloat = 0.88
 
     public init(session: HostSession, onDisconnect: @escaping () -> Void) {
         self.session = session
@@ -30,7 +32,8 @@ public struct PaseoShellView: View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let drawerWidth = width * drawerFraction
-            let corner = displayCornerRadius(width: width)
+            let panelWidth = width * panelFraction
+            let corner = EdgeDrawer.cornerRadius(forScreenWidth: width)
             ZStack(alignment: .leading) {
                 ClaudePalette.sidebarBackground.ignoresSafeArea()
                 PaseoSidebar(
@@ -50,17 +53,51 @@ public struct PaseoShellView: View {
                         .rect(cornerRadius: corner * drawerProgress, style: .continuous)
                     )
                     .overlay {
-                        if drawerProgress > 0 {
-                            Color.black.opacity(0.45 * Double(drawerProgress))
-                                .contentShape(.rect)
-                                .onTapGesture { closeDrawer() }
-                        }
+                        EdgeDrawerDim(progress: drawerProgress) { settleDrawer(open: false) }
                     }
                     .offset(x: drawerWidth * drawerProgress)
                     .shadow(
                         color: .black.opacity(0.25 * Double(drawerProgress)),
                         radius: 8 * drawerProgress)
-                    .simultaneousGesture(drawerDrag(drawerWidth: drawerWidth))
+                    .edgeDrawerDrag(
+                        edge: .leading, screenWidth: width, drawerWidth: drawerWidth,
+                        isOpen: isDrawerOpen, blocked: isPanelOpen,
+                        progress: $drawerProgress, onSettle: { settleDrawer(open: $0) })
+                    .edgeDrawerDrag(
+                        edge: .trailing, screenWidth: width, drawerWidth: panelWidth,
+                        isOpen: isPanelOpen, blocked: isDrawerOpen,
+                        progress: $panelProgress, onSettle: { settlePanel(open: $0) })
+
+                EdgeDrawerDim(progress: panelProgress) { settlePanel(open: false) }
+
+                if isPanelOpen || panelProgress > 0 {
+                    WorkspacePanel(
+                        session: session,
+                        workspace: selectedWorkspace,
+                        currentAgentId: selectedAgentId,
+                        onSelectAgent: { id in
+                            select(id)
+                            settlePanel(open: false)
+                        },
+                        onNewAgent: { workspace in
+                            openNewAgent(workspace: workspace)
+                            settlePanel(open: false)
+                        }
+                    )
+                    .frame(width: panelWidth)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .clipShape(
+                        .rect(cornerRadius: corner * panelProgress, style: .continuous)
+                    )
+                    .shadow(
+                        color: .black.opacity(0.25 * Double(panelProgress)),
+                        radius: 8 * panelProgress)
+                    .offset(x: width - panelWidth * panelProgress)
+                    .edgeDrawerDrag(
+                        edge: .trailing, screenWidth: width, drawerWidth: panelWidth,
+                        isOpen: isPanelOpen, blocked: isDrawerOpen,
+                        progress: $panelProgress, onSettle: { settlePanel(open: $0) })
+                }
             }
             .clipped()
         }
@@ -106,7 +143,7 @@ public struct PaseoShellView: View {
                 session: session,
                 store: conversation,
                 onOpenSidebar: { settleDrawer(open: true) },
-                onSelectAgent: { select($0) },
+                onOpenPanel: { settlePanel(open: true) },
                 onNewAgent: { prompt in openNewAgent(prompt: prompt) }
             )
             .id(conversation.agentId)
@@ -134,7 +171,7 @@ public struct PaseoShellView: View {
             .padding(.horizontal, 12)
             .frame(height: 48)
             ZStack {
-                ClaudeHomeHero(hint: "Pick an agent from the sidebar to start.")
+                ClaudeHomeHero(hint: "Pick a workspace from the sidebar to start.")
                 if let error = session.agentsError {
                     VStack {
                         Spacer()
@@ -150,46 +187,33 @@ public struct PaseoShellView: View {
         }
     }
 
-    // MARK: Drawer
+    // MARK: Drawers
 
-    private func drawerDrag(drawerWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 6, coordinateSpace: .global)
-            .onChanged { value in
-                if dragOrigin == nil {
-                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    guard isDrawerOpen || value.startLocation.x <= edgeZone else { return }
-                    dragOrigin = drawerProgress
-                    Haptics.prepare()
-                }
-                guard let origin = dragOrigin else { return }
-                let next = origin + value.translation.width / max(1, drawerWidth)
-                drawerProgress = min(1, max(0, next))
-            }
-            .onEnded { value in
-                guard let origin = dragOrigin else { return }
-                dragOrigin = nil
-                let projected = origin + value.predictedEndTranslation.width / max(1, drawerWidth)
-                settleDrawer(open: projected >= 0.5)
-            }
+    private var selectedWorkspace: WorkspaceDescriptor? {
+        guard let workspaceId = conversation?.agent?.workspaceId else { return nil }
+        return session.workspaceDirectory.workspace(id: workspaceId)
     }
 
     private func settleDrawer(open: Bool) {
         let changed = open != isDrawerOpen
+        if open { settlePanel(open: false) }
         isDrawerOpen = open
-        let animation: Animation =
-            reduceMotion ? .easeOut(duration: 0.22) : .spring(response: 0.36, dampingFraction: 0.88)
+        let animation: Animation = EdgeDrawer.settleAnimation(reduceMotion: reduceMotion)
         withAnimation(animation) {
             drawerProgress = open ? 1 : 0
         }
         if changed { Haptics.selection() }
     }
 
-    private func closeDrawer() {
-        settleDrawer(open: false)
-    }
-
-    private func displayCornerRadius(width: CGFloat) -> CGFloat {
-        min(55, max(44, width * 0.12))
+    private func settlePanel(open: Bool) {
+        let changed = open != isPanelOpen
+        if open { settleDrawer(open: false) }
+        isPanelOpen = open
+        let animation: Animation = EdgeDrawer.settleAnimation(reduceMotion: reduceMotion)
+        withAnimation(animation) {
+            panelProgress = open ? 1 : 0
+        }
+        if changed { Haptics.selection() }
     }
 
     // MARK: Selection
@@ -206,7 +230,7 @@ public struct PaseoShellView: View {
                 await session.refreshAgents()
             }
         }
-        if closeDrawer && isDrawerOpen { self.closeDrawer() }
+        if closeDrawer && isDrawerOpen { self.settleDrawer(open: false) }
     }
 
     private func openNewAgent(prompt: String) {
