@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fs.entry.delete.response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "path": ".t15-fixture/renamed copy.txt",
+      "success": true,
+      "error": null,
+      "requestId": "t15-8"
+    }
+  }
+}

@@ -226,6 +226,10 @@ public final class CheckoutStore: Identifiable {
         supportsDiffAll = serverInfo?.hasFeature("checkoutDiffAll") ?? false
         supportsOwnedSubscriptions = serverInfo?.hasFeature("ownedSubscriptions") ?? false
         supportsRefresh = serverInfo?.hasFeature("checkoutRefresh") ?? false
+        files.update(
+            supportsEntryOps: serverInfo?.hasFeature("fsEntryOps") ?? false,
+            supportsEntryDuplicate: serverInfo?.hasFeature("fsEntryDuplicate") ?? false,
+            supportsFileEditing: serverInfo?.hasFeature("workspaceFileEditing") ?? false)
     }
 
     internal func update(workspace: WorkspaceDescriptor) {

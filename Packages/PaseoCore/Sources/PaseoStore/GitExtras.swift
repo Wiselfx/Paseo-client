@@ -18,12 +18,27 @@ public final class GitExtrasStore {
     public private(set) var supportsDiscardChanges = false
     public private(set) var supportsFileWatching = false
     public private(set) var supportsOwnedSubscriptions = false
+    public private(set) var supportsCommitsList = false
+    public private(set) var supportsCommitBaseClassification = false
+    public private(set) var supportsForgeAutoMerge = false
+    public private(set) var supportsLegacyAutoMerge = false
 
     private let client: any DaemonClient
     private var workspaces: [String: WorkspaceGitExtras] = [:]
+    private var gitActions: [String: WorkspaceGitActions] = [:]
 
     public init(client: any DaemonClient) {
         self.client = client
+    }
+
+    /// The git actions for one open workspace. Same instance for the same id while it is open.
+    public func gitActions(for checkout: CheckoutStore) -> WorkspaceGitActions {
+        if let existing = gitActions[checkout.workspaceId] { return existing }
+        let actions = WorkspaceGitActions(
+            workspaceId: checkout.workspaceId, cwd: checkout.cwd, checkout: checkout, client: client)
+        actions.update(capabilities: gitActionCapabilities)
+        gitActions[checkout.workspaceId] = actions
+        return actions
     }
 
     /// The extras for one open workspace. Same instance for the same id while it is open.
@@ -64,9 +79,17 @@ public final class GitExtrasStore {
         supportsDiscardChanges = serverInfo?.hasFeature("checkoutDiscardChanges") ?? false
         supportsFileWatching = serverInfo?.hasFeature("workspaceFileEditing") ?? false
         supportsOwnedSubscriptions = serverInfo?.hasFeature("ownedSubscriptions") ?? false
+        supportsCommitsList = serverInfo?.hasFeature("commitsList") ?? false
+        supportsCommitBaseClassification = serverInfo?.hasFeature("commitBaseClassification") ?? false
+        supportsForgeAutoMerge = serverInfo?.hasFeature("checkoutForgeSetAutoMerge") ?? false
+        supportsLegacyAutoMerge = serverInfo?.hasFeature("checkoutGithubSetAutoMerge") ?? false
         let capabilities = capabilities
         for extras in workspaces.values {
             extras.update(capabilities: capabilities)
+        }
+        let actionCapabilities = gitActionCapabilities
+        for actions in gitActions.values {
+            actions.update(capabilities: actionCapabilities)
         }
     }
 
@@ -80,6 +103,7 @@ public final class GitExtrasStore {
 
     /// Releases the extras for one workspace. Called by `HostSession.closeCheckout`.
     internal func close(_ workspaceId: String) async {
+        gitActions.removeValue(forKey: workspaceId)
         guard let extras = workspaces.removeValue(forKey: workspaceId) else { return }
         await extras.close()
     }
@@ -90,6 +114,14 @@ public final class GitExtrasStore {
             supportsDiscardChanges: supportsDiscardChanges,
             supportsFileWatching: supportsFileWatching,
             supportsOwnedSubscriptions: supportsOwnedSubscriptions)
+    }
+
+    private var gitActionCapabilities: WorkspaceGitActions.Capabilities {
+        WorkspaceGitActions.Capabilities(
+            commitsList: supportsCommitsList,
+            commitBaseClassification: supportsCommitBaseClassification,
+            forgeAutoMerge: supportsForgeAutoMerge,
+            legacyAutoMerge: supportsLegacyAutoMerge)
     }
 }
 

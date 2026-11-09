@@ -1,0 +1,15 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fs.file.write.response",
+    "payload": {
+      "result": {
+        "status": "written",
+        "modifiedAt": "2026-11-09T07:19:52.933Z",
+        "size": 12,
+        "revision": "53:18154341:12:1794208792933913522"
+      },
+      "requestId": "t15-4"
+    }
+  }
+}
