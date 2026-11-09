@@ -141,6 +141,11 @@ Platform priority: iPhone first, then Mac; no iPad-only work (M18 dropped).
 R17 (DeepSeek): relay transport (`RelayWebSocketTransport` wraps any socket; queued sends, stable hello
 retries, 32 MiB wire bound, 4001 retry / 4002-4003 terminal, protected-only admission after
 `server_info`), `RelayPinning` (pins + secret store protocols). PaseoCore 559/166/127 = 852 green.
+M15 voice mode: Crouton built it, DeepSeek review found a crash + compile errors; DeepSeek 8872f024 rewrote
+the audio engine (one explicit playback format, one-shot converters, capture DSP off main), lead added
+@Sendable audio callbacks + AVAudioApplication permission. R19 Pair devices (QR on a white tile, copy
+localOnly + 2 min expiry, enable relay behind relayConfig). PaseoCore 583/177/128 = 888 green;
+PARITY 319 done / 30 missing. api-audit: `AVAudioConverter.convert` missing-member is a false positive.
 Xcode: the new package needs File → Packages → Resolve/Reset Package Caches. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
@@ -148,9 +153,7 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
-- R18 `r18-pairing-ui`: review (DeepSeek 6db40c26) found App/UI compile blockers (undeclared state, fake VisionKit API, PasteButton) + password-recovery gaps; Crouton c2f9fb62 fixing, then re-review.
-- R19 `r19-pair-device` (Crouton, done 1de41fc): waiting for DeepSeek 6db40c26 review.
-- M15 `m15-voice-mode`: review by DeepSeek 8872f024 found a crash, 4 compile errors, unconnected playback; Crouton 6705fee4 fixing, then re-review.
+- R18 `r18-pairing-ui`: re-review says mergeable after S3 (rotated password) + VisionKit delegate signatures; Crouton c2f9fb62 fixing.
 - Idle: DeepSeek 85844e34 (P1 polish context), DeepSeek 6db40c26 (R17; reviewer for R18).
 Known store gaps: fork can't carry provider feature values.
 
