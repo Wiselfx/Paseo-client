@@ -96,12 +96,12 @@ Hosts; Info.plist mic/speech keys moved into project.yml (PaseoCore 445/135/17 =
 M2.12 workspace labels (+ M7e's
 missing HostSession wiring), M9 Search row + command palette, M3j Save to Files/Reveal, Choose URL,
 file into terminal, gh callout, side-by-side diff, M3i PR section now mounted, M4e About/Diagnostics
-(scrubbed report)/Terminal/Sidebar pages (PaseoCore 466/139/17 = 622 green; PARITY 269 done / 80
-missing of 421). Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+(scrubbed report)/Terminal/Sidebar pages M7h Edit/Rerun on your messages
+(rewind-based), Fork from here (agent.fork_context + chat_history attachment), images in prose
+(PaseoCore 473/139/17 = 629 green; PARITY 272 done / 77 missing of 421). Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
-- M7h `m7h-message-actions` on worker 0778f3b0-0603-4eae-ab7a-3a01b367bf53: Edit/Rerun, fork, images in prose.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
 Next candidates: advertise `owned_subscriptions` (DeepSeek, off-peak; complex); notifications/push research (DeepSeek after 10:00 UTC).
