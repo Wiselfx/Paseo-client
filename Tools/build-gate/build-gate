@@ -8,6 +8,8 @@
 # Verbs:
 #   build <ref>   fetch, check out <ref> (branch name or commit sha), compile for the iOS Simulator
 #                 with signing off, print the errors/warnings and the result line
+#   ipa <ref>     same checkout, Release build for devices with signing off, packed as an unsigned
+#                 .ipa into /Users/Shared/Paseo-ipas/ (readable by the owner's own account)
 #   ping          print the Xcode and macOS versions
 set -euo pipefail
 
@@ -75,8 +77,56 @@ build)
     grep -E '\*\* BUILD (SUCCEEDED|FAILED) \*\*' "$out" || echo "BUILD exit $status"
     exit "$status"
     ;;
+ipa)
+    if [[ ! "${ref:-}" =~ ^[A-Za-z0-9._/-]{1,100}$ ]] || [[ "$ref" == *..* ]] || [[ "$ref" == -* ]]; then
+        echo "refused: bad ref" >&2
+        exit 2
+    fi
+    cd "$REPO"
+    git fetch --quiet --prune origin
+    if git rev-parse --verify --quiet "origin/$ref^{commit}" >/dev/null; then
+        target="origin/$ref"
+    elif git rev-parse --verify --quiet "$ref^{commit}" >/dev/null; then
+        target="$ref"
+    else
+        echo "refused: unknown ref $ref" >&2
+        exit 2
+    fi
+    git checkout --quiet --force --detach "$target"
+    git clean -fdq
+    sha="$(git rev-parse --short HEAD)"
+    out="$(mktemp)"
+    stage="$(mktemp -d)"
+    trap 'rm -rf "$out" "$stage"' EXIT
+    set +e
+    perl -e 'alarm shift; exec @ARGV' "$MAX_SECONDS" \
+        xcodebuild -project App/PaseoClient.xcodeproj -scheme PaseoClient \
+        -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+        -derivedDataPath "$HOME/build-derived-data-device" \
+        -skipPackagePluginValidation -skipMacroValidation \
+        CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+        build >"$out" 2>&1
+    status=$?
+    set -e
+    echo "$(date -u +%FT%TZ) ipa $ref status=$status" >>"$LOG"
+    if [[ $status -ne 0 ]]; then
+        grep -E 'error: ' "$out" | sed "s#$REPO/##g" | sort -u | head -100 || true
+        echo "IPA FAILED (exit $status)"
+        exit "$status"
+    fi
+    app="$(find "$HOME/build-derived-data-device/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' | head -1)"
+    mkdir -p "$stage/Payload" /Users/Shared/Paseo-ipas
+    cp -R "$app" "$stage/Payload/"
+    name="Paseo-$(date +%Y%m%d-%H%M)-$sha.ipa"
+    (cd "$stage" && zip -qry "$name" Payload)
+    mv "$stage/$name" "/Users/Shared/Paseo-ipas/$name"
+    chmod 644 "/Users/Shared/Paseo-ipas/$name"
+    # Keep the newest five.
+    ls -1t /Users/Shared/Paseo-ipas/*.ipa 2>/dev/null | tail -n +6 | while read -r old; do rm -f "$old"; done
+    echo "IPA /Users/Shared/Paseo-ipas/$name"
+    ;;
 *)
-    echo "refused: allowed verbs are 'build <ref>' and 'ping'" >&2
+    echo "refused: allowed verbs are 'build <ref>', 'ipa <ref>' and 'ping'" >&2
     exit 2
     ;;
 esac
