@@ -531,7 +531,7 @@ struct ProjectSettingsView: View {
 
     private var staleCallout: some View {
         Group {
-            if store.stale, let error = store.error {
+            if store.stale, store.error != nil {
                 callout(
                     title: "This file changed on the host.",
                     detail: "Your edits were not saved. Reloading shows the latest paseo.json.",

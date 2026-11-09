@@ -232,7 +232,7 @@ struct RichLinkCard: View {
     /// LPMetadataProvider only documents the completion-handler API; bridging keeps the
     /// async call site without relying on an undocumented async variant.
     private static func fetchMetadata(for url: URL) async throws -> LPLinkMetadata {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<MetadataBox, Error>) in
             LPMetadataProvider().startFetchingMetadata(for: url) { metadata, error in
                 if let error {
                     continuation.resume(throwing: error)
@@ -242,9 +242,15 @@ struct RichLinkCard: View {
                     continuation.resume(throwing: CancellationError())
                     return
                 }
-                continuation.resume(returning: metadata)
+                continuation.resume(returning: MetadataBox(value: metadata))
             }
-        }
+        }.value
+    }
+
+    /// `LPLinkMetadata` isn't `Sendable`; the provider hands over a finished object that
+    /// nothing mutates afterwards, so it is safe to carry across the completion hop.
+    private struct MetadataBox: @unchecked Sendable {
+        let value: LPLinkMetadata
     }
 
     private var placeholderCard: some View {

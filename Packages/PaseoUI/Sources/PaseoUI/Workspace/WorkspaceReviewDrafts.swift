@@ -207,7 +207,7 @@ public enum WorkspaceReviewAttachmentBuilder {
             }
         }
         guard !out.isEmpty else { return nil }
-        let wireMode = AgentAttachment.ReviewAttachment.Mode(rawValue: mode) ?? .unknown(mode)
+        let wireMode = AgentAttachment.ReviewAttachment.Mode(rawValue: mode)
         let trimmedBase = baseRef?.trimmingCharacters(in: .whitespaces)
         let attachment = AgentAttachment.ReviewAttachment(
             cwd: cwd, mode: wireMode,
