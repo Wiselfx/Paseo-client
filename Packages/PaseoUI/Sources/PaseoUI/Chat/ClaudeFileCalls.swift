@@ -202,6 +202,17 @@ struct ClaudeMergedFileRow: View {
         }
         .onAppear { checkFindTarget() }
         .onChange(of: findTarget) { _, _ in checkFindTarget() }
+        // A find match landing on any of this row's calls scrolls to one of these invisible
+        // anchors, so find works on merged rows exactly like single rows.
+        .background {
+            ZStack {
+                ForEach(call.rowSeqEnds, id: \.self) { seq in
+                    Color.clear.frame(width: 0, height: 0)
+                        .id("row:\(seq)")
+                        .accessibilityHidden(true)
+                }
+            }
+        }
         .background {
             RoundedRectangle(cornerRadius: 10)
                 .fill(ClaudePalette.warning.opacity(highlightedSeq.map { call.rowSeqEnds.contains($0) ? 0.18 : 0 } ?? 0))
