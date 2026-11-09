@@ -17,12 +17,22 @@ struct WorkspaceTerminalsView: View {
     @State private var busyScripts: Set<String> = []
     @State private var exitMessage: String?
     @State private var exitGeneration = 0
+    /// Last viewed time per terminal id (milliseconds), for the activity unread dot. In memory
+    /// only; the daemon's activity pushes are what actually updates it.
+    @State private var lastViewed: [String: Double] = [:]
+    @State private var linkedFile: TerminalLinkedFile?
+    @State private var serviceURLSheet: URL?
+    @State private var renameTarget: TerminalInfo?
+    @State private var renameText = ""
+    @State private var closeCandidate: TerminalInfo?
+
     @Environment(\.openURL) private var openURL
 
     private let typography = ClaudeTypography()
 
     private var store: TerminalsStore { session.terminals }
     private var workspaceId: String { workspace.id }
+    private var checkout: CheckoutStore { session.checkout(for: workspace) }
 
     var body: some View {
         let terminals = orderedTerminals
@@ -38,17 +48,59 @@ struct WorkspaceTerminalsView: View {
             }
         }
         .background(ClaudePalette.background)
-        .task { await store.open(workspaceId: workspaceId, cwd: workspace.cwd) }
+        .task {
+            await store.open(workspaceId: workspaceId, cwd: workspace.cwd)
+            markCurrentViewed()
+        }
         .onAppear {
             if selectedTerminalId == nil || !terminalIds.contains(selectedTerminalId ?? "") {
                 selectedTerminalId = terminalIds.first
             }
+            markCurrentViewed()
         }
         .onChange(of: terminalIds) { _, ids in
             if let selectedTerminalId, ids.contains(selectedTerminalId) { return }
             selectedTerminalId = ids.first
             exitMessage = nil
+            markCurrentViewed()
         }
+        .onChange(of: selectedTerminalId) { _, _ in markCurrentViewed() }
+        .alert("Rename terminal", isPresented: Binding(
+            get: { renameTarget != nil },
+            set: { if !$0 { renameTarget = nil } })) {
+            TextField("Name", text: $renameText)
+            Button("Cancel", role: .cancel) { renameTarget = nil }
+            Button("Rename") { commitRename() }
+        } message: {
+            Text("Choose a name for this terminal.")
+        }
+        .confirmationDialog(
+            closeCandidate.map { "Kill “\(displayName($0))”?" } ?? "Kill terminal?",
+            isPresented: Binding(
+                get: { closeCandidate != nil },
+                set: { if !$0 { closeCandidate = nil } }),
+            titleVisibility: .visible) {
+            Button("Close terminal", role: .destructive) { commitClose() }
+            Button("Cancel", role: .cancel) { closeCandidate = nil }
+        } message: {
+            Text("The process in this terminal will be terminated.")
+        }
+        .sheet(item: $linkedFile) { target in
+            WorkspaceTerminalFileSheet(checkout: checkout, target: target)
+                .presentationDetents([.large])
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { serviceURLSheet != nil },
+            set: { if !$0 { serviceURLSheet = nil } })) {
+            if let url = serviceURLSheet {
+                SafariView(url: url).ignoresSafeArea()
+            }
+        }
+    }
+
+    private func markCurrentViewed() {
+        guard let selectedTerminalId else { return }
+        lastViewed[selectedTerminalId] = Date().timeIntervalSince1970 * 1000
     }
 
     // MARK: Terminals
@@ -98,6 +150,7 @@ struct WorkspaceTerminalsView: View {
             if selectedTerminalId != terminal.id {
                 selectedTerminalId = terminal.id
                 exitMessage = nil
+                markCurrentViewed()
             }
         } label: {
             HStack(spacing: 6) {
@@ -118,6 +171,48 @@ struct WorkspaceTerminalsView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Terminal \(displayName(terminal))")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .contextMenu {
+            Button("Rename…", systemImage: "pencil") {
+                renameText = displayName(terminal)
+                renameTarget = terminal
+            }
+            Button("Close", systemImage: "xmark", role: .destructive) {
+                requestClose(terminal)
+            }
+        }
+    }
+
+    /// Close with confirmation only when the daemon's activity says a process is running.
+    private func requestClose(_ terminal: TerminalInfo) {
+        let running = terminal.activity?.state == .working || terminal.activityBucket == .running
+        if running {
+            closeCandidate = terminal
+        } else {
+            Task {
+                let ok = await store.killTerminal(terminal.id)
+                if ok { Haptics.success() } else { Haptics.failure() }
+            }
+        }
+    }
+
+    private func commitClose() {
+        guard let target = closeCandidate else { return }
+        closeCandidate = nil
+        Task {
+            let ok = await store.killTerminal(target.id)
+            if ok { Haptics.success() } else { Haptics.failure() }
+        }
+    }
+
+    private func commitRename() {
+        guard let target = renameTarget else { return }
+        renameTarget = nil
+        let title = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        Task {
+            let ok = await store.renameTerminal(target.id, to: title, in: workspaceId)
+            if ok { Haptics.success() } else { Haptics.failure() }
+        }
     }
 
     private func dotKind(for terminal: TerminalInfo) -> PaseoStatusDot.Kind {
@@ -125,7 +220,14 @@ struct WorkspaceTerminalsView: View {
         case .needsInput: return .needsInput
         case .attention: return .done
         case .running: return .running
-        case nil: return .idle
+        case nil:
+            // Daemon activity arrived since the viewer last looked at this tab.
+            if let changedAt = terminal.activity?.changedAt, changedAt > 0,
+                changedAt > (lastViewed[terminal.id] ?? 0)
+            {
+                return .unread
+            }
+            return .idle
         }
     }
 
@@ -174,7 +276,9 @@ struct WorkspaceTerminalsView: View {
                 PaseoTerminalView(
                     store: store,
                     terminalId: selectedTerminalId,
-                    onExit: { message in exitMessage = exitLine(for: message) }
+                    onExit: { message in exitMessage = exitLine(for: message) },
+                    onOutput: { markCurrentViewed() },
+                    onOpenLink: handleOpenLink
                 )
                 .id("\(selectedTerminalId)-\(exitGeneration)")
                 if let exitMessage {
@@ -242,6 +346,19 @@ struct WorkspaceTerminalsView: View {
             }
         }
         .padding(.horizontal, 32)
+    }
+
+    private func handleOpenLink(_ target: TerminalLinkTarget) {
+        switch target {
+        case .localFile(let path, let line, let col):
+            Haptics.selection()
+            linkedFile = TerminalLinkedFile(path: path, line: line, col: col)
+        case .url(let url):
+            Haptics.selection()
+            openURL(url)
+        case .unhandled:
+            Haptics.failure()
+        }
     }
 
     private func exitLine(for error: String?) -> String {
@@ -320,7 +437,8 @@ struct WorkspaceTerminalsView: View {
     }
 
     private func scriptRow(_ script: WorkspaceScript) -> some View {
-        HStack(spacing: 12) {
+        let serviceURL = script.lifecycle == .running ? script.preferredURL.flatMap(URL.init(string:)) : nil
+        return HStack(spacing: 12) {
             PaseoStatusDot(kind: scriptDotKind(script))
             VStack(alignment: .leading, spacing: 2) {
                 Text(script.scriptName)
@@ -333,18 +451,28 @@ struct WorkspaceTerminalsView: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if script.lifecycle == .running, let url = script.preferredURL, let target = URL(string: url) {
+            if let serviceURL {
                 Button {
                     Haptics.selection()
-                    openURL(target)
+                    serviceURLSheet = serviceURL
                 } label: {
                     Image(systemName: "arrow.up.right.square")
                         .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                         .frame(width: 36, height: 36)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open \(script.scriptName) in browser")
+                .accessibilityLabel("View service \(script.scriptName)")
+                .contextMenu {
+                    Button("View service", systemImage: "arrow.up.right.square") {
+                        serviceURLSheet = serviceURL
+                    }
+                    Button("Copy URL", systemImage: "doc.on.doc") {
+                        UIPasteboard.general.string = serviceURL.absoluteString
+                        Haptics.success()
+                    }
+                }
             }
             if let terminalId = script.terminalId, terminalIds.contains(terminalId) {
                 Button {
@@ -366,6 +494,29 @@ struct WorkspaceTerminalsView: View {
         }
         .padding(.horizontal, 16)
         .frame(minHeight: 48)
+        .contextMenu {
+            Button("Restart", systemImage: "arrow.clockwise") {
+                Task { await restart(script) }
+            }
+            if let serviceURL = script.preferredURL {
+                Button("Copy URL", systemImage: "doc.on.doc") {
+                    UIPasteboard.general.string = serviceURL
+                    Haptics.success()
+                }
+            }
+        }
+    }
+
+    /// Restart = stop then start, one action. No confirmation: the script is designed to be
+    /// bounced.
+    private func restart(_ script: WorkspaceScript) async {
+        Haptics.selection()
+        busyScripts.insert(script.scriptName)
+        if script.lifecycle == .running {
+            _ = await store.stopScript(script.scriptName, in: workspaceId)
+        }
+        _ = await store.startScript(script.scriptName, in: workspaceId)
+        busyScripts.remove(script.scriptName)
     }
 
     private func scriptSubtitle(_ script: WorkspaceScript) -> String {

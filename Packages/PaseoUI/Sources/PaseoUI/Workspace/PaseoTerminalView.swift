@@ -14,10 +14,10 @@ import UIKit
 ///
 /// API used from SwiftTerm (checkout of 1.99.3): `TerminalView(frame:font:)` (iOS designated
 /// init), `terminalDelegate`, `feed(byteArray:)`, `resetToInitialState()`,
-/// `nativeForegroundColor`/`nativeBackgroundColor`, `terminalDimensions` (not used; the
-/// delegate's `sizeChanged` reports the grid), and the `TerminalViewDelegate` protocol
-/// (`sizeChanged`, `setTerminalTitle`, `hostCurrentDirectoryUpdate`, `send`, `scrolled`,
-/// `rangeChanged`; the rest have defaults).
+/// `nativeForegroundColor`/`nativeBackgroundColor`, `changeScrollback(_:)`,
+/// `sendKeyUp/Down/Left/Right`, `requestOpenLink(source:request:)` (link detection is on by
+/// default), and the `TerminalViewDelegate` protocol (`sizeChanged`, `setTerminalTitle`,
+/// `hostCurrentDirectoryUpdate`, `send`, `scrolled`, `rangeChanged`; the rest have defaults).
 struct PaseoTerminalView: UIViewRepresentable {
     typealias UIViewType = TerminalView
     typealias Coordinator = PaseoTerminalCoordinator
@@ -27,6 +27,10 @@ struct PaseoTerminalView: UIViewRepresentable {
     /// Called when the daemon detaches the stream. A non-nil error means observation failed and
     /// the process may still be running; nil means it ended cleanly.
     var onExit: (String?) -> Void = { _ in }
+    /// Called on every live output chunk, for activity tracking in the tab strip.
+    var onOutput: () -> Void = {}
+    /// A link tap in the terminal; the page routes it (open the file, open the URL, …).
+    var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -39,16 +43,20 @@ struct PaseoTerminalView: UIViewRepresentable {
             ?? UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         let view = TerminalView(frame: .zero, font: font)
         view.terminalDelegate = context.coordinator
+        view.changeScrollback(2000)
         // ClaudePalette's #141413 in dark mode; used in light mode too so the terminal always
         // reads as a terminal.
         view.nativeForegroundColor = UIColor(red: 0.949, green: 0.937, blue: 0.914, alpha: 1)
         view.nativeBackgroundColor = UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 1)
         context.coordinator.view = view
+        // The virtual key bar replaces SwiftTerm's built-in one: our keys, our haptics.
+        view.inputAccessoryView = context.coordinator.makeKeyBar(for: view)
         return view
     }
 
     func updateUIView(_ uiView: TerminalView, context: Context) {
-        context.coordinator.configure(store: store, onExit: onExit)
+        context.coordinator.configure(
+            store: store, onOutput: onOutput, onOpenLink: onOpenLink, onExit: onExit)
         context.coordinator.select(terminalId: terminalId)
     }
 
@@ -72,11 +80,25 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private var pendingResize: TerminalSize?
     private var attachTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
+    private var onOutput: () -> Void = {}
+    private var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
     private var onExit: (String?) -> Void = { _ in }
 
-    func configure(store: TerminalsStore, onExit: @escaping (String?) -> Void) {
+    func configure(
+        store: TerminalsStore, onOutput: @escaping () -> Void,
+        onOpenLink: @escaping (TerminalLinkTarget) -> Void, onExit: @escaping (String?) -> Void
+    ) {
         self.store = store
+        self.onOutput = onOutput
+        self.onOpenLink = onOpenLink
         self.onExit = onExit
+    }
+
+    func makeKeyBar(for view: TerminalView) -> PaseoTerminalKeyBar {
+        PaseoTerminalKeyBar(terminalView: view) { [weak self] text in
+            guard let self, let store = self.store, let terminalId = self.terminalId else { return }
+            store.sendInput(text, to: terminalId)
+        }
     }
 
     /// Switches the view to another terminal. Tears down the current attachment first.
@@ -107,6 +129,10 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     }
 
     // MARK: TerminalViewDelegate
+
+    func requestOpenLink(source: TerminalView, request: TerminalLinkRequest) {
+        onOpenLink(parseLinkTarget(request.link))
+    }
 
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
         guard newCols > 0, newRows > 0 else { return }
@@ -177,6 +203,7 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
                     self.isReplaying = true
                     self.view?.resetToInitialState()
                 case .output(let data):
+                    self.onOutput()
                     self.view?.feed(byteArray: ArraySlice([UInt8](data)))
                 case .replayEnd:
                     self.isReplaying = false
@@ -195,5 +222,46 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         attachedSize = size
         didClaim = true
     }
+}
+
+/// Where a terminal link wants to go. Parsed from the implicit/explicit link text.
+enum TerminalLinkTarget: Equatable {
+    /// `path:line[:col]` — absolute, `~/` or workspace-relative. The page opens the file viewer.
+    case localFile(path: String, line: Int?, col: Int?)
+    /// http/https/mailto/file URLs and anything Safari can take.
+    case url(URL)
+    /// Nothing we can act on (a raw git SHA, a word, …).
+    case unhandled(String)
+}
+
+/// Classifies link text from SwiftTerm's implicit detector (and explicit OSC 8 payloads).
+/// Paths win when the text contains a slash (or `~`): `Sources/Foo.swift:42` and
+/// `/abs/path:42:3` open the viewer; scheme URLs go to Safari.
+nonisolated func parseLinkTarget(_ link: String) -> TerminalLinkTarget {
+    let lower = link.lowercased()
+    if lower.hasPrefix("http://") || lower.hasPrefix("https://")
+        || lower.hasPrefix("mailto:") || lower.hasPrefix("file://") {
+        if let url = URL(string: link) { return .url(url) }
+        return .unhandled(link)
+    }
+    if link.contains("://") { return .unhandled(link) }
+    guard link.contains("/") || link.hasPrefix("~") else { return .unhandled(link) }
+
+    var segments = link.split(separator: ":").map(String.init)
+    var line: Int?
+    var col: Int?
+    if let last = segments.last, !last.isEmpty, last.allSatisfy(\.isNumber) {
+        segments.removeLast()
+        if let second = segments.last, !second.isEmpty, second.allSatisfy(\.isNumber) {
+            segments.removeLast()
+            line = Int(second)
+            col = Int(last)
+        } else {
+            line = Int(last)
+        }
+    }
+    let path = segments.joined(separator: ":")
+    guard !path.isEmpty else { return .unhandled(link) }
+    return .localFile(path: path, line: line, col: col)
 }
 #endif
