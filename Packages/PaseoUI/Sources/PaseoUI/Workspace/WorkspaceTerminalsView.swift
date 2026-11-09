@@ -14,6 +14,9 @@ import UIKit
 struct WorkspaceTerminalsView: View {
     let session: HostSession
     let workspace: WorkspaceDescriptor
+    /// A terminal to select on appear, e.g. from a notification tap. Nil keeps the usual
+    /// first-terminal selection.
+    var initialTerminalId: String? = nil
 
     @State private var selectedTerminalId: String?
     @State private var isCreating = false
@@ -63,13 +66,13 @@ struct WorkspaceTerminalsView: View {
         }
         .onAppear {
             if selectedTerminalId == nil || !terminalIds.contains(selectedTerminalId ?? "") {
-                selectedTerminalId = terminalIds.first
+                selectedTerminalId = preferredTerminalId(from: terminalIds)
             }
             markCurrentViewed()
         }
         .onChange(of: terminalIds) { _, ids in
             if let selectedTerminalId, ids.contains(selectedTerminalId) { return }
-            selectedTerminalId = ids.first
+            selectedTerminalId = preferredTerminalId(from: ids)
             exitMessage = nil
             markCurrentViewed()
         }
@@ -143,6 +146,13 @@ struct WorkspaceTerminalsView: View {
     private func markCurrentViewed() {
         guard let selectedTerminalId else { return }
         lastViewed[selectedTerminalId] = Date().timeIntervalSince1970 * 1000
+    }
+
+    /// The requested terminal when it exists, else the first one. The request wins even
+    /// after the list arrives late (a notification tap can race the terminal list load).
+    private func preferredTerminalId(from ids: [String]) -> String? {
+        if let initialTerminalId, ids.contains(initialTerminalId) { return initialTerminalId }
+        return ids.first
     }
 
     // MARK: Attach a file

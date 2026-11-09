@@ -49,6 +49,8 @@ public final class HostSession {
     public let labels: WorkspaceLabelsStore
     /// M2.13: lazy worktree-setup probe powering the sidebar's "Set up worktree scripts" callout.
     public let projectSetupProbe: ProjectSetupProbe
+    /// Recent provider sessions and importing one into a Paseo agent (M11).
+    public let importSession: ImportSessionStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -78,6 +80,7 @@ public final class HostSession {
         self.labels = WorkspaceLabelsStore(client: client)
         self.fileUploader = ConversationUpload(client: client)
         self.projectSetupProbe = ProjectSetupProbe(client: client)
+        self.importSession = ImportSessionStore(client: client)
         self.labels.workspaceDirectory = self.workspaceDirectory
     }
 
@@ -181,6 +184,7 @@ public final class HostSession {
             agentControl.serverInfoChanged(info)
             schedules.serverInfoChanged(info)
             hostSettings.serverInfoChanged(info)
+            importSession.serverInfoChanged(info)
             hostUsage.update(serverInfo: info)
             workspaceDirectory.update(serverInfo: info)
             setupObservation.update(serverInfo: info)

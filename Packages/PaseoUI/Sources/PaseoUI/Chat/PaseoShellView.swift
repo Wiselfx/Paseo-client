@@ -33,6 +33,8 @@ public struct PaseoShellView: View {
     @State private var drawerProgress: CGFloat = 0
     @State private var isPanelOpen = false
     @State private var panelProgress: CGFloat = 0
+    /// A terminal to open the panel on, from a notification tap; cleared when the panel closes.
+    @State private var panelTerminalId: String?
     @State private var composerFocusRequested = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -107,7 +109,8 @@ public struct PaseoShellView: View {
                             openNewAgent(workspace: workspace)
                             settlePanel(open: false)
                         },
-                        onMentionInChat: mentionInChat
+                        onMentionInChat: mentionInChat,
+                        initialTerminalId: panelTerminalId
                     )
                     .frame(width: panelWidth)
                     .frame(maxHeight: .infinity, alignment: .top)
@@ -254,6 +257,7 @@ public struct PaseoShellView: View {
     private func settlePanel(open: Bool) {
         let changed = open != isPanelOpen
         if open { settleDrawer(open: false) }
+        if !open { panelTerminalId = nil }
         isPanelOpen = open
         let animation: Animation = EdgeDrawer.settleAnimation(reduceMotion: reduceMotion)
         withAnimation(animation) {
@@ -305,6 +309,7 @@ public struct PaseoShellView: View {
             guard let workspaceId,
                 let agent = session.agents.first(where: { $0.workspaceId == workspaceId })
             else { return }
+            panelTerminalId = target.terminalId
             select(agent.id)
             settlePanel(open: true)
         }
