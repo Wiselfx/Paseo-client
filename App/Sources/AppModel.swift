@@ -59,6 +59,7 @@ final class AppModel {
         }
         migrateLegacyHostIfNeeded()
         wireHostContext()
+        hostContext.loadAppearances()
         refreshHostContext()
         if let last = savedHosts.mostRecent {
             // Startup: straight to the last host. On failure the connect screen shows with this
@@ -180,6 +181,20 @@ final class AppModel {
         refreshHostContext()
     }
 
+    /// Danger zone (M16): forgets the saved endpoint + Keychain secret, then if it was the
+    /// connected host, switches to another saved host or back to the connect screen.
+    func removeHost(_ id: UUID) {
+        let wasCurrent = currentHostID == id
+        forgetSavedHost(id)
+        hostContext.removeAppearance(for: id)
+        guard wasCurrent else { return }
+        if let other = savedHosts.mostRecent {
+            Task { await connectToSaved(other.id) }
+        } else {
+            disconnect()
+        }
+    }
+
     func renameSavedHost(_ id: UUID, label: String) {
         savedHosts.rename(id, label: label)
         refreshHostContext()
@@ -188,7 +203,7 @@ final class AppModel {
     private func wireHostContext() {
         hostContext.switchTo = { [weak self] id in self?.switchToHost(id) }
         hostContext.addHost = { [weak self] in self?.addHost() }
-        hostContext.forgetHost = { [weak self] id in self?.forgetSavedHost(id) }
+        hostContext.forgetHost = { [weak self] id in self?.removeHost(id) }
         hostContext.renameHost = { [weak self] id, label in self?.renameSavedHost(id, label: label) }
     }
 

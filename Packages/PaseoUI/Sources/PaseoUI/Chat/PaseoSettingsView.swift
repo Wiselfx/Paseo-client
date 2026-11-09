@@ -37,6 +37,7 @@ struct PaseoSettingsView: View {
     @State private var page: Page?
     @State private var providerSheetID: String?
     @State private var confirmDisconnect = false
+    @State private var confirmRemoveHost = false
     @State private var confirmRemoveProject: WorkspaceProjectDescriptor?
     @State private var projectPage: WorkspaceProjectDescriptor?
     @State private var appendPromptDraft: String?
@@ -51,6 +52,7 @@ struct PaseoSettingsView: View {
     enum Page: String, CaseIterable, Identifiable, Equatable {
         case general
         case overview
+        case connections
         case hosts
         case agents
         case metadata
@@ -71,6 +73,7 @@ struct PaseoSettingsView: View {
             switch self {
             case .general: "General"
             case .overview: "Overview"
+            case .connections: "Connections"
             case .hosts: "Hosts"
             case .agents: "Agents"
             case .metadata: "Metadata"
@@ -91,6 +94,7 @@ struct PaseoSettingsView: View {
             switch self {
             case .general: "gearshape"
             case .overview: "server.rack"
+            case .connections: "link"
             case .hosts: "network"
             case .agents: "person.2"
             case .metadata: "wand.and.stars"
@@ -230,6 +234,8 @@ struct PaseoSettingsView: View {
                         .overview, symbol: Page.overview.symbol,
                         value: session.serverInfo?.hostname ?? "Paseo daemon")
                     rowDivider
+                    settingsRow(.connections, symbol: Page.connections.symbol)
+                    rowDivider
                     settingsRow(.hosts, symbol: Page.hosts.symbol, value: hostsSummary)
                     rowDivider
                     settingsRow(
@@ -278,6 +284,7 @@ struct PaseoSettingsView: View {
         switch page {
         case .general: generalPage
         case .overview: overviewPage
+        case .connections: ConnectionsPage()
         case .hosts: HostsPage()
         case .agents: agentsPage
         case .metadata: metadataPage
@@ -671,11 +678,13 @@ struct PaseoSettingsView: View {
                         value: session.serverInfo?.protocolVersion.map(String.init) ?? "Unknown")
                 }
                 Text(
-                    "The host name and badge color are set by Paseo's own apps and are not editable here. This client connects to one daemon at a time."
+                    "The badge color below is this device's own identity for the host; the daemon keeps the authoritative name. This client connects to one daemon at a time."
                 )
                 .font(.system(size: 13))
                 .foregroundStyle(ClaudePalette.secondary)
                 .padding(.leading, 16)
+                appearanceCard
+                dangerZone
                 sectionLabel("Advanced")
                 RowGroup {
                     configToggleRow(
@@ -711,6 +720,121 @@ struct PaseoSettingsView: View {
             .padding(.bottom, 20)
         }
         .scrollIndicators(.hidden)
+    }
+
+    /// Danger zone (M16): Remove this host, upstream wording. The removal itself (forget +
+    /// Keychain clear + switching) is `AppModel.removeHost` behind `hostSwitch.forgetHost`.
+    private var dangerZone: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            sectionLabel("Danger zone")
+            RowGroup {
+                Button {
+                    confirmRemoveHost = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 17, weight: .light))
+                            .foregroundStyle(ClaudePalette.failureInk)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Remove host")
+                                .font(.system(size: 17))
+                                .foregroundStyle(ClaudePalette.failureInk)
+                            Text("Removes this host and its saved connections from this device")
+                                .font(.system(size: 12))
+                                .foregroundStyle(ClaudePalette.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 56, alignment: .leading)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.host.removeHost")
+            }
+        }
+        .confirmationDialog(
+            "Remove host",
+            isPresented: $confirmRemoveHost,
+            titleVisibility: .visible
+        ) {
+            Button("Remove host", role: .destructive) {
+                if let entry = hostSwitch?.currentEntry {
+                    hostSwitch?.forgetHost(entry.id)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Remove \(hostSwitch?.currentEntry?.label ?? "this host")? This will delete its saved connections.")
+        }
+    }
+
+    /// Per-host appearance (M16): identity color + sidebar badge, upstream's card.
+    @ViewBuilder private var appearanceCard: some View {
+        if let context = hostSwitch, let entry = context.currentEntry {
+            sectionLabel("Appearance")
+            RowGroup {
+                HStack(spacing: 12) {
+                    Text("Color")
+                        .font(.system(size: 17))
+                    Spacer(minLength: 8)
+                    colorSwatches(context: context, entry: entry)
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 56)
+                rowDivider
+                HStack(spacing: 12) {
+                    Text("Sidebar badge")
+                        .font(.system(size: 17))
+                    Spacer(minLength: 8)
+                    Picker("Sidebar badge", selection: badgeBinding(context: context, entry: entry)) {
+                        ForEach(HostBadgeDisplay.allCases, id: \.rawValue) { display in
+                            Text(display.title).tag(display.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 220)
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 56)
+            }
+        }
+    }
+
+    private func colorSwatches(context: HostSwitchContext, entry: HostSwitchEntry) -> some View {
+        let appearance = context.appearance(for: entry.id)
+        return HStack(spacing: 8) {
+            ForEach(HostColor.allCases, id: \.rawValue) { color in
+                Button {
+                    var next = appearance
+                    next.color = color
+                    context.setAppearance(next, for: entry.id)
+                } label: {
+                    Circle()
+                        .fill(color == .none ? ClaudePalette.chip : color.swiftUIColor)
+                        .frame(width: 22, height: 22)
+                        .overlay {
+                            Circle()
+                                .stroke(
+                                    appearance.color == color ? ClaudePalette.ink : ClaudePalette.cardBorder,
+                                    lineWidth: appearance.color == color ? 2 : 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(color.title)
+            }
+        }
+    }
+
+    private func badgeBinding(context: HostSwitchContext, entry: HostSwitchEntry) -> Binding<String> {
+        Binding(
+            get: { context.appearance(for: entry.id).badgeDisplay.rawValue },
+            set: { raw in
+                var next = context.appearance(for: entry.id)
+                next.badgeDisplay = HostBadgeDisplay(rawValue: raw) ?? .name
+                context.setAppearance(next, for: entry.id)
+            })
     }
 
     @ViewBuilder private var connectionRow: some View {

@@ -70,6 +70,7 @@ struct PaseoSidebar: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 52)
+            hostBadge
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -308,6 +309,32 @@ struct PaseoSidebar: View {
     }
 
     // MARK: Navigation
+
+    /// The quiet host badge (M16): only when more than one host is saved — the footer
+    /// switcher stays the one place to switch. Name or icon-only per the host's appearance.
+    @ViewBuilder private var hostBadge: some View {
+        if let context = hostSwitch, context.hosts.count > 1,
+            let entry = context.currentEntry
+        {
+            let appearance = context.appearance(for: entry.id)
+            if appearance.badgeDisplay != .hidden {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(appearance.color.swiftUIColor)
+                        .frame(width: 8, height: 8)
+                    if appearance.badgeDisplay == .name {
+                        Text(entry.label)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(ClaudePalette.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+                .accessibilityLabel("Host \(entry.label)")
+            }
+        }
+    }
 
     private var navigation: some View {
         VStack(spacing: 0) {
