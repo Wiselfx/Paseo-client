@@ -1,0 +1,81 @@
+#!/bin/bash
+# build-gate: the only command the Linux build agent may run on the Mac.
+#
+# Installed as a forced command in ~/.ssh/authorized_keys of a dedicated, non-admin macOS user.
+# Whatever the client asks for arrives in $SSH_ORIGINAL_COMMAND; anything that is not one of the
+# verbs below is refused. It never opens a shell, never launches the app, never takes screenshots.
+#
+# Verbs:
+#   build <ref>   fetch, check out <ref> (branch name or commit sha), compile for the iOS Simulator
+#                 with signing off, print the errors/warnings and the result line
+#   ping          print the Xcode and macOS versions
+set -euo pipefail
+
+REPO="$HOME/Paseo-client"
+DERIVED="$HOME/build-derived-data"
+LOG="$HOME/build-gate.log"
+# Hard cap on one build so a hang never ties up the Mac.
+MAX_SECONDS=1500
+
+read -r verb ref extra <<<"${SSH_ORIGINAL_COMMAND:-}"
+
+if [[ -n "${extra:-}" ]]; then
+    echo "refused: too many arguments" >&2
+    exit 2
+fi
+
+case "${verb:-}" in
+ping)
+    xcodebuild -version
+    sw_vers -productVersion
+    ;;
+build)
+    # Branch names and shas only: letters, digits, dot, dash, underscore, slash.
+    if [[ ! "${ref:-}" =~ ^[A-Za-z0-9._/-]{1,100}$ ]] || [[ "$ref" == *..* ]] || [[ "$ref" == -* ]]; then
+        echo "refused: bad ref" >&2
+        exit 2
+    fi
+    cd "$REPO"
+    git fetch --quiet --prune origin
+    if git rev-parse --verify --quiet "origin/$ref^{commit}" >/dev/null; then
+        target="origin/$ref"
+    elif git rev-parse --verify --quiet "$ref^{commit}" >/dev/null; then
+        target="$ref"
+    else
+        echo "refused: unknown ref $ref" >&2
+        exit 2
+    fi
+    git checkout --quiet --force --detach "$target"
+    git clean -fdq
+    echo "commit $(git rev-parse --short HEAD)"
+
+    out="$(mktemp)"
+    trap 'rm -f "$out"' EXIT
+    set +e
+    # perl alarm = a portable timeout on macOS (no coreutils `timeout`).
+    perl -e 'alarm shift; exec @ARGV' "$MAX_SECONDS" \
+        xcodebuild -project App/PaseoClient.xcodeproj -scheme PaseoClient \
+        -configuration Debug -destination 'generic/platform=iOS Simulator' \
+        -derivedDataPath "$DERIVED" \
+        CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+        build >"$out" 2>&1
+    status=$?
+    set -e
+    echo "$(date -u +%FT%TZ) build $ref status=$status" >>"$LOG"
+
+    # Only diagnostics, de-duplicated, with paths made repo-relative.
+    grep -E '(error|warning): ' "$out" | sed "s#$REPO/##g" | sort -u | head -300 || true
+    if [[ $status -eq 142 ]]; then
+        echo "BUILD TIMED OUT after ${MAX_SECONDS}s"
+    elif [[ $status -ne 0 ]] && ! grep -qE 'error: ' "$out"; then
+        # A failure without a compiler diagnostic: show the tail so it can be diagnosed.
+        tail -40 "$out" | sed "s#$REPO/##g"
+    fi
+    grep -E '\*\* BUILD (SUCCEEDED|FAILED) \*\*' "$out" || echo "BUILD exit $status"
+    exit "$status"
+    ;;
+*)
+    echo "refused: allowed verbs are 'build <ref>' and 'ping'" >&2
+    exit 2
+    ;;
+esac
