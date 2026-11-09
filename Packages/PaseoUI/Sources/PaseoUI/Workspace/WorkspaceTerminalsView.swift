@@ -783,8 +783,8 @@ struct WorkspaceTerminalsView: View {
 /// original bytes, file name from the content type. SwiftUI's own `.photosPicker` modifier is
 /// avoided because availability varies across SDKs.
 private struct PhotoPickerView: UIViewControllerRepresentable {
-    var onPick: (Data, String, String) -> Void
-    var onCancel: () -> Void
+    var onPick: @MainActor (Data, String, String) -> Void
+    var onCancel: @MainActor () -> Void
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var configuration = PHPickerConfiguration()
@@ -800,10 +800,13 @@ private struct PhotoPickerView: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick, onCancel: onCancel) }
 
     final class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let onPick: (Data, String, String) -> Void
-        let onCancel: () -> Void
+        let onPick: @MainActor (Data, String, String) -> Void
+        let onCancel: @MainActor () -> Void
 
-        init(onPick: @escaping (Data, String, String) -> Void, onCancel: @escaping () -> Void) {
+        init(
+            onPick: @escaping @MainActor (Data, String, String) -> Void,
+            onCancel: @escaping @MainActor () -> Void
+        ) {
             self.onPick = onPick
             self.onCancel = onCancel
         }
