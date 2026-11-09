@@ -33,6 +33,8 @@ public final class HostSession {
     public private(set) var hostSettings: HostSettingsStore
     /// Host Voice settings + local speech models (M13). Reads/writes through hostSettings.
     public let voiceSettings: VoiceSettingsStore
+    /// Realtime voice mode transport + playback state machine (M15).
+    public let voiceSession: VoiceModeSession
     /// Worktree setup observation (running/failed/blocked snapshot per workspace).
     public let setupObservation: WorkspaceSetupObservationStore
     /// Socket-wide event subscription for pushes the other subscriptions don't carry
@@ -96,6 +98,7 @@ public final class HostSession {
         self.importSession = ImportSessionStore(client: client)
         self.forgeSearch = ForgeSearchStore(client: client)
         self.voiceSettings = VoiceSettingsStore(client: client, hostSettings: hostSettings)
+        self.voiceSession = VoiceModeSession(client: client)
         self.labels.workspaceDirectory = self.workspaceDirectory
     }
 
@@ -215,6 +218,7 @@ public final class HostSession {
             schedules.serverInfoChanged(info)
             hostSettings.serverInfoChanged(info)
             voiceSettings.serverInfoChanged(info)
+            voiceSession.serverInfoChanged(info)
             importSession.serverInfoChanged(info)
             forgeSearch.serverInfoChanged(info)
             hostUsage.update(serverInfo: info)
@@ -229,6 +233,7 @@ public final class HostSession {
             // The daemon drops every subscription with the previous socket: always re-subscribe.
             // Advisory only, so it never delays the directory, labels or a resync.
             Task { await ownedEvents.connected() }
+            Task { await voiceSession.handle(connection: state) }
             if sawReconnect {
                 sawReconnect = false
                 await resync()
@@ -240,16 +245,19 @@ public final class HostSession {
             sawReconnect = true
             ownedEvents.disconnected()
             voiceSettings.stopModelPolling()
+            await voiceSession.handle(connection: state)
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         case .idle, .connecting:
             ownedEvents.disconnected()
             voiceSettings.stopModelPolling()
+            await voiceSession.handle(connection: state)
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         case .failed:
             ownedEvents.disconnected()
             voiceSettings.stopModelPolling()
+            await voiceSession.handle(connection: state)
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         }
@@ -290,6 +298,7 @@ public final class HostSession {
                 self.attention.receive(
                     agentId: payload.agentId, workspaceId: workspaceId, attention: attention)
             }
+            voiceSession.handle(agentStream: payload)
             guard let store = conversations[payload.agentId] else { return }
             await store.handleStream(payload)
 
@@ -373,6 +382,24 @@ public final class HostSession {
                     terminal: payload,
                     workspaceId: payload.workspaceId
                         ?? terminals.workspaceId(forTerminal: payload.terminalId))
+            }
+        case "audio_output":
+            if let payload = try? decoder.decode(
+                SessionPayloadEnvelope<AudioOutputPayload>.self, from: raw
+            ).payload {
+                voiceSession.handleAudioOutput(payload)
+            }
+        case "transcription_result":
+            if let payload = try? decoder.decode(
+                SessionPayloadEnvelope<TranscriptionResultPayload>.self, from: raw
+            ).payload {
+                voiceSession.handleTranscription(payload)
+            }
+        case "voice_input_state":
+            if let payload = try? decoder.decode(
+                SessionPayloadEnvelope<VoiceInputStatePayload>.self, from: raw
+            ).payload {
+                voiceSession.handleVoiceInputState(payload)
             }
         default:
             break

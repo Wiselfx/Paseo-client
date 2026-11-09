@@ -19,6 +19,9 @@ import Testing
                     "providerSubagents": true,
                     "owned_subscriptions": true,
                     "workspace_setup_observation": true,
+                    // M15: realtime voice mode is implemented (`VoiceModeSession`), so the
+                    // hello advertises `voice` behind `VoiceMode.isEnabled`.
+                    "voice": true,
                 ])
     }
 

@@ -16,6 +16,9 @@ struct DiagnosticsPage: View {
     @State private var report = ""
     @State private var copied = false
     @State private var hostCopied = false
+    @State private var audioEngine = VoiceAudioEngine()
+    @State private var testAudioPlaying = false
+    @State private var testAudioResult: String?
 
     private let typography = ClaudeTypography()
 
@@ -60,6 +63,7 @@ struct DiagnosticsPage: View {
                     .foregroundStyle(ClaudePalette.secondary)
                     .padding(.leading, 16)
                 hostDiagnosticsSection
+                testAudioSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 26)
@@ -145,6 +149,48 @@ struct DiagnosticsPage: View {
                 }
             }
             .padding(12)
+        }
+    }
+
+    // MARK: Test audio (M15: upstream plays the thinking-tone PCM here)
+
+    @ViewBuilder private var testAudioSection: some View {
+        sectionLabel("Audio")
+        RowGroup {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Test audio")
+                        .font(.system(size: 17))
+                    if let testAudioResult {
+                        Text(testAudioResult)
+                            .font(.system(size: 13))
+                            .foregroundStyle(ClaudePalette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 8)
+                Button {
+                    Haptics.selection()
+                    Task {
+                        testAudioPlaying = true
+                        testAudioResult = nil
+                        do {
+                            try await audioEngine.playTestTone()
+                            testAudioResult = nil
+                        } catch {
+                            testAudioResult = "Playback failed: \(error.localizedDescription)"
+                        }
+                        testAudioPlaying = false
+                    }
+                } label: {
+                    Text(testAudioPlaying ? "Playing..." : "Play test")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .disabled(testAudioPlaying)
+                .accessibilityIdentifier("settings.diagnostics.testAudio")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
     }
 

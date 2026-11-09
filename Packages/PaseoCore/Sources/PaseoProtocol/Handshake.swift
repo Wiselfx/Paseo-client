@@ -24,6 +24,8 @@ public enum ClientCapabilities {
     /// chunk). `owned_subscriptions` and its `workspace_setup_observation` companion are
     /// advertised only while `OwnedSubscriptions.isEnabled`; every subscription path in the
     /// stores implements the modern protocol (see `docs/research/09-owned-subscriptions.md`).
+    /// `voice` is advertised only while `VoiceMode.isEnabled` (realtime voice mode,
+    /// `VoiceModeSession`).
     public static let implemented: [String: Bool] = {
         var capabilities: [String: Bool] = [
             helloRejection: true,
@@ -33,6 +35,9 @@ public enum ClientCapabilities {
         if OwnedSubscriptions.isEnabled {
             capabilities[OwnedSubscriptions.capability] = true
             capabilities[OwnedSubscriptions.setupObservationCapability] = true
+        }
+        if VoiceMode.isEnabled {
+            capabilities[VoiceMode.capability] = true
         }
         return capabilities
     }()
@@ -116,6 +121,15 @@ public struct ServerInfo: Decodable, Sendable, Hashable {
     public var protocolVersion: Int?
     public var permissions: [String]?
     public var features: [String: JSONValue]?
+    /// Daemon readiness per capability (`capabilities.voice`, absent on old daemons).
+    public var capabilities: ServerCapabilities?
 
     public func hasFeature(_ name: String) -> Bool { features?[name] == .bool(true) }
+
+    /// Realtime voice readiness, when the daemon reports it (`isUsable` mirrors
+    /// `resolveVoiceUnavailableMessage` returning nil).
+    public var voiceReadiness: ServerCapabilityState? { capabilities?.voice?.voice }
+
+    /// Whether this daemon says realtime voice mode is usable right now.
+    public var isVoiceAvailable: Bool { voiceReadiness?.isUsable == true }
 }

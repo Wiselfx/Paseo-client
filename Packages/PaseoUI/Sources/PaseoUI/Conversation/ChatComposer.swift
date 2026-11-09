@@ -71,6 +71,9 @@ extension ClaudeChatView {
             .padding(.horizontal, 6)
             .padding(.top, 7)
             .accessibilityIdentifier("composer.draft")
+            if voiceActiveForAgent || voice.phase == .starting {
+                voiceBar
+            }
             HStack(spacing: 8) {
                 Menu {
                     PhotosPicker(
@@ -137,6 +140,7 @@ extension ClaudeChatView {
                 fastModeChip
                 Spacer(minLength: 0)
                 contextMeter
+                voiceModeButton
                 Button {
                     if dictation.isListening {
                         dictation.stop(keepingDraft: true)
@@ -235,12 +239,170 @@ extension ClaudeChatView {
             }
         }
         .onPasteCommand(of: [.image], perform: handlePastedItems)
+        // M15: realtime voice wiring. The engine feeds the store (mic PCM + level), the
+        // store feeds the engine (next chunks + stop signals). Capture start/stop is
+        // driven by the phase; voice mode itself is store state.
+        .task {
+            bindVoiceEngine()
+        }
+        .onChange(of: voice.phase) { _, phase in
+            switch phase {
+            case .listening, .waiting, .playing:
+                Task { await startVoiceCapture() }
+            default:
+                voiceEngine.stopCapture()
+                UIApplication.shared.isIdleTimerDisabled = false
+            }
+        }
+        .onChange(of: voice.nextAudioChunk) { _, chunk in
+            guard let chunk else { return }
+            voiceEngine.enqueue(chunk) { ok in
+                if ok {
+                    voice.didPlayChunk(id: chunk.id)
+                } else {
+                    voice.didFailChunk(id: chunk.id)
+                }
+            }
+        }
+        .onChange(of: voice.playbackStopRequested) { _, _ in
+            voiceEngine.stopPlayback()
+        }
+        .onDisappear {
+            Task { await voice.stop() }
+            voiceEngine.stopCapture()
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
         // M17: drop a file row (Files tree / Changes list) onto the composer to attach it
         // as a workspace-file mention. The long-press "Add to chat" path stays.
         .dropDestination(for: String.self) { items, _ in
             guard let path = items.first else { return false }
             insertFileMention(path)
             return true
+        }
+    }
+
+    // MARK: Voice mode (M15)
+
+    private var voice: VoiceModeSession { session.voiceSession }
+    private var voiceActiveForAgent: Bool { voice.isVoiceMode(for: store.agentId) }
+
+    /// The mic-disc voice button, gated on the daemon saying realtime voice is usable.
+    /// While active it toggles mute (upstream disc behavior); otherwise it starts voice
+    /// mode (blocked while a turn runs — interrupt the agent first).
+    @ViewBuilder private var voiceModeButton: some View {
+        if session.voiceSession.isVoiceAvailable {
+            Button {
+                toggleVoiceMode()
+            } label: {
+                Image(systemName: voiceActiveForAgent && voice.isMuted ? "mic.slash.fill" : "waveform.and.mic")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(voiceActiveForAgent ? .white : ClaudePalette.ink)
+                    .background(voiceActiveForAgent ? ClaudePalette.orange : ClaudePalette.chip, in: .circle)
+            }
+            .accessibilityLabel(
+                voiceActiveForAgent
+                    ? (voice.isMuted ? "Unmute voice mode" : "Mute Voice mode") : "Enable Voice mode")
+            .accessibilityIdentifier("composer.voiceMode")
+            .disabled(voice.isVoiceSwitching)
+        }
+    }
+
+    /// The live voice row: mute toggle, volume meter, stop/interrupt (upstream wording).
+    @ViewBuilder private var voiceBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                Haptics.selection()
+                voice.setMuted(!voice.isMuted)
+            } label: {
+                Image(systemName: voice.isMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(.white)
+                    .background(voice.isMuted ? ClaudePalette.failureInk : ClaudePalette.chip, in: .circle)
+            }
+            .accessibilityLabel(voice.isMuted ? "Unmute voice" : "Mute voice")
+            .accessibilityIdentifier("composer.voice.mute")
+
+            HStack(spacing: 3) {
+                ForEach(0..<5, id: \.self) { index in
+                    let height = [8.0, 13.0, 18.0, 13.0, 8.0][index]
+                    Capsule()
+                        .fill(ClaudePalette.ink.opacity(0.85))
+                        .frame(width: 4, height: height * CGFloat(max(0.15, voice.volume) + 0.05))
+                        .scaleEffect(y: voice.isMuted ? 0.3 : 1, anchor: .center)
+                }
+            }
+            .frame(width: 52, height: 20)
+            .accessibilityLabel("Voice volume, \(Int((voice.volume * 100).rounded())) percent")
+            .accessibilityIdentifier("composer.voice.volume")
+
+            Spacer(minLength: 0)
+
+            Button {
+                Haptics.selection()
+                Task { await voice.stop() }
+            } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(.white)
+                    .background(ClaudePalette.failureInk, in: .circle)
+            }
+            .accessibilityLabel("Stop realtime voice and interrupt turn")
+            .accessibilityIdentifier("composer.voice.stop")
+            // Reachable while `.starting` too: a slow/hung `set_voice_mode` must not trap
+            // the user in voice mode with only a disabled stop button.
+            .disabled(voice.phase == .stopping)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+    }
+
+    private func toggleVoiceMode() {
+        if voice.isVoiceMode(for: store.agentId) {
+            voice.setMuted(!voice.isMuted)
+            return
+        }
+        if store.isRunning {
+            showToast("Interrupt the agent before starting voice mode")
+            return
+        }
+        Haptics.selection()
+        Task {
+            let ok = await voice.start(agentId: store.agentId)
+            if !ok {
+                if voice.missingModelIds.isEmpty {
+                    showToast(voice.error ?? "Voice mode is not available.")
+                } else {
+                    showToast("Voice needs models that aren't downloaded. Download them in Settings → Voice.")
+                }
+            }
+        }
+    }
+
+    /// Mic PCM + level from the engine into the store; interruption mutes.
+    private func bindVoiceEngine() {
+        voiceEngine.onCapturePCM = { data in
+            voice.handleCapturePCM(data)
+        }
+        voiceEngine.onVolumeLevel = { level in
+            voice.handleCaptureVolume(level)
+        }
+        voiceEngine.onInterruption = {
+            voice.setMuted(true)
+        }
+    }
+
+    private func startVoiceCapture() async {
+        guard voice.isVoiceMode else { return }
+        do {
+            try await voiceEngine.requestMicPermission()
+            try voiceEngine.startCapture()
+            UIApplication.shared.isIdleTimerDisabled = true
+        } catch {
+            showToast(error.localizedDescription)
+            await voice.stop()
         }
     }
 
