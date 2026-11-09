@@ -380,7 +380,7 @@ public struct ClaudeChatView: View {
             .lineLimit(1...12)
             .fixedSize(horizontal: false, vertical: true)
             .focused($focused)
-            .tint(ClaudePalette.ink)
+            .tint(ClaudePalette.orange)
             .padding(.horizontal, 6)
             .padding(.top, 7)
             .accessibilityIdentifier("composer.draft")
@@ -645,8 +645,8 @@ struct ClaudeSegmentView: View {
     }
 }
 
-/// "2 thoughts, 1 tool call": the counted header, then a card of 36 pt rows, each opening on its
-/// own. The card is capped at `min(400 pt, 50% of height)` and scrolls inside.
+/// "2 thoughts, 1 tool call": the counted header, then a transparent card of rows, each opening on
+/// its own. The card is capped at `min(400 pt, 50% of height)` and scrolls inside.
 struct ClaudeWorkGroupCell: View {
     let group: Turn.WorkGroup
     let turnIsRunning: Bool
@@ -654,11 +654,31 @@ struct ClaudeWorkGroupCell: View {
 
     @State private var userExpanded: Bool?
     @State private var contentHeight: CGFloat = 0
+    @State private var sweepStart = Date()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.claudeProcessCap) private var processCap
 
     private var opensByDefault: Bool { turnIsRunning && group.isActive }
     private var isExpanded: Bool { userExpanded ?? opensByDefault }
+
+    /// The leading seat's activity icon (doc 08 §1.2): the group's content decides the glyph.
+    private var seatGlyph: ClaudeGlyph.Kind {
+        var hasShell = false
+        var hasFile = false
+        for row in group.rows {
+            if case .toolCall(let call) = row.item {
+                switch call.detail {
+                case .read, .edit, .write, .search, .fetch:
+                    hasFile = true
+                default:
+                    hasShell = true
+                }
+            }
+        }
+        if hasShell { return .api }
+        if hasFile { return .browse }
+        return .think
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -669,14 +689,14 @@ struct ClaudeWorkGroupCell: View {
                 }
             } label: {
                 HStack(spacing: 6) {
+                    ClaudeLeadingSeat(glyph: seatGlyph, expanded: isExpanded)
                     summary
                     Spacer(minLength: 4)
-                    ClaudeChevron(expanded: isExpanded)
                 }
-                .frame(minHeight: 28)
+                .frame(minHeight: 17.5) // the counted line: 14 pt × 1.25
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ClaudePressButtonStyle())
             .accessibilityLabel(group.summary)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
@@ -687,24 +707,39 @@ struct ClaudeWorkGroupCell: View {
         }
     }
 
-    private var summary: some View {
+    private func summaryRuns(_ ink: Color) -> some View {
         HStack(spacing: 3) {
             if group.thoughtCount > 0 {
                 ClaudeRollingNumber(value: group.thoughtCount)
-                Text(group.thoughtCount == 1 ? "thought" : "thoughts")
+                Text(group.thoughtCount == 1 ? "thought" : "thoughts").tracking(-0.14)
             }
             if group.thoughtCount > 0 && group.toolCallCount > 0 {
-                Text(",")
+                Text(",").tracking(-0.14)
             }
             if group.toolCallCount > 0 {
                 ClaudeRollingNumber(value: group.toolCallCount)
-                Text(group.toolCallCount == 1 ? "tool call" : "tool calls")
+                Text(group.toolCallCount == 1 ? "tool call" : "tool calls").tracking(-0.14)
             }
         }
-        .font(typography.sans(14))
-        .foregroundStyle(ClaudePalette.secondaryInk)
-        .background {
-            if turnIsRunning && group.isActive { ClaudeSweepBand() }
+        .font(typography.serif(14, weight: .medium))
+        .foregroundStyle(ink)
+    }
+
+    private var summary: some View {
+        Group {
+            if turnIsRunning && group.isActive && !reduceMotion {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                    summaryRuns(ClaudePalette.tertiaryInk).overlay(alignment: .leading) {
+                        if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: context.date) {
+                            summaryRuns(ClaudePalette.shimmerInk)
+                                .mask(ClaudeSweep.windowGradient(phase: phase))
+                                .allowsHitTesting(false)
+                        }
+                    }
+                }
+            } else {
+                summaryRuns(ClaudePalette.tertiaryInk)
+            }
         }
     }
 
@@ -722,17 +757,20 @@ struct ClaudeWorkGroupCell: View {
         // Hugs its rows until they reach the host's cap, then scrolls inside the card.
         .frame(height: min(max(contentHeight, 1), processCap), alignment: .top)
         .onPreferenceChange(ClaudeGroupHeightKey.self) { height in contentHeight = height }
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 10))
+        // The process card is transparent — the canvas shows through.
+        .clipShape(.rect(cornerRadius: 8))
         .overlay {
-            RoundedRectangle(cornerRadius: 10).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
         }
-        .clipShape(.rect(cornerRadius: 10))
     }
 
     private var rows: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
-                if index > 0 { ClaudeDivider() }
+                if index > 0 {
+                    Color.clear.frame(height: 4) // the gap above the hairline
+                    ClaudeDivider()
+                }
                 ClaudeStepRow(
                     row: row, isLive: turnIsRunning && index == group.rows.count - 1,
                     typography: typography)
@@ -748,8 +786,8 @@ private struct ClaudeGroupHeightKey: PreferenceKey {
     }
 }
 
-/// One thought or tool call inside the process card: one line, 36 pt, a trailing chevron, detail
-/// below when open.
+/// One thought or tool call inside the process card: one line — 36 pt for thought and file rows,
+/// 24 pt for shell/tool rows — a trailing chevron on the disclosure rows, detail below when open.
 struct ClaudeStepRow: View {
     let row: TimelineRow
     /// The newest step of a running turn opens by default so you can watch it.
@@ -758,6 +796,20 @@ struct ClaudeStepRow: View {
 
     @State private var userExpanded: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private enum RowKind { case thought, file, tool }
+
+    private var kind: RowKind {
+        switch row.item {
+        case .reasoning: return .thought
+        case .toolCall(let call):
+            switch call.detail {
+            case .read, .edit, .write: return .file
+            default: return .tool
+            }
+        default: return .tool
+        }
+    }
 
     private var isExpanded: Bool { userExpanded ?? isLive }
 
@@ -772,17 +824,17 @@ struct ClaudeStepRow: View {
                 HStack(spacing: 6) {
                     label
                     Spacer(minLength: 4)
-                    ClaudeChevron(expanded: isExpanded)
+                    if kind != .tool {
+                        ClaudeTurnChevron(expanded: isExpanded)
+                    }
                 }
-                .frame(minHeight: 36)
+                .frame(minHeight: kind == .tool ? 24 : 36)
                 .padding(.horizontal, 12)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
             if isExpanded {
                 detail
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
                     .transition(.opacity.combined(with: .offset(y: -2)))
             }
         }
@@ -791,31 +843,50 @@ struct ClaudeStepRow: View {
     @ViewBuilder private var label: some View {
         switch row.item {
         case .reasoning(let reasoning):
-            HStack(spacing: 8) {
-                Text("Thought").font(typography.sans(14, weight: .medium)).foregroundStyle(
-                    ClaudePalette.secondaryInk)
-                if !isExpanded {
-                    Text(reasoning.text.replacingOccurrences(of: "\n", with: " "))
-                        .font(typography.sans(14))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
-                        .lineLimit(1)
-                }
+            if isExpanded {
+                Text("Think")
+                    .font(typography.serif(13, weight: .medium))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+            } else {
+                Text(reasoning.text.replacingOccurrences(of: "\n", with: " "))
+                    .font(typography.sans(13))
+                    .lineSpacing(7) // 13 / 20
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .lineLimit(1)
             }
         case .toolCall(let call):
             let presentation = ToolCallPresentation(call)
-            HStack(spacing: 6) {
-                Text(presentation.title)
-                    .font(typography.sans(14, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
-                if let subtitle = presentation.subtitle {
-                    Text(subtitle)
-                        .font(typography.sans(14))
+            if kind == .file {
+                HStack(spacing: 0) {
+                    Text(presentation.title)
+                        .font(typography.sans(13))
                         .foregroundStyle(ClaudePalette.secondaryInk)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    if let subtitle = presentation.subtitle {
+                        Circle().fill(ClaudePalette.captionInk).frame(width: 2, height: 2)
+                            .padding(.horizontal, 8)
+                        Text(subtitle)
+                            .font(typography.sans(13))
+                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .underline(.dot, color: ClaudePalette.tertiaryInk)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
-                Spacer(minLength: 4)
-                ClaudeStatusDot(status: presentation.status)
+            } else {
+                HStack(spacing: 6) {
+                    ClaudeToolSeat(call: call, symbol: presentation.symbol)
+                    Text(presentation.title)
+                        .font(typography.serif(13, weight: .medium))
+                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                    if let subtitle = presentation.subtitle {
+                        Circle().fill(ClaudePalette.captionInk).frame(width: 2, height: 2)
+                        Text(subtitle)
+                            .font(typography.sans(13))
+                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
             }
         default:
             EmptyView()
@@ -826,47 +897,76 @@ struct ClaudeStepRow: View {
         switch row.item {
         case .reasoning(let reasoning):
             // The opened thought scrolls with the group and holds no scrollbar of its own.
-            Text(reasoning.text)
-                .font(typography.sans(15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(reasoningParagraphs(reasoning.text), id: \.self) { paragraph in
+                    Text(paragraph)
+                        .font(typography.serif(13))
+                        .lineSpacing(10) // 13 / 23
+                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.top, 4)
+            .padding(.leading, 22)
+            .padding(.trailing, 12)
+            .padding(.bottom, 10)
         case .toolCall(let call):
             ClaudeToolCallDetail(call: call)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
         default:
             EmptyView()
         }
     }
-}
 
-/// The host's highlight band, swept across a running group's header.
-struct ClaudeSweepBand: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        if reduceMotion {
-            Color.clear
-        } else {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                GeometryReader { geometry in
-                    let phase =
-                        context.date.timeIntervalSinceReferenceDate.truncatingRemainder(
-                            dividingBy: ClaudeMotion.statusPeriod) / ClaudeMotion.statusPeriod
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: ClaudePalette.orange.opacity(0.18), location: 0.5),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                    .frame(width: geometry.size.width)
-                    .offset(x: CGFloat(phase * 2 - 1) * geometry.size.width)
-                }
-            }
-            .clipped()
-        }
+    private func reasoningParagraphs(_ text: String) -> [String] {
+        text.components(separatedBy: "\n\n").filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 }
+
+/// The leading seat a shell/tool row keeps (doc 08 §1.3(d)): the tool's glyph — the `>-` prompt
+/// for a shell call — inside a 16 × 16 box, swapped for a chevron on hover on DSH. Touch has no
+/// hover, so the glyph is static here.
+private struct ClaudeToolSeat: View {
+    let call: ToolCall
+    let symbol: String
+
+    var body: some View {
+        Group {
+            if case .shell = call.detail {
+                ClaudeGlyph(kind: .api, size: 14, color: ClaudePalette.tertiaryInk)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+            }
+        }
+        .frame(width: 16, height: 16)
+    }
+}
+
+/// The leading seat on the summary row (doc 08 §1.2): 16 × 16, the 14 × 14 activity icon at rest;
+/// touch has no hover, so the chevron — up while open, down while a finger is down — shows only
+/// then. There is no trailing chevron; the chevron lives in the seat.
+private struct ClaudeLeadingSeat: View {
+    let glyph: ClaudeGlyph.Kind
+    let expanded: Bool
+    @Environment(\.claudeRowPressed) private var pressed
+
+    var body: some View {
+        Group {
+            if expanded {
+                ClaudeGlyph(kind: .chevronUp, size: 14, color: ClaudePalette.tertiaryInk)
+            } else if pressed {
+                ClaudeGlyph(kind: .chevronDown, size: 14, color: ClaudePalette.tertiaryInk)
+            } else {
+                ClaudeGlyph(kind: glyph, size: 14, color: ClaudePalette.tertiaryInk)
+            }
+        }
+        .frame(width: 16, height: 16)
+    }
+}
+
 #endif

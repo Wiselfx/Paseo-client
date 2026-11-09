@@ -36,7 +36,7 @@ struct ClaudeCodeBlock: View {
                     }
                     if let command {
                         Text(command).font(typography.mono(12.5)).foregroundStyle(
-                            ClaudePalette.ink
+                            ClaudePalette.primaryInk
                         ).lineLimit(3)
                     }
                     Spacer(minLength: 8)
@@ -50,7 +50,7 @@ struct ClaudeCodeBlock: View {
                 ScrollView([.vertical, .horizontal]) {
                     Text(output)
                         .font(typography.mono(12.5))
-                        .foregroundStyle(ClaudePalette.ink.opacity(0.85))
+                        .foregroundStyle(ClaudePalette.primaryInk.opacity(0.85))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: true, vertical: false)
                         .padding(12)
@@ -102,7 +102,7 @@ struct ClaudeCopyButton: View {
         } label: {
             Image(systemName: copied ? "checkmark" : "square.on.square")
                 .font(.system(size: 15, weight: .light))
-                .foregroundStyle(copied ? ClaudePalette.ink : ClaudePalette.tertiaryInk)
+                .foregroundStyle(copied ? ClaudePalette.primaryInk : ClaudePalette.tertiaryInk)
                 .frame(width: 28, height: 28)
                 .contentShape(.rect)
         }
@@ -134,12 +134,13 @@ struct ClaudeUserBubble: View {
         HStack {
             Spacer(minLength: 42)
             Text(text)
-                .font(ClaudeTypography().sans(18))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(ClaudeTypography().sans(14))
+                .foregroundStyle(ClaudePalette.primaryInk)
                 .textSelection(.enabled)
+                .lineSpacing(8) // 14 / 22
                 .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(ClaudePalette.userBubble, in: .rect(cornerRadius: 28))
+                .padding(.vertical, 10)
+                .background(ClaudePalette.userBubble, in: .rect(cornerRadius: 20))
                 .opacity(isPending ? 0.6 : 1)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isPending)
         }
@@ -160,14 +161,16 @@ struct ClaudeProse: View {
     }
 
     static func theme(_ typography: ClaudeTypography) -> ClaudeMarkdownTheme {
-        var theme = ClaudeMarkdownTheme(serifName: typography.resolvedSerifName, bodySize: 18)
-        theme.foreground = ClaudePalette.ink
+        var theme = ClaudeMarkdownTheme(serifName: typography.resolvedSerifName, bodySize: 14)
+        theme.foreground = ClaudePalette.primaryInk
         theme.secondary = ClaudePalette.secondaryInk
-        theme.link = ClaudePalette.orange
-        theme.codeBackground = ClaudePalette.codeBackground
-        theme.codeFont = typography.mono(15, relativeTo: .body)
-        theme.blockSpacing = 14
-        theme.lineSpacing = 6
+        theme.link = ClaudePalette.proseLink
+        theme.codeBackground = ClaudePalette.codeSurface
+        theme.inlineCodeBackground = ClaudePalette.inlineCodeFill
+        theme.inlineCodeForeground = ClaudePalette.primaryInk
+        theme.codeFont = typography.mono(13, relativeTo: .body)
+        theme.blockSpacing = 12
+        theme.lineSpacing = 9 // 14 / 23
         return theme
     }
 }
