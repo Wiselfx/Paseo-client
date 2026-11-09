@@ -29,6 +29,15 @@ public struct ClaudeChatView: View {
     @FocusState private var focused: Bool
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// M5a: the DSH crab above the composer, driven by the conversation's turns.
+    @AppStorage("paseo.mascot.enabled") private var mascotEnabled = true
+    @State private var mascot = MascotStateMachine()
+    /// Failed tool calls we've already told the mascot about, by `callId`.
+    @State private var signalledToolFailureIds: Set<String> = []
+    /// Whether the machine has been told a compaction is open (edge detection for rows).
+    @State private var compactionOpen = false
+    /// Baseline for the rising edge so an existing badge doesn't fire on appear.
+    @State private var attentionActive = false
 
     public init(
         session: HostSession, store: ConversationStore, onOpenSidebar: (() -> Void)? = nil,
@@ -78,6 +87,72 @@ public struct ClaudeChatView: View {
         }
         .onChange(of: store.isRunning) { wasRunning, isRunning in
             if wasRunning && !isRunning { Haptics.settle() }
+        }
+        .onAppear { seedMascotBaselines() }
+        .onChange(of: store.activeTurnId) { _, newId in
+            let now = Date()
+            if newId != nil {
+                feedMascot(.turnStarted(at: now))
+            } else {
+                // The turn ended; how it landed is in the turns it left behind.
+                switch store.turns.last?.phase {
+                case .failed: feedMascot(.turnFailed(at: now))
+                default: feedMascot(.turnCompleted(at: now))
+                }
+            }
+        }
+        .onChange(of: mascotActivitySignature) { _, signature in
+            // Newest-row heuristic: reasoning streams think, a running tool call works.
+            switch signature.split(separator: "|").last {
+            case "reasoning": feedMascot(.activityChanged(.reasoning, at: Date()))
+            case "toolCall": feedMascot(.activityChanged(.working, at: Date()))
+            default: break
+            }
+        }
+        .onChange(of: failedToolCallIds) { _, ids in
+            let unseen = ids.filter { !signalledToolFailureIds.contains($0) }
+            guard !unseen.isEmpty else { return }
+            for _ in unseen { feedMascot(.toolFailed(at: Date())) }
+            signalledToolFailureIds.formUnion(unseen)
+        }
+        .onChange(of: runningSubagents) { _, count in
+            feedMascot(.subagentsChanged(count: count, at: Date()))
+        }
+        .onChange(of: lastCompactionStatus) { _, status in
+            let now = Date()
+            if status == "loading" {
+                if !compactionOpen {
+                    compactionOpen = true
+                    feedMascot(.compactionStarted(at: now))
+                }
+            } else if compactionOpen {
+                compactionOpen = false
+                feedMascot(.compactionEnded(failed: status == "failed", at: now))
+            }
+        }
+        .onChange(of: busySessions) { _, count in
+            feedMascot(.busySessionsChanged(count: count, at: Date()))
+        }
+        .onChange(of: pendingInteractions) { _, count in
+            feedMascot(.pendingInteractionsChanged(count: count, at: Date()))
+        }
+        .onChange(of: attentionCount) { _, count in
+            let active = count > 0
+            if active, !attentionActive { feedMascot(.attention(at: Date())) }
+            attentionActive = active
+        }
+        .onChange(of: store.draft) { _, _ in
+            feedMascot(.userActivity(at: Date()))
+        }
+        .onChange(of: focused) { _, isFocused in
+            if isFocused { feedMascot(.userActivity(at: Date())) }
+        }
+        .task {
+            // The sleep timer advances without events: 60 quiet seconds dozes off.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                mascot.tick(now: Date())
+            }
         }
     }
 
@@ -305,6 +380,96 @@ public struct ClaudeChatView: View {
         .onAppear { Task { await store.loadOlder() } }
     }
 
+    // MARK: Mascot (M5a)
+
+    private func feedMascot(_ event: MascotEvent) {
+        mascot.handle(event)
+    }
+
+    /// Runs once when the view appears: baselines the one-shot histories so opening the
+    /// conversation doesn't re-fire them, then hands the machine the current levels.
+    private func seedMascotBaselines() {
+        let now = Date()
+        signalledToolFailureIds = Set(failedToolCallIds)
+        attentionActive = attentionCount > 0
+        compactionOpen = lastCompactionStatus == "loading"
+        if store.activeTurnId != nil { feedMascot(.turnStarted(at: now)) }
+        feedMascot(.busySessionsChanged(count: busySessions, at: now))
+        feedMascot(.pendingInteractionsChanged(count: pendingInteractions, at: now))
+        feedMascot(.subagentsChanged(count: runningSubagents, at: now))
+        if compactionOpen { feedMascot(.compactionStarted(at: now)) }
+    }
+
+    /// `rowId|kind` of the newest row; only the kind drives the activity switch.
+    private var mascotActivitySignature: String {
+        guard let last = store.timeline.rows.last else { return "|" }
+        return "\(last.id)|\(mascotRowTag(last.item))"
+    }
+
+    private func mascotRowTag(_ item: TimelineItem) -> String {
+        switch item {
+        case .reasoning: "reasoning"
+        case .toolCall: "toolCall"
+        default: "other"
+        }
+    }
+
+    /// Failed tool calls whose failure is not an AbortError — the machine's `toolFailed`.
+    private var failedToolCallIds: [String] {
+        store.timeline.rows.compactMap { row in
+            if case .toolCall(let call) = row.item, call.status == .failed,
+                MascotToolError.isFailure(call)
+            {
+                return call.callId
+            }
+            return nil
+        }
+    }
+
+    /// Running sub-agent tool calls of the followed session.
+    private var runningSubagents: Int {
+        store.timeline.rows.filter { row in
+            if case .toolCall(let call) = row.item, call.status == .running,
+                case .subAgent = call.detail
+            {
+                return true
+            }
+            return false
+        }.count
+    }
+
+    /// The raw `status` of the newest compaction row (`loading` / `completed` / unknown), or nil.
+    private var lastCompactionStatus: String? {
+        store.timeline.rows.compactMap { row -> String? in
+            if case .compaction(let status) = row.item { return status }
+            return nil
+        }.last
+    }
+
+    /// Busy sessions in the workspace (the followed one included), as the machine wants them.
+    private var busySessions: Int {
+        session.agents.filter { $0.status == .running }.count
+    }
+
+    /// Workspace-wide pending interactions: approvals, questions, plan reviews.
+    private var pendingInteractions: Int {
+        session.agents.reduce(0) { $0 + $1.pendingPermissions.count }
+    }
+
+    /// Sessions that finished unread while out of view.
+    private var attentionCount: Int {
+        session.agents.filter { $0.requiresAttention == true }.count
+    }
+
+    /// The crab, feet on the composer card's top edge, flush with its right edge, above the card.
+    /// 104 × 72 pt of art; only the resting body takes touches.
+    @ViewBuilder private var mascotCrab: some View {
+        if mascotEnabled {
+            ComposerCrab(state: mascot.state)
+                .offset(y: -72)
+        }
+    }
+
     // MARK: Composer
 
     private var composer: some View {
@@ -398,6 +563,8 @@ public struct ClaudeChatView: View {
         }
         .padding(.horizontal, focused ? 8 : 16)
         .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: focused)
+        // The crab stands on the card's top edge, flush with its trailing edge.
+        .overlay(alignment: .topTrailing) { mascotCrab }
     }
 
     private var trimmedDraft: String {
