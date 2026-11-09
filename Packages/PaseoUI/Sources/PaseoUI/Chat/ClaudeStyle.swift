@@ -72,6 +72,7 @@ public struct ClaudeTypography: Sendable {
 public enum PaseoSettingsKeys {
     public static let appearance = "paseo.appearance"
     public static let yourName = "paseo.yourName"
+    public static let haptics = "paseo.haptics"
 }
 
 /// ClaudeUI's palette, extended with the tokens the DSH turn layout asks for
