@@ -22,6 +22,8 @@ struct PaseoSettingsView: View {
     @AppStorage(PaseoSettingsKeys.mascot) private var mascot = true
     /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
+    /// M7f: Full / Collapse tool calls / Collapse turns (Settings → General → Chat).
+    @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
     @State private var page: Page?
     @State private var providerSheetID: String?
     @State private var confirmDisconnect = false
@@ -249,6 +251,10 @@ struct PaseoSettingsView: View {
         DefaultSendBehavior(rawValue: defaultSend) ?? .steer
     }
 
+    private var chatDisplayMode: ChatDisplayMode {
+        ChatDisplayMode(rawValue: chatDisplay) ?? .full
+    }
+
     private var generalPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -326,6 +332,39 @@ struct PaseoSettingsView: View {
                 }
                 sectionLabel("Chat")
                 RowGroup {
+                    HStack(spacing: 12) {
+                        Text("Chat display")
+                            .font(.system(size: 17))
+                        Spacer(minLength: 8)
+                        Menu {
+                            ForEach(ChatDisplayMode.allCases, id: \.self) { option in
+                                Button {
+                                    Haptics.selection()
+                                    chatDisplay = option.rawValue
+                                } label: {
+                                    Label(
+                                        option.label,
+                                        systemImage: chatDisplay == option.rawValue
+                                            ? "checkmark" : "circle"
+                                    )
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(chatDisplayMode.label)
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                            }
+                        }
+                        .accessibilityLabel("Chat display, currently \(chatDisplayMode.label)")
+                        .accessibilityIdentifier("settings.chatDisplay")
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    Divider().padding(.leading, 16)
                     HStack(spacing: 12) {
                         Text("When the agent is running")
                             .font(.system(size: 17))

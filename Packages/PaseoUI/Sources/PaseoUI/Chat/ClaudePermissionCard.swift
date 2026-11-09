@@ -30,19 +30,24 @@ struct ClaudePermissionCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        Group {
             if let form = questionForm {
                 questionCard(form)
             } else if isPlan {
                 planCard
+                    .padding(14)
+                    .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                    }
             } else {
                 toolCard
+                    .padding(14)
+                    .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                    }
             }
-        }
-        .padding(14)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
@@ -162,27 +167,44 @@ struct ClaudePermissionCard: View {
 
     // MARK: Question form
 
+    /// The Claude-Code question card: a gray heading band carrying the question (`QUESTION`
+    /// eyebrow, 14 pt medium text), options as one divided list of borderless rows aligned to
+    /// the control grid, a boxed free-text field when offered, and the dismiss/submit row.
     @ViewBuilder private func questionCard(_ form: QuestionForm) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "questionmark.bubble")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Question")
-                        .font(typography.sans(11, weight: .semibold))
+        VStack(alignment: .leading, spacing: 0) {
+            // Heading band: eyebrow + the question text, full-bleed, on the table-head wash.
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .center, spacing: 8) {
+                    Text("QUESTION")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.8)
                         .foregroundStyle(ClaudePalette.tertiaryInk)
-                        .textCase(.uppercase)
-                    Text(title)
-                        .font(typography.sans(15, weight: .semibold))
+                    Spacer(minLength: 0)
+                    if answering { ProgressView().controlSize(.mini) }
+                }
+                ForEach(Array(form.questions.enumerated()), id: \.offset) { index, question in
+                    Text(form.questions.count > 1 ? "\(index + 1). \(question.question)" : question.question)
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(ClaudePalette.ink)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Spacer(minLength: 0)
-                if answering { ProgressView().controlSize(.mini) }
             }
-            ForEach(Array(form.questions.enumerated()), id: \.offset) { index, question in
-                QuestionSection(index: index, question: question, state: $questionState)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ClaudePalette.adaptive(light: 1, dark: 0.16))
+            Divider()
+            // Options: one list, hairline rules, no per-row capsules.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(form.questions.enumerated()), id: \.offset) { index, question in
+                    QuestionSection(index: index, question: question, state: $questionState)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 8)
+                    if index < form.questions.count - 1 {
+                        Divider().padding(.leading, 16)
+                    }
+                }
             }
             let allAnswered = form.questions.indices.allSatisfy {
                 questionState.isAnswered(index: $0, form: form)
@@ -200,7 +222,15 @@ struct ClaudePermissionCard: View {
                 .opacity(!allAnswered ? 0.45 : 1)
                 .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: allAnswered)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
+        .background(ClaudePalette.panel, in: .rect(cornerRadius: 14))
+        .clipShape(.rect(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
     }
 
     private func submitResponse(_ form: QuestionForm) -> AgentPermissionResponse {
@@ -372,17 +402,19 @@ private struct QuestionSection: View {
     private var segments: Bool { question.multiSelect }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(question.header.uppercased())
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.6)
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
                 .foregroundStyle(ClaudePalette.tertiaryInk)
-            Text(question.question)
-                .font(.system(size: 14))
-                .foregroundStyle(ClaudePalette.primaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(Array(question.options.enumerated()), id: \.offset) { optionIndex, option in
-                optionRow(option, index: optionIndex)
+                .padding(.horizontal, 8)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(question.options.enumerated()), id: \.offset) { optionIndex, option in
+                    optionRow(option, index: optionIndex)
+                    if optionIndex < question.options.count - 1 {
+                        Divider().padding(.leading, 42)
+                    }
+                }
             }
             if question.options.isEmpty || question.allowOther {
                 TextField(
@@ -396,6 +428,8 @@ private struct QuestionSection: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(ClaudePalette.chip, in: .rect(cornerRadius: 10))
+                .padding(.top, 4)
+                .padding(.horizontal, 8)
                 .accessibilityLabel("Other answer")
                 // A single-select "Other" clears the option selection, matching Claude Code.
                 .onChange(of: state.texts[index] ?? "") { _, text in
@@ -425,7 +459,7 @@ private struct QuestionSection: View {
                 }
             }
         } label: {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
                 ZStack {
                     if segments {
                         RoundedRectangle(cornerRadius: 4)
@@ -449,20 +483,20 @@ private struct QuestionSection: View {
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(option.label)
-                        .font(.system(size: 14))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(ClaudePalette.primaryInk)
                     if let description = option.description, !description.isEmpty {
                         Text(description)
-                            .font(.system(size: 12))
+                            .font(.system(size: 13))
                             .foregroundStyle(ClaudePalette.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
             .padding(.horizontal, 8)
-            .background(selected ? ClaudePalette.chip : .clear, in: .rect(cornerRadius: 10))
+            .background(selected ? ClaudePalette.adaptive(light: 0.965, dark: 0.10) : .clear)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
