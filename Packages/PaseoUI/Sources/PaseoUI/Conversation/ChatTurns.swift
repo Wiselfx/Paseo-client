@@ -104,7 +104,8 @@ struct ClaudeTurnView: View {
     var bubbleAttributed: (String) -> AttributedString {
         { text in
             FilePathLinks.attributed(
-                text, font: typography.sans(14), foreground: ClaudePalette.primaryInk,
+                text, font: typography.sans(ClaudeTypography.chatBodySize),
+                foreground: ClaudePalette.primaryInk,
                 linkColor: ClaudePalette.proseLink)
         }
     }

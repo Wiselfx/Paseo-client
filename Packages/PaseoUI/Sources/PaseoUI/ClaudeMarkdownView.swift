@@ -1,8 +1,10 @@
 #if canImport(UIKit)
     import SwiftUI
 
-    /// Theme values follow `docs/research/08-dsh-live-observation.md` §6: 14 / 23 serif body,
-    /// 12 pt between blocks, 13 pt mono code. Claude's uncaptured rich-block metrics remain provisional.
+    /// Theme values follow `docs/research/08-dsh-live-observation.md` §6: serif body, 12 pt between
+    /// blocks, mono code. Sizes are measured at Claude's 17 pt body (V5); headings and code are
+    /// ratios of `bodySize`, so the whole ladder follows the size setting and Dynamic Type.
+    /// Claude's uncaptured rich-block metrics remain provisional.
     public struct ClaudeMarkdownTheme {
         public var bodyFont: Font
         public var headingFonts: [Font]
@@ -23,18 +25,25 @@
         public var tableColumnWidth: CGFloat = 150
         public init(serifName: String = "Newsreader16pt-Regular", bodySize: CGFloat = 20) {
             foreground = ClaudePalette.primaryInk
-            bodyFont = .custom(serifName, size: bodySize, relativeTo: .body)
-            // h1 21/30, h2 18/26, h3 16/24 700; h4 14/24 600; h5/h6 keep the h4 face smaller.
-            let headingSizes: [CGFloat] = [21, 18, 16, 14, 13, 12]
-            headingFonts = headingSizes.enumerated().map { index, size in
-                Font.custom(serifName, size: size, relativeTo: index < 3 ? .headline : .body)
+            // `ClaudeTypography.serif` multiplies by the text-size setting; the theme builds its
+            // fonts directly, so without this prose would ignore Settings → Appearance.
+            let size = bodySize * ClaudeTextScale.contentMultiplier()
+            bodyFont = .custom(serifName, size: size, relativeTo: .body)
+            // The Claude ladder as ratios of the body: h1 1.5, h2 1.29, h3 1.14, h4 1, h5 0.93,
+            // h6 0.86 (the sizes measured at 14 pt: 21 / 18 / 16 / 14 / 13 / 12).
+            let headingRatios: [CGFloat] = [1.5, 1.286, 1.143, 1, 0.929, 0.857]
+            headingFonts = headingRatios.enumerated().map { index, ratio in
+                Font.custom(serifName, size: size * ratio, relativeTo: index < 3 ? .headline : .body)
                     .weight(index < 3 ? .bold : .semibold)
             }
-            codeFont = ClaudeTypography().mono(13, relativeTo: .body)
+            // ~0.88 of the body: 15 pt at the 17 pt Claude body, and the code size setting still
+            // multiplies on top inside `mono`.
+            codeFont = ClaudeTypography().mono(15, relativeTo: .body)
         }
         public static var artifact: Self {
             var theme = Self()
             theme.bodyFont = .system(size: 17)
+            theme.codeFont = .system(size: 13, design: .monospaced)
             theme.lineSpacing = 6
             return theme
         }

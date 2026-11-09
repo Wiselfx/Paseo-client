@@ -500,7 +500,9 @@ struct WorkspaceFileViewer: View {
                     detail: "\(WorkspaceFileFormat.bytes(file?.size ?? 0)) · Switch to Source.")
             } else {
                 ScrollView {
-                    ClaudeMarkdownView(text, theme: ClaudeProse.theme(typography)) { action in
+                    ClaudeMarkdownView(
+                        text, theme: ClaudeProse.theme(typography, bodySize: 14)
+                    ) { action in
                         if case .openLink(let url) = action { openURL(url) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

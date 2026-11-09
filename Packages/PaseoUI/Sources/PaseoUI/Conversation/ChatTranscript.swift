@@ -33,6 +33,10 @@ extension ClaudeChatView {
             await store.subagents.load()
             await store.backgroundWork.load()
         }
+        // Tapping a message, a bubble or the transcript's background drops the keyboard, the way
+        // Claude does (V5 §2). Simultaneous, so a link, a menu, a long-press preview and text
+        // selection all still get their tap — this only adds the dismissal.
+        .simultaneousGesture(TapGesture().onEnded { focused = false })
         .confirmationDialog(
             messageActionTitle,
             isPresented: Binding(

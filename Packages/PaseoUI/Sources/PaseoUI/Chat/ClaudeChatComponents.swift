@@ -290,17 +290,22 @@ struct ClaudeProse: View {
         }
     }
 
-    static func theme(_ typography: ClaudeTypography) -> ClaudeMarkdownTheme {
-        var theme = ClaudeMarkdownTheme(serifName: typography.resolvedSerifName, bodySize: 14)
+    static func theme(
+        _ typography: ClaudeTypography, bodySize: CGFloat = ClaudeTypography.chatBodySize
+    ) -> ClaudeMarkdownTheme {
+        // Claude iOS chats at a 17 pt serif body (V5); the markdown *file preview* keeps the
+        // research document's 14 pt, because UX-SPEC §6 freezes those previews.
+        let chat = bodySize >= ClaudeTypography.chatBodySize
+        var theme = ClaudeMarkdownTheme(serifName: typography.resolvedSerifName, bodySize: bodySize)
         theme.foreground = ClaudePalette.primaryInk
         theme.secondary = ClaudePalette.secondaryInk
         theme.link = ClaudePalette.proseLink
         theme.codeBackground = ClaudePalette.codeSurface
         theme.inlineCodeBackground = ClaudePalette.inlineCodeFill
         theme.inlineCodeForeground = ClaudePalette.primaryInk
-        theme.codeFont = typography.mono(13, relativeTo: .body)
-        theme.blockSpacing = 12
-        theme.lineSpacing = 9 // 14 / 23
+        theme.codeFont = typography.mono(chat ? 15 : 13, relativeTo: .body)
+        theme.blockSpacing = chat ? 14 : 12
+        theme.lineSpacing = chat ? 8 : 9 // chat: 17 / ~25; previews: 14 / 23
         return theme
     }
 }

@@ -4,6 +4,10 @@ import SwiftUI
 /// The app-wide typography: Anthropic Sans for the interface, Anthropic Serif for prose and
 /// display lines, Anthropic Mono for code and tool output. Every face keeps Dynamic Type.
 public struct ClaudeTypography: Sendable {
+    /// Claude iOS's chat body (V5): assistant prose, your bubbles and the composer all sit at
+    /// 17 pt, and everything around them is measured from it.
+    public static let chatBodySize: CGFloat = 17
+
     public static let anthropicSans = "AnthropicSansWebVariable-TextRegular"
     public static let anthropicSerif = "AnthropicSerifWebVariable-TextRegular"
     public static let anthropicMono = "AnthropicMonoWebWeb-Regular"
