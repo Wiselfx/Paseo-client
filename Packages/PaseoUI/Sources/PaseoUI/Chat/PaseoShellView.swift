@@ -161,16 +161,19 @@ public struct PaseoShellView: View {
     private func conversationSurface(width: CGFloat, height: CGFloat, drawerWidth: CGFloat)
         -> some View
     {
-        let offset = drawerWidth * drawerProgress - width * panelParallax * panelProgress
-        return main
-            .frame(width: width, height: height)
+        ConversationCard(
+            drawerProgress: $drawerProgress,
+            panelProgress: $panelProgress,
+            drawerWidth: drawerWidth,
+            width: width,
+            height: height,
+            parallax: panelParallax,
+            onTapScrim: closeDrawers
+        ) {
+            main
+        }
             .background { EdgeDrawerCard() }
             .environment(\.composerFocusRequested, $composerFocusRequested)
-            .overlay {
-                EdgeDrawerDim(progress: max(drawerProgress, panelProgress), onTap: closeDrawers)
-            }
-            .overlay { EdgeDrawerHairline(progress: drawerProgress) }
-            .offset(x: offset)
             .edgeDrawerDrag(
                 edge: .leading, screenWidth: width, drawerWidth: drawerWidth,
                 isOpen: isDrawerOpen, blocked: isPanelOpen,
@@ -184,7 +187,7 @@ public struct PaseoShellView: View {
     /// The panel stays mounted so its tab, its scroll position and its gesture state survive a
     /// close and reopen for the same workspace; it is off screen unless it is up (§1.3, §1.4).
     private func panelSurface(width: CGFloat, height: CGFloat) -> some View {
-        WorkspacePanel(
+        let panel = WorkspacePanel(
             session: session,
             workspace: selectedWorkspace,
             currentAgentId: selectedAgentId,
@@ -207,17 +210,14 @@ public struct PaseoShellView: View {
         // switch must load that workspace's own remembered tab. Closing and reopening the same
         // workspace keeps the identity, so the tab and scroll position survive.
         .id(selectedWorkspace?.id ?? "none")
-        .frame(width: width * panelFraction, height: height, alignment: .top)
-        .background { EdgeDrawerCard() }
-        .overlay { EdgeDrawerHairline(progress: panelProgress) }
-        .offset(x: width * (1 - panelProgress))
+        return PanelCard(progress: $panelProgress, width: width, height: height) {
+            panel
+        }
         .edgeDrawerDrag(
             edge: .leading, screenWidth: width, drawerWidth: width,
             isOpen: isPanelOpen, blocked: isDrawerOpen, openDirection: .trailing,
             requiresEdgeZone: true,
             progress: $panelProgress, onSettle: { settlePanel(open: $0) })
-        .accessibilityHidden(panelProgress == 0)
-        .allowsHitTesting(panelProgress > 0)
     }
 
     // MARK: Main
@@ -563,6 +563,83 @@ public struct PaseoShellView: View {
         if let draft { lastDraftPreferences = draft.preferences }
         draft = nil
         draftOpenedByUser = false
+    }
+}
+
+/// The conversation card: the one place that reads the drawer progresses for the middle surface.
+///
+/// SwiftUI invalidates the view whose body reads a @State, and it runs that body on every finger
+/// move of a drag. Reading drawerProgress/panelProgress in PaseoShellView.body therefore
+/// re-evaluated the whole shell — the sidebar's directory, the transcript's turns, the panel's
+/// pages — at ~60 Hz while a drawer moved (P3). Here the reads happen in this small body instead,
+/// and the heavy children arrive as an already-built value, so a drag only rebuilds the offset,
+/// the dim and the hairline on top of them. Same modifiers, same order, same geometry as before.
+struct ConversationCard<Content: View>: View {
+    @Binding var drawerProgress: CGFloat
+    @Binding var panelProgress: CGFloat
+    /// How far the sidebar pushes the card (§1.2).
+    let drawerWidth: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    /// How far the panel pushes the card left (§1.3).
+    let parallax: CGFloat
+    let onTapScrim: () -> Void
+    let content: Content
+
+    init(
+        drawerProgress: Binding<CGFloat>, panelProgress: Binding<CGFloat>, drawerWidth: CGFloat,
+        width: CGFloat, height: CGFloat, parallax: CGFloat, onTapScrim: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        _drawerProgress = drawerProgress
+        _panelProgress = panelProgress
+        self.drawerWidth = drawerWidth
+        self.width = width
+        self.height = height
+        self.parallax = parallax
+        self.onTapScrim = onTapScrim
+        self.content = content()
+    }
+
+    var body: some View {
+        let offset = drawerWidth * drawerProgress - width * parallax * panelProgress
+        content
+            .frame(width: width, height: height)
+            .overlay {
+                EdgeDrawerDim(
+                    progress: max(drawerProgress, panelProgress), onTap: onTapScrim)
+            }
+            .overlay { EdgeDrawerHairline(progress: drawerProgress) }
+            .offset(x: offset)
+    }
+}
+
+/// The workspace panel's carriage: the same deal for the right surface (§1.3) — progress is read
+/// here, not in the shell body.
+struct PanelCard<Content: View>: View {
+    @Binding var progress: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    let content: Content
+
+    init(
+        progress: Binding<CGFloat>, width: CGFloat, height: CGFloat,
+        @ViewBuilder content: () -> Content
+    ) {
+        _progress = progress
+        self.width = width
+        self.height = height
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .frame(width: width, height: height, alignment: .top)
+            .background { EdgeDrawerCard() }
+            .overlay { EdgeDrawerHairline(progress: progress) }
+            .offset(x: width * (1 - progress))
+            .accessibilityHidden(progress == 0)
+            .allowsHitTesting(progress > 0)
     }
 }
 #endif
