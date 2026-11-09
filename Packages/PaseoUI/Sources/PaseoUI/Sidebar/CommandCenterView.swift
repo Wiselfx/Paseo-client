@@ -154,8 +154,8 @@ struct CommandCenterSheet: View {
                 }
                 .glassEffect(in: .circle)
                 .accessibilityLabel("Close")
+                Spacer()
             }
-            Spacer()
         }
         .frame(height: 56)
         .padding(.horizontal, 16)

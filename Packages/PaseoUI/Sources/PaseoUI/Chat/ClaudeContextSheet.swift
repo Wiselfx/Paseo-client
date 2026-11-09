@@ -46,7 +46,7 @@ struct ClaudeContextSheet: View {
         HStack(spacing: 18) {
             ClaudeMeterRing(percent: percent, size: 64, lineWidth: 6)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(Int(percent.rounded()))% used")
+                Text("\(PaseoFormat.percent(percent)) used")
                     .font(typography.serif(28))
                     .foregroundStyle(ClaudePalette.ink)
                 if let max = usage.maxTokens {
@@ -172,14 +172,11 @@ struct ClaudeContextSheet: View {
     }
 
     static func tokenCount(_ value: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = true
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        PaseoFormat.integer(value)
     }
 
     static func percentValue(_ value: Double) -> String {
-        String(format: "%.0f%%", value)
+        PaseoFormat.percent(value)
     }
 
     static func cost(_ value: Double, fractionDigits: Int = 2) -> String {

@@ -126,7 +126,7 @@ extension ClaudeChatView {
                     .foregroundStyle(ClaudePalette.ink)
             }
             if let tokens = tokenTotal(usage) {
-                Text("\(tokens.formatted()) tokens")
+                Text("\(PaseoFormat.integer(tokens)) tokens")
                     .font(.system(size: 12))
                     .foregroundStyle(ClaudePalette.secondary)
             }

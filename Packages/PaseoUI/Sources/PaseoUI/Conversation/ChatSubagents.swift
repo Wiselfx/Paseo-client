@@ -336,7 +336,7 @@ struct ChatSubagentTimelineView: View {
         case .toolCall(let call):
             ToolCallLine(call: call, typography: typography)
         case .todo(let list):
-            Text("Todo · \(list.items.count) item\(list.items.count == 1 ? "" : "s")")
+            Text("Todo · \(PaseoFormat.integer(list.items.count)) item\(list.items.count == 1 ? "" : "s")")
                 .font(typography.mono(12))
                 .foregroundStyle(ClaudePalette.tertiaryInk)
         case .error(let message):

@@ -49,11 +49,11 @@ struct ClaudeTurnRail: View {
             Haptics.selection()
             onJump(turn.id)
         } label: {
-            Text("\(index + 1)")
+            Text("\(PaseoFormat.integer(index + 1))")
                 .font(typography.mono(10, weight: isCurrent ? .semibold : .regular))
-                .foregroundStyle(isCurrent ? ClaudePalette.orange : ClaudePalette.secondaryInk)
+                .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
                 .frame(width: 26, height: 26)
-                .background(isCurrent ? ClaudePalette.orange.opacity(0.14) : .clear, in: .circle)
+                .background(isCurrent ? ClaudePalette.chip : .clear, in: .circle)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -107,11 +107,11 @@ struct ChatTurnNavSheet: View {
             dismiss()
         } label: {
             HStack(spacing: 12) {
-                Text("\(index + 1)")
+                Text("\(PaseoFormat.integer(index + 1))")
                     .font(typography.mono(12, weight: isCurrent ? .semibold : .regular))
-                    .foregroundStyle(isCurrent ? ClaudePalette.orange : ClaudePalette.secondaryInk)
+                    .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
                     .frame(width: 32, height: 32)
-                    .background(isCurrent ? ClaudePalette.orange.opacity(0.14) : .clear, in: .circle)
+                    .background(isCurrent ? ClaudePalette.chip : .clear, in: .circle)
                 Text(userText(turn))
                     .font(typography.sans(14))
                     .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
@@ -119,7 +119,7 @@ struct ChatTurnNavSheet: View {
                     .truncationMode(.tail)
                 Spacer(minLength: 8)
                 if isCurrent {
-                    Circle().fill(ClaudePalette.orange).frame(width: 6, height: 6)
+                    Circle().fill(ClaudePalette.ink).frame(width: 6, height: 6)
                 }
             }
             .padding(.horizontal, 16)

@@ -87,9 +87,9 @@ extension PaseoSidebar {
                 }
             }
             Divider()
-            Toggle("Show branch", isOn: $showBranch)
-            Toggle("Show diff stats", isOn: $showDiffStats)
-            Toggle("Show PR badge", isOn: $showPRBadge)
+            Toggle("Show branch", isOn: $showBranch).tint(.blue)
+            Toggle("Show diff stats", isOn: $showDiffStats).tint(.blue)
+            Toggle("Show PR badge", isOn: $showPRBadge).tint(.blue)
             Picker(
                 "Group by",
                 selection: Binding(
@@ -100,7 +100,7 @@ extension PaseoSidebar {
                     Text(grouping.title).tag(grouping)
                 }
             }
-            Toggle("Active first", isOn: $activeFirst)
+            Toggle("Active first", isOn: $activeFirst).tint(.blue)
             if session.labels.supportsLabels
                 && (!labelCatalog.isEmpty || !labelFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             {

@@ -1539,6 +1539,7 @@ struct PaseoSettingsView: View {
                             })
                     )
                     .labelsHidden()
+                    .tint(.blue)
                     .disabled(session.hostSettings.isSaving)
                     .accessibilityLabel("Enable \(provider.label ?? provider.provider)")
                 }

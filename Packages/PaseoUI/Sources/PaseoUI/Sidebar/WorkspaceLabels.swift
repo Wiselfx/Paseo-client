@@ -227,7 +227,7 @@ extension PaseoSidebar {
                 }
                 if defs.count > shown.count {
                     let extra = defs.count - shown.count
-                    Text("+\(extra)")
+                    Text("+\(PaseoFormat.integer(extra))")
                         .font(typography.sans(11, weight: .medium))
                         .foregroundStyle(ClaudePalette.captionInk)
                         .accessibilityLabel("\(extra) more labels")
