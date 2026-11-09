@@ -170,15 +170,21 @@ Upstream model: a draft tab in the workspace, whose composer creates the agent o
 
 ## 4. Conversation
 
-### 4.1 Composer: dynamic (Claude iOS reference, screenshots 2026-11-09)
+### 4.1 Composer: dynamic on the new-session screen (Claude iOS reference, screenshots 2026-11-09)
+
+This section describes the **new-session / hero composer** (`DraftChatView`), which is the only
+place the collapsed pill exists. **In an existing conversation the composer is always the expanded
+two-row card** (`ChatComposer`), focused or not, empty or not — that is what Claude does once a
+chat exists (V5, device feedback 2026-11-09).
 
 - **At rest** (not focused, empty draft, no attachments): a **single-line pill**. Leading: the `+` circle. Then the placeholder, then the mic and the voice button trailing. No model chip, no context ring and no other chips in this state.
 - **Focused, or with text or attachments:** the pill grows smoothly into a **two-row card**:
   - row 1: the text field;
   - row 2: `+`, the model chip ("Model *Thinking*": model in ink, thinking level in `secondaryInk`, grey chip fill), then the remaining chips (fast mode, context ring), with mic and voice/send trailing.
 - **Transition:** one `.smooth(duration: 0.25)` (§0.4) on height and chip opacity; the text field never jumps horizontally.
-- **Collapse:** it returns to the pill on blur, only when the draft and tray are empty.
+- **Collapse:** it returns to the pill on blur, only when the draft and tray are empty. Existing conversations never collapse (see above).
 - **While a turn runs:** the stop button replaces send, in either state.
+- **Text size:** the field is 17 pt sans, and a long draft caps at about 40 % of the space above the keyboard (≈ 8 lines on an iPhone) and then scrolls inside the field, so the controls row never hides under the keyboard (V5).
 
 ### 4.1b Composer chips
 

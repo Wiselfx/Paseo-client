@@ -8,13 +8,9 @@ import UniformTypeIdentifiers
 extension ClaudeChatView {
     // MARK: Composer
 
-    /// §4.1: the pill at rest, the two-row card once it is focused or holds something. Every
-    /// other composer control keys off this one value so the shape never half-changes.
-    var composerExpanded: Bool {
-        focused || !trimmedDraft.isEmpty || !trayItems.isEmpty || store.actionError != nil
-            || voiceActiveForAgent || voice.phase == .starting
-    }
-
+    /// V5 §4.4: in an existing conversation the composer is **always** the two-row card — pill or
+    /// not, focused or not, the way Claude iOS does it. The dynamic pill→card shape lives only in
+    /// the hero/new-session composer (`DraftChatView`), before the first send.
     var composer: some View {
         VStack(alignment: .leading, spacing: 6) {
             slashMenu
@@ -22,8 +18,7 @@ extension ClaudeChatView {
             queueStack
             composerCard
         }
-        .padding(.horizontal, composerExpanded ? 8 : 16)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: composerExpanded)
+        .padding(.horizontal, 8)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: slashQuery != nil)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: mentionQuery != nil)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isQueueNonEmpty)
@@ -31,10 +26,10 @@ extension ClaudeChatView {
     }
 
     var composerCard: some View {
-        let card = VStack(alignment: .leading, spacing: composerExpanded ? 8 : 0) {
-            if composerExpanded { attachmentTray }
-            if composerExpanded { dictationDeniedBanner }
-            if composerExpanded, let error = store.actionError {
+        let card = VStack(alignment: .leading, spacing: 8) {
+            attachmentTray
+            dictationDeniedBanner
+            if let error = store.actionError {
                 Text(error)
                     .font(typography.sans(13))
                     .foregroundStyle(ClaudePalette.failureInk)
@@ -42,14 +37,13 @@ extension ClaudeChatView {
                     .transition(.opacity)
             }
             composerFieldRow
-            if composerExpanded, voiceActiveForAgent || voice.phase == .starting {
+            if voiceActiveForAgent || voice.phase == .starting {
                 voiceBar
             }
-            if composerExpanded { composerControlRow }
+            composerControlRow
         }
         let framed = card
-        .composerCardChrome(expanded: composerExpanded)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: composerExpanded)
+        .composerCardChrome(expanded: true)
         .onChange(of: composerFocusRequested.wrappedValue) { _, requested in
             guard requested else { return }
             focused = true
@@ -65,26 +59,15 @@ extension ClaudeChatView {
         return withComposerVoiceWiring(withComposerSheets(framed))
     }
 
-    /// Row 1. At rest this row *is* the pill: the add button, the placeholder, the mic and the
-    /// voice control, one line high (§4.1). Expanded, the field takes the row alone and the
-    /// controls move below it.
-    ///
-    /// The add button is an overlay, not a leading sibling: the field must keep the same
-    /// structural position in both states or SwiftUI rebuilds it and the keyboard drops when the
-    /// pill grows.
+    /// Row 1: the field alone. In an existing conversation the add button and the trailing
+    /// controls always live on row 2 — the card never collapses back to a pill (§4.4).
     @ViewBuilder var composerFieldRow: some View {
-        HStack(spacing: 8) {
-            composerTextField
-                .padding(.leading, composerExpanded ? 0 : 44)
-                .overlay(alignment: .leading) {
-                    if !composerExpanded { composerAddMenu }
-                }
-            if !composerExpanded {
-                dictateButton
-                voiceModeButton
-                if store.isRunning { composerSendControl }
-            }
-        }
+        composerTextField
+    }
+
+    /// How many lines the field may take before it scrolls inside itself (V5 §3).
+    var composerFieldLineLimit: Int {
+        ComposerFieldLimit.lines(availableHeight: surfaceHeight)
     }
 
     /// Row 2: every chip the conversation has, then the trailing controls (§4.1).
@@ -134,13 +117,15 @@ extension ClaudeChatView {
                 .foregroundStyle(ClaudePalette.secondaryInk),
             axis: .vertical
         )
-        .font(typography.sans(18))
-        .lineLimit(composerExpanded ? 1...12 : 1...1)
+        .font(typography.sans(ClaudeTypography.chatBodySize))
+        // V5 §3: grow to the cap, then scroll inside the field — the controls row below always
+        // stays above the keyboard.
+        .lineLimit(1...composerFieldLineLimit)
         .fixedSize(horizontal: false, vertical: true)
         .focused($focused)
         .tint(ClaudePalette.orange)
-        .padding(.horizontal, composerExpanded ? 6 : 2)
-        .padding(.top, composerExpanded ? 7 : 0)
+        .padding(.horizontal, 6)
+        .padding(.top, 7)
         .accessibilityIdentifier("composer.draft")
     }
 
@@ -673,8 +658,25 @@ extension ClaudeChatView {
 
 // MARK: - Shared composer pieces
 
+/// V5 §3: a long draft must never push the composer's controls under the keyboard. The field grows
+/// to this many lines and then scrolls inside itself — `TextField(axis: .vertical)` scrolls once it
+/// reaches its line limit.
+enum ComposerFieldLimit {
+    /// About 40 % of the space above the keyboard, in text lines of the 17 pt composer face
+    /// (≈ 8 lines on an iPhone in portrait). Clamped so an unmeasured pass still leaves a usable
+    /// field, and a tall screen can never take more than a third of the card.
+    static func lines(
+        availableHeight: CGFloat, fontSize: CGFloat = ClaudeTypography.chatBodySize
+    ) -> Int {
+        guard availableHeight > 0 else { return 9 }
+        let lineHeight = fontSize * 1.4
+        return min(10, max(3, Int((availableHeight * 0.4) / lineHeight)))
+    }
+}
+
 /// The composer's card: a one-line pill at rest, a lifted card once open (UX-SPEC §4.1). Shared
-/// by the live conversation and the draft so both grow the same way.
+/// by the live conversation and the draft so both grow the same way. The live conversation always
+/// passes `expanded: true` (V5 §4.4); only the draft still collapses to the pill.
 struct ComposerCardChrome: ViewModifier {
     let expanded: Bool
 

@@ -27,6 +27,9 @@ struct DraftChatView: View {
     @State private var showCameraPicker = false
     @State private var viewerImage: UIImage?
     @State private var attachmentError: String?
+    /// The draft page's height — what is left above the keyboard. Caps the composer field
+    /// (V5 §3).
+    @State private var surfaceHeight: CGFloat = 0
     @State private var dictation = DictationController()
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -61,6 +64,11 @@ struct DraftChatView: View {
             }
         }
         // No background here: the shell's rounded card is the canvas (UX-SPEC §1.1).
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.size.height
+        } action: { height in
+            surfaceHeight = height
+        }
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
     }
@@ -162,6 +170,9 @@ struct DraftChatView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Tapping the page outside the composer drops the keyboard (V5 §2). Simultaneous, so the
+        // workspace-line menu and the hero's own controls still take their taps.
+        .simultaneousGesture(TapGesture().onEnded { focused = false })
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: draft.pendingPrompt)
     }
 
@@ -319,8 +330,12 @@ struct DraftChatView: View {
                 .foregroundStyle(ClaudePalette.secondaryInk),
             axis: .vertical
         )
-        .font(typography.sans(18))
-        .lineLimit(composerExpanded ? 1...12 : 1...1)
+        .font(typography.sans(ClaudeTypography.chatBodySize))
+        // V5 §3: grow to the cap, then scroll inside the field; the controls row always stays
+        // above the keyboard.
+        .lineLimit(
+            composerExpanded
+                ? 1...ComposerFieldLimit.lines(availableHeight: surfaceHeight) : 1...1)
         .fixedSize(horizontal: false, vertical: true)
         .focused($focused)
         .tint(ClaudePalette.orange)

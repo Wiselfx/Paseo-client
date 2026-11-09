@@ -63,6 +63,9 @@ public struct ClaudeChatView: View {
     /// the answer grows past the bottom, when tail-follow takes over again.
     @State var anchoringToAnswer = false
     @State var composerHeight: CGFloat = 0
+    /// The chat surface's height — what is left above the keyboard. Caps the composer field
+    /// (V5 §3); the keyboard changing its safe-area inset shrinks it.
+    @State var surfaceHeight: CGFloat = 0
     /// One quiet line per permission answer made this session; the store drops resolved
     /// requests without remembering the answer, so the client keeps the record.
     @State var permissionResolvedLines: [AnsweredPermission] = []
@@ -182,6 +185,11 @@ public struct ClaudeChatView: View {
         }
         // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so the
         // corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.size.height
+        } action: { height in
+            surfaceHeight = height
+        }
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
         // File links in prose and in your bubbles (`paseo-file://…`) open the file viewer;
