@@ -141,7 +141,7 @@ public struct ClaudeChatView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
+        let main = VStack(spacing: 0) {
             header
             if findOpen {
                 findBar
@@ -165,61 +165,73 @@ public struct ClaudeChatView: View {
         // ordinary links fall through to the host's handler unchanged.
         .environment(\.openURL, fileLinkAction)
         .overlay(alignment: .bottom) { backToEnd }
-        .sheet(item: $sheet) { item in
-            switch item {
-            case .controls:
-                ClaudeAgentControlsSheet(session: session, store: store)
-            case .subagents:
-                ChatSubagentsSheet(
-                    subagents: store.subagents, typography: typography,
-                    hiddenIds: $hiddenSubagentIds)
-            case .backgroundWork:
-                ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork, typography: typography)
-            case .turnNav:
-                ChatTurnNavSheet(turns: store.turns, currentTurnId: lastTrackedTurn) { id in
-                    sheet = nil
-                    jumpToTurn(id)
-                }
+        let sheeted = main
+            .sheet(item: $sheet) { chatSheetContent($0) }
+            .sheet(isPresented: $showContextSheet) { ClaudeContextSheet(store: store) }
+            .sheet(isPresented: Binding(
+                get: { openFilePath != nil },
+                set: { if !$0 { openFilePath = nil } })
+            ) { fileSheetContent }
+        let wired = withChatInputWiring(withChatLifecycle(sheeted))
+        return withMascotPresence(withMascotWiring(wired))
+    }
+
+    @ViewBuilder
+    func chatSheetContent(_ item: ClaudeChatSheet) -> some View {
+        switch item {
+        case .controls:
+            ClaudeAgentControlsSheet(session: session, store: store)
+        case .subagents:
+            ChatSubagentsSheet(
+                subagents: store.subagents, typography: typography,
+                hiddenIds: $hiddenSubagentIds)
+        case .backgroundWork:
+            ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork, typography: typography)
+        case .turnNav:
+            ChatTurnNavSheet(turns: store.turns, currentTurnId: lastTrackedTurn) { id in
+                sheet = nil
+                jumpToTurn(id)
             }
         }
-        .sheet(isPresented: $showContextSheet) {
-            ClaudeContextSheet(store: store)
-        }
-        .sheet(isPresented: Binding(
-            get: { openFilePath != nil },
-            set: { if !$0 { openFilePath = nil } })) {
-                if let agent = store.agent,
-                    let workspaceId = agent.workspaceId,
-                    let workspace = session.workspaceDirectory.workspace(id: workspaceId)
-                {
-                    NavigationStack {
-                        WorkspaceFileViewer(
-                            checkout: session.checkout(for: workspace),
-                            relPath: openFilePath ?? "",
-                            onBack: { openFilePath = nil },
-                            backLabel: "Files")
-                    }
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
-                } else {
-                    // The agent's workspace isn't loaded (rare: directory fetch pending).
-                    VStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 24, weight: .light))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
-                        Text("Workspace not available")
-                            .font(typography.sans(15, weight: .medium))
-                            .foregroundStyle(ClaudePalette.ink)
-                        Button("Close") { openFilePath = nil }
-                            .font(typography.sans(15, weight: .medium))
-                            .foregroundStyle(ClaudePalette.ink)
-                            .padding(.horizontal, 18)
-                            .frame(height: 36)
-                            .background(ClaudePalette.chip, in: .capsule)
-                    }
-                    .presentationDetents([.height(240)])
-                }
+    }
+
+    @ViewBuilder
+    var fileSheetContent: some View {
+        if let agent = store.agent,
+            let workspaceId = agent.workspaceId,
+            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+        {
+            NavigationStack {
+                WorkspaceFileViewer(
+                    checkout: session.checkout(for: workspace),
+                    relPath: openFilePath ?? "",
+                    onBack: { openFilePath = nil },
+                    backLabel: "Files")
             }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+        } else {
+            // The agent's workspace isn't loaded (rare: directory fetch pending).
+            VStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 24, weight: .light))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                Text("Workspace not available")
+                    .font(typography.sans(15, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                Button("Close") { openFilePath = nil }
+                    .font(typography.sans(15, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .padding(.horizontal, 18)
+                    .frame(height: 36)
+                    .background(ClaudePalette.chip, in: .capsule)
+            }
+            .presentationDetents([.height(240)])
+        }
+    }
+
+    func withChatLifecycle(_ content: some View) -> some View {
+        content
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFollowing)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: findOpen)
         .overlay(alignment: .top) {
@@ -255,6 +267,10 @@ public struct ClaudeChatView: View {
                 }
             }
         }
+    }
+
+    func withChatInputWiring(_ content: some View) -> some View {
+        content
         .task { await loadSlashCommands() }
         .onChange(of: store.activeTurnId) { oldId, newId in
             if newId == nil, oldId != nil { flushQueuedMessage() }
@@ -285,6 +301,10 @@ public struct ClaudeChatView: View {
             guard !items.isEmpty else { return }
             handlePickedPhotos(items)
         }
+    }
+
+    func withMascotWiring(_ content: some View) -> some View {
+        content
         .onChange(of: store.activeTurnId) { _, newId in
             let now = Date()
             if newId != nil {
@@ -326,6 +346,10 @@ public struct ClaudeChatView: View {
                 feedMascot(.compactionEnded(failed: status == "failed", at: now))
             }
         }
+    }
+
+    func withMascotPresence(_ content: some View) -> some View {
+        content
         .onChange(of: busySessions) { _, count in
             feedMascot(.busySessionsChanged(count: count, at: Date()))
         }
