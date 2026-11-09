@@ -670,7 +670,7 @@ struct WorkspaceCodeView: View {
     @Environment(\.colorScheme) private var colorScheme
     private let typography = ClaudeTypography()
 
-    private static let fontSize: CGFloat = 12
+    static let fontSize: CGFloat = 12
     private static let lineSpacing: CGFloat = 6 // 12 + 6 = 18 pt lines
 
     private var lines: [Substring] { source.split(separator: "\n", omittingEmptySubsequences: false) }
@@ -700,7 +700,7 @@ struct WorkspaceCodeView: View {
         let theme: ClaudeCodeSyntaxTheme = colorScheme == .dark ? .dark : .light
         let colored = ClaudeCodeHighlighter.shared.highlight(source, language: language, theme: theme)
         // Same fallback behavior as the Markdown code blocks: plain text if the highlighter refuses.
-        return AttributedString(colored, including: \.uiKit)
+        return (try? AttributedString(colored, including: \.uiKit)) ?? AttributedString(source)
     }
 
     private struct Gutter: View {

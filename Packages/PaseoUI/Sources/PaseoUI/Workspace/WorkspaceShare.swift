@@ -9,6 +9,8 @@ import UIKit
 ///
 /// `WorkspaceFiles.read` returns everything in one RPC (text inline, or base64 for binary/images),
 /// so there is no byte-level progress to report; callers show an indeterminate state while it runs.
+/// Main-actor: it drives the checkout's observable file store.
+@MainActor
 enum WorkspaceShare {
     enum ShareError: Error {
         case unreadable(String)
@@ -87,7 +89,7 @@ struct WorkspaceExportDocument: FileDocument {
     let data: Data
     init(data: Data) { self.data = data }
     init(configuration: ReadConfiguration) throws {
-        data = configuration.file?.regularFileContents ?? Data()
+        data = configuration.file.regularFileContents ?? Data()
     }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
