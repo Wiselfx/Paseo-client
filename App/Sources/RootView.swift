@@ -21,12 +21,18 @@ struct RootView: View {
             switch model.phase {
             case .setup(let status):
                 ConnectView(
-                    host: $model.host, port: $model.port, password: $model.password, status: status,
-                    onConnect: { Task { await model.connect() } })
+                    host: $model.host, port: $model.port, password: $model.password,
+                    useTLS: $model.useTLS, connectionURI: $model.connectionURI,
+                    status: status, hosts: model.savedHostsSnapshot,
+                    onConnect: { Task { await model.connect() } },
+                    onConnectSaved: { id in Task { await model.connectToSaved(id) } },
+                    onForgetSaved: { id in model.forgetSavedHost(id) },
+                    onRenameSaved: { id, label in model.renameSavedHost(id, label: label) })
             case .connected(let session):
                 PaseoShellView(session: session, onDisconnect: { model.disconnect() })
             }
         }
         .preferredColorScheme(colorScheme)
+        .environment(\.hostSwitch, model.hostContext)
     }
 }

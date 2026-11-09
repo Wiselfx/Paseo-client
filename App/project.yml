@@ -38,6 +38,8 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSLocalNetworkUsageDescription: Paseo connects to the agent daemon on your network.
+        NSSpeechRecognitionUsageDescription: Paseo uses on-device speech recognition to dictate into the composer.
+        NSMicrophoneUsageDescription: Paseo uses the microphone to dictate into the composer.
         # The daemon is reached by IP or Tailscale name over plain ws:// on a private network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

@@ -13,6 +13,7 @@ struct PaseoSettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.hostSwitch) private var hostSwitch
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
     /// Shared with the sidebar usage footer row; hidden by default.
@@ -40,6 +41,7 @@ struct PaseoSettingsView: View {
     enum Page: String, CaseIterable, Identifiable, Equatable {
         case general
         case overview
+        case hosts
         case agents
         case metadata
         case metadataModel
@@ -54,6 +56,7 @@ struct PaseoSettingsView: View {
             switch self {
             case .general: "General"
             case .overview: "Overview"
+            case .hosts: "Hosts"
             case .agents: "Agents"
             case .metadata: "Metadata"
             case .metadataModel: "Model"
@@ -68,6 +71,7 @@ struct PaseoSettingsView: View {
             switch self {
             case .general: "gearshape"
             case .overview: "server.rack"
+            case .hosts: "network"
             case .agents: "person.2"
             case .metadata: "wand.and.stars"
             case .metadataModel: "cpu"
@@ -197,6 +201,8 @@ struct PaseoSettingsView: View {
                         .overview, symbol: Page.overview.symbol,
                         value: session.serverInfo?.hostname ?? "Paseo daemon")
                     rowDivider
+                    settingsRow(.hosts, symbol: Page.hosts.symbol, value: hostsSummary)
+                    rowDivider
                     settingsRow(
                         .agents, symbol: Page.agents.symbol,
                         value: session.hostSettings.config == nil ? "—" : ((session.hostSettings.config?.mcp?.injectIntoAgents ?? true) ? "Tools on" : "Tools off"))
@@ -235,6 +241,7 @@ struct PaseoSettingsView: View {
         switch page {
         case .general: generalPage
         case .overview: overviewPage
+        case .hosts: HostsPage()
         case .agents: agentsPage
         case .metadata: metadataPage
         case .metadataModel: metadataModelPage
@@ -1405,6 +1412,11 @@ struct PaseoSettingsView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 51)
+    }
+
+    private var hostsSummary: String {
+        let count = hostSwitch?.hosts.count ?? 0
+        return count == 0 ? "None" : "\(count) saved"
     }
 
     private var providersSummary: String {
