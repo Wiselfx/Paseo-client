@@ -256,7 +256,7 @@ public struct ClaudeChatView: View {
         }
         .onAppear { seedMascotBaselines() }
         .onAppear { seedSavedDraft() }
-        .onAppear { dictation.onDraft = { [weak store] text in store.draft = text } }
+        .onAppear { dictation.onDraft = { [weak store] text in store?.draft = text } }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
                 dictation.stop(keepingDraft: true)
