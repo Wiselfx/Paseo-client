@@ -96,7 +96,7 @@ struct WorkspaceChangesDiffView: View {
     private func commentMenu(for anchor: LineAnchor) -> some View {
         Group {
             Button("Add review comment…", systemImage: "text.bubble") {
-                commentTarget = .new(anchor: anchor)
+                commentTarget = .new(anchor)
             }
             if selectionAnchor == nil {
                 Button("Select line range…", systemImage: "selection.pin.in.out") {
@@ -556,33 +556,44 @@ struct WorkspaceChangesDiffView: View {
     }
 
     private func sideCell(_ cell: SideBySideModel.Cell?) -> some View {
-        Button {
-            handleRowTap(cellAnchor(cell))
+        // Typed locals: the optional-chained tints inline were too much for the type checker.
+        let anchor: LineAnchor? = cellAnchor(cell)
+        let lineText: String = cell?.line ?? ""
+        let signText: String = cell?.sign ?? " "
+        let bodyText: String = {
+            guard let text = cell?.text, !text.isEmpty else { return " " }
+            return text
+        }()
+        let signColor: Color = cell.map { signTint($0.kind) } ?? .clear
+        let textColor: Color = cell.map { contentTint($0.kind) } ?? ClaudePalette.primaryInk
+        let fill: Color = selectionWash(anchor)
+            ?? cell.map { rowFill($0.kind) }
+            ?? ClaudePalette.chip.opacity(0.35)
+        return Button {
+            handleRowTap(anchor)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Text(cell?.line ?? "")
+                Text(lineText)
                     .foregroundStyle(ClaudePalette.tertiaryInk)
                     .frame(width: 32, alignment: .trailing)
                     .padding(.trailing, 5)
-                Text(cell?.sign ?? " ")
-                    .foregroundStyle(cell.map { signTint($0.kind) } ?? .clear)
+                Text(signText)
+                    .foregroundStyle(signColor)
                     .frame(width: 11, alignment: .leading)
-                Text(cell?.text.flatMap { $0.isEmpty ? nil : $0 } ?? " ")
+                Text(bodyText)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .foregroundStyle(cell.map { contentTint($0.kind) } ?? ClaudePalette.primaryInk)
+                    .foregroundStyle(textColor)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 6)
             .padding(.vertical, 1)
-            .background(
-                selectionWash(cellAnchor(cell))
-                    ?? (cell.map { rowFill($0.kind) } ?? ClaudePalette.chip.opacity(0.35)))
+            .background(fill)
         }
         .buttonStyle(.plain)
         .contextMenu {
-            if reviewEnabled, let anchor = cellAnchor(cell) { commentMenu(for: anchor) }
+            if reviewEnabled, let anchor { commentMenu(for: anchor) }
         }
         .accessibilityLabel(cellAccessibilityLabel(cell))
     }
