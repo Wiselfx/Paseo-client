@@ -96,6 +96,7 @@ extension Turn {
 /// with their highlight sweep, the turn clock, and "No response yet" after 10 s of silence.
 struct ClaudeLiveStatusLine: View {
     let turn: Turn
+    let typography: ClaudeTypography
     @State private var activity: ClaudeActivity
     @State private var wordingChangedAt = Date()
     @State private var lastActivityAt = Date()
@@ -104,8 +105,9 @@ struct ClaudeLiveStatusLine: View {
     /// Ticks the clock and the wording lock four times a second (`TICK_MS`).
     private let ticker = Timer.publish(every: ClaudeMotion.tick, on: .main, in: .common).autoconnect()
 
-    init(turn: Turn) {
+    init(turn: Turn, typography: ClaudeTypography = ClaudeTypography()) {
         self.turn = turn
+        self.typography = typography
         _activity = State(initialValue: ClaudeActivity.current(for: turn))
     }
 
@@ -115,7 +117,7 @@ struct ClaudeLiveStatusLine: View {
     var body: some View {
         HStack(spacing: 6) {
             ClaudeLoaderDots()
-            ClaudeSweepText(text: activity.text, font: .system(size: 14))
+            ClaudeSweepText(text: activity.text, font: typography.sans(14))
                 .id(activity)
                 .transition(
                     .asymmetric(
@@ -123,12 +125,12 @@ struct ClaudeLiveStatusLine: View {
                         removal: .offset(y: -8).combined(with: .opacity))
                 )
             Text(DurationText.short(elapsed))
-                .font(.system(size: 13, design: .monospaced))
+                .font(typography.mono(13))
                 .foregroundStyle(ClaudePalette.captionInk)
                 .padding(.leading, 2)
             if showsOvertime {
                 Text("No response yet")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(typography.sans(11, weight: .medium))
                     .foregroundStyle(ClaudePalette.warning)
                     .padding(.horizontal, 6)
                     .frame(height: 18)

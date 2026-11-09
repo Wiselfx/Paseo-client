@@ -8,6 +8,8 @@ import SwiftUI
 struct ClaudeToolCallDetail: View {
     let call: ToolCall
 
+    private let typography = ClaudeTypography()
+
     private var status: ToolCallPresentation.Status { ToolCallPresentation(call).status }
 
     var body: some View {
@@ -15,7 +17,7 @@ struct ClaudeToolCallDetail: View {
             content
             if status == .failed, let error = call.error {
                 Text(Self.describe(error))
-                    .font(.system(size: 12.5, design: .monospaced))
+                    .font(typography.mono(12.5))
                     .foregroundStyle(ClaudePalette.failureInk)
                     .textSelection(.enabled)
             }
@@ -41,7 +43,7 @@ struct ClaudeToolCallDetail: View {
             VStack(alignment: .leading, spacing: 8) {
                 if let link = URL(string: url) {
                     Link(url, destination: link)
-                        .font(.system(size: 13))
+                        .font(typography.sans(13))
                         .foregroundStyle(ClaudePalette.orange)
                         .lineLimit(1)
                 }
@@ -49,15 +51,15 @@ struct ClaudeToolCallDetail: View {
             }
         case .subAgent(_, let description, _):
             if let description {
-                Text(description).font(.system(size: 14)).foregroundStyle(ClaudePalette.secondaryInk)
+                Text(description).font(typography.sans(14)).foregroundStyle(ClaudePalette.secondaryInk)
             }
         case .plainText(_, let text, _):
             if let text {
-                Text(text).font(.system(size: 14)).foregroundStyle(ClaudePalette.secondaryInk)
+                Text(text).font(typography.sans(14)).foregroundStyle(ClaudePalette.secondaryInk)
                     .textSelection(.enabled)
             }
         case .plan(let text):
-            Text(text).font(.system(size: 16)).foregroundStyle(ClaudePalette.ink).textSelection(.enabled)
+            Text(text).font(typography.serif(16)).foregroundStyle(ClaudePalette.ink).textSelection(.enabled)
         case .worktreeSetup(_, _, let log):
             ClaudeCodeBlock(output: log)
         case .unknown(_, let raw):
@@ -109,10 +111,12 @@ struct ClaudeDiffView: View {
     let path: String
     let lines: [ClaudeDiffLine]
 
+    private let typography = ClaudeTypography()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(path)
-                .font(.system(size: 12.5, design: .monospaced))
+                .font(typography.mono(12.5))
                 .foregroundStyle(ClaudePalette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.head)
@@ -123,7 +127,7 @@ struct ClaudeDiffView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(lines) { line in
                         Text(line.text.isEmpty ? " " : line.text)
-                            .font(.system(size: 12.5, design: .monospaced))
+                            .font(typography.mono(12.5))
                             .foregroundStyle(line.kind == .header ? ClaudePalette.tertiaryInk : ClaudePalette.ink)
                             .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 12)
@@ -156,6 +160,8 @@ struct ClaudeDiffView: View {
 struct ClaudeSearchResults: View {
     let search: ToolCallDetail.Search
 
+    private let typography = ClaudeTypography()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let results = search.webResults, !results.isEmpty {
@@ -164,11 +170,11 @@ struct ClaudeSearchResults: View {
                         Link(destination: url) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(result.title)
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(typography.sans(14, weight: .medium))
                                     .foregroundStyle(ClaudePalette.ink)
                                     .lineLimit(2)
                                 Text(url.host() ?? result.url)
-                                    .font(.system(size: 13))
+                                    .font(typography.sans(13))
                                     .foregroundStyle(ClaudePalette.secondaryInk)
                             }
                         }
@@ -179,7 +185,7 @@ struct ClaudeSearchResults: View {
             } else if let content = search.content, !content.isEmpty {
                 ClaudeCodeBlock(output: content)
             } else {
-                Text("No results").font(.system(size: 13)).foregroundStyle(ClaudePalette.tertiaryInk)
+                Text("No results").font(typography.sans(13)).foregroundStyle(ClaudePalette.tertiaryInk)
             }
         }
     }
@@ -189,16 +195,18 @@ struct ClaudeSearchResults: View {
 struct ClaudeTodoCard: View {
     let list: TimelineItem.TodoList
 
+    private let typography = ClaudeTypography()
+
     private var completed: Int { list.items.count { $0.completed } }
 
     var body: some View {
         ClaudeCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Text("Tasks").font(.system(size: 14, weight: .medium)).foregroundStyle(ClaudePalette.ink)
+                    Text("Tasks").font(typography.sans(14, weight: .medium)).foregroundStyle(ClaudePalette.ink)
                     Spacer(minLength: 8)
                     Text("\(completed)/\(list.items.count) tasks")
-                        .font(.system(size: 13))
+                        .font(typography.sans(13))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                 }
                 ClaudeDivider()
@@ -208,7 +216,7 @@ struct ClaudeTodoCard: View {
                             .font(.system(size: 13))
                             .foregroundStyle(todo.completed ? ClaudePalette.successInk : ClaudePalette.secondaryInk)
                         Text(todo.status == "in_progress" ? (todo.activeForm ?? todo.text) : todo.text)
-                            .font(.system(size: 14))
+                            .font(typography.sans(14))
                             .foregroundStyle(todo.completed ? ClaudePalette.secondaryInk : ClaudePalette.ink)
                             .strikethrough(todo.completed, color: ClaudePalette.tertiaryInk)
                     }
@@ -228,26 +236,28 @@ struct ClaudeTodoCard: View {
 struct ClaudeNoticeRow: View {
     let item: TimelineItem
 
+    private let typography = ClaudeTypography()
+
     var body: some View {
         switch item {
         case .error(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.system(size: 14))
+                .font(typography.sans(14))
                 .foregroundStyle(ClaudePalette.failureInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .notification(let level, let message):
             Label(message, systemImage: level == "warning" ? "exclamationmark.circle" : "info.circle")
-                .font(.system(size: 14))
+                .font(typography.sans(14))
                 .foregroundStyle(level == "error" ? ClaudePalette.failureInk : ClaudePalette.secondaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .compaction(let status):
             Text(status == "loading" ? "Compacting conversation…" : "Conversation compacted")
-                .font(.system(size: 13))
+                .font(typography.sans(13))
                 .foregroundStyle(ClaudePalette.tertiaryInk)
                 .frame(maxWidth: .infinity, alignment: .center)
         case .unknown(let type, _):
             Text("Unsupported item: \(type)")
-                .font(.system(size: 13))
+                .font(typography.sans(13))
                 .foregroundStyle(ClaudePalette.tertiaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
         default:

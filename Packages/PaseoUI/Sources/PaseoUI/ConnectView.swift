@@ -42,9 +42,9 @@ public struct ConnectView: View {
             VStack(spacing: 22) {
                 Spacer(minLength: 20)
                 VStack(spacing: 6) {
-                    Text("Paseo").font(.custom(typography.serifName, size: 34))
+                    Text("Paseo").font(typography.serif(34, relativeTo: .largeTitle))
                     Text("Connect to your daemon")
-                        .font(.system(size: 15))
+                        .font(typography.sans(15))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                 }
                 VStack(spacing: 12) {
@@ -62,7 +62,7 @@ public struct ConnectView: View {
                     connectButton
                     if case .failed(let message) = status {
                         Text(message)
-                            .font(.system(size: 13))
+                            .font(typography.sans(13))
                             .foregroundStyle(ClaudePalette.failureInk)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
@@ -74,7 +74,7 @@ public struct ConnectView: View {
                 Text(
                     "Use your machine's LAN or Tailscale address. Set a password with `paseo daemon set-password`."
                 )
-                .font(.system(size: 12))
+                .font(typography.sans(12))
                 .foregroundStyle(ClaudePalette.captionInk)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -92,7 +92,7 @@ public struct ConnectView: View {
         Button(action: onConnect) {
             HStack(spacing: 8) {
                 Text(connecting ? "Connecting…" : "Connect")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(typography.sans(16, weight: .medium))
                 if connecting { ProgressView().controlSize(.small).tint(ClaudePalette.background) }
             }
             .frame(maxWidth: .infinity)
@@ -118,7 +118,7 @@ public struct ConnectView: View {
                     "", text: text,
                     prompt: Text(prompt).foregroundStyle(ClaudePalette.captionInk)
                 )
-                .font(.system(size: 17))
+                .font(typography.sans(17))
                 .keyboardType(keyboard)
                 .textContentType(contentType)
                 .textInputAutocapitalization(.never)
@@ -138,7 +138,7 @@ public struct ConnectView: View {
                     "", text: text,
                     prompt: Text(prompt).foregroundStyle(ClaudePalette.captionInk)
                 )
-                .font(.system(size: 17))
+                .font(typography.sans(17))
                 .textContentType(.password)
                 .submitLabel(.go)
                 .onSubmit(onConnect)
@@ -156,7 +156,7 @@ public struct ConnectView: View {
     }
 
     private func fieldTitle(_ title: String) -> some View {
-        Text(title).font(.system(size: 12)).foregroundStyle(ClaudePalette.secondaryInk)
+        Text(title).font(typography.sans(12)).foregroundStyle(ClaudePalette.secondaryInk)
     }
 }
 #endif

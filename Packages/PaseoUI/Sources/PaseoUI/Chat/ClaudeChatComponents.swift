@@ -12,6 +12,8 @@ struct ClaudeCodeBlock: View {
     var status: ToolCallPresentation.Status
     var maxHeight: CGFloat
 
+    private let typography = ClaudeTypography()
+
     init(
         title: String? = nil, command: String? = nil, output: String?,
         status: ToolCallPresentation.Status = .succeeded, maxHeight: CGFloat = 260
@@ -29,11 +31,11 @@ struct ClaudeCodeBlock: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     ClaudeStatusDot(status: status)
                     if let title {
-                        Text(title).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(
+                        Text(title).font(typography.mono(12.5)).foregroundStyle(
                             ClaudePalette.secondaryInk)
                     }
                     if let command {
-                        Text(command).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(
+                        Text(command).font(typography.mono(12.5)).foregroundStyle(
                             ClaudePalette.ink
                         ).lineLimit(3)
                     }
@@ -47,7 +49,7 @@ struct ClaudeCodeBlock: View {
             if hasOutput, let output {
                 ScrollView([.vertical, .horizontal]) {
                     Text(output)
-                        .font(.system(size: 12.5, design: .monospaced))
+                        .font(typography.mono(12.5))
                         .foregroundStyle(ClaudePalette.ink.opacity(0.85))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: true, vertical: false)
@@ -132,7 +134,7 @@ struct ClaudeUserBubble: View {
         HStack {
             Spacer(minLength: 42)
             Text(text)
-                .font(.system(size: 18))
+                .font(ClaudeTypography().sans(18))
                 .foregroundStyle(ClaudePalette.ink)
                 .textSelection(.enabled)
                 .padding(.horizontal, 16)
@@ -158,11 +160,12 @@ struct ClaudeProse: View {
     }
 
     static func theme(_ typography: ClaudeTypography) -> ClaudeMarkdownTheme {
-        var theme = ClaudeMarkdownTheme(serifName: typography.serifName, bodySize: 18)
+        var theme = ClaudeMarkdownTheme(serifName: typography.resolvedSerifName, bodySize: 18)
         theme.foreground = ClaudePalette.ink
         theme.secondary = ClaudePalette.secondaryInk
         theme.link = ClaudePalette.orange
         theme.codeBackground = ClaudePalette.codeBackground
+        theme.codeFont = typography.mono(15, relativeTo: .body)
         theme.blockSpacing = 14
         theme.lineSpacing = 6
         return theme

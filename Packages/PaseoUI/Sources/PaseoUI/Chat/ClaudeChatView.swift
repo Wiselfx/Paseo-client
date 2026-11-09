@@ -63,7 +63,7 @@ public struct ClaudeChatView: View {
         .overlay(alignment: .top) {
             if let toast {
                 Text(toast)
-                    .font(.system(size: 13))
+                    .font(typography.sans(13))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
                     .glassEffect()
@@ -106,25 +106,37 @@ public struct ClaudeChatView: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(store.agent?.title ?? "Agent")
-                    .font(.custom(typography.serifName, size: 20))
+                    .font(typography.serif(20, relativeTo: .headline))
                     .lineLimit(1)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 12))
+                        .font(typography.sans(12))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 4)
             if let onNewAgent {
-                Button { newAgent(draft: store.draft) } label: {
-                    Image(systemName: "bubble.left.fill").overlay {
-                        Image(systemName: "plus").font(.system(size: 9, weight: .bold)).foregroundStyle(.black)
+                HStack(spacing: 0) {
+                    Button { newAgent(draft: store.draft) } label: {
+                        Image(systemName: "bubble.left.fill")
+                            .overlay {
+                                Image(systemName: "plus").font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(.black)
+                            }
+                            .frame(width: 45, height: 44)
                     }
-                    .frame(width: 44, height: 44)
+                    .accessibilityLabel("New agent")
+                    Menu {
+                        Button("Archive agent", systemImage: "archivebox", role: .destructive) {
+                            Task { await store.archive() }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 49, height: 44)
+                    }
+                    .accessibilityLabel("Agent options")
                 }
-                .glassEffect(in: .circle)
-                .accessibilityLabel("New agent")
+                .glassEffect(in: .capsule)
             }
         }
         .frame(height: 48)
@@ -181,7 +193,7 @@ public struct ClaudeChatView: View {
                                     Circle().fill(ClaudePalette.warning).frame(width: 6, height: 6)
                                 }
                                 Text(agent.title ?? "New agent")
-                                    .font(.system(size: 14, weight: selected ? .medium : .regular))
+                                    .font(typography.sans(14, weight: selected ? .medium : .regular))
                                     .lineLimit(1)
                             }
                             .padding(.horizontal, 12)
@@ -229,9 +241,9 @@ public struct ClaudeChatView: View {
     private func bannerRow(_ title: String, detail: String?) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "wifi.exclamationmark").font(.system(size: 13))
-            Text(title).font(.system(size: 13, weight: .medium))
+            Text(title).font(typography.sans(13, weight: .medium))
             if let detail {
-                Text(detail).font(.system(size: 13)).foregroundStyle(ClaudePalette.secondaryInk)
+                Text(detail).font(typography.sans(13)).foregroundStyle(ClaudePalette.secondaryInk)
             }
             Spacer(minLength: 0)
         }
@@ -253,7 +265,7 @@ public struct ClaudeChatView: View {
             case .failed(let message):
                 emptyState(title: "Couldn't load agent history", detail: message)
             case .ready:
-                emptyState(title: "Start chatting with this agent…", detail: nil)
+                ClaudeHomeHero(hint: nil)
             }
         } else {
             transcript
@@ -263,12 +275,12 @@ public struct ClaudeChatView: View {
     private func emptyState(title: String, detail: String?) -> some View {
         VStack(spacing: 10) {
             Text(title)
-                .font(.custom(typography.serifName, size: 25))
-                .foregroundStyle(ClaudePalette.adaptive(light: 0.24, dark: 0.76))
+                .font(typography.serif(25, relativeTo: .title))
+                .foregroundStyle(ClaudePalette.ink)
                 .multilineTextAlignment(.center)
             if let detail {
                 Text(detail)
-                    .font(.system(size: 14))
+                    .font(typography.sans(14))
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .multilineTextAlignment(.center)
             }
@@ -334,7 +346,7 @@ public struct ClaudeChatView: View {
                     Task { await store.loadOlder() }
                 } label: {
                     Text("Load earlier")
-                        .font(.system(size: 13))
+                        .font(typography.sans(13))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                         .frame(maxWidth: .infinity)
                         .frame(height: 30)
@@ -360,10 +372,11 @@ public struct ClaudeChatView: View {
             }
             TextField(
                 "", text: $store.draft,
-                prompt: Text("Message the agent, tag @files…").foregroundStyle(ClaudePalette.secondary),
+                prompt: Text(store.turns.isEmpty ? "Chat with Paseo" : "Reply to Paseo")
+                    .foregroundStyle(ClaudePalette.secondaryInk),
                 axis: .vertical
             )
-            .font(.system(size: 18))
+            .font(typography.sans(18))
             .lineLimit(1...12)
             .fixedSize(horizontal: false, vertical: true)
             .focused($focused)
@@ -372,21 +385,47 @@ public struct ClaudeChatView: View {
             .padding(.top, 7)
             .accessibilityIdentifier("composer.draft")
             HStack(spacing: 8) {
+                Menu {
+                    Button("New agent", systemImage: "plus.bubble") {
+                        newAgent(draft: store.draft)
+                    }
+                    Button("Copy agent ID", systemImage: "doc.on.doc") {
+                        UIPasteboard.general.string = store.agentId
+                        Haptics.selection()
+                        showToast("Agent ID copied")
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .regular))
+                        .frame(width: 36, height: 36)
+                        .foregroundStyle(ClaudePalette.ink)
+                        .background(ClaudePalette.chip, in: .circle)
+                }
+                .accessibilityLabel("Add to agent")
                 Button {
                     focused = false
                     sheet = .controls
                 } label: {
-                    Text(modelChipTitle)
-                        .font(.system(size: 14))
-                        .lineLimit(1)
-                        .padding(.horizontal, 14)
-                        .frame(height: 36)
-                        .background(ClaudePalette.chip, in: .capsule)
+                    HStack(spacing: 3) {
+                        Text(modelChipTitle)
+                        if let thinkingLabel {
+                            Text(thinkingLabel).foregroundStyle(ClaudePalette.secondaryInk)
+                        }
+                    }
+                    .font(typography.sans(14))
+                    .lineLimit(1)
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(ClaudePalette.chip, in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Model, thinking and mode")
                 .accessibilityIdentifier("composer.model")
                 Spacer(minLength: 0)
+                roundButton("mic", label: "Dictate", color: ClaudePalette.chip, ink: ClaudePalette.ink) {
+                    focused = true
+                }
+                .accessibilityIdentifier("composer.dictate")
                 if store.isRunning && trimmedDraft.isEmpty {
                     roundButton("stop.fill", label: "Stop response", color: ClaudePalette.ink, ink: ClaudePalette.background) {
                         Task { await store.cancel() }
@@ -409,8 +448,7 @@ public struct ClaudeChatView: View {
         .padding(.top, 1)
         .background(ClaudePalette.composer, in: .rect(cornerRadius: 27))
         .overlay {
-            RoundedRectangle(cornerRadius: 27).stroke(
-                ClaudePalette.adaptive(light: 0.79, dark: 0.29), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: 27).stroke(ClaudePalette.composerBorder, lineWidth: 0.7)
         }
         .padding(.horizontal, focused ? 8 : 16)
         .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: focused)
@@ -421,7 +459,7 @@ public struct ClaudeChatView: View {
     }
 
     private var modelChipTitle: String {
-        [modelLabel, thinkingLabel].compactMap { $0 }.first ?? "Model"
+        modelLabel ?? "Model"
     }
 
     private var thinkingLabel: String? {
@@ -528,9 +566,10 @@ struct ClaudeTurnView: View {
                 ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown)
             }
             if !isRunning, !copyText.isEmpty {
-                HStack(spacing: 4) {
-                    ClaudeCopyButton(text: copyText, label: "Copy turn")
+                HStack(spacing: 17) {
+                    ClaudeCopyButton(text: copyText, label: "Copy response")
                 }
+                .padding(.top, 2)
             }
         }
         .onChange(of: turn.phase) { _, phase in
@@ -561,15 +600,15 @@ struct ClaudeTurnView: View {
             HStack(spacing: 8) {
                 switch turn.phase {
                 case .running:
-                    ClaudeLiveStatusLine(turn: turn)
+                    ClaudeLiveStatusLine(turn: turn, typography: typography)
                 case .completed:
                     Text(turn.duration.map(DurationText.completed) ?? "Completed")
-                        .font(.system(size: 14))
+                        .font(typography.sans(14))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                     Spacer(minLength: 0)
                 case .failed(let message):
                     Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 14))
+                        .font(typography.sans(14))
                         .foregroundStyle(ClaudePalette.failureInk)
                         .lineLimit(2)
                     Spacer(minLength: 0)
@@ -593,7 +632,7 @@ struct ClaudeSegmentView: View {
     var body: some View {
         switch segment {
         case .work(let group):
-            ClaudeWorkGroupCell(group: group, turnIsRunning: turnIsRunning)
+            ClaudeWorkGroupCell(group: group, turnIsRunning: turnIsRunning, typography: typography)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
                 ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown)
@@ -611,6 +650,7 @@ struct ClaudeSegmentView: View {
 struct ClaudeWorkGroupCell: View {
     let group: Turn.WorkGroup
     let turnIsRunning: Bool
+    let typography: ClaudeTypography
 
     @State private var userExpanded: Bool?
     @State private var contentHeight: CGFloat = 0
@@ -661,7 +701,7 @@ struct ClaudeWorkGroupCell: View {
                 Text(group.toolCallCount == 1 ? "tool call" : "tool calls")
             }
         }
-        .font(.system(size: 14))
+        .font(typography.sans(14))
         .foregroundStyle(ClaudePalette.secondaryInk)
         .background {
             if turnIsRunning && group.isActive { ClaudeSweepBand() }
@@ -693,7 +733,9 @@ struct ClaudeWorkGroupCell: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
                 if index > 0 { ClaudeDivider() }
-                ClaudeStepRow(row: row, isLive: turnIsRunning && index == group.rows.count - 1)
+                ClaudeStepRow(
+                    row: row, isLive: turnIsRunning && index == group.rows.count - 1,
+                    typography: typography)
             }
         }
     }
@@ -712,6 +754,7 @@ struct ClaudeStepRow: View {
     let row: TimelineRow
     /// The newest step of a running turn opens by default so you can watch it.
     let isLive: Bool
+    let typography: ClaudeTypography
 
     @State private var userExpanded: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -749,11 +792,11 @@ struct ClaudeStepRow: View {
         switch row.item {
         case .reasoning(let reasoning):
             HStack(spacing: 8) {
-                Text("Thought").font(.system(size: 14, weight: .medium)).foregroundStyle(
+                Text("Thought").font(typography.sans(14, weight: .medium)).foregroundStyle(
                     ClaudePalette.secondaryInk)
                 if !isExpanded {
                     Text(reasoning.text.replacingOccurrences(of: "\n", with: " "))
-                        .font(.system(size: 14))
+                        .font(typography.sans(14))
                         .foregroundStyle(ClaudePalette.tertiaryInk)
                         .lineLimit(1)
                 }
@@ -762,11 +805,11 @@ struct ClaudeStepRow: View {
             let presentation = ToolCallPresentation(call)
             HStack(spacing: 6) {
                 Text(presentation.title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(typography.sans(14, weight: .medium))
                     .foregroundStyle(ClaudePalette.ink)
                 if let subtitle = presentation.subtitle {
                     Text(subtitle)
-                        .font(.system(size: 14))
+                        .font(typography.sans(14))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -784,7 +827,7 @@ struct ClaudeStepRow: View {
         case .reasoning(let reasoning):
             // The opened thought scrolls with the group and holds no scrollbar of its own.
             Text(reasoning.text)
-                .font(.system(size: 15))
+                .font(typography.sans(15))
                 .foregroundStyle(ClaudePalette.secondaryInk)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
