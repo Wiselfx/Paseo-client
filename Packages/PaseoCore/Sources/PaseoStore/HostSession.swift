@@ -92,6 +92,7 @@ public final class HostSession {
         self.attention = AttentionCenter()
         self.labels = WorkspaceLabelsStore(client: client)
         self.fileUploader = ConversationUpload(client: client)
+        self.fileUploader.isRelayConnection = (client as? DaemonConnection)?.endpoint.relay != nil
         self.projectSetupProbe = ProjectSetupProbe(client: client)
         self.importSession = ImportSessionStore(client: client)
         self.forgeSearch = ForgeSearchStore(client: client)
@@ -511,6 +512,8 @@ public final class ConversationStore: Identifiable {
         self.subagents = ConversationSubagents(agentId: agentId, client: client)
         self.backgroundWork = BackgroundWorkStore(agentId: agentId, client: client)
         self.uploads = ConversationUpload(client: client)
+        // R18: relay endpoints cap upload chunks (ConversationUpload.chunkSize(relay:)).
+        self.uploads.isRelayConnection = (client as? DaemonConnection)?.endpoint.relay != nil
     }
 
     /// Loads the tail page. Called by `HostSession` when the conversation opens.

@@ -262,8 +262,9 @@ public struct ConnectionOffer: Sendable, Equatable {
     }
 
     /// Strict standard base64, 32 bytes, canonical: the same rules the daemon's `importPublicKey`
-    /// applies, so a key we accept is a key the daemon produced.
-    static func decodePublicKey(_ encoded: String) throws -> [UInt8] {
+    /// applies, so a key we accept is a key the daemon produced. Public: the app rebuilds
+    /// validated offers from saved hosts with it.
+    public static func decodePublicKey(_ encoded: String) throws -> [UInt8] {
         guard !encoded.isEmpty else { throw ConnectionOfferError.invalidDaemonPublicKey }
         let bytes = try decodeStandardBase64(encoded)
         guard bytes.count == Self.keyByteCount else {

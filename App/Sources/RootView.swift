@@ -43,7 +43,10 @@ struct RootView: View {
             switch model.phase {
             case .setup(let status):
                 if !welcomeCompleted, model.savedHostsSnapshot.isEmpty, case .idle = status {
-                    WelcomeView { connectForm(status: status) }
+                    WelcomeView(
+                        onScan: { method = .scan },
+                        onPaste: { method = .paste }
+                    ) { connectForm(status: status) }
                 } else {
                     connectForm(status: status)
                 }
@@ -69,6 +72,75 @@ struct RootView: View {
         .id(rebuildKey)
         .preferredColorScheme(colorScheme)
         .environment(\.hostSwitch, model.hostContext)
+        .sheet(isPresented: $model.addHostRequested) {
+            AddHostMethodsSheet(
+                onDirect: { model.addHostRequested = false },
+                onScan: { model.addHostRequested = false; method = .scan },
+                onPaste: { model.addHostRequested = false; method = .paste })
+        }
+        .sheet(item: $method) { choice in
+            if choice == .scan {
+                PairScanSheet { payload in
+                    method = nil
+                    stagePairing(payload)
+                }
+            } else {
+                PastePairingSheet { payload in
+                    method = nil
+                    stagePairing(payload)
+                }
+            }
+        }
+        .sheet(item: $pendingPairing) { pending in
+            HostConfirmationPairingSheet(offer: pending.offer, kind: pending.kind) {
+                attemptPairing(pending.offer, password: nil)
+            }
+        }
+        .sheet(item: $passwordPairing) { pending in
+            PairingPasswordSheet(host: pending.offer.serverID, error: pairingError) { entered in
+                attemptPairing(pending.offer, password: entered)
+            }
+        }
+    }
+
+    /// A scanned/pasted payload: parse it (never log it), then confirm unless the link
+    /// matches a saved host exactly (upstream: resolve true without asking).
+    private func stagePairing(_ payload: String) {
+        do {
+            let offer = try ConnectionOffer(link: payload)
+            let saved = model.savedHostsSnapshot.compactMap { entry in
+                model.savedHost(withId: entry.id)
+            }
+            if let kind = HostConfirmation.confirmationKind(offer: offer, savedHosts: saved) {
+                pendingPairing = PendingPairing(offer: offer, kind: kind)
+            } else {
+                attemptPairing(offer, password: nil)
+            }
+        } catch {
+            pairingError = "That link doesn't look right."
+            method = .paste
+        }
+    }
+
+    @State private var passwordPairing: PendingPairing?
+
+    private func attemptPairing(_ offer: ConnectionOffer, password: String?) {
+        pairingError = nil
+        Task {
+            switch await model.connectRelay(offer: offer, password: password) {
+            case .connected:
+                pendingPairing = nil
+                passwordPairing = nil
+            case .passwordRequired:
+                pendingPairing = nil
+                passwordPairing = PendingPairing(offer: offer, kind: .newHost)
+            case .failed(let message):
+                pairingError = message
+                if passwordPairing == nil {
+                    method = .paste
+                }
+            }
+        }
     }
 
     /// Drains queued attention intents and hands them to the notification coordinator. Runs on

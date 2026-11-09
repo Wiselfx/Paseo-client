@@ -85,6 +85,11 @@ struct ConnectionsPage: View {
                     .foregroundStyle(ClaudePalette.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if host.isRelay {
+                    Text("Encrypted relay")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ClaudePalette.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button {
