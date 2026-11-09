@@ -68,14 +68,14 @@ composer, T15 git/file ops backend, M6a attachments, M7c file-call rows + summar
 archive undo (confirmation kept when the host lacks archiveUndo), M4c host settings, M3f panel git +
 file ops, M2.9 sidebar badges/display options/hide, M8c provider features (Features page, Fast chip,
 Settings default send steer/queue/interrupt), M3g terminal key bar, tab unread/rename/close, script
-restart/view service, local links, 2k scrollback (PaseoCore 354/126/17 = 497 green; one-off
+restart/view service, local links, 2k scrollback, M3h file sort/share/Markdown+image preview,
+diff options (hunk-level whitespace hide, wrap, collapse) and jump-to-file (PaseoCore 354/126/17 = 497 green; one-off
 DaemonConnectionTests flake → T16). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - M7d `m7d-anchor-reveal` on worker 0778f3b0: chat-anchor, reveal, rewind (transcript).
 - T16 `t16-flake-usage` on worker 918fee9a: connection-test flake, context/usage store.
-- M3h `m3h-files-diff` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: file sort/share/preview, diff options.
 - M8d `m8d-mentions-dictation` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: @-file popover, dictation.
 - R10 `r10-split` on worker 79dd09d6: split PaseoSidebar + ClaudeSchedulesView into files (pure move).
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
