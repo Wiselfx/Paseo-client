@@ -1,0 +1,15 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agent_history_response",
+    "payload": {
+      "requestId": "m7e-17",
+      "entries": [],
+      "pageInfo": {
+        "nextCursor": null,
+        "prevCursor": null,
+        "hasMore": false
+      }
+    }
+  }
+}

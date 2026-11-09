@@ -1,0 +1,110 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agent_response",
+    "payload": {
+      "requestId": "m7e-13",
+      "agent": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "provider": "omp",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_fixture",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinkingOptionId": null,
+        "effectiveThinkingOptionId": "high",
+        "runtimeInfo": {
+          "provider": "omp",
+          "sessionId": "sandbox-session",
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "thinkingOptionId": "high",
+          "modeId": "full"
+        },
+        "createdAt": "2026-11-09T08:20:13.045Z",
+        "updatedAt": "2026-11-09T08:20:16.933Z",
+        "lastUserMessageAt": "2026-11-09T08:20:13.078Z",
+        "status": "idle",
+        "activeTurn": null,
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true,
+          "supportsSessionListing": true,
+          "supportsDynamicModes": true,
+          "supportsMcpServers": true,
+          "supportsReasoningStream": true,
+          "supportsToolInvocations": true,
+          "supportsRewindConversation": true,
+          "supportsRewindFiles": false,
+          "supportsRewindBoth": false,
+          "supportsNativePaseoTools": true
+        },
+        "currentModeId": "full",
+        "availableModes": [
+          {
+            "id": "full",
+            "label": "Full Access",
+            "description": "Launches OMP with yolo approval mode so tools run without prompts.",
+            "icon": "ShieldOff",
+            "colorTier": "dangerous",
+            "isUnattended": true
+          },
+          {
+            "id": "write",
+            "label": "Write Approval",
+            "description": "Launches OMP with write approval mode \u2014 reads are free, writes require approval.",
+            "icon": "ShieldAlert",
+            "colorTier": "moderate"
+          },
+          {
+            "id": "ask",
+            "label": "Always Ask",
+            "description": "Launches OMP with always-ask approval mode for write and exec tools.",
+            "icon": "ShieldCheck",
+            "colorTier": "safe"
+          }
+        ],
+        "features": [
+          {
+            "type": "toggle",
+            "id": "fast_mode",
+            "label": "Fast",
+            "icon": "zap",
+            "value": false
+          }
+        ],
+        "pendingPermissions": [],
+        "persistence": {
+          "provider": "omp",
+          "sessionId": "sandbox-session",
+          "nativeHandle": "/tmp/fixture-sandbox/sandbox-session.jsonl",
+          "metadata": {
+            "cwd": "/tmp/fixture-sandbox",
+            "bridgedTools": [],
+            "model": "opencode-go/deepseek-v4.1-flash",
+            "modeId": "full"
+          }
+        },
+        "title": "fixture agent A",
+        "labels": {},
+        "archivedAt": null,
+        "requiresAttention": false,
+        "attentionReason": null,
+        "attentionTimestamp": null
+      },
+      "project": {
+        "projectKey": "prj_fixture",
+        "projectName": "fixture-sandbox",
+        "workspaceName": "Reply with ready",
+        "checkout": {
+          "cwd": "/tmp/fixture-sandbox",
+          "currentBranch": "main",
+          "remoteUrl": null,
+          "worktreeRoot": "/tmp/fixture-sandbox",
+          "isGit": true,
+          "isPaseoOwnedWorktree": false,
+          "mainRepoRoot": null
+        }
+      },
+      "error": null
+    }
+  }
+}
