@@ -36,7 +36,11 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.showBranch") var showBranch = true
     @AppStorage("paseo.sidebar.showDiffStats") var showDiffStats = true
     @AppStorage("paseo.sidebar.showPRBadge") var showPRBadge = true
-    @AppStorage("paseo.sidebar.groupByProject") var groupByProject = true
+    @AppStorage("paseo.sidebar.groupBy") var groupByRaw = SidebarGrouping.project.rawValue
+    /// Running workspaces float to the top of their group. Default on.
+    @AppStorage("paseo.sidebar.activeFirst") var activeFirst = true
+    /// Project ids whose "Set up worktree scripts" callout was dismissed.
+    @AppStorage("paseo.sidebar.setupCalloutDismissed") var setupCalloutDismissed = ""
     @AppStorage("paseo.sidebar.hiddenWorkspaces") var hiddenWorkspaces = ""
     /// The sidebar label filter: the raw label name, or "" for All (one at a time, by design).
     @AppStorage("paseo.sidebar.labelFilter") var labelFilter = ""
@@ -135,6 +139,8 @@ struct PaseoSidebar: View {
                 NewLabelSheet(session: session, workspace: target) { sheet = nil }
             case .labelsManager:
                 LabelsManageSheet(session: session) { sheet = nil }
+            case .project(let target):
+                ProjectSettingsView(session: session, project: target)
             }
         }
         .alert(
@@ -508,6 +514,7 @@ private enum PaseoSidebarSheet: Identifiable {
     case usage
     case newLabel(WorkspaceDescriptor)
     case labelsManager
+    case project(WorkspaceProjectDescriptor)
 
     var id: String {
         switch self {
@@ -520,6 +527,7 @@ private enum PaseoSidebarSheet: Identifiable {
         case .usage: "usage"
         case .newLabel(let target): "newLabel:\(target.id)"
         case .labelsManager: "labelsManager"
+        case .project(let target): "project:\(target.projectId)"
         }
     }
 }
