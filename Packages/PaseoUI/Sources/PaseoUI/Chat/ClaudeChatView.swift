@@ -1,7 +1,9 @@
 #if canImport(UIKit)
 import PaseoStore
+import PhotosUI
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// One agent's conversation, rendered from `ConversationStore.turns` in ClaudeUI's clothes.
 ///
@@ -71,6 +73,12 @@ public struct ClaudeChatView: View {
     @State private var showFullScreenComposer = false
     /// M8b: debounce for saved-draft writes (~500 ms).
     @State private var draftSaveTask: Task<Void, Never>?
+    /// M6a: attachments for this conversation, app-scope so they survive agent switches.
+    @State private var attachmentStore = ComposerAttachmentStore.shared
+    @State private var photoSelection: [PhotosPickerItem] = []
+    @State private var showCameraPicker = false
+    @State private var showFileImporter = false
+    @State private var attachmentViewerImage: UIImage?
 
     private enum SlashCommandState {
         case idle, loading, ready
@@ -145,6 +153,10 @@ public struct ClaudeChatView: View {
         }
         .onChange(of: store.draft) { _, newValue in
             scheduleDraftSave(newValue)
+        }
+        .onChange(of: photoSelection) { _, items in
+            guard !items.isEmpty else { return }
+            handlePickedPhotos(items)
         }
         .onChange(of: store.activeTurnId) { _, newId in
             let now = Date()
@@ -999,7 +1011,13 @@ public struct ClaudeChatView: View {
     }
 
     /// Long-press on the send button: holds the draft back until the running turn ends.
+    /// Attachments make queuing non-trivial, so it is disabled while the tray is non-empty.
     private func queueDraft() {
+        guard trayItems.isEmpty else {
+            Haptics.selection()
+            showToast("Remove attachments to queue")
+            return
+        }
         let text = trimmedDraft
         guard !text.isEmpty else { return }
         composerQueue.mutate(store.agentId) { _ = $0.enqueue(text) }
@@ -1062,6 +1080,129 @@ public struct ClaudeChatView: View {
         }
     }
 
+    // MARK: Attachments (M6a)
+
+    private var trayItems: [ComposerAttachmentItem] { attachmentStore.items(for: store.agentId) }
+
+    private var hasUploadingAttachment: Bool {
+        trayItems.contains { item in
+            switch item.phase {
+            case .pending, .uploading: true
+            case .done, .failed: false
+            }
+        }
+    }
+
+    /// Send is enabled with an empty draft when there's a finished attachment; disabled while an
+    /// upload is in flight.
+    private var canSendMessage: Bool {
+        guard !hasUploadingAttachment else { return false }
+        if !trimmedDraft.isEmpty { return true }
+        return trayItems.contains { if case .done = $0.phase { true } else { false } }
+    }
+
+    private var cameraAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
+
+    /// Decodes, downscales to ≤ 2048 px and re-encodes as JPEG (0.85), then attaches.
+    private func attachImageData(_ data: Data, fileName: String) {
+        guard let processed = ComposerImageProcessor.downscaledJPEG(data: data) else {
+            showToast("Couldn't read that image.")
+            return
+        }
+        let item = ComposerAttachmentItem(
+            fileName: fileName, mimeType: "image/jpeg", byteCount: processed.data.count,
+            data: processed.data, thumbnail: processed.image)
+        attachmentStore.add(item, to: store.agentId, store: store)
+    }
+
+    private func handlePickedPhotos(_ selection: [PhotosPickerItem]) {
+        Task {
+            for picked in selection {
+                guard let data = try? await picked.loadTransferable(type: Data.self) else {
+                    continue
+                }
+                attachImageData(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
+            }
+            photoSelection = []
+        }
+    }
+
+    private func attachFileURLs(_ urls: [URL]) {
+        for url in urls {
+            let name = url.lastPathComponent
+            guard url.startAccessingSecurityScopedResource() else {
+                showToast("Couldn't open \(name).")
+                continue
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+            guard let data = try? Data(contentsOf: url) else {
+                showToast("Couldn't read \(name).")
+                continue
+            }
+            guard data.count <= ConversationUpload.maxBytes else {
+                showToast("\(name) is too large (50 MB max).")
+                continue
+            }
+            let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+                ?? "application/octet-stream"
+            let item = ComposerAttachmentItem(
+                fileName: name, mimeType: mimeType, byteCount: data.count,
+                data: data, thumbnail: nil)
+            attachmentStore.add(item, to: store.agentId, store: store)
+        }
+    }
+
+    /// "Mention a file": inserts `@` and focuses the composer.
+    private func mentionFile() {
+        if store.draft.isEmpty {
+            store.draft = "@"
+        } else if store.draft.hasSuffix(" ") || store.draft.hasSuffix("\n") {
+            store.draft += "@"
+        } else {
+            store.draft += " @"
+        }
+        focused = true
+    }
+
+    /// Pasted images attach; pasted text keeps the default text behavior.
+    private func handlePastedItems(_ providers: [NSItemProvider]) {
+        for provider in providers {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) {
+                data, _ in
+                guard let data else { return }
+                Task { @MainActor in
+                    attachImageData(data, fileName: "pasted-\(UUID().uuidString.prefix(8)).jpg")
+                }
+            }
+        }
+    }
+
+    /// The pill row above the text field: thumbnails/file pills with remove "x";
+    /// progress ring while uploading; retry on failure.
+    @ViewBuilder private var attachmentTray: some View {
+        if !trayItems.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(trayItems) { item in
+                        ComposerAttachmentPill(
+                            item: item,
+                            uploadProgress: store.uploads.progress,
+                            onRemove: {
+                                attachmentStore.remove(item.id, from: store.agentId, store: store)
+                            },
+                            onRetry: {
+                                attachmentStore.retry(item.id, in: store.agentId, store: store)
+                            },
+                            onTapImage: { image in attachmentViewerImage = image })
+                    }
+                }
+                .padding(.vertical, 2)
+                .padding(.horizontal, 1)
+            }
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
     // MARK: Composer
 
     private var composer: some View {
@@ -1074,10 +1215,12 @@ public struct ClaudeChatView: View {
         .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: focused)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: slashQuery != nil)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isQueueNonEmpty)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: !trayItems.isEmpty)
     }
 
     private var composerCard: some View {
         VStack(alignment: .leading, spacing: 8) {
+            attachmentTray
             if let error = store.actionError {
                 Text(error)
                     .font(.system(size: 13))
@@ -1101,6 +1244,17 @@ public struct ClaudeChatView: View {
             .accessibilityIdentifier("composer.draft")
             HStack(spacing: 8) {
                 Menu {
+                    PhotosPicker(
+                        selection: $photoSelection, maxSelectionCount: 10, matching: .images
+                    ) {
+                        Label("Photo Library", systemImage: "photo.on.rectangle")
+                    }
+                    if cameraAvailable {
+                        Button("Camera", systemImage: "camera") { showCameraPicker = true }
+                    }
+                    Button("Files", systemImage: "folder") { showFileImporter = true }
+                    Button("Mention a file", systemImage: "at") { mentionFile() }
+                    Divider()
                     Button("New agent", systemImage: "plus.bubble") {
                         newAgent(draft: store.draft)
                     }
@@ -1148,7 +1302,7 @@ public struct ClaudeChatView: View {
                     .accessibilityIdentifier("composer.stop")
                 } else {
                     QueueSendButton(
-                        isRunning: store.isRunning, canSend: !trimmedDraft.isEmpty
+                        isRunning: store.isRunning, canSend: canSendMessage
                     ) {
                         send()
                     } onQueue: {
@@ -1176,6 +1330,39 @@ public struct ClaudeChatView: View {
         .fullScreenCover(isPresented: $showFullScreenComposer) {
             FullScreenComposer(draft: $store.draft, isRunning: store.isRunning) { send() }
         }
+        .fileImporter(
+            isPresented: $showFileImporter, allowsMultipleSelection: true,
+            allowedContentTypes: [.item]
+        ) { result in
+            switch result {
+            case .success(let urls): attachFileURLs(urls)
+            case .failure(let error): showToast(error.localizedDescription)
+            }
+        }
+        .sheet(isPresented: $showCameraPicker) {
+            CameraCaptureView(
+                onCapture: { image in
+                    showCameraPicker = false
+                    guard let data = image.jpegData(compressionQuality: 1.0) else {
+                        showToast("Couldn't read that photo.")
+                        return
+                    }
+                    attachImageData(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
+                },
+                onCancel: { showCameraPicker = false }
+            )
+            .ignoresSafeArea()
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { attachmentViewerImage != nil },
+                set: { if !$0 { attachmentViewerImage = nil } })
+        ) {
+            if let image = attachmentViewerImage {
+                AttachmentImageViewer(image: image)
+            }
+        }
+        .onPasteCommand(of: [.image], perform: handlePastedItems)
     }
 
     /// M8b: the expand control — visible only when the draft is ~5 lines tall or more.
@@ -1217,11 +1404,23 @@ public struct ClaudeChatView: View {
 
     private func send() {
         let text = trimmedDraft
-        guard !text.isEmpty else { return }
+        // Send is disabled while an upload is in flight; the tray keeps the failed pills,
+        // everything ready rides this send.
+        let readyAttachments = trayItems.compactMap { item -> AgentAttachment? in
+            if case .done(let attachment) = item.phase { return .uploadedFile(attachment) }
+            return nil
+        }
+        guard !text.isEmpty || !readyAttachments.isEmpty else { return }
+        guard !hasUploadingAttachment else { return }
         SavedDraftStore.clear(store.agentId)
         focused = false
         Haptics.send()
-        Task { await store.send(text) }
+        Task {
+            await store.sendWithAttachments(text, attachments: readyAttachments)
+            if store.actionError == nil {
+                attachmentStore.consumeDoneAttachments(for: store.agentId)
+            }
+        }
     }
 
     private func roundButton(

@@ -194,11 +194,11 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Interrupt (stop) control — See Conversation & turns — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.stop`, `store.cancel()`); `docs/research/01-app-features.md:48`
 - [ ] Feature: Keyboard behavior setting (Enter vs ⌘/Ctrl+Enter; Default send: Interrupt/Steer/Queue) — Status: `missing` — Source: `docs/research/01-app-features.md:75,272`
 - [ ] Feature: Fullscreen input expansion — Status: `done` (expand control at the card's top-right when the draft runs ~5 lines; full-height editor, Sans 17, Done/Send; same draft binding) — Source: `docs/research/01-app-features.md:77`; this client `…/Chat/FullScreenComposer.swift`, `…/Chat/ClaudeChatView.swift`
-- [ ] Feature: Attachment tray (pills above the input) — Status: `missing` — Source: `docs/research/01-app-features.md:78`
-- [ ] Feature: Add attachment menu (image / file upload / issue-or-PR; paste; drag-and-drop; large pasted text becomes a file) — Status: `missing` — Source: `docs/research/01-app-features.md:79-83`; docs/research/04-protocol-agents-permissions-settings.md:918
-- [ ] Feature: Send message with attachments (image inline base64; file upload via `file.upload.request`) — Status: `store only (no UI)` (binary upload itself needs a PaseoKit binary-send that does not exist yet — T12 gap) — Source: this client `Packages/PaseoCore/Sources/PaseoStore/ConversationExtras.swift:14-68`; `docs/STATUS.md:29`; docs/research/04-protocol-agents-permissions-settings.md:957
+- [ ] Feature: Attachment tray (pills above the input) — Status: `done` (56 pt image thumbnails / file pills with icon + name + size, remove "x", thin progress ring while uploading, retry on failure, downscale ≤ 2048 px JPEG 0.85 at attach time; uploads happen at attach, send is instant) — Source: `docs/research/01-app-features.md:78`; this client `…/Chat/ComposerAttachments.swift`, `…/Chat/ClaudeChatView.swift`
+- [ ] Feature: Add attachment menu (image / file upload / issue-or-PR; paste; drag-and-drop; large pasted text becomes a file) — Status: `done` (PhotosPicker multi, Camera on devices with one, fileImporter any type, "Mention a file" inserts @ + focuses, paste of an image attaches; not: issue-or-PR forge picker, drag-and-drop, large-pasted-text-to-file) — Source: `docs/research/01-app-features.md:79-83`; this client `…/Chat/ClaudeChatView.swift`, `…/Chat/CameraCapture.swift`
+- [ ] Feature: Send message with attachments (image inline base64; file upload via `file.upload.request`) — Status: `done` (files ride `file.upload.request` at attach time via `ConversationUpload` (T14), sent as `.uploadedFile` refs through `sendWithAttachments` (T12); attachment-only send allowed; send disabled while an upload is in flight; inline base64 path unused) — Source: this client `…/Chat/ClaudeChatView.swift`; `Packages/PaseoCore/Sources/PaseoStore/ConversationExtras.swift:14-68`
 - [ ] Feature: Forge issue/PR attach + searchable picker — Status: `missing` — Source: `docs/research/01-app-features.md:79,83`; docs/research/02-protocol-workspaces-git-files.md:420
-- [ ] Feature: Attachment actions (open/remove per pill, open in side pane) — Status: `missing` — Source: `docs/research/01-app-features.md:82`
+- [ ] Feature: Attachment actions (open/remove per pill, open in side pane) — Status: `done` (remove per pill everywhere; image pills open a full-screen viewer; file pills have no open) — Source: `docs/research/01-app-features.md:82`; this client `…/Chat/ComposerAttachments.swift`
 - [ ] Feature: Agent controls (provider/model/thinking/mode) in the composer — Status: `done` (sheet, not chips) — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.model` → `ClaudeAgentControlsSheet`); `docs/research/01-app-features.md:84`
 - [ ] Feature: Provider-feature chips / aggregated Features sheet in composer — Status: `missing` — Source: `docs/research/01-app-features.md:84`; docs/research/04-protocol-agents-permissions-settings.md:308-342
 - [ ] Feature: Agent profiles picker (fills provider/model/mode/thinking/features once at creation) — Status: `store only (no UI)` — Source: `docs/research/01-app-features.md:85`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:118-127`
@@ -531,8 +531,8 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 95 | 23 % |
-| `missing` | 211 | 50 % |
+| `done` | 99 | 24 % |
+| `missing` | 207 | 49 % |
 | `desktop-only (flag)` | 46 | 11 % |
 | `store only (no UI)` | 31 | 7 % |
 | `in flight` (M3a 1 · M3b 5 · M3c 8 · M3d 5) | 19 | 5 % |
