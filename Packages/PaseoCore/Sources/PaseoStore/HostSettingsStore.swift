@@ -37,6 +37,10 @@ public final class HostSettingsStore {
     public private(set) var supportsPushTokenRevocation = false
     /// `features.daemonDiagnostics`: only capable daemons answer `diagnostics.request`.
     public private(set) var supportsDaemonDiagnostics = false
+    /// `features.daemonStatusRpc`: only capable daemons answer `daemon.get_pairing_offer`.
+    public private(set) var supportsPairingOffer = false
+    /// `features.relayConfig`: only capable daemons accept relay config patches.
+    public private(set) var supportsRelayConfig = false
 
     // Presence state. The app drives this from focus and visibility changes.
     public private(set) var isPresenting = false
@@ -247,6 +251,60 @@ public final class HostSettingsStore {
 
     public private(set) var diagnosticsState: DiagnosticsState = .idle
 
+    /// What the last `loadPairingOffer()` did. The offer URL is a credential: it lives
+    /// only here, transiently, until the Pair device page clears it on close. Never logged.
+    public enum PairingOfferState: Sendable, Equatable {
+        case idle
+        case loading
+        case received(url: String, relayEnabled: Bool)
+        case failed(String)
+    }
+
+    public private(set) var pairingOfferState: PairingOfferState = .idle
+
+    /// Fetches the daemon's pairing offer. Gated on `features.daemonStatusRpc`: returns false
+    /// without sending anything when the daemon cannot serve it. No caching across calls.
+    @discardableResult
+    public func loadPairingOffer() async -> Bool {
+        guard supportsPairingOffer else {
+            pairingOfferState = .failed("This daemon cannot create a pairing link.")
+            return false
+        }
+        pairingOfferState = .loading
+        do {
+            let response = try await client.send(DaemonGetPairingOfferRequest(), timeout: .seconds(30))
+            if !response.url.isEmpty {
+                pairingOfferState = .received(url: response.url, relayEnabled: response.relayEnabled)
+            } else if response.relayEnabled {
+                pairingOfferState = .failed("Pairing offer unavailable.")
+            } else {
+                pairingOfferState = .received(url: "", relayEnabled: false)
+            }
+            return true
+        } catch {
+            pairingOfferState = .failed(hostSettingsErrorText(error))
+            return false
+        }
+    }
+
+    /// Drops the offer (the Pair device page calls this on close; the URL is a credential).
+    public func clearPairingOffer() {
+        pairingOfferState = .idle
+    }
+
+    /// Enables relay on the daemon (`set_daemon_config_request {relay:{enabled:true}}`).
+    /// Gated on `features.relayConfig`; returns false with `error` set when gated out.
+    @discardableResult
+    public func enableRelay() async -> Bool {
+        guard supportsRelayConfig else {
+            error = "This daemon cannot be configured for relay."
+            return false
+        }
+        var patch = DaemonConfigPatch()
+        patch.relay = .init(enabled: true)
+        return await save(patch)
+    }
+
     /// Runs the daemon's whole-host diagnostic (`diagnostics.request`, gated on
     /// `features.daemonDiagnostics`). Returns false without sending anything when the daemon
     /// is not capable; the state becomes `.unsupported` and `error` is untouched. Failures
@@ -382,6 +440,8 @@ public final class HostSettingsStore {
         supportsProfiles = info?.hasFeature("agentProfiles") ?? false
         supportsPushTokenRevocation = info?.hasFeature("pushTokenRevocation") ?? false
         supportsDaemonDiagnostics = info?.hasFeature("daemonDiagnostics") ?? false
+        supportsPairingOffer = info?.hasFeature("daemonStatusRpc") ?? false
+        supportsRelayConfig = info?.hasFeature("relayConfig") ?? false
         if !supportsDaemonDiagnostics, diagnosticsState != .loading {
             diagnosticsState = .unsupported
         }
