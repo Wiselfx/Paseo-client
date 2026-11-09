@@ -125,7 +125,7 @@ work, start fresh when scope changes or its context drifts (256k context, compac
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
 - M12 `m12-forge-attach` on Crouton c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: Add issue or PR picker, sound cues, PARITY sweep.
 - M13 `m13-voice-settings` on Crouton 6705fee4-a9d1-4be4-9962-4524eff8f59c: host Voice page, speech provider sheets, local models.
-- R15 `r15-relay-research` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: relay + pairing research (doc only).
+- R16 `r16-relay-crypto` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: Noise NK, record codec, offer parsing (swift-crypto approved by the user). Plan: R17 transport, R18 pairing UI, R19 Pair device (`docs/research/11` §10).
 - Idle: DeepSeek 8872f024 (T17; deep protocol/subscription context).
 Known store gaps: fork can't carry provider feature values.
 
