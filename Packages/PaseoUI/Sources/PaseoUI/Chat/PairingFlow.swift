@@ -254,6 +254,7 @@ public struct QRScannerView: UIViewControllerRepresentable {
         let onFailed: () -> Void
         private weak var scanner: DataScannerViewController?
         private var reported = false
+        private var started = false
 
         init(onPayload: @escaping (String) -> Void, onFailed: @escaping () -> Void) {
             self.onPayload = onPayload
@@ -265,7 +266,10 @@ public struct QRScannerView: UIViewControllerRepresentable {
         }
 
         func beginScanning() {
-            guard !reported else { return }
+            // Recognition never delivers without this; it throws when the scanner is
+            // unavailable or permissions are missing, which the sheet turns into Paste.
+            guard !reported, !started else { return }
+            started = true
             do {
                 try scanner?.startScanning()
             } catch {
@@ -279,16 +283,19 @@ public struct QRScannerView: UIViewControllerRepresentable {
             Task { @MainActor in self.onFailed() }
         }
 
-        func dataScanner(_ dataScanner: DataScannerViewController, becameUnavailableWithError error: Error) {
+        func dataScanner(
+            _ dataScanner: DataScannerViewController,
+            becameUnavailableWithError error: DataScannerViewController.ScanningUnavailable
+        ) {
             reportFailure()
         }
 
         /// Point-at-the-code detection (the natural scan path).
         func dataScanner(
             _ dataScanner: DataScannerViewController,
-            didAdd allItems: [RecognizedItem]
+            didAdd addedItems: [RecognizedItem], allItems: [RecognizedItem]
         ) {
-            guard let first = allItems.first,
+            guard let first = addedItems.first,
                 case .barcode(let barcode) = first,
                 let payload = barcode.payloadStringValue
             else { return }
@@ -565,7 +572,7 @@ public struct PairingPasswordSheet: View {
     }
 
     private func submit() {
-        guard !password.isEmpty else { return }
+        guard !password.isEmpty, !isAttempting else { return }
         onConnect(password)
     }
 }

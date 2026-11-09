@@ -115,6 +115,27 @@ import Testing
         #expect(endpoint.url.absoluteString.contains("serverId=srv_AAAAAAAAAAAA"))
     }
 
+    @Test func aTypedPasswordOverridesStoredAndOffer() throws {
+        // Review N3: precedence is typed > offer > store, so a password prompt can resume.
+        let pins = RelayHostPins(store: InMemoryRelayPinStore())
+        let secrets = InMemoryRelaySecretStore()
+        secrets.savePassword("stored", serverID: Self.serverID)
+
+        let typed = try Self.offer(password: "from-link")
+            .makeEndpoint(secrets: secrets, pins: pins, password: "typed-fresh")
+        #expect(typed.credential == .password("typed-fresh"))
+
+        // Nil typed falls back to the offer's embedded password, not the store.
+        let offerWins = try Self.offer(password: "from-link")
+            .makeEndpoint(secrets: secrets, pins: pins)
+        #expect(offerWins.credential == .password("from-link"))
+
+        // An empty typed string is no typed password at all.
+        let emptyTyped = try Self.offer()
+            .makeEndpoint(secrets: secrets, pins: pins, password: "")
+        #expect(emptyTyped.credential == .password("stored"))
+    }
+
     @Test func aLinkWithoutAPasswordFallsBackToTheSecretStore() throws {
         let pins = RelayHostPins(store: InMemoryRelayPinStore())
         let secrets = InMemoryRelaySecretStore()

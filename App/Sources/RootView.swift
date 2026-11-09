@@ -30,7 +30,6 @@ struct RootView: View {
     }
 
     enum PairingSheet: Identifiable {
-        case methods
         case scan
         case paste(error: String?)
         case confirm(PendingPairing)
@@ -38,7 +37,6 @@ struct RootView: View {
 
         var id: String {
             switch self {
-            case .methods: "methods"
             case .scan: "scan"
             case .paste(let error): "paste.\(error ?? "")"
             case .confirm(let pending): "confirm.\(pending.id)"
@@ -112,11 +110,6 @@ struct RootView: View {
         }
         .sheet(item: $pairingSheet) { sheet in
             switch sheet {
-            case .methods:
-                AddHostMethodsSheet(
-                    onDirect: { pairingSheet = nil },
-                    onScan: { pairingSheet = .scan },
-                    onPaste: { pairingSheet = .paste(error: nil) })
             case .scan:
                 PairScanSheet(
                     onScanned: { payload in
@@ -145,6 +138,8 @@ struct RootView: View {
         .onChange(of: model.relayPasswordRequest) { _, request in
             guard let request else { return }
             // S3: a saved relay host rejected the stored password; ask again here.
+            // Clear the request after consuming (N6): a stale non-nil value is a trap.
+            model.relayPasswordRequest = nil
             pairingSheet = .password(
                 PendingPairing(offer: request.offer, kind: .newHost), error: nil)
         }
@@ -188,8 +183,9 @@ struct RootView: View {
             case .connected:
                 pairingSheet = nil
             case .passwordRequired:
-                // S2: after a submitted password, come back fresh with the reason's own words.
-                let error = fromPassword ? "Incorrect password." : nil
+                // S2: after a submitted password, come back fresh; "Wrong password." matches
+                // the daemon-reason mapping in AppModel.describe (one wording, N8).
+                let error = fromPassword ? "Wrong password." : nil
                 pairingSheet = .password(
                     PendingPairing(offer: pending.offer, kind: pending.kind), error: error)
             case .failed(let message):

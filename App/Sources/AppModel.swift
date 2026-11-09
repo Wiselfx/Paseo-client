@@ -245,12 +245,13 @@ final class AppModel {
         } catch let error as ConnectionError {
             // S3: a saved relay host rejecting its stored password reroutes into the
             // password sheet (RootView reads relayPasswordRequest), not a dead-end failure.
-            if let relayOffer,
+            // Saved host only: the pairing path (existingSavedID == nil) gets its own
+            // prompt from connectRelay's .passwordRequired, so re-review N5 doesn't double-fire.
+            if let relayOffer, let savedID = existingSavedID,
                 case .rejected(let reason) = error,
-                reason == "password_required" || reason == "incorrect_password",
-                passwordToSave == nil
+                reason == "password_required" || reason == "incorrect_password"
             {
-                relayPasswordRequest = RelayPasswordRequest(offer: relayOffer, savedID: existingSavedID ?? UUID())
+                relayPasswordRequest = RelayPasswordRequest(offer: relayOffer, savedID: savedID)
                 phase = .setup(.idle)
                 return error
             }
@@ -295,11 +296,6 @@ final class AppModel {
         SavedHosts.savePassword("", for: id)
         if currentHostID == id { currentHostID = nil }
         refreshHostContext()
-    }
-
-    /// The full saved host for the confirmation exact-match check (R18).
-    func savedHost(withId id: UUID) -> SavedHost? {
-        savedHosts.host(id)
     }
 
     /// Danger zone (M16): forgets the saved endpoint + Keychain secret, then if it was the
