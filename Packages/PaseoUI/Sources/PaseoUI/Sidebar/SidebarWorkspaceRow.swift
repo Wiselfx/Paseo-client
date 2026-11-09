@@ -148,7 +148,7 @@ extension PaseoSidebar {
             }
             Spacer(minLength: 6)
             if showPRBadge, let pullRequest = pullRequest(workspace), let number = pullRequest.number {
-                Text("#\(number)")
+                Text(verbatim: "#\(number)")
                     .font(typography.sans(11, weight: .semibold))
                     .foregroundStyle(pullRequestTint(workspace))
             }

@@ -56,7 +56,7 @@ struct WorkspacePRSection: View {
                 label: stateLabel(status),
                 tint: stateTint(status))
             VStack(alignment: .leading, spacing: 4) {
-                Text("#\(status.number ?? 0) · \(status.title)")
+                Text("#\(String(status.number ?? 0)) · \(status.title)")
                     .font(typography.sans(15, weight: .semibold))
                     .foregroundStyle(ClaudePalette.ink)
                     .lineLimit(2)

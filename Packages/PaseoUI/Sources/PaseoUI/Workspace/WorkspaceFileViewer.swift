@@ -761,7 +761,7 @@ struct WorkspaceCodeView: View {
         var body: some View {
             VStack(alignment: .trailing, spacing: 6) {
                 ForEach(1...max(count, 1), id: \.self) { number in
-                    Text("\(number)")
+                    Text(verbatim: String(number))
                         .font(typography.mono(WorkspaceCodeView.fontSize))
                         .foregroundStyle(ClaudePalette.captionInk)
                         .frame(width: CGFloat(gutterWidth), alignment: .trailing)
