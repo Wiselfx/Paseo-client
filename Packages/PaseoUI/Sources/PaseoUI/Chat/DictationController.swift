@@ -40,9 +40,7 @@ final class DictationController: NSObject {
 
     private func start(currentDraft: String) async {
         // Permission prompts on first use only.
-        let speechAuthorized = await withCheckedContinuation { cont in
-            SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0 == .authorized) }
-        }
+        let speechAuthorized = await Self.requestSpeechAuthorization()
         let recordAuthorized = await AVAudioApplication.requestRecordPermission()
         guard speechAuthorized, recordAuthorized else {
             isDenied = true
@@ -79,9 +77,7 @@ final class DictationController: NSObject {
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            bufferRequest.append(buffer)
-            let level = Self.rms(buffer)
+        Self.installLevelTap(on: input, format: format, request: bufferRequest) { [weak self] level in
             Task { @MainActor in
                 self?.updateLevel(level)
             }
@@ -99,23 +95,12 @@ final class DictationController: NSObject {
         self.request = bufferRequest
         lastHeard = Date()
 
-        recognition = recognizer.recognitionTask(with: bufferRequest) { [weak self] result, error in
-            guard let self else { return }
-            if let result {
-                let text = result.bestTranscription.formattedString
-                let isFinal = result.isFinal
-                Task { @MainActor in
-                    self.handle(text: text, isFinal: isFinal)
-                }
-            }
-            if error != nil {
-                Task { @MainActor in
-                    self.stop(keepingDraft: true)
-                }
-            } else if result?.isFinal == true {
-                Task { @MainActor in
-                    self.stop(keepingDraft: true)
-                }
+        recognition = Self.startRecognition(recognizer, request: bufferRequest) {
+            [weak self] text, isFinal, failed in
+            Task { @MainActor in
+                guard let self else { return }
+                if let text { self.handle(text: text, isFinal: isFinal) }
+                if failed || isFinal { self.stop(keepingDraft: true) }
             }
         }
 
@@ -186,8 +171,43 @@ final class DictationController: NSObject {
         onDraft?(combined)
     }
 
+    // MARK: Off-main callbacks
+    //
+    // Speech and AVAudio call these closures on their own queues. A closure written inside
+    // this @MainActor class would inherit main-actor isolation and trap at runtime when
+    // called off the main thread, so they are formed in nonisolated static functions.
+
+    nonisolated private static func requestSpeechAuthorization() async -> Bool {
+        await withCheckedContinuation { cont in
+            SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0 == .authorized) }
+        }
+    }
+
+    nonisolated private static func installLevelTap(
+        on input: AVAudioInputNode, format: AVAudioFormat,
+        request: SFSpeechAudioBufferRecognitionRequest,
+        onLevel: @escaping @Sendable (Float) -> Void
+    ) {
+        nonisolated(unsafe) let request = request
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
+            request.append(buffer)
+            onLevel(rms(buffer))
+        }
+    }
+
+    /// `onResult(text, isFinal, failed)` runs on the recognizer's queue.
+    nonisolated private static func startRecognition(
+        _ recognizer: SFSpeechRecognizer, request: SFSpeechAudioBufferRecognitionRequest,
+        onResult: @escaping @Sendable (String?, Bool, Bool) -> Void
+    ) -> SFSpeechRecognitionTask {
+        recognizer.recognitionTask(with: request) { @Sendable result, error in
+            onResult(
+                result?.bestTranscription.formattedString, result?.isFinal ?? false, error != nil)
+        }
+    }
+
     /// RMS of the first float channel — a level meter for the mic pulse.
-    static func rms(_ buffer: AVAudioPCMBuffer) -> Float {
+    nonisolated static func rms(_ buffer: AVAudioPCMBuffer) -> Float {
         guard let channel = buffer.floatChannelData?[0] else { return 0 }
         let length = Int(buffer.frameLength)
         guard length > 0 else { return 0 }
