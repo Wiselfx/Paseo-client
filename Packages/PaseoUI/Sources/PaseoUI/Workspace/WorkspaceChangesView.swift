@@ -10,6 +10,10 @@ import PaseoStore
 struct WorkspaceChangesView: View {
     let session: HostSession
     let checkout: CheckoutStore
+    /// The open chat's agent, the default recipient for review feedback.
+    var agentId: String? = nil
+    /// The workspace id, for the feedback recipients menu (matches session.agents rows).
+    var workspaceId: String? = nil
 
     private enum Compare {
         case uncommitted
@@ -33,6 +37,7 @@ struct WorkspaceChangesView: View {
     @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
     @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
     @AppStorage("paseo.diff.sideBySide") private var sideBySide = false
+    @State private var feedbackError: String?
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -90,7 +95,11 @@ struct WorkspaceChangesView: View {
                 root
                     .toolbar(.hidden, for: .navigationBar)
                     .navigationDestination(item: $openFile) { file in
-                        WorkspaceChangesDiffView(file: file, extras: extras)
+                        WorkspaceChangesDiffView(
+                            file: file, extras: extras,
+                            workspaceId: checkout.workspaceId,
+                            mode: compare == .uncommitted ? "uncommitted" : "base",
+                            baseRef: baseRef)
                     }
                     .navigationDestination(item: $openCommit) { commit in
                         WorkspaceCommitDiffView(commit: commit, actions: gitActions, extras: extras)
@@ -250,6 +259,133 @@ struct WorkspaceChangesView: View {
         }
     }
 
+    // MARK: Send feedback (N)
+
+    /// The draft scope for the currently displayed diff.
+    private var reviewKey: WorkspaceReviewDraftKey {
+        WorkspaceReviewDraftKey(
+            workspaceId: checkout.workspaceId,
+            mode: compare == .uncommitted ? "uncommitted" : "base",
+            baseRef: compare == .uncommitted ? "" : (baseRef ?? ""),
+            ignoreWhitespace: hideWhitespace)
+    }
+
+    /// Review drafts that live on the currently displayed diff.
+    private var reviewDraftCount: Int {
+        WorkspaceReviewDrafts.shared.count(for: reviewKey)
+    }
+
+    /// The agents in this workspace; the open chat's agent is the default recipient.
+    private var feedbackRecipients: [AgentSnapshot] {
+        session.agents.filter { $0.workspaceId == checkout.workspaceId }
+    }
+
+    private var defaultFeedbackRecipient: AgentSnapshot? {
+        let all = feedbackRecipients
+        if let agentId, let current = all.first(where: { $0.id == agentId }) { return current }
+        return all.first
+    }
+
+    @ViewBuilder private var sendFeedbackBar: some View {
+        if reviewDraftCount > 0 {
+            HStack(spacing: 10) {
+                if let defaultRecipient = defaultFeedbackRecipient {
+                    HStack(spacing: 0) {
+                        Button {
+                            Task { await sendFeedback(to: defaultRecipient) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "paperplane")
+                                    .font(.system(size: 13, weight: .medium))
+                                Text("Send feedback (\(reviewDraftCount))")
+                                    .font(typography.sans(13, weight: .semibold))
+                            }
+                            .foregroundStyle(ClaudePalette.background)
+                            .padding(.leading, 14)
+                            .padding(.trailing, 12)
+                            .frame(height: 34)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(
+                            "Send feedback to \(agentTitle(defaultRecipient)), \(reviewDraftCount) comments")
+                        if feedbackRecipients.count > 1 {
+                            Menu {
+                                ForEach(feedbackRecipients) { agent in
+                                    Button {
+                                        Task { await sendFeedback(to: agent) }
+                                    } label: {
+                                        if agent.id == agentId {
+                                            Label(
+                                                "\(agentTitle(agent)) (this chat)",
+                                                systemImage: "checkmark")
+                                        } else {
+                                            Text(agentTitle(agent))
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(ClaudePalette.background)
+                                    .frame(height: 34)
+                                    .padding(.trailing, 10)
+                            }
+                            .accessibilityLabel("Choose an agent to send feedback")
+                        }
+                    }
+                    .background(ClaudePalette.ink, in: .capsule)
+                } else {
+                    Text("Open an agent in this workspace to send feedback.")
+                        .font(typography.sans(12))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                }
+                if let feedbackError {
+                    Text(feedbackError)
+                        .font(typography.sans(11))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .lineLimit(2)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func agentTitle(_ agent: AgentSnapshot) -> String {
+        let title = agent.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.map { $0.isEmpty ? "Agent" : $0 } ?? "Agent"
+    }
+
+    /// Sends the current diff's drafts as one `review` attachment on one prompt — the open
+    /// chat's agent by default, otherwise the picked workspace agent. Drafts that were
+    /// attached are cleared only when the daemon accepts the message.
+    private func sendFeedback(to agent: AgentSnapshot) async {
+        feedbackError = nil
+        let scoped = WorkspaceReviewDrafts.shared.comments(for: reviewKey)
+        guard !scoped.isEmpty else { return }
+        guard let (attachment, sent) = WorkspaceReviewAttachmentBuilder.buildAll(
+            comments: scoped, files: extras.files, cwd: checkout.cwd,
+            mode: compare == .uncommitted ? "uncommitted" : "base",
+            baseRef: baseRef)
+        else {
+            feedbackError = "Saved comments no longer match this diff."
+            Haptics.failure()
+            return
+        }
+        let conversation = session.conversation(for: agent.id)
+        await conversation.sendWithAttachments(
+            "Please address this code review.",
+            attachments: [.review(attachment)])
+        if let error = conversation.actionError {
+            feedbackError = error
+            Haptics.failure()
+            return
+        }
+        WorkspaceReviewDrafts.shared.clearSent(key: reviewKey, comments: sent)
+        feedbackError = nil
+        Haptics.success()
+        showToast("Feedback sent to \(agentTitle(agent))")
+    }
+
     // MARK: Header (branch · ahead/behind · PR)
 
     private var header: some View {
@@ -283,6 +419,7 @@ struct WorkspaceChangesView: View {
             if baseRef != nil {
                 compareSwitch
             }
+            sendFeedbackBar
         }
         .padding(.horizontal, 20)
         .padding(.top, 14)
