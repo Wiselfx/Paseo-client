@@ -88,7 +88,6 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Workspace rows — title-or-branch, project/branch + relative-activity meta line — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/SidebarWorkspaceRow.swift` (`workspaceRow`)
 - [ ] Feature: Status bucket dot on workspace rows (needs_input / failed / working / done / unseen) + unread attention dot — Status: `done` (the trailing unread dot also renders manual unread marks; see the context-menu row) — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/SidebarWorkspaceRow.swift` (`workspaceRow`, `statusKind`), `Sidebar/PaseoStatusDot.swift`
 - [ ] Feature: Long-press workspace context menu (New agent here, Rename, Copy path, Copy branch name, Pin/Unpin, Hide from sidebar, Mark/Clear unread, Archive) — Status: `done` (manual unread per DSH wording — "Mark as unread" / "Clear unread mark"; persisted locally `paseo.sidebar.manualUnread`; cleared on open; reuses the unread/attention dot) — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/SidebarWorkspaceRow.swift` (`contextMenu`)
-- [ ] Feature: Active / Archived switch above the workspace list — Status: `done` (quiet segmented control, persisted `paseo.sidebar.workspaceSegment`; Active shows the grouped/date lists; **Archived is a store-gap empty state — there is no archived-workspace listing in the directory feed or any RPC (recovery RPCs are per-id only), so no unarchive/delete is offered and nothing is faked**) — Source: `…/features/workspace/` (`workspace-view.ts`, copy `archiveActive`/`archiveArchived`); this client `Sidebar/PaseoSidebar.swift` (`workspaceSegmentSwitch`, `archivedWorkspacesEmptyState`), `Sidebar/SidebarDirectory.swift`
 - [ ] Feature: Project context menu (New agent, Copy path, Rename…, Remove project w/ confirmation) — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/SidebarProjectGroup.swift` (`contextMenu`)
 - [ ] Feature: Project rename in sidebar — Status: `done` (`project.rename.request`; empty restores the folder name; `WorkspaceDirectory.renameProject`; rows update live) — Source: `docs/research/01-app-features.md:109`; docs/research/02-protocol-workspaces-git-files.md:61; this client `PaseoProtocol/WorkspaceMutations.swift`, `PaseoStore/WorkspaceDirectory+Mutations.swift`, `Packages/PaseoUI/Sources/PaseoUI/Sidebar/PaseoSidebar.swift`
 - [ ] Feature: Remove project with confirmation — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/PaseoSidebar.swift` ("Remove project?" dialog), `Sidebar/SidebarProjectGroup.swift`
@@ -521,22 +520,22 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 - [ ] Feature: `turn-nav` — redrawn message navigator (numbered turn rail in the transcript margin) — Status: `missing` — Source: `…/features/turn-nav/` (`turn-nav.ts`, `turn-nav-host.ts`)
 - [ ] Feature: `view-tabs` — Chat / Trajectory tab bar on the conversation view — Status: `not applicable (no trajectory view)` — Source: `…/features/view-tabs/` (`view-tabs.ts`)
 - [ ] Feature: `width-handle` — conversation column width drag handle with hover reveal — Status: `not applicable (no resizable panels)` — Source: `…/features/width-handle/` (`width-handle.ts`)
-- [ ] Feature: `workspace` — Active / Archived switch above the workspace list; archived conversations get their own list where they can be deleted — Status: `missing` (store gap, by design: the directory feed filters archived workspaces daemon-side and no archived-listing RPC exists (recovery RPCs are per-workspaceId only). M2.14 ships the quiet Active / Archived segmented switch with an honest empty state for Archived; no list, no unarchive/delete, nothing faked) — Source: `…/features/workspace/` (`workspace-view.ts`, `archived-list.ts`, `archived-actions.ts`); this client `Sidebar/PaseoSidebar.swift` (`workspaceSegmentSwitch`, `archivedWorkspacesEmptyState`)
+- [ ] Feature: `workspace` — Active / Archived switch above the workspace list; archived conversations get their own list where they can be deleted — Status: `missing` (store gap, by design: the directory feed filters archived workspaces daemon-side and no archived-listing RPC exists (recovery RPCs are per-workspaceId only). No segment control in the UI — an Archived segment that is always empty is UI without function; no list, no unarchive/delete, nothing faked) — Source: `…/features/workspace/` (`workspace-view.ts`, `archived-list.ts`, `archived-actions.ts`)
 
 
 ## Counts
 
-422 feature rows. Status counts (normalized; parenthetical qualifiers ignored):
+421 feature rows. Status counts (normalized; parenthetical qualifiers ignored):
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 280 | 66.4 % |
+| `done` | 279 | 66.3 % |
 | `missing` | 70 | 16.6 % |
 | `desktop-only (flag)` | 47 | 11.2 % |
 | `store only (no UI)` | 6 | 1.4 % |
 | `in flight` | 0 | 0.0 % |
 | `not applicable` | 19 | 4.5 % |
-| **Total** | **422** | 100 % |
+| **Total** | **421** | 100 % |
 
 What the numbers say: the client is at parity in the *conversation* area (turn layout, DSH
 live-observation turn UX, permissions, markdown, markdown code blocks) and in the

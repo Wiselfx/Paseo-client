@@ -14,17 +14,13 @@ extension PaseoSidebar {
     }
 
     @ViewBuilder var directory: some View {
-        if archivedSegmentActive {
-            archivedWorkspacesEmptyState
-        } else {
-            let pinned = pinnedWorkspaces()
-            switch sidebarGrouping {
-            case .project:
-                groupedDirectory(
-                    groups: sortedGroups(session.workspaceDirectory.groups), pinned: pinned)
-            case .date:
-                dateDirectory(buckets: dateBuckets(), pinned: pinned)
-            }
+        let pinned = pinnedWorkspaces()
+        switch sidebarGrouping {
+        case .project:
+            groupedDirectory(
+                groups: sortedGroups(session.workspaceDirectory.groups), pinned: pinned)
+        case .date:
+            dateDirectory(buckets: dateBuckets(), pinned: pinned)
         }
     }
 
