@@ -53,6 +53,14 @@ Tickets: `docs/tickets/`. Worktrees: `/home/paseo/.paseo/worktrees/0264elgj/<bra
    build once produced a fake failure.
 4. After merging, `swift test` must be fully green.
 
+## In flight (2026-11-09)
+
+- M2.5a `m25a-bugs`: model switch no-op, pi/omp missing, composer timeout message.
+- M2.5b `m25b-polish`: Anthropic fonts, dark mode, home greeting, interactive sidebar drawer.
+- Research 8 `research-dsh-live`: live DSH observation (silver work rows, loader, quips,
+  composer, palette). Feeds an M2.6 pass on the turn UI. The quality bar is Apple-level
+  invisible polish; DSH is the visual truth.
+
 ## Next (UI, decided by the lead, built by workers)
 
 - M3: workspace surfaces in ClaudeUI style: file browser, Changes/diff view, terminals (SwiftTerm
@@ -60,8 +68,7 @@ Tickets: `docs/tickets/`. Worktrees: `/home/paseo/.paseo/worktrees/0264elgj/<bra
 - M4: settings and hosts (ClaudeUI settings shell → Paseo host/app settings, T10 store), schedules
   UI (ClaudeRoutinesView → T9 store).
 - M5: rich content rendering (T13 detection → LPLinkView, YouTube, images, SVG) and the mascot
-  (T13 state machine). **Open decision for the user:** our own mascot vs. the DSH crab (Anthropic's
-  Clawd; not covered by the plugin's license; personal use is the user's call).
+  (T13 state machine). Mascot decided: the DSH crab (Clawd), personal app.
 - Later: relay pairing (QR, E2E) for use away from the LAN; iPad layout.
 
 ## Working rules that matter
