@@ -41,6 +41,12 @@ U-round: the first on-device fix round (2026-11-09). Spec: `docs/UX-SPEC.md`. Au
 
 Tests: PaseoCore 661/177/145 green (983).
 
+**In flight:** U5 prompt outline (`docs/tickets/U5-outline.md`). DeepSeek aa2f0c45 (the U3 worker), branch `u5-outline` in the u3-chat worktree.
+- Covers: upstream prompt index RPC + jump fetch, `loadAllOlder` removed, tick-only rail with no reserved margin, picker-wheel haptics.
+- On finish: review, merge, then tell the user to pull.
+
+**User feedback queue:** U2 needs a device check; real provider SVG glyphs (`iconSvg`) in the chip; Add provider (protocol shape first); the terminal "link" icon is still unidentified; the AVAudioSession `setActive` hang-risk fault.
+
 Open: voice mode no longer crashes on the simulator (fresh pull); dictation on a device untested; AVAudioSession setActive on main (hang-risk fault); the terminal "link" icon (which button?), Add provider (needs a protocol patch shape; later ticket).
 
 Tickets: `docs/tickets/`. Worktrees: `/home/paseo/.paseo/worktrees/0264elgj/<branch>`.
