@@ -76,6 +76,7 @@ bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - M7d `m7d-anchor-reveal` on worker 0778f3b0: chat-anchor, reveal, rewind (transcript).
 - T16 `t16-flake-usage` on worker 918fee9a: connection-test flake, context/usage store.
+- M3i `m3i-pr-pane` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: PR checks/timeline, base branch picker.
 - M8d `m8d-mentions-dictation` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: @-file popover, dictation.
 - R10 `r10-split` on worker 79dd09d6: split PaseoSidebar + ClaudeSchedulesView into files (pure move).
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
