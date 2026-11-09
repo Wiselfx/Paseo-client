@@ -349,7 +349,9 @@ struct WorkspacePanel: View {
 
     @ViewBuilder private var changesPage: some View {
         if let checkout {
-            WorkspaceChangesView(session: session, checkout: checkout)
+            WorkspaceChangesView(
+                session: session, checkout: checkout,
+                agentId: currentAgentId, workspaceId: workspace?.id)
         } else {
             loadingPage
         }
