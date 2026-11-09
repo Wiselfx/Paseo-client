@@ -149,6 +149,12 @@ public final class HostSession {
         return store
     }
 
+    /// The checkout store for a workspace if one is already open, without creating or loading one.
+    /// Safe to call while a view is drawing.
+    public func existingCheckout(_ workspaceId: String) -> CheckoutStore? {
+        checkouts[workspaceId]
+    }
+
     /// Call when the checkout screen goes away. Releases its diff subscription.
     public func closeCheckout(_ workspaceId: String) async {
         await gitExtras.close(workspaceId)

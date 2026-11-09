@@ -139,10 +139,11 @@ extension ClaudeChatView {
     /// The workspace's forge, from the checkout's PR status (upstream getForgePresentation
     /// source). Unknown or absent forges read as GitHub, like old daemons.
     var forgeId: String {
+        // Read-only: never create a checkout store from a view's body.
         guard let workspaceId = store.agent?.workspaceId,
-            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+            let checkout = session.existingCheckout(workspaceId)
         else { return "github" }
-        let forge = session.checkout(for: workspace).prStatus?.forge?
+        let forge = checkout.prStatus?.forge?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return forge.isEmpty ? "github" : forge
     }
