@@ -258,7 +258,8 @@ struct ComposerCrab: View {
 
     var body: some View {
         let effective = effectiveAnimation
-        ClaudeCrabView(animation: effective, onBodyTap: effective.isResting ? pokeNow : nil)
+        let tap: (() -> Void)? = effective.isResting ? { pokeNow() } : nil
+        ClaudeCrabView(animation: effective, onBodyTap: tap)
             .onChange(of: poke) { _, newValue in
                 // A poke plays once (`frames × 80 ms`), then hands the stage back.
                 guard let newValue else { return }
