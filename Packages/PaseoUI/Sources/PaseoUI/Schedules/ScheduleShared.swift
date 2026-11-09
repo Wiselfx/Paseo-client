@@ -1,0 +1,100 @@
+#if canImport(UIKit)
+import PaseoStore
+import SwiftUI
+
+/// Shared state pill and formatting helpers for the Schedules pages.
+/// The pill a row shows; active/paused/finished/expired/target gone, in warn or wash tints.
+struct ScheduleStatePill: View {
+    let state: ScheduleState
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(ink)
+            .padding(.horizontal, 8)
+            .frame(height: 18)
+            .background(ink.opacity(0.16), in: .rect(cornerRadius: 5))
+            .accessibilityLabel(label)
+    }
+
+    private var label: String {
+        switch state {
+        case .active: "Active"
+        case .paused: "Paused"
+        case .expired: "Expired"
+        case .finished: "Finished"
+        case .targetGone: "Target gone"
+        case .unknown: "Unknown"
+        }
+    }
+
+    private var ink: Color {
+        switch state {
+        case .active: ClaudePalette.successInk
+        case .paused: ClaudePalette.warning
+        case .expired, .finished, .unknown: ClaudePalette.secondaryInk
+        case .targetGone: ClaudePalette.failureInk
+        }
+    }
+}
+
+/// Formats an ISO-8601 instant ("2026-11-09T07:30:00Z") as "Nov 9, 09:12", or "—" otherwise.
+func scheduleTimestamp(_ iso: String?) -> String {
+    guard let iso, let date = PaseoDate.parse(iso) else { return "—" }
+    let formatter = DateFormatter()
+    formatter.locale = .current
+    formatter.dateFormat = "MMM d, HH:mm"
+    return formatter.string(from: date)
+}
+
+/// "in 3h", "tomorrow at 09:00" for a next-run caption; "—" when missing.
+func scheduleNextRun(_ iso: String?) -> String {
+    guard let iso, let date = PaseoDate.parse(iso) else { return "Not scheduled" }
+    let seconds = date.timeIntervalSinceNow
+    if seconds < 0 { return "Overdue" }
+    if seconds < 3600 { return "In \(max(1, Int(seconds / 60))) min" }
+    if seconds < 86_400 { return "In \(Int(seconds / 3600))h" }
+    let days = Int(seconds / 86_400)
+    let formatter = DateFormatter()
+    formatter.locale = .current
+    formatter.dateFormat = "MMM d, HH:mm"
+    return days == 1 ? "Tomorrow at \(formatter.string(from: date))" : "In \(days) days · \(formatter.string(from: date))"
+}
+
+func scheduleDuration(_ start: String, _ end: String?) -> String {
+    guard let startDate = PaseoDate.parse(start) else { return "—" }
+    let endDate = end.flatMap(PaseoDate.parse) ?? Date()
+    let seconds = max(0, endDate.timeIntervalSince(startDate))
+    if seconds < 1 { return "<1s" }
+    if seconds < 60 { return "\(Int(seconds))s" }
+    return "\(Int(seconds / 60))m \(Int(seconds.truncatingRemainder(dividingBy: 60)))s"
+}
+
+extension ScheduleCadence {
+    /// The cadence line for display: "Every day at 9:00 · Europe/Sofia".
+    var words: String {
+        switch self {
+        case .every(let everyMs): ScheduleWords.cadence(everyMs: everyMs)
+        case .cron(let expression, let timezone): ScheduleWords.cadence(expression: expression, timezone: timezone)
+        case .unknown(let raw): "Cron: \(raw)"
+        }
+    }
+}
+
+extension ScheduleTarget {
+    /// The stored new-agent config, when the target creates a fresh agent each run.
+    var newAgentConfig: ScheduleNewAgentConfig? {
+        if case .newAgent(let config) = self { return config }
+        return nil
+    }
+
+    /// The agent id when the target prompts an existing agent (a heartbeat).
+    var agentId: String? {
+        switch self {
+        case .agent(let agentId), .selfAgent(let agentId): agentId
+        default: nil
+        }
+    }
+}
+
+#endif
