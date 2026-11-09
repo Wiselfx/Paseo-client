@@ -3,16 +3,19 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// Settings → Diagnostics: a copyable app report for support bundles. Everything in the report is
-/// derived from this device's build info and the daemon's `server_info`, and it is scrubbed by
-/// construction: no tokens, no passwords, no full host name (the host appears only as a stable
-/// `host-…` digest). The daemon's own diagnostics (`diagnostics.request`) are not reachable from
-/// this build's client layer — see the M4e handoff / PARITY row.
+/// Settings → Diagnostics: a copyable app report for support bundles, plus the daemon's own
+/// host diagnostics (`diagnostics.request`) when the daemon advertises
+/// `features.daemonDiagnostics`. Everything in the app report is derived from this device's
+/// build info and the daemon's `server_info`, and it is scrubbed by construction: no tokens,
+/// no passwords, no full host name (the host appears only as a stable `host-…` digest). The
+/// daemon bundle is scrubbed the same way before it is shown or copied (see
+/// `scrubHostDiagnostic`).
 struct DiagnosticsPage: View {
     let session: HostSession
 
     @State private var report = ""
     @State private var copied = false
+    @State private var hostCopied = false
 
     private let typography = ClaudeTypography()
 
@@ -56,6 +59,7 @@ struct DiagnosticsPage: View {
                     .font(.system(size: 13))
                     .foregroundStyle(ClaudePalette.secondary)
                     .padding(.leading, 16)
+                hostDiagnosticsSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 26)
@@ -65,6 +69,107 @@ struct DiagnosticsPage: View {
         .onAppear {
             if report.isEmpty { report = Self.makeReport(session: session) }
         }
+    }
+
+    // MARK: Host diagnostics
+
+    @ViewBuilder private var hostDiagnosticsSection: some View {
+        sectionLabel("Host diagnostics")
+        RowGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                switch session.hostSettings.diagnosticsState {
+                case .idle:
+                    Text("Ask the daemon for its support bundle: versions, provider availability and runtime metrics.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.secondary)
+                case .unsupported:
+                    Text("Not supported by this daemon.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.secondary)
+                case .loading:
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Running…")
+                            .font(.system(size: 13))
+                            .foregroundStyle(ClaudePalette.secondary)
+                    }
+                case .ready(let diagnostic):
+                    ScrollView {
+                        Text(Self.scrubHostDiagnostic(diagnostic))
+                            .font(typography.mono(11.5, relativeTo: .caption))
+                            .foregroundStyle(ClaudePalette.ink)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                    .frame(maxHeight: 300)
+                    HStack {
+                        Button {
+                            Haptics.selection()
+                            UIPasteboard.general.string = Self.scrubHostDiagnostic(diagnostic)
+                            hostCopied = true
+                            Task {
+                                try? await Task.sleep(for: .seconds(1.5))
+                                hostCopied = false
+                            }
+                        } label: {
+                            Label(hostCopied ? "Copied" : "Copy",
+                                  systemImage: hostCopied ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("settings.diagnostics.hostCopy")
+                        Spacer(minLength: 0)
+                    }
+                case .failed(let message):
+                    Text(message)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                }
+                if session.hostSettings.diagnosticsState != .unsupported {
+                    HStack {
+                        Button {
+                            Haptics.selection()
+                            Task { await session.hostSettings.loadDiagnostics() }
+                        } label: {
+                            Label(
+                                session.hostSettings.diagnosticsState == .loading ? "Running…" : "Run",
+                                systemImage: "play.circle")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(session.hostSettings.diagnosticsState == .loading)
+                        .accessibilityIdentifier("settings.diagnostics.hostRun")
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(12)
+        }
+    }
+
+    /// Scrubs the daemon bundle before display or copy: bearer credentials and
+    /// token/password/secret assignments are redacted, and the daemon host's home directory
+    /// is shortened to `~`, so no secret or home path leaves the device. The bundle is an
+    /// opaque string upstream; this is best-effort on its free text, like the app report's
+    /// machine-codes-only rule.
+    static func scrubHostDiagnostic(_ text: String) -> String {
+        var result = text
+        let home = FileManager.default.homeDirectoryForCurrentUser().path
+        if !home.isEmpty, home != "/" {
+            result = result.replacingOccurrences(of: home, with: "~")
+        }
+        result = Self.redact(pattern: #"(?i)\b(Bearer)\s+\S+"#, in: result, replacement: "$1 [redacted]")
+        result = Self.redact(
+            pattern: #"(?i)\b(token|password|passwd|secret|api[_-]?key|access[_-]?key)\s*[:=]\s*[^\s,;]+"#,
+            in: result, replacement: "$1: [redacted]")
+        return result
+    }
+
+    private static func redact(pattern: String, in text: String, replacement: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
     }
 
     // MARK: Report
