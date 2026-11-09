@@ -6,7 +6,7 @@ import SwiftUI
 /// Remote SSH stays desktop-only. "Settings" opens a pre-connect appearance sheet; the full Settings
 /// screen needs a host. Shown once, before the first successful connection; the flag flips in
 /// `AppModel.performConnect`.
-struct WelcomeView<DirectForm: View>: View {
+public struct WelcomeView<DirectForm: View>: View {
     /// The direct-connection form (M1b's `ConnectView`), revealed by the primary tile.
     let directForm: DirectForm
     /// Scan QR / Paste pairing link tiles (R18); nil hides the tiles (previews).
@@ -21,7 +21,7 @@ struct WelcomeView<DirectForm: View>: View {
 
     enum Stage { case welcome, directForm }
 
-    init(
+    public init(
         onScan: (() -> Void)? = nil, onPaste: (() -> Void)? = nil,
         @ViewBuilder directForm: () -> DirectForm
     ) {
@@ -30,7 +30,7 @@ struct WelcomeView<DirectForm: View>: View {
         self.directForm = directForm()
     }
 
-    var body: some View {
+    public var body: some View {
         Group {
             switch stage {
             case .welcome: welcomeContent

@@ -382,43 +382,50 @@ private struct WorkspaceFilesDirectoryList: View {
         }
     }
 
+    private func rowContent(_ entry: FileExplorerEntry) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: entry.isDirectory ? "folder" : "doc")
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(entry.isDirectory ? ClaudePalette.ink : ClaudePalette.secondaryInk)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.name)
+                    .font(typography.sans(15))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let meta = meta(entry) {
+                    Text(meta)
+                        .font(typography.sans(12))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 6)
+            if sharingPath == entry.path || savingToFilesPath == entry.path {
+                ProgressView().controlSize(.small)
+            } else if entry.isDirectory {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 46)
+        .contentShape(.rect)
+        .background(revealedRow == relative(entry) ? ClaudePalette.chip.opacity(0.9) : Color.clear)
+    }
+
     private func row(_ entry: FileExplorerEntry) -> some View {
         Button {
             Haptics.selection()
             if entry.isDirectory { onOpenDirectory(entry.path) } else { onOpenFile(entry.path) }
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: entry.isDirectory ? "folder" : "doc")
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(entry.isDirectory ? ClaudePalette.ink : ClaudePalette.secondaryInk)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(entry.name)
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.ink)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if let meta = meta(entry) {
-                        Text(meta)
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 6)
-                if sharingPath == entry.path || savingToFilesPath == entry.path {
-                    ProgressView().controlSize(.small)
-                } else if entry.isDirectory {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
-                }
+            if entry.isDirectory {
+                rowContent(entry)
+            } else {
+                rowContent(entry).draggable(relative(entry))
             }
-            .padding(.horizontal, 12)
-            .frame(height: 46)
-            .contentShape(.rect)
-            .background(revealedRow == relative(entry) ? ClaudePalette.chip.opacity(0.9) : Color.clear)
-            .draggable(entry.isDirectory ? nil : relative(entry))
         }
         .buttonStyle(.plain)
         .contextMenu {

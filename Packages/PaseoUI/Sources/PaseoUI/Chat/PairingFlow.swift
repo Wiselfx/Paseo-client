@@ -31,7 +31,7 @@ public struct AddHostMethodsSheet: View {
         self.onPaste = onPaste
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Add connection") { dismiss() }
             ScrollView {
@@ -118,7 +118,7 @@ public struct PairScanSheet: View {
     @State private var granted = false
     @State private var didAccept = false
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Scan QR") { dismiss() }
             if permissionDenied {
@@ -211,14 +211,14 @@ public struct PairScanSheet: View {
 /// accepted payload stops scanning (one attempt at a time). Scanning starts once
 /// `startWhen` flips true (the sheet only sets it after camera permission is confirmed);
 /// `startScanning()` throws when the scanner is unavailable, which funnels to `onFailed`.
-public struct QRScannerView: UIViewControllerRepresentable {
-    public var onPayload: (String) -> Void
+struct QRScannerView: UIViewControllerRepresentable {
+    var onPayload: (String) -> Void
     /// Fired when scanning cannot start (unsupported, unavailable, permission).
-    public var onFailed: () -> Void
+    var onFailed: () -> Void
     /// Flips true once camera permission is confirmed; recognition begins then.
-    public var startWhen: Bool
+    var startWhen: Bool
 
-    public init(
+    init(
         onPayload: @escaping (String) -> Void, onFailed: @escaping () -> Void = {},
         startWhen: Bool = false
     ) {
@@ -227,7 +227,7 @@ public struct QRScannerView: UIViewControllerRepresentable {
         self.startWhen = startWhen
     }
 
-    public func makeUIViewController(context: Context) -> DataScannerViewController {
+    func makeUIViewController(context: Context) -> DataScannerViewController {
         let scanner = DataScannerViewController(
             recognizedDataTypes: [.barcode(symbologies: [.qr])],
             qualityLevel: .balanced,
@@ -241,11 +241,11 @@ public struct QRScannerView: UIViewControllerRepresentable {
         return scanner
     }
 
-    public func updateUIViewController(_ controller: DataScannerViewController, context: Context) {
+    func updateUIViewController(_ controller: DataScannerViewController, context: Context) {
         if startWhen { context.coordinator.beginScanning() }
     }
 
-    public func makeCoordinator() -> Coordinator {
+    func makeCoordinator() -> Coordinator {
         Coordinator(onPayload: onPayload, onFailed: onFailed)
     }
 
@@ -334,7 +334,7 @@ public struct PastePairingSheet: View {
     @State private var text = ""
     @State private var invalid = false
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Paste pairing link") { dismiss() }
             VStack(alignment: .leading, spacing: 12) {
@@ -428,7 +428,7 @@ public struct HostConfirmationPairingSheet: View {
     }
     @Environment(\.dismiss) private var dismiss
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Connect to this host?") { dismiss() }
             ScrollView {
@@ -524,7 +524,7 @@ public struct PairingPasswordSheet: View {
 
     @State private var password = ""
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Password for \(host)") { dismiss() }
             VStack(alignment: .leading, spacing: 12) {
