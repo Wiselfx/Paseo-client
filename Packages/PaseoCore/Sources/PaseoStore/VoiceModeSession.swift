@@ -62,6 +62,14 @@ public final class VoiceModeSession {
         isVoiceMode && activeAgentId == agentId
     }
 
+    /// Whether the UI may play the thinking tone (`canPlayCue` upstream): the lane is
+    /// waiting for a reply and the daemon hasn't heard the user speak. Timing (the
+    /// 1.5 s delay before the first tone, the repeat gap) lives with the engine; the
+    /// store only publishes when the tone is allowed at all.
+    public var isThinkingToneExpected: Bool {
+        isVoiceMode && phase == .waiting && !isSpeaking
+    }
+
     public private(set) var phase: Phase = .disabled
     public private(set) var activeAgentId: String?
     public private(set) var isVoiceSwitching = false
