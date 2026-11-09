@@ -48,6 +48,8 @@ struct WorkspacePanel: View {
     @State private var renamingAgent: AgentSnapshot?
     @State private var agentPendingArchive: AgentSnapshot?
     @State private var renameText = ""
+    @State private var showSetupSheet = false
+    @State private var observedSetupWorkspaceId: String?
 
     private let typography = ClaudeTypography()
 
@@ -91,6 +93,7 @@ struct WorkspacePanel: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            setupQuietLine
             segmented
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
@@ -101,6 +104,10 @@ struct WorkspacePanel: View {
         .environment(\.mentionInChat, onMentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
         .task(id: workspace?.id) {
+            if let previous = observedSetupWorkspaceId, previous != workspace?.id {
+                observedSetupWorkspaceId = nil
+                await session.setupObservation.stopObserving(previous)
+            }
             guard let workspace else {
                 checkout = nil
                 gitExtras = nil
@@ -110,6 +117,13 @@ struct WorkspacePanel: View {
             let extras = await MainActor.run { session.gitExtras.workspace(for: store) }
             checkout = store
             gitExtras = extras
+            observedSetupWorkspaceId = workspace.id
+            await session.setupObservation.observe(workspace.id)
+        }
+        .sheet(isPresented: $showSetupSheet) {
+            if let workspace {
+                WorkspaceSetupSheet(session: session, workspace: workspace)
+            }
         }
         .alert(
             "Rename agent",
@@ -198,6 +212,76 @@ struct WorkspacePanel: View {
     private var diffStatText: String? {
         guard let stat = workspace?.diffStat else { return nil }
         return "+\(stat.additions) −\(stat.deletions)"
+    }
+
+    // MARK: Setup quiet line
+
+    /// A quiet status line above the page switcher, shown only while setup is running, failed or
+    /// blocked. Tap opens the setup sheet. Hidden entirely otherwise.
+    @ViewBuilder private var setupQuietLine: some View {
+        if let workspace, let snapshot = session.setupObservation.snapshot(for: workspace.id),
+            snapshot.status == .running || snapshot.status == .failed || snapshot.status == .blocked
+        {
+            Button {
+                showSetupSheet = true
+            } label: {
+                HStack(spacing: 8) {
+                    setupGlyph(snapshot.status)
+                    Text(setupLineText(snapshot))
+                        .font(typography.sans(13, weight: .medium))
+                        .foregroundStyle(setupLineInk(snapshot.status))
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                }
+                .contentShape(Rectangle())
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(ClaudePalette.quoteWash)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(setupLineText(snapshot)). Opens setup details.")
+        }
+    }
+
+    private func setupLineText(_ snapshot: WorkspaceSetupSnapshot) -> String {
+        switch snapshot.status {
+        case .running: return "Setting up…"
+        case .failed: return "Setup failed"
+        case .blocked:
+            if let blocked = snapshot.blockedSource {
+                return "Blocked on change request #\(blocked.number)"
+            }
+            return "Setup blocked"
+        default: return "Setup"
+        }
+    }
+
+    private func setupLineInk(_ status: WorkspaceSetupStatus) -> Color {
+        switch status {
+        case .failed: ClaudePalette.failureInk
+        case .blocked: ClaudePalette.warning
+        default: ClaudePalette.secondaryInk
+        }
+    }
+
+    @ViewBuilder private func setupGlyph(_ status: WorkspaceSetupStatus) -> some View {
+        switch status {
+        case .running:
+            ProgressView().controlSize(.mini).tint(ClaudePalette.secondaryInk)
+        case .failed:
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(ClaudePalette.failureInk)
+        case .blocked:
+            Image(systemName: "clock.badge.exclamationmark")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(ClaudePalette.warning)
+        default:
+            EmptyView()
+        }
     }
 
     // MARK: Page switcher
