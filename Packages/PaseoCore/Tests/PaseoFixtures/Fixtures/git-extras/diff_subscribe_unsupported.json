@@ -1,0 +1,3 @@
+{
+  "error": "Error: diff.subscribe.request: Unknown request, try upgrading the daemon (currently v0.15.2)"
+}

@@ -537,10 +537,11 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
     ]
 
     /// A message type that may settle a pending request or is a late response we should drop.
+    /// Schedules use slash-namespaced types such as `schedule/list/response`.
     private static func isResponseType(_ messageType: String?) -> Bool {
         guard let messageType else { return false }
         return messageType.hasSuffix("_response") || messageType.hasSuffix(".response")
-            || correlatedResponseTypes.contains(messageType)
+            || messageType.hasSuffix("/response") || correlatedResponseTypes.contains(messageType)
     }
 
     private struct TimelineReplacement: Decodable, Sendable {

@@ -42,10 +42,21 @@ let usage = """
       agent-control [cwd]      full stack (AgentControlStore/ConversationStore) on a sandbox:
                                list providers, create an omp agent, switch its mode, answer a
                                permission request, rename and archive it (default cwd /tmp/fixture-sandbox)
+      host-settings [agentId]
+                               host config, provider switches, slash commands, 15 s presence
+                               heartbeat and push-token revocation (default: fixture sandbox agent)
       workspaces               projects and workspaces from the live directory subscription
       checkout <workspaceId>   git status, PR badge and working diff summary
       files <workspaceId> [path]
                                list a directory in a workspace
+      schedules                full stack (SchedulesStore) on a sandbox schedule:
+                               create, inspect, update, pause/resume, run once, logs and delete
+      git-extras [cwd]         full stack on /tmp/fixture-git: modern-vs-legacy diff,
+                               branch suggestions/switch, discard, live file watch, PR badge
+      attachments-search <agentId> [query]
+                               full stack: search the conversation, list provider subagents and
+                               send a message with a structured text attachment (default query
+                               "ready")
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -294,6 +305,11 @@ do {
         try await runTerminal(connection, workspaceId: workspaceId, cwd: cwd)
     case "agent-control":
         try await runAgentControl(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
+    case "host-settings":
+        try await runHostSettings(
+            connection,
+            agentId: arguments.commandArguments.first
+                ?? "1c51ee58-765c-4f8d-bf27-7009338b361e")
     case "workspaces":
         try await runWorkspaces(connection)
     case "checkout":
@@ -306,6 +322,17 @@ do {
             throw ProbeError("files needs a <workspaceId>")
         }
         try await runFiles(connection, workspaceId: workspaceId, path: arguments.commandArguments.dropFirst().first)
+    case "schedules":
+        try await runSchedules(connection)
+    case "git-extras":
+        try await runGitExtras(
+            connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-git/scratch-repo")
+    case "attachments-search":
+        guard let agentId = arguments.commandArguments.first else {
+            throw ProbeError("attachments-search needs an <agentId>")
+        }
+        let query = arguments.commandArguments.dropFirst().first ?? "ready"
+        try await runAttachmentsSearch(connection, agentId: agentId, query: query)
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -549,6 +576,92 @@ func runAgentControl(_ connection: DaemonConnection, cwd: String) async throws {
     }
 }
 
+/// End-to-end check of T10 against the live daemon: config read, a harmless patch that is restored,
+/// slash commands for the sandbox agent, presence heartbeats and push-token revocation.
+@MainActor
+func runHostSettings(_ connection: DaemonConnection, agentId: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    let store = session.hostSettings
+
+    await store.load()
+    guard store.phase == .ready else {
+        throw ProbeError("daemon config failed to load: \(store.phase)")
+    }
+    let config = try unwrapConfig(store)
+    let enabledProviders = config.providers
+        .filter { $0.value.enabled != false }
+        .keys.sorted()
+    let enabledList = enabledProviders.joined(separator: ",")
+    print(
+        "config: providers=\(config.providers.count) enabled=[\(enabledList)] profiles=\(store.profiles.count)"
+    )
+    print(
+        "features: agentProfiles=\(store.supportsProfiles) pushTokenRevocation=\(store.supportsPushTokenRevocation)"
+    )
+    let inject = config.mcp?.injectIntoAgents.map(String.init) ?? "-"
+    let cleanup = config.idleRuntimeCleanup.map(String.init) ?? "-"
+    print(
+        "settings: mcp.injectIntoAgents=\(inject) "
+            + "autoArchiveAfterMerge=\(config.autoArchiveAfterMerge) idleRuntimeCleanup=\(cleanup)"
+    )
+
+    let commands = await store.loadCommands(for: agentId)
+    let kinds = Dictionary(grouping: commands, by: { command -> String in
+        switch command.kind {
+        case .command: "command"
+        case .skill: "skill"
+        case .unknown(let raw): raw
+        }
+    }).mapValues(\.count)
+    let kindText = kinds.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+    print("commands for \(String(agentId.prefix(8))): \(commands.count) [\(kindText)]")
+    print("  first: \(commands.prefix(4).map(\.name).joined(separator: ", "))")
+    if let error = store.commandError(for: agentId) { print("  commandsError: \(error)") }
+
+    store.startPresence(focusedAgentId: agentId, appVisible: true)
+    try await Task.sleep(for: .milliseconds(200))
+    print("presence: started focus=\(String(agentId.prefix(8))) sent=\(store.presenceSentCount)")
+    store.updateVisibility(false)
+    try await Task.sleep(for: .milliseconds(200))
+    print("presence: hidden sent=\(store.presenceSentCount) visible=\(store.appVisible)")
+    try await Task.sleep(for: .seconds(16))
+    print("presence: after 16 s sent=\(store.presenceSentCount) (15 s cadence expected)")
+    store.stopPresence()
+
+    let revoked = await store.unregisterPushToken("paseo-probe-not-registered")
+    print("push revoke of an unregistered token: success=\(revoked) error=\(store.error ?? "none")")
+
+    guard let originalPrompt = config.resumePrompt else {
+        throw ProbeError("config.resumePrompt is missing; not writing config")
+    }
+    var patch = DaemonConfigPatch()
+    patch.resumePrompt = "\(originalPrompt) [probe]"
+    let patched = await store.save(patch)
+    let patchedPrompt = store.config?.resumePrompt ?? "-"
+    print(
+        "patch resumePrompt: saved=\(patched) effective=\(patchedPrompt) error=\(store.error ?? "none")"
+    )
+    var restore = DaemonConfigPatch()
+    restore.resumePrompt = originalPrompt
+    let restored = await store.save(restore)
+    let restoredPrompt = store.config?.resumePrompt ?? "-"
+    print(
+        "restore resumePrompt: saved=\(restored) effective=\(restoredPrompt) error=\(store.error ?? "none")"
+    )
+    guard restored, store.config?.resumePrompt == originalPrompt else {
+        throw ProbeError("daemon config was not restored")
+    }
+}
+
+/// Reads the config the store holds, or fails the probe instead of force-unwrapping.
+@MainActor
+func unwrapConfig(_ store: HostSettingsStore) throws -> DaemonConfig {
+    guard let config = store.config else { throw ProbeError("daemon config is nil") }
+    return config
+}
+
 // MARK: - Workspaces and git
 
 func workspaceKindText(_ kind: WorkspaceKind) -> String {
@@ -696,4 +809,252 @@ func runFiles(_ connection: DaemonConnection, workspaceId: String, path: String?
     }
     if let error = store.files.error { print("error: \(error)") }
     await session.closeCheckout(workspaceId)
+}
+
+
+// MARK: - Git extras (T11)
+
+enum GitExtrasPhaseText {
+    static func diff(_ phase: WorkspaceGitExtras.DiffPhase) -> String {
+        switch phase {
+        case .idle: return "idle"
+        case .loading: return "loading"
+        case .ready: return "ready"
+        case .failed(let message): return "failed(\(message))"
+        }
+    }
+
+    static func file(_ phase: WorkspaceGitExtras.FilePhase) -> String {
+        switch phase {
+        case .idle: return "idle"
+        case .loading: return "loading"
+        case .ready: return "ready"
+        case .failed(let message): return "failed(\(message))"
+        }
+    }
+}
+
+@discardableResult
+func runGit(_ arguments: [String], cwd: String) throws -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["git"] + arguments
+    process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    try process.run()
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    let output = String(data: data, encoding: .utf8) ?? ""
+    guard process.terminationStatus == 0 else {
+        throw ProbeError("git \(arguments.joined(separator: " ")) failed: \(output)")
+    }
+    return output.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// Creates the fixture repo idempotently: a bare remote and a checkout in /tmp/fixture-git only.
+func ensureGitExtrasFixture(_ cwd: String) throws {
+    let root = "/tmp/fixture-git"
+    guard cwd == "\(root)/scratch-repo" else {
+        throw ProbeError("git-extras only runs in \(root)/scratch-repo; refusing \(cwd)")
+    }
+    let remote = "\(root)/remote.git"
+    let fileManager = FileManager.default
+    try fileManager.createDirectory(atPath: remote, withIntermediateDirectories: true)
+    if !fileManager.fileExists(atPath: "\(remote)/HEAD") {
+        try runGit(["init", "--bare", "-q", "-b", "main", remote], cwd: root)
+    }
+    if !fileManager.fileExists(atPath: "\(cwd)/.git") {
+        try fileManager.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+        try runGit(["init", "-q", "-b", "main"], cwd: cwd)
+        try runGit(["config", "user.email", "fixture@example.test"], cwd: cwd)
+        try runGit(["config", "user.name", "Fixture"], cwd: cwd)
+        try Data("# scratch\n\nline one\nline two\n".utf8)
+            .write(to: URL(fileURLWithPath: "\(cwd)/README.md"))
+        try Data("print(\"hello\")\n".utf8)
+            .write(to: URL(fileURLWithPath: "\(cwd)/hello.py"))
+        try runGit(["add", "."], cwd: cwd)
+        try runGit(["commit", "-qm", "initial fixture commit"], cwd: cwd)
+        try runGit(["remote", "add", "origin", remote], cwd: cwd)
+        try runGit(["push", "-qu", "origin", "main"], cwd: cwd)
+    }
+    let branches = try runGit(["branch", "--list", "feature/t11"], cwd: cwd)
+    if branches.isEmpty {
+        try runGit(["checkout", "-qb", "feature/t11"], cwd: cwd)
+        let readme = URL(fileURLWithPath: "\(cwd)/README.md")
+        let existing = (try? String(contentsOf: readme, encoding: .utf8)) ?? "# scratch\n"
+        try Data((existing + "feature line\n").utf8).write(to: readme)
+        try runGit(["commit", "-qam", "feature commit"], cwd: cwd)
+        try runGit(["push", "-qu", "origin", "feature/t11"], cwd: cwd)
+    }
+    try runGit(["checkout", "-q", "main"], cwd: cwd)
+    try runGit(["reset", "-q", "--hard", "origin/main"], cwd: cwd)
+}
+
+/// End-to-end check of T11 against the live daemon. Only creates a workspace for the fixture repo
+/// and archives it again; it never touches another workspace or project.
+@MainActor
+func runGitExtras(_ connection: DaemonConnection, cwd: String) async throws {
+    try ensureGitExtrasFixture(cwd)
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    guard await waitForDirectory(session) else {
+        throw ProbeError("workspace directory did not load: \(session.workspaceDirectory.error ?? "unknown error")")
+    }
+
+    let projectsBefore = (try? await connection.send(ProjectListRequest()))?.projects
+        .filter { $0.projectRootPath == cwd } ?? []
+    var workspace = session.workspaceDirectory.workspaces.first { $0.cwd == cwd }
+    var createdWorkspace = false
+    if workspace == nil {
+        let response = try await connection.send(
+            WorkspaceCreateRequest(
+                source: .directory(path: cwd, projectId: nil),
+                idempotencyKey: "paseo-probe-t11-\(UUID().uuidString)"))
+        guard let created = response.workspace else {
+            throw ProbeError("workspace.create failed: \(response.error ?? "unknown")")
+        }
+        workspace = created
+        createdWorkspace = true
+    }
+    guard let workspace else { throw ProbeError("no workspace for \(cwd)") }
+
+    var cleanedUp = false
+    do {
+        let checkout = session.checkout(for: workspace)
+        _ = await waitForCheckout(checkout)
+        try await waitUntil("the initial checkout diff", timeout: 30) {
+            checkout.diffPhase != .idle && checkout.diffPhase != .loading
+        }
+        let extras = session.gitExtras.workspace(for: checkout)
+        let capabilities = extras.capabilities
+        print(
+            "workspace \(workspace.id) cwd=\(checkout.cwd) created=\(createdWorkspace) "
+                + "modernDiff=\(capabilities.supportsModernDiff) discard=\(capabilities.supportsDiscardChanges) "
+                + "files=\(capabilities.supportsFileWatching)")
+
+        await extras.loadBranchSuggestions(query: "feature", limit: 20)
+        print("branches: \(extras.branchSuggestions.map(\.name).joined(separator: ","))")
+
+        let switched = await extras.switchBranch("feature/t11")
+        print("switch feature/t11 -> \(switched) branch=\(extras.currentBranch ?? "-")")
+        let switchedBack = await extras.switchBranch("main")
+        print("switch main -> \(switchedBack) branch=\(extras.currentBranch ?? "-")")
+
+        let readme = URL(fileURLWithPath: "\(cwd)/README.md")
+        let original = try Data(contentsOf: readme)
+        try (original + Data("probe diff\n".utf8)).write(to: readme)
+        // The daemon's git observer debounces stat changes before the diff snapshot catches up.
+        try await Task.sleep(for: .seconds(1))
+
+        await extras.loadDiff(compare: .working(cwd: cwd))
+        try await waitUntil("the diff", timeout: 30) { extras.diffPhase != .loading }
+        print(
+            "diff pipeline=\(extras.isUsingLegacyPipeline ? "legacy" : "modern") "
+                + "phase=\(GitExtrasPhaseText.diff(extras.diffPhase)) files=\(extras.filesChanged) "
+                + "+\(extras.additions)-\(extras.deletions)")
+        for file in extras.files.prefix(5) {
+            print("  \(file.path) +\(file.additions)-\(file.deletions)")
+        }
+
+        let discarded = await extras.discard(paths: ["README.md"])
+        print("discard -> \(discarded) dirty=\(checkout.status?.isDirty.map(String.init) ?? "-")")
+        try original.write(to: readme)
+
+        await extras.watchFile("README.md")
+        let initialSize = extras.watchedFile?.size
+        print(
+            "file \(extras.watchedFile?.path ?? "-") phase=\(GitExtrasPhaseText.file(extras.filePhase)) "
+                + "size=\(initialSize.map(String.init) ?? "-")")
+
+        try (original + Data("probe watched\n".utf8)).write(to: readme)
+        _ = await eventuallyProbe(timeout: 5) {
+            extras.watchedFile?.size != initialSize && extras.watchedFile?.size != nil
+        }
+        print("file update size=\(extras.watchedFile?.size.map(String.init) ?? "-")")
+        try original.write(to: readme)
+        await extras.stopWatchingFile()
+
+        await extras.loadPrStatus()
+        let badge = extras.prBadge
+        print(
+            "pr auth=\(extras.prAuthState.map { String(describing: $0) } ?? "-") "
+                + "badge=\(badge.map { " #\($0.number.map(String.init) ?? "-") \($0.state) checks=\($0.checks)" } ?? extras.prError ?? "none")")
+
+        if let error = extras.actionError ?? extras.diffError ?? extras.fileError {
+            print("error: \(error)")
+        }
+
+        await session.closeCheckout(workspace.id)
+        if createdWorkspace {
+            _ = try? await connection.send(ArchiveWorkspaceRequest(workspaceId: workspace.id))
+            if projectsBefore.isEmpty {
+                let projects = (try? await connection.send(ProjectListRequest()))?.projects ?? []
+                if let project = projects.first(where: { $0.projectRootPath == cwd }) {
+                    _ = try? await connection.send(
+                        ProjectRemoveRequest(projectId: project.projectId))
+                }
+            }
+            cleanedUp = true
+        }
+    } catch {
+        await session.closeCheckout(workspace.id)
+        if createdWorkspace, !cleanedUp {
+            _ = try? await connection.send(ArchiveWorkspaceRequest(workspaceId: workspace.id))
+            if projectsBefore.isEmpty {
+                let projects = (try? await connection.send(ProjectListRequest()))?.projects ?? []
+                if let project = projects.first(where: { $0.projectRootPath == cwd }) {
+                    _ = try? await connection.send(
+                        ProjectRemoveRequest(projectId: project.projectId))
+                }
+            }
+        }
+        throw error
+    }
+}
+
+@MainActor
+func eventuallyProbe(timeout: TimeInterval, _ condition: @MainActor () -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(100))
+    }
+    return condition()
+}
+
+// MARK: - T12: attachments, search and subagents
+
+@MainActor
+func runAttachmentsSearch(_ connection: DaemonConnection, agentId: String, query: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    let store = session.conversation(for: agentId)
+    try await waitUntil("the conversation to load", timeout: 30) { store.phase == .ready }
+
+    print("agent \(String(agentId.prefix(8))) rows=\(store.timeline.rows.count) turns=\(store.turns.count)")
+    print("provider subagents supported=\(store.subagents.isSupported)")
+
+    await store.subagents.load()
+    print("provider subagents=\(store.subagents.items.count) active=\(store.subagents.active.count) error=\(store.subagents.error ?? "none")")
+    for subagent in store.subagents.items {
+        let title = subagent.title ?? "-"
+        print("  \(String(subagent.id.prefix(8))) \(subagent.provider) \(subagent.status) \(title)")
+    }
+
+    _ = await store.search.search(query)
+    print("search query=\"\(query)\" epoch=\(store.search.epoch ?? "-") locations=\(store.search.locations.count) matches=\(store.search.matchCount) error=\(store.search.error ?? "none")")
+    for location in store.search.locations.prefix(10) {
+        print("  seq=\(location.seq) role=\(location.role) count=\(location.count ?? 1)")
+    }
+
+    let attachment = AgentAttachment.text(
+        .init(text: "T12 probe attachment: hello from the sandbox.", title: "T12 probe"))
+    await store.sendWithAttachments(
+        "T12 probe: acknowledging the attached note.", attachments: [attachment])
+    print("send actionError=\(store.actionError ?? "none") pending=\(store.timeline.rows.contains { $0.isPending })")
+    session.closeConversation(agentId)
 }

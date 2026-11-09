@@ -1,0 +1,11 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_archived",
+    "payload": {
+      "agentId": "a8c4fa13-5874-4077-98f9-bce6de7f610e",
+      "archivedAt": "2026-11-08T23:18:22.610Z",
+      "requestId": "archive"
+    }
+  }
+}

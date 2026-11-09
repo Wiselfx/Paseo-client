@@ -1,0 +1,39 @@
+{
+  "type": "session",
+  "message": {
+    "type": "schedule/list/response",
+    "payload": {
+      "requestId": "list-after-create",
+      "schedules": [
+        {
+          "id": "a9bffe73",
+          "name": "T9 fixture schedule",
+          "prompt": "Reply with the single word: scheduled",
+          "cadence": {
+            "type": "cron",
+            "expression": "0 0 1 1 *",
+            "timezone": "UTC"
+          },
+          "target": {
+            "type": "new-agent",
+            "config": {
+              "provider": "omp",
+              "cwd": "/tmp/fixture-sandbox",
+              "modeId": "full",
+              "model": "opencode-go/deepseek-v4.1-flash"
+            }
+          },
+          "status": "active",
+          "createdAt": "2026-11-08T23:12:17.750Z",
+          "updatedAt": "2026-11-08T23:12:17.750Z",
+          "nextRunAt": "2027-01-01T00:00:00.000Z",
+          "lastRunAt": null,
+          "pausedAt": null,
+          "expiresAt": null,
+          "maxRuns": 2
+        }
+      ],
+      "error": null
+    }
+  }
+}

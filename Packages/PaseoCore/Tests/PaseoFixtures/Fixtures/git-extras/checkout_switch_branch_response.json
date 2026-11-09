@@ -1,0 +1,14 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout_switch_branch_response",
+    "payload": {
+      "cwd": "/tmp/fixture-git/scratch-repo",
+      "success": true,
+      "branch": "feature/t11",
+      "source": "local",
+      "error": null,
+      "requestId": "t11-4"
+    }
+  }
+}
