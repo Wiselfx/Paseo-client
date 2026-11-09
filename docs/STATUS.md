@@ -105,8 +105,8 @@ Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01â€
 - R14 `r14-api-audit` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: PaseoUIâ†’PaseoCore API checker (catch Xcode errors) + fixes.
 - M4f `m4f-appearance` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: Pure black theme, text/code size.
 - M2.13 `m213-dsh-sidebar` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: active-first, group by date, setup callout.
-Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
-commands cache never invalidated; GitHub search has no star count.
+Known store gaps: commands cache never invalidated; GitHub search has no star count; host
+`diagnostics.request` has no store slot; fork can't carry provider feature values.
 Next candidates: advertise `owned_subscriptions` (DeepSeek, off-peak; complex); notifications/push research (DeepSeek after 10:00 UTC).
 Roadmap order: see PARITY.md suggested milestones, renumbered below.
 
