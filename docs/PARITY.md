@@ -237,7 +237,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Provider subagent list/timeline (background tasks the provider reports) — Status: `store only (no UI)` — Source: this client `Packages/PaseoProtocol/Subagents.swift`, `Packages/PaseoStore/ConversationSubagents.swift`
 - [ ] Feature: Fast mode (per-provider, composer + command center) — Status: `missing` — Source: `docs/research/01-app-features.md:325`
 - [ ] Feature: Model switch no-op bug fix (M2.5a) — Status: `done` — Source: `docs/STATUS.md:58`, `git log` `325b984`
-- [ ] Feature: Agent list / history surface — See Search & history — Status: `missing` — Source: `docs/research/01-app-features.md:66`
+- [x] Feature: Agent list / history surface — See Search & history — Status: `done` (History screen, active agents only; archived hidden: `HostSession` discards them at ingest, no unarchive RPC) — Source: this client `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:66`
 - [ ] Feature: Attention flags on agents (permission/error/finished) — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoSidebar.swift:321-360`; `docs/research/04-protocol-agents-permissions-settings.md:642`
 - [ ] Feature: Agent snapshot cards re-render on `agent_update` (live title/model/status) — Status: `done` — Source: this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:124-180`; fixtures `Packages/PaseoCore/Tests/PaseoFixtures/Fixtures/agents/`
 
@@ -418,13 +418,13 @@ Status counts are in `## Counts` at the very bottom.
 
 ## Search & history
 
-- [ ] Feature: Sessions / History screen — See Workspaces & projects — Status: `missing` — Source: `docs/research/01-app-features.md:135`
-- [ ] Feature: Timeline search (query the agent's timeline through the daemon; match positions; paginate) — Status: `store only (no UI)` — Source: this client `Packages/PaseoCore/Sources/PaseoStore/ConversationSearch.swift`, `Packages/PaseoProtocol/TimelineSearch.swift`; docs/research/04-protocol-agents-permissions-settings.md:889; fixtures `Packages/PaseoCore/Tests/PaseoFixtures/Fixtures/attachments-search/`
+- [x] Feature: Sessions / History screen — See Workspaces & projects — Status: `done` (History sheet: agents across workspaces, newest first, Today/Yesterday/Earlier grouping, title filter; active agents only, tap opens the agent) — Source: this client `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:135`
+- [x] Feature: Timeline search (query the agent's timeline through the daemon; match positions; paginate) — Status: `done` — Source: this client `Packages/PaseoCore/Sources/PaseoStore/ConversationSearch.swift`, `Packages/PaseoProtocol/TimelineSearch.swift`; UI: `Chat/ClaudeChatView.swift` (find bar, scroll-to-match, brief highlight, expands the work group holding the match), `Chat/ClaudeFindBar.swift`; docs/research/04-protocol-agents-permissions-settings.md:889; fixtures `Packages/PaseoCore/Tests/PaseoFixtures/Fixtures/attachments-search/`
 - [ ] Feature: Command center (Cmd+K: Actions / Files / Workspaces / Agents / Models / Thinking / Mode / Fast groups, keyboard-driven, shortcut badges) — Status: `missing` — Source: `docs/research/01-app-features.md:252-264`
 - [ ] Feature: Command palette in DSH style (redraw of the host palette; searches sessions/projects/actions) — Status: `missing` — Source: folder `dsh-claude-style-reference/packages/client/src/features/search/` (Ctrl+K takeover, Recents/Actions/Sessions/Projects filters)
 - [ ] Feature: Keyboard shortcuts dialog (all bindings, grouped, "Not set" states) — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:408`
 - [ ] Feature: "Search" placeholder/action in sidebar — See Sidebar & navigation — Status: `missing` — Source: `docs/research/01-app-features.md:99`
-- [ ] Feature: Search history (History screen: "Search history") — Status: `missing` — Source: `docs/research/01-app-features.md:137,293-300`
+- [x] Feature: Search history (History screen: "Search history") — Status: `done` (title filter in the History screen) — Source: this client `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:137,293-300`
 - [ ] Feature: Find in pane — See Desktop-only — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:57`
 - [ ] Feature: Slash-command search in the composer — See Composer — Status: `done` (the `/` menu filters as you type) — Source: `docs/research/01-app-features.md:89`; this client `…/Chat/ClaudeChatView.swift`
 
