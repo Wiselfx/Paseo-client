@@ -1,0 +1,14 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fs.entry.create.response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "parentPath": ".t15-fixture",
+      "path": ".t15-fixture/scratch.txt",
+      "success": true,
+      "error": null,
+      "requestId": "t15-2"
+    }
+  }
+}

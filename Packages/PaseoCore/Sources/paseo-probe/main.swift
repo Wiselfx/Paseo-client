@@ -61,6 +61,8 @@ let usage = """
                                full stack: upload a tiny text file to the sandbox agent through
                                file.upload.request + binary frames, then ask it to print the
                                file's first line, showing the reply
+      git-ops [cwd]            commits ahead of base + commit file diff (default /tmp/fixture-sandbox)
+      fs-ops [cwd]             fs.entry create/rename/duplicate/delete + conflict-checked write
       attachments-search <agentId> [query]
                                full stack: search the conversation, list provider subagents and
                                send a message with a structured text attachment (default query
@@ -412,6 +414,10 @@ do {
             throw ProbeError("upload needs an <agentId> <localFile>")
         }
         try await runUpload(connection, agentId: agentId, path: path)
+    case "git-ops":
+        try await runGitOps(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
+    case "fs-ops":
+        try await runFsOps(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     case "attachments-search":
         guard let agentId = arguments.commandArguments.first else {
             throw ProbeError("attachments-search needs an <agentId>")
@@ -1337,5 +1343,109 @@ func mimeTypeForUpload(extension ext: String) -> String {
     case "jpg", "jpeg": "image/jpeg"
     case "pdf": "application/pdf"
     default: "application/octet-stream"
+    }
+}
+
+// MARK: - Git ops and file ops (T15)
+
+@MainActor
+func runGitOps(_ connection: DaemonConnection, cwd: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    guard await waitForDirectory(session) else {
+        throw ProbeError("workspace directory did not load: \(session.workspaceDirectory.error ?? "unknown error")")
+    }
+    guard let workspace = session.workspaceDirectory.workspaces.first(where: { $0.cwd == cwd }) else {
+        throw ProbeError("no workspace for \(cwd); expected /tmp/fixture-sandbox to be registered")
+    }
+    let checkout = session.checkout(for: workspace)
+    _ = await waitForCheckout(checkout)
+    let actions = session.gitExtras.gitActions(for: checkout)
+    print("workspace \(workspace.id) cwd=\(checkout.cwd) commitsList=\(actions.supportsCommitsList) baseClassification=\(actions.supportsCommitBaseClassification) forgeAutoMerge=\(actions.capabilities.forgeAutoMerge) legacyAutoMerge=\(actions.capabilities.legacyAutoMerge)")
+
+    await actions.loadCommits()
+    print("commits base=\(actions.commitsBaseRef ?? "-") count=\(actions.commits.count) error=\(actions.commitsError ?? "-")")
+    for commit in actions.commits.prefix(5) {
+        let files = commit.files.map { "\($0.path)(+\($0.additions)/-\($0.deletions))" }.joined(separator: ",")
+        print("  \(commit.shortSha) \(commit.subject) [\(files)] isOnRemote=\(commit.isOnRemote) isOnBase=\(commit.isOnBase.map(String.init) ?? "-")")
+    }
+
+    if let first = actions.commits.first, let path = first.files.first?.path {
+        let file = await actions.loadCommitFileDiff(sha: first.sha, path: path)
+        if let file {
+            print("file diff \(file.path): \(file.hunks.count) hunks +\(file.additions)-\(file.deletions) error=\(actions.commitFileDiffError ?? "-")")
+        } else {
+            print("file diff \(path): nil error=\(actions.commitFileDiffError ?? "-")")
+        }
+    }
+    await session.closeCheckout(workspace.id)
+}
+
+/// File operations against the sandbox only. Creates `.t15-probe.txt`, writes it, renames it,
+/// duplicates it, then deletes both copies. Never touches anything it didn't create.
+@MainActor
+func runFsOps(_ connection: DaemonConnection, cwd: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    guard await waitForDirectory(session) else {
+        throw ProbeError("workspace directory did not load: \(session.workspaceDirectory.error ?? "unknown error")")
+    }
+    guard let workspace = session.workspaceDirectory.workspaces.first(where: { $0.cwd == cwd }) else {
+        throw ProbeError("no workspace for \(cwd); expected /tmp/fixture-sandbox to be registered")
+    }
+    let checkout = session.checkout(for: workspace)
+    _ = await waitForCheckout(checkout)
+    let files = checkout.files
+    print("workspace \(workspace.id) cwd=\(checkout.cwd) entryOps=\(files.supportsEntryOps) duplicate=\(files.supportsEntryDuplicate) editing=\(files.supportsFileEditing)")
+
+    var created: [String] = []
+    func attemptDelete(_ path: String, label: String) async {
+        let ok = await files.delete(path: path)
+        print("  delete \(path) -> \(ok) error=\(files.error ?? "-")")
+        _ = label
+    }
+
+    let original = "t15-probe.txt"
+    let renamed = "t15-probe-renamed.txt"
+    let path = await files.createEntry(parentPath: nil, name: original, kind: .file)
+    print("create -> \(path ?? "nil") error=\(files.error ?? "-")")
+    if let path { created.append(path) }
+
+    await files.read(path ?? original, maxBytes: 1024)
+    let modifiedAt = files.file?.modifiedAt ?? ""
+    let outcome = await files.write(
+        path: path ?? original, content: "probe \(Date().timeIntervalSince1970)\n",
+        expectedModifiedAt: modifiedAt)
+    print("write -> \(fileWriteOutcomeText(outcome)) error=\(files.error ?? "-")")
+
+    let renamedPath = await files.rename(path: path ?? original, to: renamed)
+    print("rename -> \(renamedPath ?? "nil") error=\(files.error ?? "-")")
+    if let renamedPath {
+        created.removeAll { $0 == (path ?? original) }
+        created.append(renamedPath)
+    }
+
+    let duplicatedPath = await files.duplicate(path: renamedPath ?? renamed)
+    print("duplicate -> \(duplicatedPath ?? "nil") error=\(files.error ?? "-")")
+    if let duplicatedPath { created.append(duplicatedPath) }
+
+    for path in created { await attemptDelete(path, label: "cleanup") }
+
+    await files.list()
+    let leftover = files.entries.map(\.name).filter { $0.hasPrefix("t15-probe") }
+    print("list after cleanup: entries=\(files.entries.count) leftover=\(leftover.isEmpty ? "none" : leftover.joined(separator: ","))")
+    await session.closeCheckout(workspace.id)
+}
+
+func fileWriteOutcomeText(_ outcome: FileWriteOutcome) -> String {
+    switch outcome {
+    case .written(let modifiedAt, let size, let revision):
+        return "written(size=\(size) revision=\(revision ?? "-") modifiedAt=\(modifiedAt))"
+    case .conflict(let modifiedAt):
+        return "conflict(currentModifiedAt=\(modifiedAt ?? "-"))"
+    case .failed(let message):
+        return "failed(\(message))"
     }
 }

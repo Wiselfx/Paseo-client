@@ -1,0 +1,37 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout.commits.list.response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "baseRef": null,
+      "commits": [
+        {
+          "sha": "ab3b806a42f4fb13c9884e65ab499b8e95eecad8",
+          "shortSha": "ab3b806",
+          "subject": "Fixture baseline",
+          "authorName": "Fixture",
+          "authorDate": "2026-11-08T22:02:37Z",
+          "isOnRemote": false,
+          "isOnBase": true,
+          "files": [
+            {
+              "path": "README.md",
+              "additions": 3,
+              "deletions": 0,
+              "status": "added"
+            },
+            {
+              "path": "convert.py",
+              "additions": 5,
+              "deletions": 0,
+              "status": "added"
+            }
+          ]
+        }
+      ],
+      "error": null,
+      "requestId": "t15-0"
+    }
+  }
+}

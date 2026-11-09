@@ -26,12 +26,18 @@ public final class WorkspaceFiles {
     public private(set) var entries: [FileExplorerEntry] = []
     /// The last file read, if any.
     public private(set) var file: FileExplorerFile?
-    public private(set) var error: String?
+    /// Observable error sink; T15's entry operations surface daemon refusals here verbatim.
+    public internal(set) var error: String?
 
     /// Hard cap for inline reads. Bigger files come back truncated or refused by the daemon.
     public var maxReadBytes = 512 * 1024
 
-    private let client: any DaemonClient
+    /// Entry-op/write capabilities, read once per host. Internal: T15's `FileEntries.swift`
+    /// extension reads and updates it.
+    internal var entryCapabilities = EntryCapabilities()
+
+    /// Internal (not private) so the T15 extension file can send RPCs with it.
+    internal let client: any DaemonClient
 
     internal init(cwd: String, client: any DaemonClient) {
         self.cwd = cwd
@@ -101,5 +107,22 @@ public final class WorkspaceFiles {
             return nil
         }
         return path
+    }
+}
+
+/// Entry-operation and file-editing capabilities for `WorkspaceFiles`, set once per host.
+/// Internal on purpose: views read the derived `supports*` flags on T15's extension.
+struct EntryCapabilities: Sendable, Hashable {
+    public var supportsEntryOps: Bool
+    public var supportsEntryDuplicate: Bool
+    public var supportsFileEditing: Bool
+
+    public init(
+        supportsEntryOps: Bool = false, supportsEntryDuplicate: Bool = false,
+        supportsFileEditing: Bool = false
+    ) {
+        self.supportsEntryOps = supportsEntryOps
+        self.supportsEntryDuplicate = supportsEntryDuplicate
+        self.supportsFileEditing = supportsFileEditing
     }
 }
