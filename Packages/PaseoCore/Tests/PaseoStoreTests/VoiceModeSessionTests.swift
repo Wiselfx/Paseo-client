@@ -302,6 +302,75 @@ struct VoiceModeSessionTests {
         #expect(session.phase == .playing)
     }
 
+    @Test func lateAckAfterStopDoesNotCrashNorAck() async throws {
+        let client = FakeDaemonClient()
+        let session = try makeSession(client)
+        startable(client)
+        await session.start(agentId: "agent-1")
+        session.handleAudioOutput(audioPayload(id: "a0", group: "ga", index: 0, last: false))
+        #expect(session.nextAudioChunk?.id == "a0")
+
+        await session.stop()
+        // The engine's in-flight completion fires after the stop cleared the queue:
+        // this must be a silent no-op (no force-unwrap crash, no stale ack).
+        session.didPlayChunk(id: "a0")
+        session.didFailChunk(id: "a0")
+
+        for _ in 0..<20 { await Task.yield() }
+        #expect(session.phase == .disabled)
+        #expect(client.messages.compactMap { $0 as? AudioPlayed }.isEmpty)
+    }
+
+    @Test func stopDuringStartDropsTheLateStartResponse() async throws {
+        let client = FakeDaemonClient()
+        let session = try makeSession(client)
+        client.onSend(SetVoiceModeRequest.self) { request in
+            if request.enabled {
+                // Hold the enable response until the test's stop() has run.
+                try? await Task.sleep(for: .milliseconds(80))
+            }
+            return try! JSONDecoder().decode(
+                SetVoiceModeRequest.Response.self,
+                from: Data(#"""
+                    {"requestId":"r","enabled":\#(request.enabled),"agentId":"agent-1",
+                     "accepted":true,"error":null}
+                    """#.utf8))
+        }
+        let startTask = Task { await session.start(agentId: "agent-1") }
+        for _ in 0..<50 {
+            await Task.yield()
+            if session.phase == .starting { break }
+        }
+        #expect(session.phase == .starting)
+
+        let stopped = await session.stop()
+        let started = await startTask.value
+
+        #expect(stopped)
+        #expect(!started, "the start response arrived after the stop generation bump")
+        #expect(session.phase == .disabled)
+        #expect(session.activeAgentId == nil)
+        #expect(client.requests(SetVoiceModeRequest.self).last?.enabled == false)
+    }
+
+    @Test func failedConnectionDoesFullLocalTeardown() async throws {
+        let client = FakeDaemonClient()
+        let session = try makeSession(client)
+        startable(client)
+        await session.start(agentId: "agent-1")
+        session.handleAudioOutput(audioPayload(id: "a0", group: "ga", index: 0, last: true))
+        #expect(session.nextAudioChunk != nil)
+        let stopsBefore = session.playbackStopRequested
+
+        await session.handle(connection: .failed(.timeout))
+
+        #expect(session.phase == .disabled)
+        #expect(session.activeAgentId == nil)
+        #expect(session.nextAudioChunk == nil)
+        #expect(!session.isVoiceMode)
+        #expect(session.playbackStopRequested == stopsBefore + 1)
+    }
+
     @Test func stopCancelsTheTurnThenLeavesTheLane() async throws {
         let client = FakeDaemonClient()
         let session = try makeSession(client)

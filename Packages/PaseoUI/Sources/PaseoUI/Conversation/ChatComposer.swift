@@ -71,7 +71,7 @@ extension ClaudeChatView {
             .padding(.horizontal, 6)
             .padding(.top, 7)
             .accessibilityIdentifier("composer.draft")
-            if voiceActiveForAgent {
+            if voiceActiveForAgent || voice.phase == .starting {
                 voiceBar
             }
             HStack(spacing: 8) {
@@ -304,6 +304,7 @@ extension ClaudeChatView {
                 voiceActiveForAgent
                     ? (voice.isMuted ? "Unmute voice mode" : "Mute Voice mode") : "Enable Voice mode")
             .accessibilityIdentifier("composer.voiceMode")
+            .disabled(voice.isVoiceSwitching)
         }
     }
 

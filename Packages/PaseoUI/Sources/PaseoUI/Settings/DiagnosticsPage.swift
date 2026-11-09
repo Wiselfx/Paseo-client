@@ -175,7 +175,7 @@ struct DiagnosticsPage: View {
                         testAudioPlaying = true
                         testAudioResult = nil
                         do {
-                            try audioEngine.playTestTone()
+                            try await audioEngine.playTestTone()
                             testAudioResult = nil
                         } catch {
                             testAudioResult = "Playback failed: \(error.localizedDescription)"

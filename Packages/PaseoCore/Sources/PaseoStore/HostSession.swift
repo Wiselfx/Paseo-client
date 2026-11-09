@@ -211,7 +211,6 @@ public final class HostSession {
     private func handle(state: ConnectionState) async {
         connection = state
         await terminals.handle(connection: state)
-        await voiceSession.handle(connection: state)
         switch state {
         case .connected(let info):
             serverInfo = info
@@ -234,6 +233,7 @@ public final class HostSession {
             // The daemon drops every subscription with the previous socket: always re-subscribe.
             // Advisory only, so it never delays the directory, labels or a resync.
             Task { await ownedEvents.connected() }
+            Task { await voiceSession.handle(connection: state) }
             if sawReconnect {
                 sawReconnect = false
                 await resync()
@@ -245,16 +245,19 @@ public final class HostSession {
             sawReconnect = true
             ownedEvents.disconnected()
             voiceSettings.stopModelPolling()
+            await voiceSession.handle(connection: state)
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         case .idle, .connecting:
             ownedEvents.disconnected()
             voiceSettings.stopModelPolling()
+            await voiceSession.handle(connection: state)
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         case .failed:
             ownedEvents.disconnected()
             voiceSettings.stopModelPolling()
+            await voiceSession.handle(connection: state)
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         }

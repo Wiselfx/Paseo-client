@@ -109,6 +109,9 @@ public final class VoiceModeSession {
         var id: String
         var isVoiceMode: Bool
         var shouldPlay: Bool
+        /// Playback session generation when the group was created (`generation` in the
+        /// upstream runtime). Bumped by `resetPlaybackState`; stale groups never advance.
+        var generation: UInt64
         var chunks: [Int: AudioPlaybackChunk] = [:]
         var nextChunkToPlay = 0
         var finalChunkIndex: Int?
@@ -118,6 +121,9 @@ public final class VoiceModeSession {
     private var groups: [String: PlaybackGroup] = [:]
     private var groupOrder: [String] = []
     private var activeGroupId: String?
+    /// One per playback reset, like upstream's `playback.generation`: acks that arrive
+    /// after a stop/interrupt must be ignored as stale.
+    private var playbackGeneration: UInt64 = 0
 
     public init(client: any DaemonClient) {
         self.client = client
@@ -183,10 +189,14 @@ public final class VoiceModeSession {
 
     /// Leaves voice mode: cancels the running turn (upstream's `stopRealtimeVoice`
     /// cancels the agent before stopping the lane), clears playback, then tells the
-    /// daemon. The store always lands back at `.disabled`, even when a send fails.
+    /// daemon. Works mid-`.starting` too: hung start responses are dropped by the
+    /// generation bump and the lane is torn down (`stopVoice` upstream).
+    /// The store always lands back at `.disabled`, even when a send fails.
     @discardableResult
     public func stop() async -> Bool {
-        guard isVoiceMode, let agentId = activeAgentId else { return true }
+        let wasStarting = phase == .starting
+        guard wasStarting || isVoiceMode else { return true }
+        let agentId = activeAgentId
         let generation = self.generation + 1
         self.generation = generation
         phase = .stopping
@@ -196,7 +206,7 @@ public final class VoiceModeSession {
 
         var failed = false
         do {
-            if turnInProgress {
+            if turnInProgress, let agentId {
                 _ = try await client.send(CancelAgentRequest(agentId: agentId))
             }
             _ = try await client.send(SetVoiceModeRequest(enabled: false))
@@ -268,11 +278,11 @@ public final class VoiceModeSession {
         if groups[groupId] == nil {
             groups[groupId] = PlaybackGroup(
                 id: groupId, isVoiceMode: payload.isVoiceMode,
-                shouldPlay: phase != .stopping)
+                shouldPlay: phase != .stopping, generation: playbackGeneration)
             groupOrder.append(groupId)
             if activeGroupId == nil { activeGroupId = groupId }
         }
-        var group = groups[groupId]!
+        guard var group = groups[groupId] else { return }
         group.chunks[chunkIndex] = AudioPlaybackChunk(
             id: payload.id, groupId: groupId, chunkIndex: chunkIndex,
             data: VoiceWire.decodeAudio(payload.audio), format: payload.format)
@@ -327,15 +337,17 @@ public final class VoiceModeSession {
 
     // MARK: Playback acknowledgement (UI -> store -> daemon)
 
-    /// The engine finished (or failed) with `id`: ack it with `audio_played`, advance
-    /// the group's ordered cursor and retire finished groups. Upstream acks every chunk
-    /// after play, including failures, exactly once.
+    /// The engine finished (or failed) with `id`: advance the ordered cursor and ack
+    /// with `audio_played` — but only when the chunk still belongs to this playback
+    /// session. An ack arriving after stop/interrupt (the engine's in-flight
+    /// completion) is stale: no crash, no ack (`generation !== playback.generation`
+    /// early-return upstream).
     public func didPlayChunk(id: String) {
+        guard advancePlayback(afterChunkId: id) else { return }
         let client = self.client
         Task {
             try? await client.send(AudioPlayed(id: id))
         }
-        advancePlayback(afterChunkId: id)
     }
 
     /// A chunk the engine could not play at all still gets acked (upstream plays the
@@ -359,13 +371,27 @@ public final class VoiceModeSession {
     /// (`resyncVoiceMode` upstream).
     internal func handle(connection: ConnectionState) async {
         switch connection {
-        case .reconnecting, .failed:
+        case .reconnecting:
             transportReady = false
             turnInProgress = false
             isSpeaking = false
             volume = 0
             resetPlaybackState()
             isAssistantAudioPlaying = false
+            exposeNextAudioChunk()
+        case .failed, .idle, .connecting:
+            // The socket is gone for good: full local teardown so the UI stops capture,
+            // clears the wake lock and returns the composer to a normal state.
+            transportReady = false
+            turnInProgress = false
+            playbackStopRequested &+= 1
+            resetPlaybackState()
+            isAssistantAudioPlaying = false
+            clearCaptureTelemetry()
+            activeAgentId = nil
+            phase = .disabled
+            isVoiceSwitching = false
+            isMuted = false
             exposeNextAudioChunk()
         case .connected:
             guard isVoiceMode, let agentId = activeAgentId else { return }
@@ -385,8 +411,6 @@ public final class VoiceModeSession {
                 error = String(describing: failure)
             }
             isVoiceSwitching = false
-        case .idle, .connecting:
-            transportReady = false
         }
     }
 
@@ -407,6 +431,7 @@ public final class VoiceModeSession {
     /// Clears the playback queue (interrupt, stop, resync). The engine hears about it
     /// through `playbackStopRequested`.
     private func resetPlaybackState() {
+        playbackGeneration &+= 1
         groups = [:]
         groupOrder = []
         activeGroupId = nil
@@ -421,7 +446,9 @@ public final class VoiceModeSession {
     /// Surfaces the active group's next chunk, starting an unstarted voice group
     /// (`onAssistantAudioStarted` upstream: phase `.playing`).
     private func exposeNextAudioChunk() {
-        guard activeGroupId != nil, var group = groups[activeGroupId!] else {
+        guard let activeGroupId, var group = groups[activeGroupId],
+            group.generation == playbackGeneration
+        else {
             nextAudioChunk = nil
             return
         }
@@ -435,7 +462,7 @@ public final class VoiceModeSession {
         }
         if group.shouldPlay, !group.started, group.isVoiceMode {
             group.started = true
-            groups[activeGroupId!] = group
+            groups[activeGroupId] = group
             isAssistantAudioPlaying = true
             if phase != .stopping { phase = .playing }
         }
@@ -444,24 +471,34 @@ public final class VoiceModeSession {
 
     /// Ack-advanced cursor; retires a group once its final chunk played and acks
     /// (`retireFinishedGroup` upstream: playback finished → `listening`/`waiting`).
-    private func advancePlayback(afterChunkId: String) {
-        guard var group = groups[activeGroupId!], group.chunks[group.nextChunkToPlay]?.id == afterChunkId
-        else { return }
+    /// Returns false when the ack is stale (unknown or previous-generation chunk).
+    @discardableResult
+    private func advancePlayback(afterChunkId: String) -> Bool {
+        guard let activeGroupId, var group = groups[activeGroupId],
+            group.generation == playbackGeneration,
+            group.chunks[group.nextChunkToPlay]?.id == afterChunkId
+        else { return false }
         group.chunks.removeValue(forKey: group.nextChunkToPlay)
         group.nextChunkToPlay += 1
-        let finished = group.finalChunkIndex != nil && group.nextChunkToPlay > group.finalChunkIndex!
-        groups[activeGroupId!] = group
+        let finished: Bool
+        if let finalChunkIndex = group.finalChunkIndex {
+            finished = group.nextChunkToPlay > finalChunkIndex
+        } else {
+            finished = false
+        }
+        groups[activeGroupId] = group
         if finished {
             let wasStarted = group.started
             groups.removeValue(forKey: group.id)
             if groupOrder.first == group.id { groupOrder.removeFirst() }
             else { groupOrder.removeAll { $0 == group.id } }
-            activeGroupId = groupOrder.first
+            self.activeGroupId = groupOrder.first
             if wasStarted, group.isVoiceMode {
                 isAssistantAudioPlaying = false
                 if turnInProgress { phase = .waiting } else { phase = .listening }
             }
         }
         exposeNextAudioChunk()
+        return true
     }
 }
