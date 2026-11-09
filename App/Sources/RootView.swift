@@ -7,16 +7,15 @@ import SwiftUI
 struct RootView: View {
     @Bindable var model: AppModel
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
+    @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
+    @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
 
     private var colorScheme: ColorScheme? {
-        switch ClaudeAppearance(rawValue: appearance) ?? .system {
-        case .system: nil
-        case .light: .light
-        case .dark: .dark
-        }
+        (ClaudeAppearance(rawValue: appearance) ?? .system).colorScheme
     }
 
     var body: some View {
+        // Rebuilding on these keys applies theme and font-size changes live.
         Group {
             switch model.phase {
             case .setup(let status):
@@ -32,6 +31,7 @@ struct RootView: View {
                 PaseoShellView(session: session, onDisconnect: { model.disconnect() })
             }
         }
+        .id("\(appearance)|\(contentTextSize)|\(codeFontSize)")
         .preferredColorScheme(colorScheme)
         .environment(\.hostSwitch, model.hostContext)
     }

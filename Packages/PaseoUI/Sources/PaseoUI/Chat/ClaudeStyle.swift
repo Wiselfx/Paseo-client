@@ -27,6 +27,7 @@ public struct ClaudeTypography: Sendable {
     public func serif(
         _ size: CGFloat, relativeTo style: Font.TextStyle = .body, weight: Font.Weight = .regular
     ) -> Font {
+        let size = size * ClaudeTextScale.contentMultiplier()
         if ClaudeFontResources.isAvailable(serifName) {
             return apply(weight, to: .custom(serifName, size: size, relativeTo: style))
         }
@@ -50,6 +51,7 @@ public struct ClaudeTypography: Sendable {
     public func mono(
         _ size: CGFloat, relativeTo style: Font.TextStyle = .body, weight: Font.Weight = .regular
     ) -> Font {
+        let size = size * ClaudeTextScale.codeMultiplier()
         guard ClaudeFontResources.isAvailable(monoName) else {
             return .system(style, design: .monospaced, weight: weight)
         }
@@ -80,23 +82,37 @@ public enum PaseoSettingsKeys {
 /// (`docs/research/08-dsh-live-observation.md` §5 — that document overrides doc 06).
 enum ClaudePalette {
     /// #141413 in dark, ClaudeUI's warm canvas in light.
-    static let background = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
+    static var background: Color {
+        Color(uiColor: UIColor { traits in
+            if ClaudeAppearance.pureBlackActive {
+                return UIColor(white: 0, alpha: 1)
+            }
+            return traits.userInterfaceStyle == .dark
                 ? UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 1)
                 : UIColor(red: 0.976, green: 0.976, blue: 0.969, alpha: 1)
         })
+    }
     /// The drawer sits a touch darker than the content panel in dark mode.
-    static let sidebarBackground = adaptive(light: 0.96, dark: 16 / 255)
-    static let codeBackground = adaptive(light: 0.98, dark: 0.04)
-    static let panel = adaptive(light: 1, dark: 31 / 255)
+    static var sidebarBackground: Color {
+        adaptive(light: 0.96, dark: 16 / 255, pureBlack: 7 / 255)
+    }
+    static var codeBackground: Color {
+        adaptive(light: 0.98, dark: 0.04, pureBlack: 0.02)
+    }
+    static var panel: Color {
+        adaptive(light: 1, dark: 31 / 255, pureBlack: 15 / 255)
+    }
     /// A lifted gray composer card, ~#262624 in dark.
-    static let composer = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
+    static var composer: Color {
+        Color(uiColor: UIColor { traits in
+            if ClaudeAppearance.pureBlackActive {
+                return UIColor(white: 18 / 255, alpha: 1)
+            }
+            return traits.userInterfaceStyle == .dark
                 ? UIColor(red: 38 / 255, green: 38 / 255, blue: 36 / 255, alpha: 1)
                 : UIColor(white: 0.99, alpha: 1)
         })
+    }
     static let composerBorder = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
@@ -110,10 +126,14 @@ enum ClaudePalette {
                 ? UIColor(red: 0.949, green: 0.937, blue: 0.914, alpha: 1)
                 : UIColor(white: 0.13, alpha: 1)
         })
-    static func adaptive(light: Double, dark: Double) -> Color {
+    static func adaptive(light: Double, dark: Double, pureBlack: Double? = nil) -> Color {
         Color(
-            uiColor: UIColor {
-                $0.userInterfaceStyle == .dark ? UIColor(white: dark, alpha: 1) : UIColor(white: light, alpha: 1)
+            uiColor: UIColor { traits in
+                if ClaudeAppearance.pureBlackActive {
+                    return UIColor(white: pureBlack ?? dark, alpha: 1)
+                }
+                return traits.userInterfaceStyle == .dark
+                    ? UIColor(white: dark, alpha: 1) : UIColor(white: light, alpha: 1)
             })
     }
     static let orange = Color(red: 217 / 255, green: 119 / 255, blue: 87 / 255)
@@ -143,12 +163,16 @@ enum ClaudePalette {
                 : UIColor(red: 24 / 255, green: 79 / 255, blue: 149 / 255, alpha: 1)
         })
     /// The code-block surface: #FFFFFF light / #212121 dark (`--dsw-alias-markdown-code-block`).
-    static let codeSurface = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
+    static var codeSurface: Color {
+        Color(uiColor: UIColor { traits in
+            if ClaudeAppearance.pureBlackActive {
+                return UIColor(white: 17 / 255, alpha: 1)
+            }
+            return traits.userInterfaceStyle == .dark
                 ? UIColor(red: 33 / 255, green: 33 / 255, blue: 33 / 255, alpha: 1)
                 : UIColor(white: 1, alpha: 1)
         })
+    }
     /// `--dsh-claude-inline-code-bg`: rgba(6,6,6,0.05) light / rgba(255,255,255,0.05) dark.
     static let inlineCodeFill = Color(
         uiColor: UIColor {
