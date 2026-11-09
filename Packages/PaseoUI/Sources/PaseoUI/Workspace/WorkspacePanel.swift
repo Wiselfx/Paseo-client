@@ -3,6 +3,29 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
+/// The action a "Mention in chat" button triggers. Internal, so the panel's pages can reach it
+/// without widening their fixed constructors. Nil disables the action.
+struct MentionInChatKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+
+/// The live-file watch (T11) for the workspace the panel shows. Published by the panel;
+/// consumed by the Files page and its viewer.
+struct WorkspaceGitExtrasKey: EnvironmentKey {
+    static let defaultValue: WorkspaceGitExtras? = nil
+}
+
+extension EnvironmentValues {
+    var mentionInChat: ((String) -> Void)? {
+        get { self[MentionInChatKey.self] }
+        set { self[MentionInChatKey.self] = newValue }
+    }
+    var workspaceGitExtras: WorkspaceGitExtras? {
+        get { self[WorkspaceGitExtrasKey.self] }
+        set { self[WorkspaceGitExtrasKey.self] = newValue }
+    }
+}
+
 /// The workspace panel: "inside this workspace" — its agents, files, changes and terminals. Slides
 /// in from the right edge over the chat, mirroring the left sidebar drawer.
 ///
@@ -15,10 +38,13 @@ struct WorkspacePanel: View {
     let currentAgentId: String?
     var onSelectAgent: (String) -> Void
     var onNewAgent: (WorkspaceDescriptor) -> Void
+    /// Inserts `@relative/path ` into the open conversation's composer (see `PaseoShellView`).
+    var onMentionInChat: ((String) -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage private var pageRaw: String
     @State private var checkout: CheckoutStore?
+    @State private var gitExtras: WorkspaceGitExtras?
     @State private var renamingAgent: AgentSnapshot?
     @State private var agentPendingArchive: AgentSnapshot?
     @State private var renameText = ""
@@ -28,13 +54,15 @@ struct WorkspacePanel: View {
     init(
         session: HostSession, workspace: WorkspaceDescriptor?, currentAgentId: String?,
         onSelectAgent: @escaping (String) -> Void,
-        onNewAgent: @escaping (WorkspaceDescriptor) -> Void
+        onNewAgent: @escaping (WorkspaceDescriptor) -> Void,
+        onMentionInChat: ((String) -> Void)? = nil
     ) {
         self.session = session
         self.workspace = workspace
         self.currentAgentId = currentAgentId
         self.onSelectAgent = onSelectAgent
         self.onNewAgent = onNewAgent
+        self.onMentionInChat = onMentionInChat
         // The last page is remembered per workspace.
         let id = workspace?.id ?? "none"
         _pageRaw = AppStorage(wrappedValue: Page.agents.rawValue, "paseo.panel.page.\(id)")
@@ -70,13 +98,18 @@ struct WorkspacePanel: View {
             content
         }
         .background(ClaudePalette.background)
+        .environment(\.mentionInChat, onMentionInChat)
+        .environment(\.workspaceGitExtras, gitExtras)
         .task(id: workspace?.id) {
             guard let workspace else {
                 checkout = nil
+                gitExtras = nil
                 return
             }
             let store = await MainActor.run { session.checkout(for: workspace) }
+            let extras = await MainActor.run { session.gitExtras.workspace(for: store) }
             checkout = store
+            gitExtras = extras
         }
         .alert(
             "Rename agent",

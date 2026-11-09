@@ -13,11 +13,17 @@ struct WorkspaceFileViewer: View {
     let backLabel: String
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.mentionInChat) private var mentionInChat
+    @Environment(\.workspaceGitExtras) private var gitExtras
     @State private var copied = false
     private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
     private var fileName: String { WorkspaceFileFormat.lastComponent(relPath) }
+    /// Workspace-relative path for the "Mention in chat" action and the live-file watch.
+    private var relativePath: String {
+        WorkspaceFileFormat.relativePath(relPath, cwd: checkout.cwd)
+    }
 
     /// The store keeps one file; show it only while it is the file we asked for.
     private var file: FileExplorerFile? {
@@ -33,7 +39,22 @@ struct WorkspaceFileViewer: View {
             ClaudeDivider()
             content
         }
-        .onAppear { Task { await files.read(relPath) } }
+        .onAppear {
+            Task {
+                if let gitExtras { await gitExtras.watchFile(relativePath) }
+                await files.read(relativePath)
+            }
+        }
+        // The daemon pushed a new version: re-read, keeping the scroll position (the code
+        // view's identity is stable across re-reads, so the offset survives).
+        .onChange(of: gitExtras?.watchedFile) { _, version in
+            guard version != nil else { return }
+            Task { await files.read(relativePath) }
+        }
+        .onDisappear {
+            guard let gitExtras else { return }
+            Task { await gitExtras.stopWatchingFile() }
+        }
     }
 
     // MARK: Top row
@@ -60,6 +81,19 @@ struct WorkspaceFileViewer: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
+            if let mentionInChat {
+                Button {
+                    mentionInChat(relativePath)
+                } label: {
+                    Image(systemName: "at")
+                        .font(.system(size: 15, weight: .light))
+                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .frame(width: 28, height: 28)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Mention in chat")
+            }
             if canCopy { copyButton } else { Color.clear.frame(width: 28, height: 28) }
         }
         .padding(.horizontal, 10)
@@ -196,7 +230,7 @@ struct WorkspaceFileViewer: View {
                 .multilineTextAlignment(.center)
             Button {
                 Haptics.selection()
-                Task { await files.read(relPath) }
+                Task { await files.read(relativePath) }
             } label: {
                 Text("Retry")
                     .font(typography.sans(13, weight: .medium))

@@ -86,6 +86,8 @@ private struct WorkspaceFilesDirectoryList: View {
     @State private var toast: String?
     private let typography = ClaudeTypography()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// "Mention in chat" from a row's long-press; nil disables the action.
+    @Environment(\.mentionInChat) private var mentionInChat
 
     private var files: WorkspaceFiles { checkout.files }
 
@@ -227,6 +229,11 @@ private struct WorkspaceFilesDirectoryList: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
+            if !entry.isDirectory {
+                Button("Mention in chat", systemImage: "at") {
+                    mentionInChat?(relative(entry))
+                }
+            }
             Button("Copy path", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = absolute(entry)
                 showToast("Path copied")
