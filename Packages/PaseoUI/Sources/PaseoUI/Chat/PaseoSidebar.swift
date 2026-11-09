@@ -62,8 +62,16 @@ struct PaseoSidebar: View {
             case .newWorkspace:
                 ClaudeNewWorkspaceSheet(
                     session: session, defaultProjectId: selectedWorkspaceProjectId
-                ) {
-                    showToast("Workspace created")
+                ) { agentId, message in
+                    if let agentId {
+                        onSelectAgent(agentId)
+                    } else {
+                        showToast(message ?? "Workspace created")
+                    }
+                }
+            case .addProject:
+                AddProjectSheet(session: session) { message in
+                    showToast(message)
                 }
             }
         }
@@ -185,7 +193,8 @@ struct PaseoSidebar: View {
 
     @ViewBuilder private var directory: some View {
         let groups = sortedGroups(session.workspaceDirectory.groups)
-        if groups.isEmpty {
+        let pinned = pinnedWorkspaces()
+        if groups.allSatisfy({ $0.workspaces.isEmpty }), pinned.isEmpty {
             let error = session.workspaceDirectory.error
             Text(
                 session.workspaceDirectory.isLoading
@@ -196,6 +205,12 @@ struct PaseoSidebar: View {
             .foregroundStyle(error == nil ? ClaudePalette.secondaryInk : ClaudePalette.failureInk)
             .padding(.vertical, 24)
         } else {
+            if !pinned.isEmpty {
+                sectionHeader("Pinned")
+                ForEach(pinned) { workspace in
+                    workspaceRow(workspace)
+                }
+            }
             ForEach(groups) { group in
                 projectRow(group)
                 SidebarRoll(expanded: !isCollapsed(group.id)) {
@@ -206,18 +221,32 @@ struct PaseoSidebar: View {
                     }
                 }
             }
+            if session.workspaceDirectory.supportsProjectAdd {
+                addProjectRow
+            }
         }
+    }
+
+    /// Pinned workspaces, most recent first. Displayed at the top; pin/unpin itself is not
+    /// wired — the stores expose no pin action — so this section is read-only.
+    private func pinnedWorkspaces() -> [WorkspaceDescriptor] {
+        session.workspaceDirectory.workspaces
+            .filter(\.isPinned)
+            .sorted {
+                (activityDate(for: $0) ?? .distantPast) > (activityDate(for: $1) ?? .distantPast)
+            }
     }
 
     /// Workspaces within a project, newest activity first; projects ordered by their newest
     /// workspace. Activity is the max of the workspace's agents' `updatedAt`/`lastUserMessageAt`,
     /// falling back to the workspace's own `activityAt` → `lastUserMessageAt` → `createdAt`.
+    /// Pinned workspaces live in their own section and are excluded here.
     private func sortedGroups(_ groups: [WorkspaceGroup]) -> [WorkspaceGroup] {
         groups
             .map { group in
                 WorkspaceGroup(
                     project: group.project,
-                    workspaces: group.workspaces.sorted {
+                    workspaces: group.workspaces.filter { !$0.isPinned }.sorted {
                         (activityDate(for: $0) ?? .distantPast) > (activityDate(for: $1) ?? .distantPast)
                     })
             }
@@ -243,6 +272,31 @@ struct PaseoSidebar: View {
             if let stamp, let date = PaseoDate.parse(stamp) { return date }
         }
         return nil
+    }
+
+    /// A quiet row under the last project; opens the Add-project sheet.
+    private var addProjectRow: some View {
+        Button {
+            Haptics.selection()
+            sheet = .addProject
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(width: 24, height: 24)
+                    .background(ClaudePalette.chip, in: .circle)
+                Text("Add project")
+                    .font(typography.sans(15))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 12)
+            .frame(height: 46)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add project")
     }
 
     private func projectRow(_ group: WorkspaceGroup) -> some View {
@@ -323,10 +377,7 @@ struct PaseoSidebar: View {
                     Text(workspaceTitle(workspace))
                         .font(typography.sans(16, weight: .medium))
                         .lineLimit(1)
-                    Text(metaLine(workspace))
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .lineLimit(1)
+                    metaRow(workspace)
                 }
                 Spacer(minLength: 0)
                 if attention {
@@ -389,10 +440,29 @@ struct PaseoSidebar: View {
         return workspace.branch ?? workspace.name
     }
 
-    private func metaLine(_ workspace: WorkspaceDescriptor) -> String {
-        let branch = workspace.branch ?? workspaceKindLabel(workspace)
-        guard let stamp = activityDate(for: workspace) else { return branch }
-        return "\(branch) · \(relativeAge(stamp))"
+    @ViewBuilder private func metaRow(_ workspace: WorkspaceDescriptor) -> some View {
+        HStack(spacing: 4) {
+            Text(workspace.branch ?? workspaceKindLabel(workspace))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+            if let stat = workspace.diffStat, stat.additions > 0 || stat.deletions > 0 {
+                Text("·").foregroundStyle(ClaudePalette.captionInk)
+                if stat.additions > 0 {
+                    Text("+\(stat.additions)")
+                        .foregroundStyle(ClaudePalette.successInk.opacity(0.75))
+                }
+                if stat.deletions > 0 {
+                    Text("−\(stat.deletions)")
+                        .foregroundStyle(ClaudePalette.failureInk.opacity(0.75))
+                }
+            }
+            if let stamp = activityDate(for: workspace) {
+                Text("·").foregroundStyle(ClaudePalette.captionInk)
+                Text(relativeAge(stamp))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+            }
+        }
+        .font(typography.sans(12))
+        .lineLimit(1)
     }
 
     /// "now", "5m", "3h", "2d", "4mo" — compact ages for the meta line.
@@ -572,30 +642,67 @@ private enum PaseoSidebarSheet: Identifiable {
     case settings
     case schedules
     case newWorkspace
+    case addProject
 
     var id: String {
         switch self {
         case .settings: "settings"
         case .schedules: "schedules"
         case .newWorkspace: "newWorkspace"
+        case .addProject: "addProject"
         }
     }
 }
 
 
-/// The minimal new-workspace sheet in ClaudeUI's sheet chrome: pick a project (defaulting to the
-/// selected workspace's project), an optional name, and create a worktree off the project's current
-/// branch.
+/// The full new-workspace sheet in ClaudeUI's sheet chrome: pick a project (defaulting to the
+/// selected workspace's project), an optional name, isolation (Local vs New worktree), the base
+/// branch to fork from (free text, current branch prefilled — the store exposes branch
+/// suggestions only per checkout, which this sheet does not have), and an optional first prompt,
+/// which creates an agent in the new workspace right away with the catalogue's provider defaults.
 private struct ClaudeNewWorkspaceSheet: View {
     let session: HostSession
     let defaultProjectId: String?
-    var onCreated: () -> Void
+    /// `agentId` when a first prompt produced an agent; `message` carries a toast line for
+    /// partial failures (e.g. the workspace was created but the agent couldn't start).
+    var onCreated: (String?, String?) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var projectId: String?
     @State private var name = ""
+    @State private var isolation: Isolation = .worktree
+    @State private var baseBranchText = ""
+    @State private var prompt = ""
+    @State private var busyStep: BusyStep?
     private let typography = ClaudeTypography()
 
+    enum Isolation: String, CaseIterable, Identifiable {
+        case local
+        case worktree
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .local: "Local"
+            case .worktree: "New worktree"
+            }
+        }
+    }
+
+    enum BusyStep {
+        case workspace
+        case agent
+
+        var label: String {
+            switch self {
+            case .workspace: "Creating workspace…"
+            case .agent: "Creating agent…"
+            }
+        }
+    }
+
     private var directory: WorkspaceDirectory { session.workspaceDirectory }
+    private var catalog: AgentControlStore { session.agentControl }
     private var projects: [WorkspaceProjectDescriptor] { directory.projects }
 
     private var selectedProjectId: String {
@@ -606,9 +713,9 @@ private struct ClaudeNewWorkspaceSheet: View {
         projects.first { $0.projectId == selectedProjectId }
     }
 
-    /// The branch the new worktree forks from: the project's local (non-worktree) checkout branch,
-    /// else any branch in the project, else "main".
-    private var baseBranch: String {
+    /// The branch a worktree forks from: the project's local (non-worktree) checkout branch,
+    /// else any branch the directory carries, else "main". Used to prefill the base-branch field.
+    private var currentBranch: String {
         let projectId = selectedProject?.projectId
         let workspaces = directory.workspaces.filter { $0.projectId == projectId }
         if let branch = workspaces.first(where: { $0.workspaceKind != .worktree && $0.branch != nil })?
@@ -619,8 +726,18 @@ private struct ClaudeNewWorkspaceSheet: View {
         return workspaces.compactMap(\.branch).first ?? "main"
     }
 
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedPrompt: String {
+        prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var canCreate: Bool {
-        directory.supportsWorkspaceCreate && !directory.isCreatingWorkspace && selectedProject != nil
+        guard busyStep == nil, selectedProject != nil else { return false }
+        if isolation == .worktree { return directory.supportsWorkspaceCreate }
+        return true
     }
 
     var body: some View {
@@ -664,20 +781,19 @@ private struct ClaudeNewWorkspaceSheet: View {
                         .padding(.horizontal, 16)
                         .frame(height: 52)
                     }
-                    if directory.supportsWorkspaceCreate {
-                        Text("Creates a git worktree off \(baseBranch).")
+                    isolationSection
+                    if isolation == .worktree {
+                        baseBranchSection
+                    }
+                    promptSection
+                    if let error = directory.actionError {
+                        Text(error)
                             .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.captionInk)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 4)
-                    } else {
-                        Text("This daemon cannot create workspaces.")
-                            .font(typography.sans(13))
                             .foregroundStyle(ClaudePalette.failureInk)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 4)
                     }
-                    if let error = directory.actionError {
+                    if let error = catalog.actionError {
                         Text(error)
                             .font(typography.sans(12))
                             .foregroundStyle(ClaudePalette.failureInk)
@@ -692,9 +808,110 @@ private struct ClaudeNewWorkspaceSheet: View {
         }
         .background(ClaudePalette.background)
         .foregroundStyle(ClaudePalette.ink)
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(38)
+        .onAppear {
+            baseBranchText = currentBranch
+            if !directory.supportsWorkspaceCreate { isolation = .local }
+        }
+        .onChange(of: selectedProjectId) { _, _ in
+            baseBranchText = currentBranch
+        }
+    }
+
+    private var isolationSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Isolation")
+                .font(typography.sans(13, weight: .medium))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .padding(.leading, 4)
+            HStack(spacing: 2) {
+                ForEach(Isolation.allCases) { option in
+                    Button {
+                        guard option == .local || directory.supportsWorkspaceCreate else { return }
+                        Haptics.selection()
+                        isolation = option
+                    } label: {
+                        Text(option.title)
+                            .font(typography.sans(14, weight: isolation == option ? .medium : .regular))
+                            .foregroundStyle(
+                                isolation == option ? ClaudePalette.background : ClaudePalette.ink)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                            .background(
+                                isolation == option ? ClaudePalette.ink : Color.clear, in: .capsule)
+                            .opacity(
+                                option == .worktree && !directory.supportsWorkspaceCreate ? 0.4 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(option == .worktree && !directory.supportsWorkspaceCreate)
+                    .accessibilityLabel(option.title)
+                }
+            }
+            .padding(3)
+            .background(ClaudePalette.chip, in: .capsule)
+            if !directory.supportsWorkspaceCreate {
+                Text("This daemon cannot create worktrees; new sessions open the project root.")
+                    .font(typography.sans(12))
+                    .foregroundStyle(ClaudePalette.captionInk)
+                    .padding(.leading, 4)
+            }
+        }
+    }
+
+    private var baseBranchSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Branch off")
+                .font(typography.sans(13, weight: .medium))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .padding(.leading, 4)
+            RowGroup {
+                HStack(spacing: 12) {
+                    Text("Branch")
+                        .font(typography.sans(17))
+                    Spacer(minLength: 8)
+                    TextField(
+                        "", text: $baseBranchText,
+                        prompt: Text("main").foregroundStyle(ClaudePalette.secondary)
+                    )
+                    .font(typography.mono(13))
+                    .multilineTextAlignment(.trailing)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+            }
+            Text("The new worktree forks from this branch. The daemon reports no branch list here; type one.")
+                .font(typography.sans(12))
+                .foregroundStyle(ClaudePalette.captionInk)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    private var promptSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("First prompt")
+                .font(typography.sans(13, weight: .medium))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .padding(.leading, 4)
+            RowGroup {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField(
+                        "", text: $prompt,
+                        prompt: Text("What should the agent do?").foregroundStyle(ClaudePalette.secondary),
+                        axis: .vertical
+                    )
+                    .font(typography.sans(16))
+                    .lineLimit(1...4)
+                    Text("Creates an agent right away with this host's default provider, model and mode.")
+                        .font(typography.sans(11))
+                        .foregroundStyle(ClaudePalette.captionInk)
+                }
+                .padding(12)
+            }
+        }
     }
 
     private var createButton: some View {
@@ -702,10 +919,10 @@ private struct ClaudeNewWorkspaceSheet: View {
             create()
         } label: {
             HStack(spacing: 8) {
-                if directory.isCreatingWorkspace {
+                if busyStep != nil {
                     ProgressView().controlSize(.small).tint(ClaudePalette.background)
                 }
-                Text(directory.isCreatingWorkspace ? "Creating…" : "Create workspace")
+                Text(busyStep?.label ?? "Create workspace")
                     .font(typography.sans(16, weight: .medium))
             }
             .frame(maxWidth: .infinity)
@@ -716,25 +933,69 @@ private struct ClaudeNewWorkspaceSheet: View {
         }
         .buttonStyle(.plain)
         .disabled(!canCreate)
+        .padding(.top, 4)
         .accessibilityIdentifier("newWorkspace.create")
     }
 
     private func create() {
         guard let project = selectedProject else { return }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let branchName = branchSlug(trimmed) ?? "workspace-\(Int(Date().timeIntervalSince1970))"
-        let baseRef = baseBranch.hasPrefix("refs/") ? baseBranch : "refs/heads/\(baseBranch)"
-        let title = trimmed.isEmpty ? nil : trimmed
-        Task {
-            let created = await directory.createWorkspace(
-                in: project,
-                source: .branchOff(baseRef: baseRef, branchName: branchName, worktreeSlug: branchName),
-                title: title)
-            if created != nil {
-                onCreated()
-                dismiss()
-            }
+        let title = trimmedName.isEmpty ? nil : trimmedName
+        let prompt = trimmedPrompt
+        let source: NewWorkspaceSource
+        switch isolation {
+        case .local:
+            source = .local
+        case .worktree:
+            let typed = baseBranchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let base = typed.isEmpty ? currentBranch : typed
+            let baseRef = base.hasPrefix("refs/") ? base : "refs/heads/\(base)"
+            let branchName = branchSlug(trimmedName) ?? "workspace-\(Int(Date().timeIntervalSince1970))"
+            source = .branchOff(baseRef: baseRef, branchName: branchName, worktreeSlug: branchName)
         }
+        busyStep = .workspace
+        Task {
+            let created = await directory.createWorkspace(in: project, source: source, title: title)
+            guard let workspace = created else {
+                busyStep = nil
+                return
+            }
+            var agentId: String?
+            var message: String?
+            if !prompt.isEmpty {
+                busyStep = .agent
+                agentId = await createAgent(in: workspace, prompt: prompt)
+                if agentId == nil {
+                    message = catalog.actionError ?? "Workspace created — but the agent couldn't start."
+                }
+            }
+            await session.refreshAgents()
+            onCreated(agentId, message)
+            dismiss()
+        }
+    }
+
+    /// Provider defaults as the new-agent sheet computes them: the first ready provider, its
+    /// default model, thinking level and mode.
+    private func createAgent(in workspace: WorkspaceDescriptor, prompt: String) async -> String? {
+        let needsLoad: Bool
+        switch catalog.phase {
+        case .idle, .failed: needsLoad = true
+        case .loading, .ready: needsLoad = catalog.providers.isEmpty
+        }
+        if needsLoad { await catalog.loadCatalog() }
+        guard let providerId = catalog.readyProviders.first?.provider else {
+            return nil
+        }
+        guard let model = catalog.defaultModel(forProvider: providerId) else {
+            return nil
+        }
+        let thinking = model.defaultThinkingOptionId
+        let mode =
+            catalog.provider(providerId)?.defaultModeId
+            ?? catalog.modes(forProvider: providerId).first?.id
+        return await catalog.createAgent(
+            cwd: workspace.cwd, workspaceId: workspace.id, provider: providerId, model: model.id,
+            modeId: mode, thinkingOptionId: thinking, prompt: prompt)
     }
 
     /// Lowercase, non-alphanumerics collapsed to single dashes, trimmed; nil when nothing is left.
