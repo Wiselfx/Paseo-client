@@ -235,6 +235,13 @@ extension ClaudeChatView {
             }
         }
         .onPasteCommand(of: [.image], perform: handlePastedItems)
+        // M17: drop a file row (Files tree / Changes list) onto the composer to attach it
+        // as a workspace-file mention. The long-press "Add to chat" path stays.
+        .dropDestination(for: String.self) { items, _ in
+            guard let path = items.first else { return false }
+            insertFileMention(path)
+            return true
+        }
     }
 
     /// M8b: the expand control — visible only when the draft is ~5 lines tall or more.

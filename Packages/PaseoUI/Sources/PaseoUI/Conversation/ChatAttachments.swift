@@ -95,6 +95,21 @@ extension ClaudeChatView {
         focused = true
     }
 
+    /// Dropped-file drag (M17): inserts `@relative/path ` like "Add to chat" does.
+    func insertFileMention(_ relPath: String) {
+        let trimmed = relPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let mention = "@\(trimmed) "
+        if store.draft.isEmpty {
+            store.draft = mention
+        } else if store.draft.hasSuffix(" ") || store.draft.hasSuffix("\n") {
+            store.draft += mention
+        } else {
+            store.draft += " " + mention
+        }
+        focused = true
+    }
+
     /// Pasted images attach; pasted text keeps the default text behavior.
     func handlePastedItems(_ providers: [NSItemProvider]) {
         for provider in providers {
