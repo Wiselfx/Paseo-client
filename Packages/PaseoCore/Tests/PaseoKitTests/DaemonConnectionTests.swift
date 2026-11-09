@@ -28,6 +28,9 @@ import Testing
         let info = try await awaitValue(connectTask)
         #expect(info.serverId == "srv_FIXTURE")
         #expect(info.protocolVersion == 1)
+        // The state log drains asynchronously — wait for the logger to observe .connected
+        // instead of asserting against a stream snapshot.
+        try await waitForLoggedState(.connected(info), in: stateLog)
         #expect(stateLog.states.contains(.connected(info)))
         stateTask.cancel()
     }

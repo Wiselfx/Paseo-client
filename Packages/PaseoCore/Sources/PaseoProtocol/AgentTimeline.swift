@@ -77,7 +77,8 @@ public struct AgentStreamPayload: Decodable, Sendable {
 
 public enum AgentStreamEvent: Sendable, Decodable {
     case turnStarted(turnId: String?)
-    case turnCompleted(turnId: String?)
+    case turnCompleted(turnId: String?, usage: AgentUsage?)
+    case usageUpdated(provider: String?, usage: AgentUsage?, turnId: String?)
     case turnFailed(turnId: String?, error: String)
     case turnCanceled(turnId: String?, reason: String)
     /// A live delta. Unlike `TimelineEntry`, these are NOT merged: reasoning and assistant text
@@ -88,7 +89,7 @@ public enum AgentStreamEvent: Sendable, Decodable {
     case attentionRequired(reason: String)
     case unknown(type: String)
 
-    private enum K: String, CodingKey { case turnId, error, reason, item, request, requestId }
+    private enum K: String, CodingKey { case turnId, error, reason, item, request, requestId, provider, usage }
 
     public init(from decoder: Decoder) throws {
         let type = try decoder.discriminator()
@@ -96,7 +97,12 @@ public enum AgentStreamEvent: Sendable, Decodable {
         let turnId = try c.decodeIfPresent(String.self, forKey: .turnId)
         switch type {
         case "turn_started": self = .turnStarted(turnId: turnId)
-        case "turn_completed": self = .turnCompleted(turnId: turnId)
+        case "turn_completed": self = .turnCompleted(turnId: turnId, usage: try c.decodeIfPresent(AgentUsage.self, forKey: .usage))
+        case "usage_updated":
+            self = .usageUpdated(
+                provider: try c.decodeIfPresent(String.self, forKey: .provider),
+                usage: try c.decodeIfPresent(AgentUsage.self, forKey: .usage),
+                turnId: turnId)
         case "turn_failed": self = .turnFailed(turnId: turnId, error: try c.decode(String.self, forKey: .error))
         case "turn_canceled": self = .turnCanceled(turnId: turnId, reason: try c.decode(String.self, forKey: .reason))
         case "timeline": self = .timeline(item: try c.decode(TimelineItem.self, forKey: .item), turnId: turnId)

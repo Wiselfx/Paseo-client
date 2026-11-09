@@ -69,6 +69,8 @@ let usage = """
                                full stack: search the conversation, list provider subagents and
                                send a message with a structured text attachment (default query
                                "ready")
+      usage                        provider plan usage reports and the context meter: prints
+                               report summaries plus the sandbox agent's context window usage
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -280,6 +282,7 @@ func streamEventType(_ event: AgentStreamEvent) -> String {
     switch event {
     case .turnStarted: "turn_started"
     case .turnCompleted: "turn_completed"
+    case .usageUpdated: "usage_updated"
     case .turnFailed: "turn_failed"
     case .turnCanceled: "turn_canceled"
     case .timeline: "timeline"
@@ -422,6 +425,8 @@ do {
         try await runGitOps(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     case "fs-ops":
         try await runFsOps(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
+    case "usage":
+        try await runUsage(connection)
     case "attachments-search":
         guard let agentId = arguments.commandArguments.first else {
             throw ProbeError("attachments-search needs an <agentId>")
@@ -1452,4 +1457,56 @@ func fileWriteOutcomeText(_ outcome: FileWriteOutcome) -> String {
     case .failed(let message):
         return "failed(\(message))"
     }
+}
+
+// MARK: - T16: provider usage reports and the context meter
+
+@MainActor
+func runUsage(_ connection: DaemonConnection) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+
+    print("usage supported=\(session.hostUsage.isSupported)")
+    let ok = await session.hostUsage.load(forceRefresh: true)
+    print("usage load ok=\(ok) phase=\(session.hostUsage.phase) reports=\(session.hostUsage.reports.count)")
+    if let error = session.hostUsage.error {
+        print("usage error: \(error)")
+    }
+    for report in session.hostUsage.reports {
+        let kind: String = {
+            switch report.report {
+            case .available(let available):
+                let windows = available.windows.map { window in
+                    let used = window.usedPct.map { "\($0)%" } ?? "-"
+                    return "\(window.id)=\(used)"
+                }.joined(separator: ", ")
+                return "available plan=\(available.planLabel ?? "-") windows=[\(windows)]"
+            case .unavailable(let problem):
+                switch problem {
+                case .expired(let expiresAt, _): return "unavailable expired expiresAt=\(expiresAt)"
+                case .rejected(let status, _): return "unavailable rejected status=\(status)"
+                case .noQuota(let detail): return "unavailable no_quota detail=\(detail)"
+                case .unknown: return "unavailable unknown"
+                }
+            case .failure(let message):
+                return "error \(message)"
+            }
+        }()
+        print("  \(report.sourceId) (\(report.sourceLabel)): \(kind)")
+    }
+
+    let agentId = "1c51ee58-765c-4f8d-bf27-7009338b361e"
+    let store = session.conversation(for: agentId)
+    try await waitUntil("the conversation to load", timeout: 30) { store.phase == .ready }
+    if let context = store.contextUsage {
+        let percent = context.percentUsed.map { String(format: "%.1f", $0) } ?? "-"
+        let used = context.usedTokens.map(String.init) ?? "-"
+        let max = context.maxTokens.map(String.init) ?? "-"
+        let cost = context.totalCostUsd.map { String(format: "%.4f", $0) } ?? "-"
+        print("agent \(String(agentId.prefix(8))) context: used=\(used) / max=\(max) percent=\(percent) cost=$\(cost)")
+    } else {
+        print("agent \(String(agentId.prefix(8))) context: no usage reported")
+    }
+    session.closeConversation(agentId)
 }

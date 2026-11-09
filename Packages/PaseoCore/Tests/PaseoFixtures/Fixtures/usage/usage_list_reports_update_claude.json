@@ -1,0 +1,53 @@
+{
+  "type": "session",
+  "message": {
+    "type": "usage.list_reports.update",
+    "payload": {
+      "requestId": "t16-reports",
+      "report": {
+        "id": "claude:46312266-417b-4d9f-aea4-48a061656f8b.921e55a1-3215-4f0c-b06b-c915d1b7d1e5",
+        "sourceId": "claude",
+        "sourceLabel": "Claude",
+        "account": {
+          "label": "fixture-account@example.invalid"
+        },
+        "fetchedAt": "2026-11-09T07:38:13.429Z",
+        "report": {
+          "status": "available",
+          "planLabel": "Pro ai",
+          "windows": [
+            {
+              "id": "five_hour",
+              "label": "Session",
+              "shortLabel": "5h",
+              "summary": true,
+              "usedPct": 42,
+              "remainingPct": 58,
+              "resetsAt": "2026-11-09T11:19:59.631712+00:00",
+              "tone": "ok"
+            },
+            {
+              "id": "weekly",
+              "label": "Weekly",
+              "shortLabel": "wk",
+              "summary": true,
+              "usedPct": 16,
+              "remainingPct": 84,
+              "resetsAt": "2026-11-14T07:59:59.631735+00:00",
+              "tone": "ok"
+            }
+          ],
+          "balances": [],
+          "details": [
+            {
+              "id": "extra_usage",
+              "label": "Extra usage",
+              "value": "Disabled"
+            }
+          ]
+        },
+        "successfulAt": "2026-11-09T07:38:13.741Z"
+      }
+    }
+  }
+}

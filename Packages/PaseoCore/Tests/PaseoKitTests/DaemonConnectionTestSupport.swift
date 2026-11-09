@@ -177,6 +177,16 @@ func waitUntil(timeout: Duration = .seconds(3), _ condition: () -> Bool) async t
     throw TestTimeout()
 }
 
+/// Waits until the state log records `state`. The log drains the connection's state stream in a
+/// separate task, so an assertion made immediately after the awaited task completes races the
+/// logger (see `connectReturnsServerInfoFromFixture`): the stream yields are buffered, and
+/// nothing about `connect()` returning orders them against the logger's appends.
+func waitForLoggedState(
+    _ state: ConnectionState, in log: StateLog, timeout: Duration = .seconds(2)
+) async throws {
+    try await waitUntil(timeout: timeout) { log.states.contains(state) }
+}
+
 func testConfiguration(
     helloTimeout: Duration = .seconds(1),
     pingInterval: Duration = .seconds(10),
@@ -259,6 +269,7 @@ func streamEventType(_ event: AgentStreamEvent) -> String {
     switch event {
     case .turnStarted: "turn_started"
     case .turnCompleted: "turn_completed"
+    case .usageUpdated: "usage_updated"
     case .turnFailed: "turn_failed"
     case .turnCanceled: "turn_canceled"
     case .timeline: "timeline"

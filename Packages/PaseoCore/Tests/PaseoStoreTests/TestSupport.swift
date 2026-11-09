@@ -26,6 +26,27 @@ extension Load {
     static func fixtureAgentId() throws -> String {
         try #require(agents().entries.first?.agent.id)
     }
+
+    static func daemonConfig(enabled: Bool = true) throws -> GetDaemonConfigRequest.Response {
+        if enabled {
+            return try decoder.decode(
+                SessionPayloadEnvelope<GetDaemonConfigRequest.Response>.self,
+                from: Fixture.data("get_daemon_config_response", area: "host-settings")
+            ).payload
+        }
+        var object = try JSONSerialization.jsonObject(
+            with: Fixture.data("get_daemon_config_response", area: "host-settings")) as? [String: Any] ?? [:]
+        var message = object["message"] as? [String: Any] ?? [:]
+        var payload = message["payload"] as? [String: Any] ?? [:]
+        var config = payload["config"] as? [String: Any] ?? [:]
+        config["usage"] = ["enabled": false]
+        payload["config"] = config
+        message["payload"] = payload
+        object["message"] = message
+        return try decoder.decode(
+            SessionPayloadEnvelope<GetDaemonConfigRequest.Response>.self,
+            from: try JSONSerialization.data(withJSONObject: object)).payload
+    }
 }
 
 /// Polls `condition` on the main actor until it holds, failing after `timeout`.

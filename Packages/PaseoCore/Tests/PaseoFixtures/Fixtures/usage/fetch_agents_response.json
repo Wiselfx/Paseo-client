@@ -1,0 +1,565 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agents_response",
+    "payload": {
+      "requestId": "agents",
+      "subscriptionId": "00000000-0000-4000-8000-000000000000",
+      "entries": [
+        {
+          "agent": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-usage",
+            "workspaceId": "wks_fixture1",
+            "model": "opencode/inkling-2-small-free",
+            "thinkingOptionId": "max",
+            "effectiveThinkingOptionId": "max",
+            "runtimeInfo": {
+              "provider": "opencode",
+              "sessionId": "ses_fixture1",
+              "model": "opencode/inkling-2-small-free",
+              "thinkingOptionId": "max",
+              "modeId": "build"
+            },
+            "createdAt": "2026-11-09T06:50:56.829Z",
+            "updatedAt": "2026-11-09T07:41:39.183Z",
+            "lastUserMessageAt": null,
+            "status": "running",
+            "activeTurn": {
+              "turnId": "10000000-0000-4000-8000-000000000001",
+              "startedAt": "2026-11-09T07:34:49.629Z"
+            },
+            "capabilities": {
+              "supportsStreaming": true,
+              "supportsSessionPersistence": true,
+              "supportsSessionListing": true,
+              "supportsDynamicModes": true,
+              "supportsMcpServers": true,
+              "supportsReasoningStream": true,
+              "supportsToolInvocations": true,
+              "supportsRewindBoth": true,
+              "supportsRewindConversation": false,
+              "supportsRewindFiles": false
+            },
+            "currentModeId": "build",
+            "availableModes": [
+              {
+                "id": "build",
+                "label": "Build",
+                "description": "The default agent. Executes tools based on configured permissions."
+              },
+              {
+                "id": "plan",
+                "label": "Plan",
+                "description": "Read-only agent for exploring the codebase and planning work before implementation."
+              }
+            ],
+            "features": [
+              {
+                "type": "toggle",
+                "id": "auto_accept",
+                "label": "Auto-accept",
+                "value": false
+              }
+            ],
+            "pendingPermissions": [],
+            "persistence": {
+              "provider": "opencode",
+              "sessionId": "ses_fixture1",
+              "nativeHandle": "ses_fixture1",
+              "metadata": {
+                "provider": "opencode",
+                "cwd": "/tmp/fixture-usage",
+                "modeId": "build",
+                "model": "opencode/inkling-2-small-free",
+                "thinkingOptionId": "max",
+                "title": "Fixture agent 1",
+                "openCodeRuntimeNotices": [
+                  {
+                    "major": 2,
+                    "timestamp": "2026-11-09T06:50:56.829Z"
+                  }
+                ]
+              }
+            },
+            "title": "Fixture agent 1",
+            "labels": {},
+            "archivedAt": null,
+            "lastUsage": {
+              "inputTokens": 1056701,
+              "cachedInputTokens": 172523008,
+              "outputTokens": 116221,
+              "totalCostUsd": 0,
+              "contextWindowMaxTokens": 1048576,
+              "contextWindowUsedTokens": 717704
+            },
+            "requiresAttention": false,
+            "attentionReason": null,
+            "attentionTimestamp": null
+          },
+          "project": {
+            "projectKey": "/tmp/fixture-usage",
+            "projectName": "fixture",
+            "workspaceName": "Fixture 1",
+            "checkout": {
+              "cwd": "/tmp/fixture-usage",
+              "currentBranch": "main",
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-usage",
+              "isGit": true,
+              "isPaseoOwnedWorktree": true,
+              "mainRepoRoot": "/tmp/fixture-usage"
+            }
+          }
+        },
+        {
+          "agent": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-usage",
+            "workspaceId": "wks_fixture2",
+            "model": "opencode/inkling-2-small-free",
+            "thinkingOptionId": "max",
+            "effectiveThinkingOptionId": "max",
+            "runtimeInfo": {
+              "provider": "opencode",
+              "sessionId": "ses_fixture2",
+              "model": "opencode/inkling-2-small-free",
+              "thinkingOptionId": "max",
+              "modeId": "build"
+            },
+            "createdAt": "2026-11-09T06:12:59.985Z",
+            "updatedAt": "2026-11-09T07:41:36.444Z",
+            "lastUserMessageAt": null,
+            "status": "running",
+            "activeTurn": {
+              "turnId": "10000000-0000-4000-8000-000000000002",
+              "startedAt": "2026-11-09T07:39:11.453Z"
+            },
+            "capabilities": {
+              "supportsStreaming": true,
+              "supportsSessionPersistence": true,
+              "supportsSessionListing": true,
+              "supportsDynamicModes": true,
+              "supportsMcpServers": true,
+              "supportsReasoningStream": true,
+              "supportsToolInvocations": true,
+              "supportsRewindBoth": true,
+              "supportsRewindConversation": false,
+              "supportsRewindFiles": false
+            },
+            "currentModeId": "build",
+            "availableModes": [
+              {
+                "id": "build",
+                "label": "Build",
+                "description": "The default agent. Executes tools based on configured permissions."
+              },
+              {
+                "id": "plan",
+                "label": "Plan",
+                "description": "Read-only agent for exploring the codebase and planning work before implementation."
+              }
+            ],
+            "features": [
+              {
+                "type": "toggle",
+                "id": "auto_accept",
+                "label": "Auto-accept",
+                "value": false
+              }
+            ],
+            "pendingPermissions": [],
+            "persistence": {
+              "provider": "opencode",
+              "sessionId": "ses_fixture2",
+              "nativeHandle": "ses_fixture2",
+              "metadata": {
+                "provider": "opencode",
+                "cwd": "/tmp/fixture-usage",
+                "modeId": "build",
+                "model": "opencode/inkling-2-small-free",
+                "thinkingOptionId": "max",
+                "title": "Fixture agent 2",
+                "openCodeRuntimeNotices": [
+                  {
+                    "major": 2,
+                    "timestamp": "2026-11-09T06:12:59.985Z"
+                  }
+                ]
+              }
+            },
+            "title": "Fixture agent 2",
+            "labels": {},
+            "archivedAt": null,
+            "lastUsage": {
+              "inputTokens": 1842475,
+              "cachedInputTokens": 187823872,
+              "outputTokens": 100516,
+              "totalCostUsd": 0,
+              "contextWindowMaxTokens": 1048576,
+              "contextWindowUsedTokens": 729597
+            },
+            "requiresAttention": false,
+            "attentionReason": null,
+            "attentionTimestamp": null
+          },
+          "project": {
+            "projectKey": "/tmp/fixture-usage",
+            "projectName": "fixture",
+            "workspaceName": "Fixture 2",
+            "checkout": {
+              "cwd": "/tmp/fixture-usage",
+              "currentBranch": "main",
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-usage",
+              "isGit": true,
+              "isPaseoOwnedWorktree": true,
+              "mainRepoRoot": "/tmp/fixture-usage"
+            }
+          }
+        },
+        {
+          "agent": {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "provider": "claude",
+            "cwd": "/tmp/fixture-usage-repo",
+            "workspaceId": "wks_fixture3",
+            "model": "claude-opus-5-5",
+            "thinkingOptionId": "medium",
+            "effectiveThinkingOptionId": "medium",
+            "runtimeInfo": {
+              "provider": "claude",
+              "sessionId": "ses_fixture3",
+              "model": "claude-opus-5-5",
+              "modeId": "bypassPermissions",
+              "extra": {
+                "runtimeModel": "claude-opus-5-5"
+              }
+            },
+            "createdAt": "2026-11-08T20:38:30.062Z",
+            "updatedAt": "2026-11-09T07:41:20.750Z",
+            "lastUserMessageAt": "2026-11-09T07:41:20.720Z",
+            "status": "running",
+            "activeTurn": {
+              "turnId": "10000000-0000-4000-8000-000000000003",
+              "startedAt": "2026-11-09T07:41:20.719Z"
+            },
+            "capabilities": {
+              "supportsStreaming": true,
+              "supportsSessionPersistence": true,
+              "supportsSessionListing": true,
+              "supportsDynamicModes": true,
+              "supportsMcpServers": true,
+              "supportsReasoningStream": true,
+              "supportsToolInvocations": true,
+              "supportsRewindConversation": true,
+              "supportsRewindFiles": true,
+              "supportsRewindBoth": true
+            },
+            "currentModeId": "bypassPermissions",
+            "availableModes": [
+              {
+                "id": "plan",
+                "label": "Plan Mode",
+                "description": "Analyze the codebase without executing tools or edits"
+              },
+              {
+                "id": "default",
+                "label": "Always Ask",
+                "description": "Prompts for permission the first time a tool is used"
+              },
+              {
+                "id": "acceptEdits",
+                "label": "Accept File Edits",
+                "description": "Automatically approves edit-focused tools without prompting"
+              },
+              {
+                "id": "auto",
+                "label": "Auto mode",
+                "description": "Uses a model classifier to review permission prompts automatically"
+              },
+              {
+                "id": "bypassPermissions",
+                "label": "Bypass",
+                "description": "Skip all permission prompts (use with caution)"
+              }
+            ],
+            "features": [
+              {
+                "type": "toggle",
+                "id": "fast_mode",
+                "label": "Fast",
+                "description": "Lower latency Opus responses at higher token cost",
+                "tooltip": "Toggle fast mode",
+                "icon": "zap",
+                "value": false
+              }
+            ],
+            "pendingPermissions": [],
+            "persistence": {
+              "provider": "claude",
+              "sessionId": "ses_fixture3",
+              "nativeHandle": "ses_fixture3",
+              "metadata": {
+                "provider": "claude",
+                "cwd": "/tmp/fixture-usage-repo",
+                "modeId": "bypassPermissions",
+                "model": "claude-opus-5-5",
+                "thinkingOptionId": "medium"
+              }
+            },
+            "title": "Fixture agent 3",
+            "labels": {},
+            "archivedAt": null,
+            "lastUsage": {
+              "inputTokens": 6,
+              "cachedInputTokens": 325793,
+              "outputTokens": 656,
+              "totalCostUsd": 38.89886190000003,
+              "contextWindowMaxTokens": 1000000,
+              "contextWindowUsedTokens": 163949
+            },
+            "requiresAttention": false,
+            "attentionReason": null,
+            "attentionTimestamp": null
+          },
+          "project": {
+            "projectKey": "/tmp/fixture-usage",
+            "projectName": "fixture",
+            "workspaceName": "Fixture 3",
+            "checkout": {
+              "cwd": "/tmp/fixture-usage",
+              "currentBranch": "main",
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-usage",
+              "isGit": true,
+              "isPaseoOwnedWorktree": false,
+              "mainRepoRoot": null
+            }
+          }
+        },
+        {
+          "agent": {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-usage",
+            "workspaceId": "wks_fixture4",
+            "model": "opencode/inkling-2-small-free",
+            "thinkingOptionId": "max",
+            "effectiveThinkingOptionId": "max",
+            "runtimeInfo": {
+              "provider": "opencode",
+              "sessionId": "ses_fixture4",
+              "model": "opencode/inkling-2-small-free",
+              "thinkingOptionId": "max",
+              "modeId": "build"
+            },
+            "createdAt": "2026-11-09T06:13:35.827Z",
+            "updatedAt": "2026-11-09T07:41:17.614Z",
+            "lastUserMessageAt": null,
+            "status": "running",
+            "activeTurn": {
+              "turnId": "10000000-0000-4000-8000-000000000004",
+              "startedAt": "2026-11-09T07:34:47.312Z"
+            },
+            "capabilities": {
+              "supportsStreaming": true,
+              "supportsSessionPersistence": true,
+              "supportsSessionListing": true,
+              "supportsDynamicModes": true,
+              "supportsMcpServers": true,
+              "supportsReasoningStream": true,
+              "supportsToolInvocations": true,
+              "supportsRewindBoth": true,
+              "supportsRewindConversation": false,
+              "supportsRewindFiles": false
+            },
+            "currentModeId": "build",
+            "availableModes": [
+              {
+                "id": "build",
+                "label": "Build",
+                "description": "The default agent. Executes tools based on configured permissions."
+              },
+              {
+                "id": "plan",
+                "label": "Plan",
+                "description": "Read-only agent for exploring the codebase and planning work before implementation."
+              }
+            ],
+            "features": [
+              {
+                "type": "toggle",
+                "id": "auto_accept",
+                "label": "Auto-accept",
+                "value": false
+              }
+            ],
+            "pendingPermissions": [],
+            "persistence": {
+              "provider": "opencode",
+              "sessionId": "ses_fixture4",
+              "nativeHandle": "ses_fixture4",
+              "metadata": {
+                "provider": "opencode",
+                "cwd": "/tmp/fixture-usage",
+                "modeId": "build",
+                "model": "opencode/inkling-2-small-free",
+                "thinkingOptionId": "max",
+                "title": "Fixture agent 4",
+                "openCodeRuntimeNotices": [
+                  {
+                    "major": 2,
+                    "timestamp": "2026-11-09T06:13:35.827Z"
+                  }
+                ]
+              }
+            },
+            "title": "Fixture agent 4",
+            "labels": {},
+            "archivedAt": null,
+            "lastUsage": {
+              "inputTokens": 1961010,
+              "cachedInputTokens": 251605888,
+              "outputTokens": 160155,
+              "totalCostUsd": 0,
+              "contextWindowMaxTokens": 1048576,
+              "contextWindowUsedTokens": 859576
+            },
+            "requiresAttention": false,
+            "attentionReason": null,
+            "attentionTimestamp": null
+          },
+          "project": {
+            "projectKey": "/tmp/fixture-usage",
+            "projectName": "fixture",
+            "workspaceName": "Fixture 4",
+            "checkout": {
+              "cwd": "/tmp/fixture-usage",
+              "currentBranch": "main",
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-usage",
+              "isGit": true,
+              "isPaseoOwnedWorktree": true,
+              "mainRepoRoot": "/tmp/fixture-usage"
+            }
+          }
+        },
+        {
+          "agent": {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-usage",
+            "workspaceId": "wks_fixture5",
+            "model": "opencode/inkling-2-small-free",
+            "thinkingOptionId": "max",
+            "effectiveThinkingOptionId": "max",
+            "runtimeInfo": {
+              "provider": "opencode",
+              "sessionId": "ses_fixture5",
+              "model": "opencode/inkling-2-small-free",
+              "thinkingOptionId": "max",
+              "modeId": "build"
+            },
+            "createdAt": "2026-11-09T06:50:54.777Z",
+            "updatedAt": "2026-11-09T07:40:42.494Z",
+            "lastUserMessageAt": null,
+            "status": "running",
+            "activeTurn": {
+              "turnId": "10000000-0000-4000-8000-000000000005",
+              "startedAt": "2026-11-09T07:35:09.729Z"
+            },
+            "capabilities": {
+              "supportsStreaming": true,
+              "supportsSessionPersistence": true,
+              "supportsSessionListing": true,
+              "supportsDynamicModes": true,
+              "supportsMcpServers": true,
+              "supportsReasoningStream": true,
+              "supportsToolInvocations": true,
+              "supportsRewindBoth": true,
+              "supportsRewindConversation": false,
+              "supportsRewindFiles": false
+            },
+            "currentModeId": "build",
+            "availableModes": [
+              {
+                "id": "build",
+                "label": "Build",
+                "description": "The default agent. Executes tools based on configured permissions."
+              },
+              {
+                "id": "plan",
+                "label": "Plan",
+                "description": "Read-only agent for exploring the codebase and planning work before implementation."
+              }
+            ],
+            "features": [
+              {
+                "type": "toggle",
+                "id": "auto_accept",
+                "label": "Auto-accept",
+                "value": false
+              }
+            ],
+            "pendingPermissions": [],
+            "persistence": {
+              "provider": "opencode",
+              "sessionId": "ses_fixture5",
+              "nativeHandle": "ses_fixture5",
+              "metadata": {
+                "provider": "opencode",
+                "cwd": "/tmp/fixture-usage",
+                "modeId": "build",
+                "model": "opencode/inkling-2-small-free",
+                "thinkingOptionId": "max",
+                "title": "Fixture agent 5",
+                "openCodeRuntimeNotices": [
+                  {
+                    "major": 2,
+                    "timestamp": "2026-11-09T06:50:54.777Z"
+                  }
+                ]
+              }
+            },
+            "title": "Fixture agent 5",
+            "labels": {},
+            "archivedAt": null,
+            "lastUsage": {
+              "inputTokens": 1209956,
+              "cachedInputTokens": 126346112,
+              "outputTokens": 107846,
+              "totalCostUsd": 0,
+              "contextWindowMaxTokens": 1048576,
+              "contextWindowUsedTokens": 675114
+            },
+            "requiresAttention": false,
+            "attentionReason": null,
+            "attentionTimestamp": null
+          },
+          "project": {
+            "projectKey": "/tmp/fixture-usage",
+            "projectName": "fixture",
+            "workspaceName": "Fixture 5",
+            "checkout": {
+              "cwd": "/tmp/fixture-usage",
+              "currentBranch": "main",
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-usage",
+              "isGit": true,
+              "isPaseoOwnedWorktree": true,
+              "mainRepoRoot": "/tmp/fixture-usage"
+            }
+          }
+        }
+      ],
+      "pageInfo": {
+        "nextCursor": "fixture-cursor",
+        "prevCursor": null,
+        "hasMore": true
+      }
+    }
+  }
+}

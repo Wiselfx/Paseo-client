@@ -56,6 +56,9 @@ public struct AgentSnapshot: Sendable, Hashable, Decodable, Identifiable {
     /// `AgentSnapshotPayloadSchema.features`. Optional: absent on older daemons and for
     /// providers without features.
     public var features: [AgentFeature]?
+    /// Context-window and cost figures the provider reports; refreshed with the snapshot and
+    /// merged context-window fields from stream usage events.
+    public var lastUsage: AgentUsage?
 
     public struct ActiveTurn: Sendable, Hashable, Decodable {
         public var turnId: String

@@ -21,6 +21,8 @@ public final class HostSession {
     public private(set) var workspaceDirectory: WorkspaceDirectory
     /// Last error from loading the agent list, for display.
     public private(set) var agentsError: String?
+    /// Provider plan usage reports for this host (e.g. Claude/Copilot windows).
+    public let hostUsage: HostUsageStore
     /// Live terminals and workspace scripts for every opened workspace.
     public let terminals: TerminalsStore
     /// Provider catalogue, agent creation, and live permission routing.
@@ -46,6 +48,7 @@ public final class HostSession {
     public init(client: any DaemonClient) {
         self.client = client
         self.terminals = TerminalsStore(client: client)
+        self.hostUsage = HostUsageStore(client: client)
         self.agentControl = AgentControlStore(client: client)
         self.schedules = SchedulesStore(client: client)
         self.hostSettings = HostSettingsStore(client: client)
@@ -153,6 +156,7 @@ public final class HostSession {
             agentControl.serverInfoChanged(info)
             schedules.serverInfoChanged(info)
             hostSettings.serverInfoChanged(info)
+            hostUsage.update(serverInfo: info)
             workspaceDirectory.update(serverInfo: info)
             gitExtras.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
@@ -220,6 +224,7 @@ public final class HostSession {
     /// `DaemonEvent` stays small.
     private func handleUnhandled(messageType: String, raw: Data) async {
         let decoder = JSONDecoder()
+        hostUsage.handle(messageType: messageType, raw: raw)
         gitExtras.handle(messageType: messageType, raw: raw)
         switch messageType {
         case "workspace_update":
@@ -549,7 +554,14 @@ public final class ConversationStore: Identifiable {
         case .turnStarted(let turnId):
             setActiveTurn(turnId)
 
-        case .turnCompleted, .turnFailed, .turnCanceled:
+        case .turnCompleted(_, let usage):
+            setActiveTurn(nil)
+            if let usage { applyContextWindow(usage) }
+
+        case .usageUpdated(_, let usage, _):
+            if let usage { applyContextWindow(usage) }
+
+        case .turnFailed, .turnCanceled:
             setActiveTurn(nil)
 
         case .permissionRequested(let raw):
