@@ -11,7 +11,7 @@ struct ClaudeAgentControlsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var page: Page = .root
 
-    enum Page: Equatable { case root, models, thinking, modes }
+    enum Page: Equatable { case root, models, thinking, modes, features, feature(String) }
 
     private var providerId: String? {
         if let id = store.agent?.provider, !id.isEmpty { return id }
@@ -48,6 +48,8 @@ struct ClaudeAgentControlsSheet: View {
         case .models: "Model"
         case .thinking: "Thinking"
         case .modes: "Mode"
+        case .features: "Features"
+        case .feature: selectFeature?.label ?? "Feature"
         }
     }
 
@@ -56,9 +58,12 @@ struct ClaudeAgentControlsSheet: View {
             SheetHeader(
                 title: title, back: page != .root,
                 close: {
-                    if page == .root {
+                    switch page {
+                    case .root:
                         dismiss()
-                    } else {
+                    case .feature:
+                        page = .features
+                    default:
                         page = .root
                     }
                 })
@@ -102,8 +107,23 @@ struct ClaudeAgentControlsSheet: View {
             case .models: modelPage
             case .thinking: thinkingPage
             case .modes: modePage
+            case .features: featuresPage
+            case .feature: featureSelectPage
             }
         }
+    }
+
+    private var agentFeatures: [AgentFeature] {
+        store.agent?.features ?? []
+    }
+
+    /// The feature behind the current `.feature` page, or nil.
+    private var selectFeature: AgentFeature.Select? {
+        guard case .feature(let id) = page else { return nil }
+        for feature in agentFeatures {
+            if case .select(let select) = feature, select.id == id { return select }
+        }
+        return nil
     }
 
     private var root: some View {
@@ -121,9 +141,28 @@ struct ClaudeAgentControlsSheet: View {
                 SheetRow(
                     title: "Mode", value: modeLabel, chevron: true
                 ) { page = .modes }
+                if !toggleableFeatures.isEmpty || !selectableFeatures.isEmpty {
+                    RowDivider()
+                    SheetRow(
+                        title: "Features", value: featuresSummary, chevron: true
+                    ) { page = .features }
+                }
             }
             .padding(.horizontal, 16)
         }
+    }
+
+    private var toggleableFeatures: [AgentFeature.Toggle] {
+        agentFeatures.compactMap { if case .toggle(let toggle) = $0 { return toggle } else { return nil } }
+    }
+
+    private var selectableFeatures: [AgentFeature.Select] {
+        agentFeatures.compactMap { if case .select(let select) = $0 { return select } else { return nil } }
+    }
+
+    private var featuresSummary: String {
+        let on = toggleableFeatures.filter(\.value).count
+        return "\(on) on"
     }
 
     private var providerDetail: String? {
@@ -209,6 +248,120 @@ struct ClaudeAgentControlsSheet: View {
                 }
             }
         }
+    }
+
+    // MARK: Features
+
+    /// Feature switches from the snapshot: toggle rows with a switch, select rows as menus of
+    /// options. Unknown feature kinds are not shown.
+    private var featuresPage: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if toggleableFeatures.isEmpty, selectableFeatures.isEmpty {
+                    Text("This agent doesn't offer any features.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .padding(.top, 24)
+                } else {
+                    RowGroup {
+                        ForEach(Array(toggleableFeatures.enumerated()), id: \.element.id) { index, toggle in
+                            featureToggleRow(toggle)
+                            if index < toggleableFeatures.count - 1 || !selectableFeatures.isEmpty { RowDivider() }
+                        }
+                        ForEach(Array(selectableFeatures.enumerated()), id: \.element.id) { index, select in
+                            SheetRow(
+                                title: select.label, detail: select.description,
+                                value: selectValueLabel(select), chevron: true
+                            ) { page = .feature(select.id) }
+                            if index < selectableFeatures.count - 1 { RowDivider() }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+        }
+    }
+
+    private func featureToggleRow(_ toggle: AgentFeature.Toggle) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(toggle.label)
+                    .font(.system(size: 17))
+                if let detail = toggle.description {
+                    Text(detail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if let tooltip = toggle.tooltip {
+                    Text(tooltip)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 8)
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { toggle.value },
+                    set: { newValue in
+                        Haptics.selection()
+                        Task { await store.setFeatureToggle(featureId: toggle.id, value: newValue) }
+                    })
+            )
+            .labelsHidden()
+            .tint(ClaudePalette.orange)
+            .accessibilityLabel(toggle.label)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 52)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var featureSelectPage: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if let select = selectFeature {
+                    RowGroup {
+                        if select.value != nil {
+                            SheetRow(title: "None") {
+                                Haptics.selection()
+                                page = .features
+                                Task { await store.setFeatureSelection(featureId: select.id, value: nil) }
+                            }
+                            RowDivider()
+                        }
+                        ForEach(Array(select.options.enumerated()), id: \.element.id) { index, option in
+                            SheetRow(
+                                title: option.label, detail: option.description,
+                                checked: select.value == option.id,
+                                badge: option.isDefault == true ? "Default" : nil
+                            ) {
+                                Haptics.selection()
+                                page = .features
+                                Task {
+                                    await store.setFeatureSelection(
+                                        featureId: select.id, value: option.id)
+                                }
+                            }
+                            if index < select.options.count - 1 { RowDivider() }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                } else {
+                    Text("This feature is gone — the agent changed its feature set.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .padding(.top, 24)
+                }
+            }
+        }
+    }
+
+    private func selectValueLabel(_ select: AgentFeature.Select) -> String {
+        guard let value = select.value else { return "None" }
+        return select.options.first(where: { $0.id == value })?.label ?? value
     }
 
     private var modePage: some View {

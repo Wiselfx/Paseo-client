@@ -7,12 +7,14 @@ import PaseoProtocol
 
 extension ConversationStore {
     /// Sends text with inline images and/or structured attachments. Shows the same optimistic
-    /// bubble as `send(_:)`; attachments alone (empty text) are allowed.
+    /// bubble as `send(_:)`; attachments alone (empty text) are allowed. When the agent is
+    /// running the plain call steers; pass `behavior: "interrupt"` to interrupt instead.
     ///
     /// File attachments must already exist on the daemon (`uploaded_file`); the byte upload is a
     /// separate `file.upload.request` + binary-frame flow.
     public func sendWithAttachments(
-        _ text: String, images: [ImageAttachment] = [], attachments: [AgentAttachment] = []
+        _ text: String, images: [ImageAttachment] = [], attachments: [AgentAttachment] = [],
+        behavior: String? = nil
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !images.isEmpty || !attachments.isEmpty, let client else { return }
@@ -30,7 +32,7 @@ extension ConversationStore {
                     agentId: agentId,
                     text: trimmed,
                     messageId: clientId,
-                    activeTurnBehavior: isRunning ? "steer" : nil,
+                    activeTurnBehavior: behavior ?? (isRunning ? "steer" : nil),
                     images: images.isEmpty ? nil : images,
                     attachments: attachments.isEmpty ? nil : attachments))
             if response.accepted {

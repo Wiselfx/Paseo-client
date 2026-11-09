@@ -314,7 +314,8 @@ public final class ConversationStore: Identifiable {
     }
 
     public private(set) var phase: LoadPhase = .loading
-    public private(set) var agent: AgentSnapshot?
+    // M8c: settable inside the module so ConversationFeatures can apply optimistic updates.
+    public internal(set) var agent: AgentSnapshot?
     public private(set) var timeline = TimelineState()
     /// `TurnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)`, kept in sync.
     public private(set) var turns: [Turn] = []
@@ -327,9 +328,9 @@ public final class ConversationStore: Identifiable {
     public private(set) var pendingPermissions: [AgentPermissionRequest] = []
     /// The provider's notice from the last accepted change, e.g. "applies next turn". Render as a
     /// toast; `clearNotice()` once shown.
-    public private(set) var lastNotice: AgentProviderNotice?
+    public internal(set) var lastNotice: AgentProviderNotice?
     /// Last failed send, cancel or agent change, for a transient error banner. Cleared by the next success.
-    public private(set) var actionError: String?
+    public internal(set) var actionError: String?
     /// Last failed background fetch (opening the conversation, older pages, catching up after a
     /// gap). Kept apart from `actionError` so a slow or timed-out refresh never appears on the
     /// composer: only the user's own send, cancel or settings change belongs there.
@@ -405,9 +406,10 @@ public final class ConversationStore: Identifiable {
     }
 
     /// Sends `text` (trimmed; no-op when empty). Shows it at once as a pending row, then sends
-    /// `SendAgentMessageRequest` with a fresh `messageId`. If the agent is running, uses
-    /// `activeTurnBehavior: "steer"`. Clears `draft` when `text == draft`.
-    public func send(_ text: String) async {
+    /// `SendAgentMessageRequest` with a fresh `messageId`. When the agent is running, the plain
+    /// call steers (`activeTurnBehavior: "steer"`); pass `behavior: "interrupt"` to interrupt the
+    /// turn instead (the wire also supports `"steer"`). Clears `draft` when `text == draft`.
+    public func send(_ text: String, behavior: String? = nil) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let client else { return }
 
@@ -424,7 +426,7 @@ public final class ConversationStore: Identifiable {
                     agentId: agentId,
                     text: trimmed,
                     messageId: clientId,
-                    activeTurnBehavior: isRunning ? "steer" : nil))
+                    activeTurnBehavior: behavior ?? (isRunning ? "steer" : nil)))
             if response.accepted {
                 actionError = nil
             } else {

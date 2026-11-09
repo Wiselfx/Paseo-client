@@ -52,6 +52,10 @@ public struct AgentSnapshot: Sendable, Hashable, Decodable, Identifiable {
     public var attentionReason: String?
     public var archivedAt: String?
     public var labels: [String: String]?
+    /// Provider-specific feature toggles/selects (e.g. `fast_mode`), from
+    /// `AgentSnapshotPayloadSchema.features`. Optional: absent on older daemons and for
+    /// providers without features.
+    public var features: [AgentFeature]?
 
     public struct ActiveTurn: Sendable, Hashable, Decodable {
         public var turnId: String
