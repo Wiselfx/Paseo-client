@@ -97,6 +97,9 @@ M3i's PR section was never instantiated: fix assigned to M3j. R12 synced PARITY.
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
+- M7h `m7h-message-actions` on worker 0778f3b0-0603-4eae-ab7a-3a01b367bf53: Edit/Rerun, fork, images in prose.
+- M4e `m4e-about` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: About, Diagnostics, scrollback, sidebar settings.
+- M9 `m9-command-center` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: Search row + command palette.
 - M3j `m3j-panel-leftovers` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: save to Files, script URLs, file into terminal, forge callout, side-by-side diff.
 - M2.12 `m212-labels` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: workspace labels store + sidebar UI.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
