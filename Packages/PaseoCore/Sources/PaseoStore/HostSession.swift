@@ -513,6 +513,8 @@ public final class ConversationStore: Identifiable {
     public let search: ConversationSearch
     /// Provider-managed subagents for this agent's track.
     public let subagents: ConversationSubagents
+    /// Every user prompt of the conversation, from the daemon's index (U5 chat outline).
+    public let promptOutline: PromptOutline
     public let backgroundWork: BackgroundWorkStore
     /// File uploads for this conversation (`file.upload.request` + binary frames).
     public let uploads: ConversationUpload
@@ -528,6 +530,7 @@ public final class ConversationStore: Identifiable {
         self.client = nil
         self.search = ConversationSearch(agentId: agentId, client: nil)
         self.subagents = ConversationSubagents(agentId: agentId, client: nil)
+        self.promptOutline = PromptOutline(agentId: agentId, client: nil)
         self.backgroundWork = BackgroundWorkStore(agentId: agentId, client: nil)
         self.uploads = ConversationUpload(client: nil)
     }
@@ -537,6 +540,7 @@ public final class ConversationStore: Identifiable {
         self.client = client
         self.search = ConversationSearch(agentId: agentId, client: client)
         self.subagents = ConversationSubagents(agentId: agentId, client: client)
+        self.promptOutline = PromptOutline(agentId: agentId, client: client)
         self.backgroundWork = BackgroundWorkStore(agentId: agentId, client: client)
         self.uploads = ConversationUpload(client: client)
         // R18: relay endpoints cap upload chunks (ConversationUpload.chunkSize(relay:)).
@@ -579,25 +583,6 @@ public final class ConversationStore: Identifiable {
             backgroundError = nil
         } catch {
             backgroundError = errorText(error)
-        }
-    }
-
-    /// Loads older history until `timeline.hasOlder` is false, one page at a time.
-    ///
-    /// Used where "the rest of the conversation" is the point rather than a page: the
-    /// Jump-to-message sheet lists every prompt, and the transcript's top-of-viewport auto-load
-    /// keeps going while the reader stays at the top. Stops on a failed page, and on a page that
-    /// does not move the start cursor, so a daemon that keeps answering `hasOlder` with nothing
-    /// new cannot spin this loop.
-    public func loadAllOlder() async {
-        // A page already in flight (the transcript's auto-load) finishes first; returning early
-        // would leave the Jump-to-message sheet's spinner up with nothing loading.
-        while isLoadingOlder { try? await Task.sleep(for: .milliseconds(50)) }
-        while timeline.hasOlder, let cursor = timeline.startCursor, !isLoadingOlder {
-            backgroundError = nil
-            await loadOlder()
-            guard backgroundError == nil else { return }
-            guard timeline.startCursor != cursor else { return }
         }
     }
 
@@ -873,6 +858,65 @@ public final class ConversationStore: Identifiable {
 
     private func updateTurns() {
         turns = TurnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
+        // The chat outline is stale whenever the newest prompt moves (a turn started, a page
+        // arrived, the timeline was replaced). Upstream's `latestPromptSeq` effect.
+        promptOutline.timelineChanged(epoch: timeline.epoch, latestPromptSeq: latestPromptSeq)
+    }
+
+    /// The newest prompt row on the wire. Pending sends are not in the daemon's index yet.
+    private var latestPromptSeq: Int? {
+        timeline.rows.last { row in
+            guard !row.isPending else { return false }
+            if case .userMessage = row.item { return true }
+            return false
+        }?.seqStart
+    }
+
+    /// Upstream `planTimelinePromptJump` (`app/src/timeline/timeline-sync-plan.ts:77-88`): a
+    /// bounded window starting half a page above the prompt, merged outside the loaded range.
+    public nonisolated static func promptJumpCursor(
+        epoch: String, seq: Int, pageSize: Int = 40
+    ) -> TimelineCursor {
+        TimelineCursor(epoch: epoch, seq: seq + pageSize / 2 + 1)
+    }
+
+    /// The view id of the prompt's own row when its window is loaded. The chat transcript tags
+    /// every row `row:<seqEnd>` (`ChatTurns`), which works for a prompt inside a running turn too.
+    public func promptRowId(forPromptSeq seq: Int) -> String? {
+        guard let row = timeline.rows.first(where: { row in
+            guard !row.isPending, case .userMessage = row.item else { return false }
+            return row.seqStart == seq
+        }) else { return nil }
+        return "row:\(row.seqEnd)"
+    }
+
+    /// Jumps to a prompt without paging history in: a loaded prompt returns its row directly; an
+    /// unloaded one fetches just the window around it (upstream `jumpToPrompt`,
+    /// `use-chat-outline.ts:235-266`) and returns the row once merged. Nil when it failed.
+    @discardableResult
+    public func jump(toPromptSeq seq: Int) async -> String? {
+        if let rowId = promptRowId(forPromptSeq: seq) { return rowId }
+        guard let client, let epoch = timeline.epoch else { return nil }
+        var request = FetchAgentTimelineRequest(
+            agentId: agentId, direction: .before,
+            cursor: Self.promptJumpCursor(epoch: epoch, seq: seq), limit: 40)
+        // The window is usually outside the contiguous range; the daemon must merge, not continue.
+        request.mergeWindow = true
+        do {
+            let page = try await client.send(request)
+            if let message = page.error {
+                backgroundError = message
+                return nil
+            }
+            timeline.applyPage(page)
+            if let snapshot = page.agent { applyAgent(snapshot) }
+            updateTurns()
+            backgroundError = nil
+            return promptRowId(forPromptSeq: seq)
+        } catch {
+            backgroundError = conversationErrorText(error)
+            return nil
+        }
     }
 
     /// Optimistic bubble for a send performed by a feature extension.

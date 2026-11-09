@@ -15,6 +15,10 @@ public struct FetchAgentTimelineRequest: PaseoRequest {
     public var projection = "projected"
     /// Keep whole turns on tail/before pages.
     public var wholeTurns: Bool? = true
+    /// Merge this bounded page outside the client's contiguous loaded range, instead of treating it
+    /// as a continuation. Upstream's prompt jump (`planTimelinePromptJump`) sets it so one window
+    /// around an old prompt can be loaded without paging everything between (messages.ts:2000-2001).
+    public var mergeWindow: Bool?
 
     public enum Direction: String, Encodable, Sendable, Decodable { case tail, before, after }
 
