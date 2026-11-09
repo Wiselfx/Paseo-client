@@ -75,7 +75,7 @@ public enum PaseoSettingsKeys {
 }
 
 /// ClaudeUI's palette, extended with the tokens the DSH turn layout asks for
-/// (`docs/research/06-dsh-ux-spec.md` §1.9).
+/// (`docs/research/08-dsh-live-observation.md` §5 — that document overrides doc 06).
 enum ClaudePalette {
     /// #141413 in dark, ClaudeUI's warm canvas in light.
     static let background = Color(
@@ -114,10 +114,53 @@ enum ClaudePalette {
                 $0.userInterfaceStyle == .dark ? UIColor(white: dark, alpha: 1) : UIColor(white: light, alpha: 1)
             })
     }
-    static let orange = Color(red: 0.80, green: 0.36, blue: 0.23)
+    static let orange = Color(red: 217 / 255, green: 119 / 255, blue: 87 / 255)
 
     // MARK: DSH tokens
 
+    /// `--dsw-alias-label-primary`: #161616 light / #FDFDFD dark. The ink DSH paints prose and
+    /// turn content with; shared tokens stay `ink` (chrome) — this one is split from it.
+    static let primaryInk = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 253 / 255, green: 253 / 255, blue: 253 / 255, alpha: 1)
+                : UIColor(red: 22 / 255, green: 22 / 255, blue: 22 / 255, alpha: 1)
+        })
+    /// `--dsw-alias-label-shimmer`: the sweep band's tint, the ink colour, never the accent.
+    static let shimmerInk = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 253 / 255, green: 253 / 255, blue: 253 / 255, alpha: 1)
+                : UIColor(red: 22 / 255, green: 22 / 255, blue: 22 / 255, alpha: 1)
+        })
+    /// The prose link colour, #184F95 light / #8AB4F8 dark (`--dsh-claude-link`).
+    static let proseLink = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 138 / 255, green: 180 / 255, blue: 248 / 255, alpha: 1)
+                : UIColor(red: 24 / 255, green: 79 / 255, blue: 149 / 255, alpha: 1)
+        })
+    /// The code-block surface: #FFFFFF light / #212121 dark (`--dsw-alias-markdown-code-block`).
+    static let codeSurface = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 33 / 255, green: 33 / 255, blue: 33 / 255, alpha: 1)
+                : UIColor(white: 1, alpha: 1)
+        })
+    /// `--dsh-claude-inline-code-bg`: rgba(6,6,6,0.05) light / rgba(255,255,255,0.05) dark.
+    static let inlineCodeFill = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(white: 1, alpha: 0.05)
+                : UIColor(red: 6 / 255, green: 6 / 255, blue: 6 / 255, alpha: 0.05)
+        })
+    /// The blockquote's wash: rgba(20,20,19,0.04) light / rgba(250,249,245,0.06) dark.
+    static let quoteWash = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: 250 / 255, green: 249 / 255, blue: 245 / 255, alpha: 0.06)
+                : UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 0.04)
+        })
     /// `--dsw-alias-label-secondary`: #70686A / #BEB6B8.
     static let secondaryInk = Color(
         uiColor: UIColor {
@@ -151,15 +194,17 @@ enum ClaudePalette {
             $0.userInterfaceStyle == .dark
                 ? UIColor(white: 1, alpha: 0.09) : UIColor(white: 233 / 255, alpha: 1)
         })
+    /// `#F4F2F3` light / translucent white dark — DSH's `#F4F2F3` / `rgba(255,255,255,0.06)`.
     static let userBubble = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.06) : UIColor(white: 0.92, alpha: 1)
+                ? UIColor(white: 1, alpha: 0.06)
+                : UIColor(red: 244 / 255, green: 242 / 255, blue: 243 / 255, alpha: 1)
         })
     /// `--dsh-claude-chip`, the hover/pressed plate.
     static let chip = adaptive(light: 0.965, dark: 0.14)
-    /// `--dsw-alias-state-warn-label`, the awaiting-input dot and the overtime badge.
-    static let warning = Color(red: 0.980, green: 0.698, blue: 0.098)
+    /// `--dsw-alias-state-warn-label`: #DD8629 both themes.
+    static let warning = Color(red: 221 / 255, green: 134 / 255, blue: 41 / 255)
     /// The unread / finished-in-background dot.
     static let unread = Color(red: 0.165, green: 0.471, blue: 0.839)
     static let failureInk = Color(
@@ -202,6 +247,14 @@ enum ClaudeMotion {
     static let open: Double = 0.25
     /// `--dsh-claude-period-hold` / status sweep.
     static let statusPeriod: Double = 1.5
+    /// `--dsh-claude-duration-host-sweep-delay`: the band waits this long after the words appear.
+    static let sweepDelay: Double = 0.3
+    /// `--dsh-claude-ease-host-sweep`: `steps(48, end)`.
+    static let sweepSteps: Int = 48
+    /// `--dsh-claude-period-dot-rotate`: a loader motion stands this long before another takes over.
+    static let dotRotate: Double = 10
+    /// `--dsh-claude-duration-dot-morph`: the hand-over between two loader motions.
+    static let dotMorph: Double = 0.48
     /// `WORD_LOCK_MS`: a wording stands for at least a second.
     static let wordLock: Double = 1.0
     /// `TICK_MS`: the status line's clock.
@@ -246,6 +299,39 @@ extension EnvironmentValues {
     }
 }
 
+/// The highlight band the running words sweep under (doc 08 §3.4): a masked, shimmer-ink copy of
+/// the glyph run reveals under a soft-edged diagonal window that crosses once per 1.5 s, stepped in
+/// 48 places, 300 ms after the words appear, holding still for the last third of the period.
+/// The wash is never a translucent fill behind the words — only the tinted glyphs show.
+enum ClaudeSweep {
+    /// The stepped 0...<1 sweep position, or nil while the band rests (last third of the period).
+    static func phase(startedAt start: Date, at date: Date) -> Double? {
+        let elapsed = date.timeIntervalSince(start) - ClaudeMotion.sweepDelay
+        guard elapsed >= 0 else { return nil }
+        let cycle = elapsed.truncatingRemainder(dividingBy: ClaudeMotion.statusPeriod)
+        let active = ClaudeMotion.statusPeriod * (2.0 / 3.0) // 1 s of motion, 0.5 s of rest
+        guard cycle < active else { return nil }
+        let raw = cycle / active
+        return (raw * Double(ClaudeMotion.sweepSteps)).rounded(.down) / Double(ClaudeMotion.sweepSteps)
+    }
+
+    /// The mask: a soft-edged window sliding left → right across about one label width and a half.
+    /// The 105° tilt is approximated with a gentle downward axis; the geometry is not measured.
+    static func windowGradient(phase: Double) -> LinearGradient {
+        let cx = -0.25 + 1.5 * phase
+        func clamp(_ value: Double) -> Double { min(max(value, 0), 1) }
+        return LinearGradient(
+            stops: [
+                .init(color: .clear, location: clamp(cx - 0.4)),
+                .init(color: .black, location: clamp(cx - 0.1)),
+                .init(color: .black, location: clamp(cx + 0.1)),
+                .init(color: .clear, location: clamp(cx + 0.4)),
+            ],
+            startPoint: UnitPoint(x: 0, y: 0),
+            endPoint: UnitPoint(x: 1, y: 0.26))
+    }
+}
+
 /// 0.5 pt hairline, as the DSH separators are drawn.
 struct ClaudeDivider: View {
     var body: some View {
@@ -264,6 +350,51 @@ struct ClaudeChevron: View {
             .rotationEffect(.degrees(expanded ? 90 : 0))
             .frame(width: 12, height: 12)
             .accessibilityHidden(true)
+    }
+}
+
+/// The trailing chevron the process card's thought/file rows wear (doc 08 §1.3): a 12 × 12 mask
+/// of `M6 4l4 4-4 4`, stroke 1.5 with round caps, rotated a quarter turn while the row is open.
+struct ClaudeTurnChevron: View {
+    var expanded: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Path { path in
+            path.move(to: CGPoint(x: 6, y: 4))
+            path.addLine(to: CGPoint(x: 10, y: 8))
+            path.addLine(to: CGPoint(x: 6, y: 12))
+        }
+        .stroke(
+            ClaudePalette.tertiaryInk,
+            style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
+        )
+        .frame(width: 12, height: 12)
+        .rotationEffect(.degrees(expanded ? 90 : 0))
+        .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: expanded)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Touch has no hover: the summary row's leading seat shows its chevron while the row is open
+/// or while a finger is down, and the activity glyph otherwise. The key is injected by
+/// `ClaudePressButtonStyle`; it defaults to false everywhere else.
+private struct ClaudeRowPressedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var claudeRowPressed: Bool {
+        get { self[ClaudeRowPressedKey.self] }
+        set { self[ClaudeRowPressedKey.self] = newValue }
+    }
+}
+
+/// A plain button style that publishes `isPressed` into the environment so the row's leading
+/// seat can follow the finger. No visual change of its own.
+struct ClaudePressButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.environment(\.claudeRowPressed, configuration.isPressed)
     }
 }
 
