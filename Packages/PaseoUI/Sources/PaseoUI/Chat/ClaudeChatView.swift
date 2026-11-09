@@ -867,7 +867,7 @@ struct ClaudeStepRow: View {
                         Text(subtitle)
                             .font(typography.sans(13))
                             .foregroundStyle(ClaudePalette.secondaryInk)
-                            .underline(.dot, color: ClaudePalette.tertiaryInk)
+                            .underline(true, pattern: .dot, color: ClaudePalette.tertiaryInk)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
