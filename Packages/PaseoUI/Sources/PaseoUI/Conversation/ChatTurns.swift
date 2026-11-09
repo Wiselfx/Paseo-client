@@ -6,8 +6,8 @@ import UIKit
 /// One turn: your bubble, the process header, the process body, the answer.
 ///
 /// In `Collapse turns` mode (Settings → General → Chat), completed turns older than the most
-/// recent one collapse to the prompt plus the first ~6 lines of the reply with a **Show more**
-/// row; **Show less** folds back. Find expands whatever holds a match automatically.
+/// recent one show the prompt plus the turn summary; **Show less** is gone — the answer itself
+/// always renders in full. Find expands whatever holds a match automatically.
 struct ClaudeTurnView: View {
     let turn: Turn
     let typography: ClaudeTypography
@@ -38,8 +38,7 @@ struct ClaudeTurnView: View {
 
     /// Nil until the reader taps, so the default can follow the turn's phase.
     @State private var userExpanded: Bool?
-    /// Collapse-turns override: true = Show more (expanded), false = Show less (folded),
-    /// nil = the mode's default.
+    /// Collapse-turns override: true = expanded (full work), nil = the mode's default.
     @State private var userExpandedTurn: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
@@ -100,12 +99,8 @@ struct ClaudeTurnView: View {
         }
     }
 
-    var showShowLess: Bool {
-        chatDisplayMode == .collapseTurns && turn.phase == .completed && !isLatestTurn
-            && userExpandedTurn == true
-    }
-
-    /// Overview sentence, or "View turn details" (upstream `summary-line.tsx:18`).
+    /// The overview sentence under the prompt. In `collapseTurns` it is the whole fold affordance;
+    /// the answer below it is never clipped, so there is no separate "Show more".
     var turnSummaryLabel: String { TurnSummary(turn: turn).detailsLabel }
 
     /// "Sent by {{name}}" above the bubble (upstream `user-message/index.tsx:95`, rendered
@@ -126,7 +121,8 @@ struct ClaudeTurnView: View {
         }
     }
 
-    /// The folded turn: the prompt plus the first ~6 lines of the reply, then **Show more**.
+    /// The folded turn: the prompt plus the turn summary, then the answer in full.
+    /// Every message is always shown in full (UX spec §4.3); the fold hides work, never prose.
     @ViewBuilder private var collapsedTurn: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
@@ -165,46 +161,13 @@ struct ClaudeTurnView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(turnSummaryLabel)
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ZStack(alignment: .bottom) {
-                    ClaudeProse(markdown: FilePathLinks.linkified(markdown: message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
-                        .frame(maxHeight: 6 * 23, alignment: .top)
-                        .clipped()
-                    LinearGradient(
-                        stops: [
-                            .init(color: ClaudePalette.background.opacity(0), location: 0),
-                            .init(color: ClaudePalette.background, location: 1),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 26)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                }
+                ClaudeProse(markdown: FilePathLinks.linkified(markdown: message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
             } else {
                 // A turn with no answer section (all work / no prose): keep it honest.
                 Text("This turn ended without a reply.")
                     .font(typography.sans(13))
                     .foregroundStyle(ClaudePalette.tertiaryInk)
             }
-            Button {
-                Haptics.selection()
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
-                    userExpandedTurn = true
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text("Show more")
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Show more of this turn")
         }
     }
 
@@ -266,26 +229,6 @@ struct ClaudeTurnView: View {
                     }
                 }
                 .padding(.top, 2)
-            }
-            if showShowLess {
-                Button {
-                    Haptics.selection()
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
-                        userExpandedTurn = false
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("Show less")
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Show less of this turn")
             }
         }
         .onChange(of: turn.phase) { _, phase in

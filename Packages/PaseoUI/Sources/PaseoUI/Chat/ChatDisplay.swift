@@ -6,8 +6,9 @@ import Foundation
 /// - `full`: the current layout — work groups fold on their own, answers render fully.
 /// - `collapseToolCalls`: work groups start collapsed even while their turn runs (find expands
 ///   whatever holds a match).
-/// - `collapseTurns`: completed turns older than the last show the prompt plus the first
-///   ~6 lines of the reply with **Show more**; **Show less** folds back.
+/// - `collapseTurns`: completed turns older than the last show the prompt plus the turn
+///   summary; the answer itself always renders in full (UX spec §4.3 forbids clipping a
+///   message behind "Show more").
 enum ChatDisplayMode: String, CaseIterable {
     case full
     case collapseToolCalls

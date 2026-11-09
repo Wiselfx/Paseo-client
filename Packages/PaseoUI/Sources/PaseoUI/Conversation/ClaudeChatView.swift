@@ -44,6 +44,12 @@ public struct ClaudeChatView: View {
     @State var findAnchor: String?
     @State var findSearchTask: Task<Void, Never>?
     @State var scrollProxy: ScrollViewProxy?
+    /// U3: scroll position, used to undo the jump a prepended history page would cause.
+    @State var scrollPosition = ScrollPosition()
+    /// Where the viewport sat when an older page was requested; nil when nothing is pending.
+    @State var historyAnchor: HistoryAnchor?
+    /// One older-page fetch at a time, driven by the top of the transcript.
+    @State var historyLoadInFlight = false
     /// The last turn row that appeared; the find restore anchors to it.
     @State var lastTrackedTurn: String?
     @FocusState var findFocused: Bool
@@ -89,6 +95,16 @@ public struct ClaudeChatView: View {
     @State var compactionOpen = false
     /// Baseline for the rising edge so an existing badge doesn't fire on appear.
     @State var attentionActive = false
+    /// U3: mascot baselines are taken once, when the conversation's first load is ready — not on
+    /// appear, when the timeline is still empty (B11).
+    @State var mascotSeeded = false
+    /// Oldest seq present when the baselines were taken. Failure rows below it belong to history
+    /// (an older page), never to a live event.
+    @State var mascotSeqFloor = Int.max
+    /// The turn the mascot was actually told started; nil until a live turn is announced. Keeps
+    /// the initial snapshot settling (activeTurnId going nil as history loads) from reading as a
+    /// finished turn and playing the failure animation.
+    @State var mascotLiveTurnId: String?
     /// M8a: slash commands for this agent (`/` at the start of the draft opens the menu).
     @State var slashCommands: [AgentSlashCommand] = []
     @State var slashState: SlashCommandState = .idle
@@ -151,6 +167,8 @@ public struct ClaudeChatView: View {
                 banner.padding(.horizontal, 16).padding(.bottom, 6)
             }
             content
+            // Upstream's subagent pill lives in the track bar directly above the composer.
+            subagentPill
             composer
                 .onGeometryChange(for: CGFloat.self) { geometry in
                     geometry.size.height
@@ -188,7 +206,7 @@ public struct ClaudeChatView: View {
         case .backgroundWork:
             ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork, typography: typography)
         case .turnNav:
-            ChatTurnNavSheet(turns: store.turns, currentTurnId: lastTrackedTurn) { id in
+            ChatTurnNavSheet(store: store, currentTurnId: lastTrackedTurn) { id in
                 sheet = nil
                 jumpToTurn(id)
             }
@@ -254,7 +272,6 @@ public struct ClaudeChatView: View {
         .onChange(of: store.isRunning) { wasRunning, isRunning in
             if wasRunning && !isRunning { Haptics.settle() }
         }
-        .onAppear { seedMascotBaselines() }
         .onAppear { seedSavedDraft() }
         .onAppear { dictation.onDraft = { text in store.draft = text } }
         .onChange(of: scenePhase) { _, phase in
@@ -305,11 +322,25 @@ public struct ClaudeChatView: View {
 
     func withMascotWiring(_ content: some View) -> some View {
         content
+        // History arrives after the view appears, so baselines are taken when the first load is
+        // ready; seeding on appear left them empty and history's failures played as errors (B11).
+        .onAppear {
+            if case .ready = store.phase { seedMascotBaselines() }
+        }
+        .onChange(of: store.phase) { _, phase in
+            if case .ready = phase { seedMascotBaselines() }
+        }
         .onChange(of: store.activeTurnId) { _, newId in
+            guard mascotSeeded else { return }
             let now = Date()
-            if newId != nil {
+            if let newId {
+                mascotLiveTurnId = newId
                 feedMascot(.turnStarted(at: now))
             } else {
+                // Only a turn the mascot was told about can end. A snapshot settling to nil as
+                // history loads is not news (UX spec §4.4).
+                guard mascotLiveTurnId != nil else { return }
+                mascotLiveTurnId = nil
                 // The turn ended; how it landed is in the turns it left behind.
                 switch store.turns.last?.phase {
                 case .failed: feedMascot(.turnFailed(at: now))
@@ -326,7 +357,11 @@ public struct ClaudeChatView: View {
             }
         }
         .onChange(of: failedToolCallIds) { _, ids in
-            let unseen = ids.filter { !signalledToolFailureIds.contains($0) }
+            guard mascotSeeded else {
+                signalledToolFailureIds = Set(ids)
+                return
+            }
+            let unseen = liveFailedToolCallIds.filter { !signalledToolFailureIds.contains($0) }
             guard !unseen.isEmpty else { return }
             for _ in unseen { feedMascot(.toolFailed(at: Date())) }
             signalledToolFailureIds.formUnion(unseen)

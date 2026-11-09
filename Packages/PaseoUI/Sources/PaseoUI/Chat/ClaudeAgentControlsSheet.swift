@@ -214,25 +214,15 @@ struct ClaudeAgentControlsSheet: View {
         }
     }
 
+    /// One list control for every provider (UX spec §4.2): a row per level, in the provider's
+    /// order, the current level checked. The Faster↔Smarter slider is gone.
     private var thinkingPage: some View {
         ScrollView {
-            VStack(spacing: 12) {
-                if let ranked = EffortLadder.ranked(thinkingOptions) {
-                    // Compact Faster ↔ Smarter ladder (effort). The list remains for unranked providers.
-                    EffortLadder(
-                        options: ranked,
-                        selectedId: effectiveThinkingId
-                    ) { chooseThinking($0) }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 4)
-                } else {
-                    plainThinkingList
-                }
-            }
+            plainThinkingList
         }
     }
 
-    /// The original list of options — used when the provider's levels aren't ranked.
+    /// The provider's levels, verbatim: Default first, then one row per reported option.
     private var plainThinkingList: some View {
         VStack(spacing: 12) {
                 RowGroup {

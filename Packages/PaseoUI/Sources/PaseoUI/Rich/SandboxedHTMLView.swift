@@ -38,6 +38,12 @@ struct SandboxedHTMLView: UIViewRepresentable {
     let heightFloor: CGFloat
     let heightCeiling: CGFloat
     var onHeightChange: (CGFloat) -> Void
+    /// A file preview is a document, not a rich card: it fills its frame and scrolls. Rich cards
+    /// keep the default (sized to their reported content height).
+    var fillsFrame: Bool = false
+    /// File previews render untrusted markup with page JavaScript off. Rich cards need the
+    /// height reporter, so they keep it on.
+    var allowsScripts: Bool = true
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onHeightChange: onHeightChange, floor: heightFloor, ceiling: heightCeiling)
@@ -46,10 +52,11 @@ struct SandboxedHTMLView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.add(context.coordinator, name: "vizHeight")
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = allowsScripts
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
+        webView.scrollView.isScrollEnabled = fillsFrame
+        webView.scrollView.bounces = fillsFrame
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
@@ -62,6 +69,8 @@ struct SandboxedHTMLView: UIViewRepresentable {
         context.coordinator.onHeightChange = onHeightChange
         context.coordinator.floor = heightFloor
         context.coordinator.ceiling = heightCeiling
+        webView.scrollView.isScrollEnabled = fillsFrame
+        webView.scrollView.bounces = fillsFrame
         if context.coordinator.loadedHTML != html {
             context.coordinator.loadedHTML = html
             webView.loadHTMLString(html, baseURL: nil)

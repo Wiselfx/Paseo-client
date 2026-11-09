@@ -18,8 +18,11 @@ public enum ClientCapabilities {
     public static let helloRejection = "hello_rejection"
     public static let terminalChunkedReplay = "terminal_chunked_replay"
     /// The daemon honors `agent.provider_subagents.list.request` and pushes update events only
-    /// to clients advertising this capability.
-    public static let providerSubagents = "providerSubagents"
+    /// to clients advertising this capability. The wire name is snake_case, like every other
+    /// entry in `CLIENT_CAPS` (`packages/protocol/src/client-capabilities.ts`: `providerSubagents:
+    /// "provider_subagents"`); a camelCase key is silently ignored by the daemon, so the
+    /// subagent list never refreshed and the chat pill never appeared.
+    public static let providerSubagents = "provider_subagents"
     /// Every behavior this client actually implements. No `binary_chunking_v1` sends (we never
     /// chunk). `owned_subscriptions` and its `workspace_setup_observation` companion are
     /// advertised only while `OwnedSubscriptions.isEnabled`; every subscription path in the
