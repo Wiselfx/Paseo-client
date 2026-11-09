@@ -3,9 +3,10 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// The full Settings screen: General, Host, Providers and About. ClaudeUI's settings layout
-/// (glass-circle back/close, pushed pages, grouped rows) wired to the live session and the app's
-/// `@AppStorage` keys. Opened from the sidebar avatar.
+/// The full Settings screen: General, host pages (Overview, Agents, Metadata, Workspaces,
+/// Projects, Providers) and About. ClaudeUI's settings layout (glass-circle back/close,
+/// pushed pages, grouped rows) wired to the live session and the app's `@AppStorage` keys.
+/// Opened from the sidebar avatar.
 struct PaseoSettingsView: View {
     let session: HostSession
     var onDisconnect: () -> Void
@@ -19,12 +20,24 @@ struct PaseoSettingsView: View {
     @AppStorage(PaseoSettingsKeys.mascot) private var mascot = true
     @State private var page: Page?
     @State private var confirmDisconnect = false
+    @State private var confirmRemoveProject: WorkspaceProjectDescriptor?
+    @State private var appendPromptDraft: String?
+    @State private var appendPromptSaving = false
+    @State private var resumePromptDraft: String?
+    @State private var resumePromptSaving = false
+    @FocusState private var appendPromptFocused: Bool
+    @FocusState private var resumePromptFocused: Bool
 
     private let typography = ClaudeTypography()
 
     enum Page: String, CaseIterable, Identifiable, Equatable {
         case general
-        case host
+        case overview
+        case agents
+        case metadata
+        case metadataModel
+        case workspaces
+        case projects
         case providers
         case about
 
@@ -33,7 +46,12 @@ struct PaseoSettingsView: View {
         var title: String {
             switch self {
             case .general: "General"
-            case .host: "Host"
+            case .overview: "Overview"
+            case .agents: "Agents"
+            case .metadata: "Metadata"
+            case .metadataModel: "Model"
+            case .workspaces: "Workspaces"
+            case .projects: "Projects"
             case .providers: "Providers"
             case .about: "About"
             }
@@ -42,7 +60,12 @@ struct PaseoSettingsView: View {
         var symbol: String {
             switch self {
             case .general: "gearshape"
-            case .host: "server.rack"
+            case .overview: "server.rack"
+            case .agents: "person.2"
+            case .metadata: "wand.and.stars"
+            case .metadataModel: "cpu"
+            case .workspaces: "square.stack"
+            case .projects: "folder"
             case .providers: "cpu"
             case .about: "info.circle"
             }
@@ -81,6 +104,9 @@ struct PaseoSettingsView: View {
             if session.hostSettings.config == nil, session.hostSettings.phase != .loading {
                 await session.hostSettings.load()
             }
+            if session.agentControl.phase == .idle {
+                await session.agentControl.loadCatalog()
+            }
         }
     }
 
@@ -106,17 +132,7 @@ struct PaseoSettingsView: View {
                 .glassEffect(in: .circle)
                 .accessibilityLabel(page == nil ? "Close settings" : "Back")
                 Spacer()
-                if page == .host {
-                    Button {
-                        Task { await session.hostSettings.load() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 19, weight: .light))
-                            .frame(width: 44, height: 44)
-                    }
-                    .glassEffect(in: .circle)
-                    .accessibilityLabel("Refresh host settings")
-                } else if page == .providers {
+                if page == .providers {
                     Button {
                         Task { await session.agentControl.refreshCatalog() }
                     } label: {
@@ -126,6 +142,16 @@ struct PaseoSettingsView: View {
                     }
                     .glassEffect(in: .circle)
                     .accessibilityLabel("Refresh providers")
+                } else if page != nil {
+                    Button {
+                        Task { await session.hostSettings.load() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 19, weight: .light))
+                            .frame(width: 44, height: 44)
+                    }
+                    .glassEffect(in: .circle)
+                    .accessibilityLabel("Refresh host settings")
                 }
             }
         }
@@ -150,10 +176,28 @@ struct PaseoSettingsView: View {
                 sectionLabel("App")
                 RowGroup {
                     settingsRow(.general, symbol: Page.general.symbol, value: appearance)
+                }
+                sectionLabel("Host")
+                RowGroup {
+                    settingsRow(
+                        .overview, symbol: Page.overview.symbol,
+                        value: session.serverInfo?.hostname ?? "Paseo daemon")
                     rowDivider
                     settingsRow(
-                        .host, symbol: Page.host.symbol,
-                        value: session.serverInfo?.hostname ?? "Paseo daemon")
+                        .agents, symbol: Page.agents.symbol,
+                        value: session.hostSettings.config == nil ? "—" : ((session.hostSettings.config?.mcp?.injectIntoAgents ?? true) ? "Tools on" : "Tools off"))
+                    rowDivider
+                    settingsRow(
+                        .metadata, symbol: Page.metadata.symbol,
+                        value: session.hostSettings.config == nil ? "—" : (metadataMode == .automatic ? "Automatic" : "Manual"))
+                    rowDivider
+                    settingsRow(
+                        .workspaces, symbol: Page.workspaces.symbol,
+                        value: session.hostSettings.config == nil ? "—" : ((session.hostSettings.config?.autoArchiveAfterMerge ?? false) ? "Auto-archive" : "Manual"))
+                    rowDivider
+                    settingsRow(
+                        .projects, symbol: Page.projects.symbol,
+                        value: projectCountLine)
                     rowDivider
                     settingsRow(
                         .providers, symbol: Page.providers.symbol,
@@ -176,7 +220,12 @@ struct PaseoSettingsView: View {
     @ViewBuilder private func detail(for page: Page) -> some View {
         switch page {
         case .general: generalPage
-        case .host: hostPage
+        case .overview: overviewPage
+        case .agents: agentsPage
+        case .metadata: metadataPage
+        case .metadataModel: metadataModelPage
+        case .workspaces: workspacesPage
+        case .projects: projectsPage
         case .providers: providersPage
         case .about: aboutPage
         }
@@ -309,45 +358,56 @@ struct PaseoSettingsView: View {
         .padding(12)
     }
 
-    // MARK: Host
+    // MARK: Host pages
 
-    private var hostPage: some View {
+    private enum MetadataMode { case automatic, manual }
+
+    private var metadataMode: MetadataMode {
+        (session.hostSettings.config?.metadataGeneration?.providers.isEmpty ?? true)
+            ? .automatic : .manual
+    }
+
+    private var configuredMetadataProviders: [DaemonConfig.StructuredGenerationProvider] {
+        session.hostSettings.config?.metadataGeneration?.providers ?? []
+    }
+
+    private var metadataModelLabel: String {
+        guard let first = configuredMetadataProviders.first else { return "Choose a model…" }
+        if let model = first.model, !model.isEmpty { return "\(first.provider) / \(model)" }
+        return "\(first.provider) / provider default"
+    }
+
+    private var projectCountLine: String {
+        let count = session.workspaceDirectory.groups.count
+        return count == 1 ? "1 project" : "\(count) projects"
+    }
+
+    // MARK: Overview
+
+    private var overviewPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 sectionLabel("Connection")
                 RowGroup {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Connection")
-                                .font(.system(size: 17))
-                            Text(session.serverInfo?.hostname ?? "Paseo daemon")
-                                .font(.system(size: 13))
-                                .foregroundStyle(ClaudePalette.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 8)
-                        HStack(spacing: 6) {
-                            PaseoStatusDot(kind: connectionKind(session.connection))
-                            Text(connectionLabel(session.connection))
-                                .font(.system(size: 13))
-                                .foregroundStyle(ClaudePalette.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(height: 60)
+                    connectionRow
                     rowDivider
-                    valueRow("Server ID", value: session.serverInfo?.serverId ?? "Not connected", mono: true)
+                    valueRow(
+                        "Server ID", value: session.serverInfo?.serverId ?? "Not connected", mono: true)
                     rowDivider
                     valueRow("Daemon version", value: session.serverInfo?.version ?? "Unknown")
-                }
-                sectionLabel("Daemon config")
-                RowGroup {
-                    configToggleRow(
-                        "Auto-archive after merge",
-                        isOn: configBinding(
-                            get: { $0.autoArchiveAfterMerge }, set: { $0.autoArchiveAfterMerge = $1 }))
                     rowDivider
+                    valueRow(
+                        "Protocol version",
+                        value: session.serverInfo?.protocolVersion.map(String.init) ?? "Unknown")
+                }
+                Text(
+                    "The host name and badge color are set by Paseo's own apps and are not editable here. This client connects to one daemon at a time."
+                )
+                .font(.system(size: 13))
+                .foregroundStyle(ClaudePalette.secondary)
+                .padding(.leading, 16)
+                sectionLabel("Advanced")
+                RowGroup {
                     configToggleRow(
                         "Terminal agent hooks",
                         isOn: configBinding(
@@ -355,79 +415,17 @@ struct PaseoSettingsView: View {
                             set: { $0.enableTerminalAgentHooks = $1 }))
                     rowDivider
                     configToggleRow(
-                        "Resume on startup",
-                        isOn: configBinding(
-                            get: { $0.resumeOnStartup ?? false },
-                            set: { $0.resumeOnStartup = $1 }))
-                    rowDivider
-                    configToggleRow(
-                        "Idle runtime cleanup",
-                        isOn: configBinding(
-                            get: { $0.idleRuntimeCleanup ?? false },
-                            set: { $0.idleRuntimeCleanup = $1 }))
-                    rowDivider
-                    configToggleRow(
-                        "Relay for remote pairing",
-                        isOn: configBinding(
-                            get: { $0.relay?.enabled ?? false },
-                            set: { $0.relay = .init(enabled: $1) }))
-                    rowDivider
-                    configToggleRow(
-                        "Require protected security",
-                        isOn: configBinding(
-                            get: { $0.relay?.requireProtectedSecurity ?? false },
-                            set: { $0.relay = .init(requireProtectedSecurity: $1) }))
-                    rowDivider
-                    configToggleRow(
                         "Usage tracking",
                         isOn: configBinding(
-                            get: { $0.usage?.enabled ?? false }, set: { $0.usage = .init(enabled: $1) }))
-                    rowDivider
-                    configToggleRow(
-                        "Browser tools",
-                        isOn: configBinding(
-                            get: { $0.browserTools?.enabled ?? false },
-                            set: { $0.browserTools = .init(enabled: $1) }))
-                    rowDivider
-                    configToggleRow(
-                        "Inject MCP into agents",
-                        isOn: configBinding(
-                            get: { $0.mcp?.injectIntoAgents ?? false },
-                            set: { $0.mcp = .init(injectIntoAgents: $1) }))
-                    rowDivider
-                    configToggleRow(
-                        "Plugins enabled",
-                        isOn: configBinding(
-                            get: { $0.pluginsEnabled ?? false },
-                            set: { $0.pluginsEnabled = $1 }))
+                            get: { $0.usage?.enabled ?? false },
+                            set: { $0.usage = .init(enabled: $1) }))
                 }
-                if let prompt = session.hostSettings.config?.appendSystemPrompt,
-                    !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                {
-                    Text("Append system prompt")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondary)
-                        .padding(.leading, 16)
-                    Text(prompt)
-                        .font(typography.mono(12, relativeTo: .footnote))
-                        .foregroundStyle(ClaudePalette.ink)
-                        .lineLimit(4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
-                }
-                if session.hostSettings.supportsProfiles {
-                    RowGroup {
-                        valueRow(
-                            "Agent profiles",
-                            value: "\(session.hostSettings.profiles.count)")
-                    }
-                }
-                Text("Unset toggles show as off. Changes apply immediately; the effective config comes back from the daemon.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
-                    .padding(.leading, 16)
+                Text(
+                    "Unset toggles show as off. Changes apply immediately; the effective config comes back from the daemon."
+                )
+                .font(.system(size: 13))
+                .foregroundStyle(ClaudePalette.secondary)
+                .padding(.leading, 16)
                 if let error = session.hostSettings.error {
                     Text(error)
                         .font(.system(size: 13))
@@ -435,21 +433,7 @@ struct PaseoSettingsView: View {
                         .padding(.leading, 16)
                 }
                 RowGroup {
-                    Button {
-                        confirmDisconnect = true
-                    } label: {
-                        HStack {
-                            Text("Disconnect")
-                                .font(.system(size: 17))
-                                .foregroundStyle(ClaudePalette.failureInk)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 52)
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Disconnect")
+                    disconnectButton
                 }
             }
             .padding(.horizontal, 16)
@@ -458,6 +442,542 @@ struct PaseoSettingsView: View {
         }
         .scrollIndicators(.hidden)
     }
+
+    @ViewBuilder private var connectionRow: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Connection")
+                    .font(.system(size: 17))
+                Text(session.serverInfo?.hostname ?? "Paseo daemon")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 6) {
+                PaseoStatusDot(kind: connectionKind(session.connection))
+                Text(connectionLabel(session.connection))
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 60)
+    }
+
+    @ViewBuilder private var disconnectButton: some View {
+        Button {
+            confirmDisconnect = true
+        } label: {
+            HStack {
+                Text("Disconnect")
+                    .font(.system(size: 17))
+                    .foregroundStyle(ClaudePalette.failureInk)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 52)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Disconnect")
+    }
+
+    // MARK: Agents
+
+    private var agentsPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                sectionLabel("Tools")
+                RowGroup {
+                    configToggleRow(
+                        "Enable Paseo tools",
+                        subtitle: "Agents will be able to manage worktrees, agents and schedules",
+                        isOn: configBinding(
+                            get: { $0.mcp?.injectIntoAgents ?? true },
+                            set: { $0.mcp = .init(injectIntoAgents: $1) }))
+                    rowDivider
+                    configToggleRow(
+                        "Browser tools",
+                        subtitle: "Agents can control the in-app browser, including logged-in state",
+                        isOn: configBinding(
+                            get: { $0.browserTools?.enabled ?? false },
+                            set: { $0.browserTools = .init(enabled: $1) }))
+                }
+                sectionLabel("System prompt")
+                RowGroup {
+                    promptCard(
+                        title: "Appended to every agent's system prompt",
+                        placeholder: "What every agent should always know…",
+                        draft: appendPromptBinding,
+                        focused: $appendPromptFocused,
+                        saving: appendPromptSaving,
+                        dirty: appendPromptDirty) {
+                            saveAppendPrompt()
+                        }
+                }
+                if let skills = session.hostSettings.config?.skillsSelection {
+                    sectionLabel("Orchestration skills")
+                    RowGroup {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Skills")
+                                    .font(.system(size: 17))
+                                Text("Installed on the host for orchestrating agents")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                            }
+                            Spacer(minLength: 8)
+                            Text(skills.label)
+                                .font(.system(size: 15))
+                                .foregroundStyle(ClaudePalette.secondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 52)
+                    }
+                }
+                if session.hostSettings.supportsProfiles {
+                    RowGroup {
+                        valueRow("Agent profiles", value: "\(session.hostSettings.profiles.count)")
+                    }
+                }
+                sectionLabel("Restart recovery")
+                RowGroup {
+                    configToggleRow(
+                        "Resume agents after restart",
+                        subtitle: "Agents found mid-task are resumed with this prompt appended",
+                        isOn: configBinding(
+                            get: { $0.resumeOnStartup ?? false },
+                            set: { $0.resumeOnStartup = $1 }))
+                    if session.hostSettings.config?.resumeOnStartup == true {
+                        rowDivider
+                        promptCard(
+                            title: "Appended to the resume prompt",
+                            placeholder: "What a resumed agent should know…",
+                            draft: resumePromptBinding,
+                            focused: $resumePromptFocused,
+                            saving: resumePromptSaving,
+                            dirty: resumePromptDirty) {
+                                saveResumePrompt()
+                            }
+                    }
+                }
+                sectionLabel("Idle agents")
+                RowGroup {
+                    configToggleRow(
+                        "Release idle agents",
+                        subtitle: "Free up memory after an hour of inactivity",
+                        isOn: configBinding(
+                            get: { $0.idleRuntimeCleanup ?? false },
+                            set: { $0.idleRuntimeCleanup = $1 }))
+                }
+                if let error = session.hostSettings.error {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .padding(.leading, 16)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 26)
+            .padding(.bottom, 20)
+        }
+        .scrollIndicators(.hidden)
+        .toolbar {
+            ToolbarItem(placement: .keyboard) {
+                HStack {
+                    Spacer()
+                    Button("Done") {
+                        if appendPromptFocused, appendPromptDirty { saveAppendPrompt() }
+                        if resumePromptFocused, resumePromptDirty { saveResumePrompt() }
+                        appendPromptFocused = false
+                        resumePromptFocused = false
+                    }
+                }
+            }
+        }
+    }
+
+    private var appendPromptBinding: Binding<String> {
+        Binding(
+            get: { appendPromptDraft ?? session.hostSettings.config?.appendSystemPrompt ?? "" },
+            set: { appendPromptDraft = $0 })
+    }
+
+    private var appendPromptDirty: Bool {
+        guard let draft = appendPromptDraft else { return false }
+        return draft != (session.hostSettings.config?.appendSystemPrompt ?? "")
+    }
+
+    private func saveAppendPrompt() {
+        guard let draft = appendPromptDraft else { return }
+        Haptics.selection()
+        appendPromptSaving = true
+        Task {
+            var patch = DaemonConfigPatch()
+            patch.appendSystemPrompt = draft
+            let ok = await session.hostSettings.save(patch)
+            appendPromptSaving = false
+            if ok { appendPromptDraft = nil }
+            appendPromptFocused = false
+        }
+    }
+
+    private var resumePromptBinding: Binding<String> {
+        Binding(
+            get: { resumePromptDraft ?? session.hostSettings.config?.resumePrompt ?? "" },
+            set: { resumePromptDraft = $0 })
+    }
+
+    private var resumePromptDirty: Bool {
+        guard let draft = resumePromptDraft else { return false }
+        return draft != (session.hostSettings.config?.resumePrompt ?? "")
+    }
+
+    private func saveResumePrompt() {
+        guard let draft = resumePromptDraft else { return }
+        Haptics.selection()
+        resumePromptSaving = true
+        Task {
+            var patch = DaemonConfigPatch()
+            patch.resumePrompt = draft
+            let ok = await session.hostSettings.save(patch)
+            resumePromptSaving = false
+            if ok { resumePromptDraft = nil }
+            resumePromptFocused = false
+        }
+    }
+
+    @ViewBuilder private func promptCard(
+        title: String,
+        placeholder: String,
+        draft: Binding<String>,
+        focused: FocusState<Bool>.Binding,
+        saving: Bool,
+        dirty: Bool,
+        onSave: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(ClaudePalette.secondary)
+            TextField(placeholder, text: draft, axis: .vertical)
+                .font(typography.mono(12.5, relativeTo: .footnote))
+                .lineLimit(3...12)
+                .padding(12)
+                .background(ClaudePalette.background.opacity(0.55), in: .rect(cornerRadius: 12))
+                .focused(focused)
+            if dirty {
+                HStack {
+                    Spacer(minLength: 8)
+                    Button(action: onSave) {
+                        Text(saving ? "Saving…" : "Done")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .disabled(saving)
+                }
+            }
+        }
+        .padding(16)
+    }
+
+    // MARK: Metadata
+
+    private var metadataPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                sectionLabel("Metadata generation")
+                RowGroup {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Model selection")
+                                .font(.system(size: 17))
+                            Spacer(minLength: 8)
+                            Text(metadataMode == .automatic ? "Automatic" : "Manual")
+                                .font(.system(size: 15))
+                                .foregroundStyle(ClaudePalette.secondary)
+                        }
+                        HStack(spacing: 8) {
+                            metadataModeChip(.automatic, "Automatic")
+                            metadataModeChip(.manual, "Manual")
+                        }
+                    }
+                    .padding(16)
+                }
+                if metadataMode == .manual {
+                    sectionLabel("Model")
+                    RowGroup {
+                        Button {
+                            Haptics.selection()
+                            open(.metadataModel)
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Model")
+                                        .font(.system(size: 17))
+                                    Text(metadataModelLabel)
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(ClaudePalette.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(height: 60)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.metadata.model")
+                    }
+                }
+                Text(
+                    "Used for titles, branch names, commit messages and pull requests drafted by the host."
+                )
+                .font(.system(size: 13))
+                .foregroundStyle(ClaudePalette.secondary)
+                .padding(.leading, 16)
+                if let error = session.hostSettings.error {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .padding(.leading, 16)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 26)
+            .padding(.bottom, 20)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func metadataModeChip(_ mode: MetadataMode, _ title: String) -> some View {
+        let isSelected = metadataMode == mode
+        return Button {
+            Haptics.selection()
+            switch mode {
+            case .automatic:
+                save { $0.metadataGeneration = .init(providers: []) }
+            case .manual:
+                open(.metadataModel)
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isSelected ? ClaudePalette.background : ClaudePalette.ink)
+                .padding(.horizontal, 18)
+                .frame(height: 40)
+                .background(isSelected ? ClaudePalette.ink : ClaudePalette.chip, in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("settings.metadata.mode." + title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .disabled(session.hostSettings.config == nil || session.hostSettings.isSaving)
+    }
+
+    private func isMetadataModelSelected(provider: String, modelId: String) -> Bool {
+        guard let first = configuredMetadataProviders.first, first.provider == provider else {
+            return false
+        }
+        return first.model == modelId
+    }
+
+    private func selectMetadataModel(provider: String, modelId: String) {
+        let tail = Array(configuredMetadataProviders.dropFirst())
+        save {
+            $0.metadataGeneration = .init(
+                providers: [.init(provider: provider, model: modelId)] + tail)
+        }
+        open(.metadata)
+    }
+
+    private var metadataModelPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                if session.agentControl.phase == .loading,
+                    session.agentControl.providers.isEmpty
+                {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 32)
+                    Text("Loading providers…")
+                        .font(.system(size: 15))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .frame(maxWidth: .infinity)
+                } else if session.agentControl.readyProviders.isEmpty {
+                    Text("No usable models on this host. Enable a provider on the Providers page first.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .padding(.top, 32)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    ForEach(session.agentControl.readyProviders) { provider in
+                        let models = session.agentControl.models(forProvider: provider.provider)
+                        if !models.isEmpty {
+                            sectionLabel(provider.label ?? provider.provider)
+                            RowGroup {
+                                ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
+                                    SheetRow(
+                                        title: model.label, detail: model.description,
+                                        checked: isMetadataModelSelected(
+                                            provider: provider.provider, modelId: model.id),
+                                        badge: model.isDefault == true ? "Default" : nil
+                                    ) {
+                                        Haptics.selection()
+                                        selectMetadataModel(provider: provider.provider, modelId: model.id)
+                                    }
+                                    if index < models.count - 1 { rowDivider }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 26)
+            .padding(.bottom, 20)
+        }
+        .scrollIndicators(.hidden)
+        .onAppear {
+            if session.agentControl.phase == .idle {
+                Task { await session.agentControl.loadCatalog() }
+            }
+        }
+    }
+
+    // MARK: Workspaces
+
+    private var workspacesPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                sectionLabel("Workspaces")
+                RowGroup {
+                    configToggleRow(
+                        "Auto-archive after merge",
+                        subtitle:
+                            "Automatically archive clean Paseo workspaces after their pull request is merged",
+                        isOn: configBinding(
+                            get: { $0.autoArchiveAfterMerge },
+                            set: { $0.autoArchiveAfterMerge = $1 }))
+                }
+                if let error = session.hostSettings.error {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .padding(.leading, 16)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 26)
+            .padding(.bottom, 20)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    // MARK: Projects
+
+    private var projectsPage: some View {
+        let counts = Dictionary(
+            session.workspaceDirectory.groups.map { ($0.project.projectId, $0.workspaces.count) },
+            uniquingKeysWith: +)
+        let projects = session.workspaceDirectory.groups.map(\.project).sorted {
+            ($0.projectCustomName ?? $0.projectDisplayName).localizedCaseInsensitiveCompare(
+                $1.projectCustomName ?? $1.projectDisplayName) == .orderedAscending
+        }
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                sectionLabel("On this host")
+                if projects.isEmpty {
+                    Text("No projects on this host yet.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .padding(.leading, 16)
+                } else {
+                    RowGroup {
+                        ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
+                            projectRow(project, count: counts[project.id] ?? 0)
+                            if index < projects.count - 1 { rowDivider }
+                        }
+                    }
+                }
+                Text(
+                    "Removing a project unregisters it on this host. Files on disk are not changed."
+                )
+                .font(.system(size: 13))
+                .foregroundStyle(ClaudePalette.secondary)
+                .padding(.leading, 16)
+                if let error = session.workspaceDirectory.actionError {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .padding(.leading, 16)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 26)
+            .padding(.bottom, 20)
+        }
+        .scrollIndicators(.hidden)
+        .confirmationDialog(
+            "Remove project?",
+            isPresented: Binding(
+                get: { confirmRemoveProject != nil },
+                set: { if !$0 { confirmRemoveProject = nil } })
+        ) {
+            Button("Remove", role: .destructive) {
+                guard let project = confirmRemoveProject else { return }
+                confirmRemoveProject = nil
+                Task { _ = await session.workspaceDirectory.removeProject(project.projectId) }
+            }
+            Button("Cancel", role: .cancel) { confirmRemoveProject = nil }
+        } message: {
+            Text(
+                "The project and its workspaces will be unregistered on this host. Files on disk will not be changed."
+            )
+        }
+    }
+
+    private func projectRow(_ project: WorkspaceProjectDescriptor, count: Int) -> some View {
+        let title = project.projectCustomName ?? project.projectDisplayName
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 17))
+                    .lineLimit(1)
+                Text(project.projectRootPath)
+                    .font(typography.mono(12, relativeTo: .footnote))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            Text(count == 1 ? "1 workspace" : "\(count) workspaces")
+                .font(.system(size: 13))
+                .foregroundStyle(ClaudePalette.secondary)
+                .lineLimit(1)
+            if session.workspaceDirectory.supportsProjectRemove {
+                Menu {
+                    Button("Remove project", role: .destructive) {
+                        confirmRemoveProject = project
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 19, weight: .light))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .accessibilityLabel("Project actions")
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 60)
+    }
+
+    // MARK: Shared save helpers
 
     private func configBinding(
         get: @escaping (DaemonConfig) -> Bool,
@@ -480,12 +1000,27 @@ struct PaseoSettingsView: View {
         Task { await session.hostSettings.save(patch) }
     }
 
-    @ViewBuilder private func configToggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
-        Toggle(title, isOn: isOn)
-            .font(.system(size: 17))
-            .padding(.horizontal, 16)
-            .frame(height: 52)
-            .disabled(session.hostSettings.isSaving || session.hostSettings.config == nil)
+    @ViewBuilder private func configToggleRow(
+        _ title: String, subtitle: String? = nil, isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 17))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .tint(.blue)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 52)
+        .disabled(session.hostSettings.isSaving || session.hostSettings.config == nil)
+        .accessibilityIdentifier("settings.config." + title)
     }
 
     // MARK: Providers
@@ -533,7 +1068,7 @@ struct PaseoSettingsView: View {
                         .foregroundStyle(ClaudePalette.secondary)
                         .padding(.leading, 16)
                     if session.hostSettings.config == nil {
-                        Text("Daemon config is unavailable — pull to refresh on the Host page to enable toggles.")
+                        Text("Daemon config is unavailable — pull to refresh on a Host page to enable toggles.")
                             .font(.system(size: 13))
                             .foregroundStyle(ClaudePalette.secondary)
                             .padding(.leading, 16)
