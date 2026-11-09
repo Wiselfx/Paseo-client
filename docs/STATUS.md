@@ -157,6 +157,8 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
+- M20b `m20b-direct-server-id` on DeepSeek 9950fe1d: persist serverId on direct hosts (deep links, dedupe).
+- R17c `r17c-flake` on DeepSeek 6db40c26: deflake RelayConnectionTests 4003.
 - Idle: DeepSeek 85844e34 (P1 polish context), DeepSeek 6db40c26 (R17; reviewer for R18).
 Known store gaps: fork can't carry provider feature values.
 
