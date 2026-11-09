@@ -36,6 +36,9 @@ public final class HostSession {
     /// Project `paseo.json` read/write + project icons (Settings → host → Projects → Project).
     public let projectConfig: ProjectConfigStore
     public let projectIcons: ProjectIconStore
+    /// Shared T14 upload channel for "paste a file into the terminal" (progress observable, one
+    /// upload at a time). Per-conversation uploads are separate instances on each ConversationStore.
+    public let fileUploader: ConversationUpload
     /// Git extras for open workspaces: modern diffs, discard, branches, PR badge, live files.
     public let gitExtras: GitExtrasStore
 
@@ -62,6 +65,7 @@ public final class HostSession {
         self.setupObservation = WorkspaceSetupObservationStore(client: client)
         self.projectConfig = ProjectConfigStore(client: client)
         self.projectIcons = ProjectIconStore(client: client)
+        self.fileUploader = ConversationUpload(client: client)
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.

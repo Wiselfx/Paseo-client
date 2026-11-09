@@ -31,6 +31,12 @@ struct PaseoTerminalView: UIViewRepresentable {
     var onOutput: () -> Void = {}
     /// A link tap in the terminal; the page routes it (open the file, open the URL, …).
     var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
+    /// The in-flight T14 upload shown in the key bar's progress row, or nil when idle.
+    var upload: TerminalUploadSnapshot? = nil
+    /// Called when the key bar's paperclip is tapped.
+    var onAttach: (() -> Void)? = nil
+    /// Called when the key bar's upload-row cancel button is tapped.
+    var onCancelUpload: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -56,8 +62,10 @@ struct PaseoTerminalView: UIViewRepresentable {
 
     func updateUIView(_ uiView: TerminalView, context: Context) {
         context.coordinator.configure(
-            store: store, onOutput: onOutput, onOpenLink: onOpenLink, onExit: onExit)
+            store: store, onOutput: onOutput, onOpenLink: onOpenLink, onExit: onExit,
+            onAttach: onAttach, onCancelUpload: onCancelUpload)
         context.coordinator.select(terminalId: terminalId)
+        context.coordinator.setUpload(upload)
     }
 
     static func dismantleUIView(_ uiView: TerminalView, coordinator: Coordinator) {
@@ -83,22 +91,45 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private var onOutput: () -> Void = {}
     private var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
     private var onExit: (String?) -> Void = { _ in }
+    private var onAttach: (() -> Void)?
+    private var onCancelUpload: (() -> Void)?
+    private weak var keyBar: PaseoTerminalKeyBar?
 
     func configure(
         store: TerminalsStore, onOutput: @escaping () -> Void,
-        onOpenLink: @escaping (TerminalLinkTarget) -> Void, onExit: @escaping (String?) -> Void
+        onOpenLink: @escaping (TerminalLinkTarget) -> Void, onExit: @escaping (String?) -> Void,
+        onAttach: (() -> Void)?, onCancelUpload: (() -> Void)?
     ) {
         self.store = store
         self.onOutput = onOutput
         self.onOpenLink = onOpenLink
         self.onExit = onExit
+        self.onAttach = onAttach
+        self.onCancelUpload = onCancelUpload
+        applyToKeyBar()
+    }
+
+    /// Pushes the current upload snapshot and the closures into the key bar. Called from
+    /// `configure` and `setUpload` so the bar always reflects the latest SwiftUI state.
+    private func applyToKeyBar() {
+        guard let keyBar else { return }
+        keyBar.onAttach = onAttach
+        keyBar.onCancelUpload = onCancelUpload
+    }
+
+    func setUpload(_ snapshot: TerminalUploadSnapshot?) {
+        keyBar?.setUpload(snapshot)
     }
 
     func makeKeyBar(for view: TerminalView) -> PaseoTerminalKeyBar {
-        PaseoTerminalKeyBar(terminalView: view) { [weak self] text in
+        let bar = PaseoTerminalKeyBar(terminalView: view) { [weak self] text in
             guard let self, let store = self.store, let terminalId = self.terminalId else { return }
             store.sendInput(text, to: terminalId)
         }
+        bar.onAttach = { [weak self] in self?.onAttach?() }
+        bar.onCancelUpload = { [weak self] in self?.onCancelUpload?() }
+        keyBar = bar
+        return bar
     }
 
     /// Switches the view to another terminal. Tears down the current attachment first.

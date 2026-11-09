@@ -32,6 +32,9 @@ struct WorkspaceChangesView: View {
     @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
     @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
     @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
+    @AppStorage("paseo.diff.sideBySide") private var sideBySide = false
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
@@ -119,6 +122,7 @@ struct WorkspaceChangesView: View {
             if showsConflictBanner {
                 conflictBanner
             }
+            forgeSetupBanner
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -663,6 +667,9 @@ struct WorkspaceChangesView: View {
     private var moreMenu: some View {
         Menu {
             Section("Diff options") {
+                if horizontalSizeClass == .regular {
+                    Toggle("Side by side", isOn: $sideBySide)
+                }
                 Toggle("Hide whitespace changes", isOn: $hideWhitespace)
                 Toggle("Wrap long lines", isOn: $wrapLongLines)
                 Button(collapseAllHunks ? "Expand all files" : "Collapse all files") {
@@ -760,6 +767,117 @@ struct WorkspaceChangesView: View {
                     }
                 }
             })
+    }
+
+    // MARK: Forge setup callout
+
+    /// The precise forge setup step this host is missing, when the daemon reports it on the PR
+    /// status payload (`authState`). GitHub-only: the commands are gh-specific, and guessing
+    /// another forge's installer would be wrong. Copy-only; nothing is run remotely.
+    private enum ForgeIssue {
+        case cliMissing
+        case unauthenticated
+
+        var title: String {
+            switch self {
+            case .cliMissing: "GitHub CLI isn't installed on this host"
+            case .unauthenticated: "GitHub CLI isn't authenticated on this host"
+            }
+        }
+    }
+
+    private var forgeIssue: ForgeIssue? {
+        guard let pr = extras.prStatus ?? checkout.prStatus else { return nil }
+        let forge = pr.forge?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard forge.map({ $0.isEmpty ? "github" : $0 }) ?? "github" == "github" else { return nil }
+        switch pr.authStateText {
+        case "cli_missing": return .cliMissing
+        case "unauthenticated": return .unauthenticated
+        default: return nil  // authenticated / no_remote / error / unknown
+        }
+    }
+
+    /// The remote's hostname for `gh auth login --hostname` on Enterprise hosts; "github.com" is
+    /// dropped because plain `gh auth login` targets it.
+    private var forgeRemoteHost: String? {
+        guard let remote = checkout.status?.remoteUrl else { return nil }
+        var s = remote
+        for prefix in ["ssh://", "https://", "http://", "git@"] where s.hasPrefix(prefix) {
+            s = String(s.dropFirst(prefix.count))
+        }
+        if let at = s.firstIndex(of: "@") { s = String(s[s.index(after: at)...]) }
+        if let end = s.firstIndex(where: { $0 == "/" || $0 == ":" }) {
+            s = String(s[..<end])
+        }
+        let host = s.trimmingCharacters(in: .whitespaces)
+        return host.isEmpty ? nil : host
+    }
+
+    private func forgeCommands(for issue: ForgeIssue) -> [String] {
+        switch issue {
+        case .cliMissing:
+            return ["brew install gh", "sudo apt install gh", "gh auth login"]
+        case .unauthenticated:
+            if let host = forgeRemoteHost, host != "github.com" {
+                return ["gh auth login --hostname \(host)"]
+            }
+            return ["gh auth login"]
+        }
+    }
+
+    @ViewBuilder private var forgeSetupBanner: some View {
+        if let issue = forgeIssue {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(ClaudePalette.warning)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(issue.title)
+                        .font(typography.sans(12, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                    Text("Run this on the host, then refresh:")
+                        .font(typography.sans(12))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                    ForEach(forgeCommands(for: issue), id: \.self) { command in
+                        forgeCopyCommand(command)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(ClaudePalette.warning.opacity(0.08))
+            .transition(.opacity)
+        }
+    }
+
+    @State private var copiedForgeCommand: String?
+
+    private func forgeCopyCommand(_ command: String) -> some View {
+        Button {
+            UIPasteboard.general.string = command
+            Haptics.success()
+            copiedForgeCommand = command
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                if copiedForgeCommand == command { copiedForgeCommand = nil }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: copiedForgeCommand == command ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(command)
+                    .font(typography.mono(12))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(ClaudePalette.ink)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(ClaudePalette.chip, in: .capsule)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Copy \(command)")
     }
 
     // MARK: Merge conflict banner

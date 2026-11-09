@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
+import UniformTypeIdentifiers
 import UIKit
 
 /// Contract for ticket M3b: the "Files" page of the workspace panel (`WorkspacePanel`).
@@ -9,6 +10,9 @@ struct WorkspaceFilesView: View {
     let checkout: CheckoutStore
 
     @State private var stack: [WorkspaceFilesRoute] = []
+    /// Workspace-relative path of a file the Files page should flash and scroll to
+    /// ("Reveal in Files page" from the viewer); consumed by the containing directory page.
+    @State private var revealTarget: String?
     private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
@@ -30,9 +34,20 @@ struct WorkspaceFilesView: View {
         case .file(let path):
             WorkspaceFileViewer(
                 checkout: checkout, relPath: path, onBack: { stack.removeLast() },
-                backLabel: backLabel(for: path))
+                backLabel: backLabel(for: path), onReveal: { reveal(relPath: path) })
             .id(path)
         }
+    }
+
+    /// Pop the file's routes off the stack; the containing directory page stays (or, for a
+    /// root-level file, the root list). The page consumes `revealTarget` to flash the row.
+    private func reveal(relPath: String) {
+        stack.removeAll { route in
+            if case .file = route { return true }
+            return false
+        }
+        revealTarget = relPath
+        Haptics.selection()
     }
 
     private func directoryList(path: String) -> some View {
@@ -44,7 +59,9 @@ struct WorkspaceFilesView: View {
             },
             onOpenFile: { path in
                 if stack.last != .file(path) { stack.append(.file(path)) }
-            })
+            },
+            revealTarget: revealTarget,
+            onRevealConsumed: { revealTarget = nil })
         // A distinct identity per directory: fresh state, fresh `onAppear`, no stale rows.
         .id(path)
     }
@@ -92,6 +109,10 @@ private struct WorkspaceFilesDirectoryList: View {
     let onBack: (() -> Void)?
     let onOpenDirectory: (String) -> Void
     let onOpenFile: (String) -> Void
+    /// Workspace-relative path to flash and scroll to, if any ("Reveal in Files page").
+    var revealTarget: String?
+    /// Called once the containing page has consumed `revealTarget` (or timed out).
+    var onRevealConsumed: () -> Void = {}
 
     /// The listing of this page's directory, captured when this page's refresh completed. The
     /// store keeps a single listing, so pages snapshot it rather than watch it change.
@@ -106,6 +127,13 @@ private struct WorkspaceFilesDirectoryList: View {
     @State private var pendingDelete: FileExplorerEntry?
     @State private var sharingPath: String?
     @State private var shareTarget: SharePayload?
+    @State private var savingToFilesPath: String?
+    @State private var exportDocument: WorkspaceExportDocument?
+    @State private var exportType: UTType?
+    @State private var exportName: String?
+    /// The flash-highlighted row (workspace-relative path), if any; clears after a beat.
+    @State private var revealedRow: String?
+    @State private var revealHandled: String?
     private let typography = ClaudeTypography()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// "Mention in chat" from a row's long-press; nil disables the action.
@@ -120,6 +148,8 @@ private struct WorkspaceFilesDirectoryList: View {
             content
         }
         .onAppear { Task { await refresh() } }
+        .onChange(of: listing) { _, _ in syncReveal() }
+        .onChange(of: revealTarget) { _, _ in syncReveal() }
         .overlay(alignment: .bottom) { toastView }
         .alert(namePromptTitle, isPresented: namePromptBinding) {
             TextField(namePromptPlaceholder, text: $nameText)
@@ -130,6 +160,25 @@ private struct WorkspaceFilesDirectoryList: View {
         }
         .sheet(item: $shareTarget) { target in
             ActivityView(items: [target.url])
+        }
+        .fileExporter(
+            isPresented: Binding(
+                get: { exportDocument != nil },
+                set: { if !$0 { exportDocument = nil } }),
+            document: exportDocument ?? WorkspaceExportDocument(data: Data()),
+            contentType: exportType ?? .data,
+            defaultFilename: exportName
+        ) { result in
+            exportDocument = nil
+            switch result {
+            case .success:
+                Haptics.success()
+                showToast("Saved to Files")
+            case .failure(let error):
+                guard !WorkspaceShare.isUserCancellation(error) else { return }
+                Haptics.failure()
+                showToast("Couldn't save: \(error.localizedDescription)")
+            }
         }
         .confirmationDialog(
             "Delete “\(pendingDelete?.name ?? "")”?",
@@ -311,18 +360,25 @@ private struct WorkspaceFilesDirectoryList: View {
     }
 
     private func list(_ visible: [FileExplorerEntry]) -> some View {
-        return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
-                    if index > 0 {
-                        ClaudeDivider().padding(.leading, 46)
+        return ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 {
+                            ClaudeDivider().padding(.leading, 46)
+                        }
+                        row(entry)
+                            .id(relative(entry))
                     }
-                    row(entry)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
+            .refreshable { await refresh() }
+            .onChange(of: revealedRow) { _, target in
+                guard let target else { return }
+                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .center) }
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .refreshable { await refresh() }
     }
 
     private func row(_ entry: FileExplorerEntry) -> some View {
@@ -349,7 +405,7 @@ private struct WorkspaceFilesDirectoryList: View {
                     }
                 }
                 Spacer(minLength: 6)
-                if sharingPath == entry.path {
+                if sharingPath == entry.path || savingToFilesPath == entry.path {
                     ProgressView().controlSize(.small)
                 } else if entry.isDirectory {
                     Image(systemName: "chevron.right")
@@ -360,6 +416,7 @@ private struct WorkspaceFilesDirectoryList: View {
             .padding(.horizontal, 12)
             .frame(height: 46)
             .contentShape(.rect)
+            .background(revealedRow == relative(entry) ? ClaudePalette.chip.opacity(0.9) : Color.clear)
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -370,6 +427,9 @@ private struct WorkspaceFilesDirectoryList: View {
             }
             Button("Share…", systemImage: "square.and.arrow.up") {
                 share(entry)
+            }
+            Button("Save to Files…", systemImage: "square.and.arrow.down") {
+                saveToFiles(entry)
             }
             Button("Rename…", systemImage: "pencil") {
                 nameText = entry.name
@@ -578,6 +638,43 @@ private struct WorkspaceFilesDirectoryList: View {
                 showToast("Couldn't prepare the file for sharing.")
             }
             sharingPath = nil
+        }
+    }
+
+    /// Reads the bytes through the files store into memory and presents `fileExporter`.
+    /// Same read path as share; no HTTP token route on this client (see WorkspaceShare).
+    private func saveToFiles(_ entry: FileExplorerEntry) {
+        guard savingToFilesPath == nil else { return }
+        savingToFilesPath = entry.path
+        Haptics.selection()
+        Task {
+            do {
+                let payload = try await WorkspaceShare.prepareExport(
+                    checkout, path: relative(entry), name: entry.name)
+                exportName = payload.displayName
+                exportType = payload.contentType
+                exportDocument = WorkspaceExportDocument(data: payload.data)
+            } catch let error as WorkspaceShare.ShareError {
+                if case .unreadable(let message) = error { showToast(message) }
+            } catch {
+                showToast("Couldn't prepare the file.")
+            }
+            savingToFilesPath = nil
+        }
+    }
+
+    /// Fires only in the page that actually holds the row: flash it, scroll to it, then clear.
+    private func syncReveal() {
+        guard let target = revealTarget, revealHandled != target else { return }
+        guard case .success(let entries) = listing,
+            entries.contains(where: { relative($0) == target })
+        else { return }
+        revealHandled = target
+        revealedRow = target
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            if revealedRow == revealTarget { revealedRow = nil }
+            onRevealConsumed()
         }
     }
 
