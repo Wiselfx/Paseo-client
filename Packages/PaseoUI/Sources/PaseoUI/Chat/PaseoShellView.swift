@@ -56,7 +56,8 @@ public struct PaseoShellView: View {
                     selectedAgentId: selectedAgentId,
                     onSelectAgent: { select($0) },
                     onNewAgent: { openNewAgent(workspace: $0) },
-                    onDisconnect: onDisconnect
+                    onDisconnect: onDisconnect,
+                    onTogglePanel: { settlePanel(open: !isPanelOpen) }
                 )
                 .frame(width: drawerWidth)
                 .frame(maxHeight: .infinity, alignment: .top)
