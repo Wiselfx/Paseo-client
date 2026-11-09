@@ -57,8 +57,8 @@ struct PaseoSidebar: View {
             switch selection {
             case .settings:
                 PaseoSettingsView(session: session, onDisconnect: onDisconnect)
-            case .comingSoon(let title):
-                ClaudeSidebarComingSoonSheet(title: title)
+            case .schedules:
+                ClaudeSchedulesView(session: session)
             case .newWorkspace:
                 ClaudeNewWorkspaceSheet(
                     session: session, defaultProjectId: selectedWorkspaceProjectId
@@ -161,7 +161,7 @@ struct PaseoSidebar: View {
 
     private var navigation: some View {
         VStack(spacing: 0) {
-            navigationRow("Scheduled", symbol: "clock") { sheet = .comingSoon("Scheduled") }
+            navigationRow("Scheduled", symbol: "clock") { sheet = .schedules }
         }
         .padding(.top, 4)
     }
@@ -570,42 +570,18 @@ private struct SidebarRollHeightKey: PreferenceKey {
 
 private enum PaseoSidebarSheet: Identifiable {
     case settings
-    case comingSoon(String)
+    case schedules
     case newWorkspace
 
     var id: String {
         switch self {
         case .settings: "settings"
-        case .comingSoon(let title): "coming.\(title)"
+        case .schedules: "schedules"
         case .newWorkspace: "newWorkspace"
         }
     }
 }
 
-/// The screens that do not exist yet, in ClaudeUI's sheet chrome.
-private struct ClaudeSidebarComingSoonSheet: View {
-    let title: String
-    @Environment(\.dismiss) private var dismiss
-    private let typography = ClaudeTypography()
-
-    var body: some View {
-        VStack(spacing: 18) {
-            SheetHeader(title: title, close: { dismiss() })
-            Spacer()
-            Text("Coming soon")
-                .font(typography.serif(24, relativeTo: .title2))
-                .foregroundStyle(ClaudePalette.ink)
-            Text("This screen isn't built yet.")
-                .font(typography.sans(14))
-                .foregroundStyle(ClaudePalette.secondaryInk)
-            Spacer()
-        }
-        .background(ClaudePalette.background)
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
-    }
-}
 
 /// The minimal new-workspace sheet in ClaudeUI's sheet chrome: pick a project (defaulting to the
 /// selected workspace's project), an optional name, and create a worktree off the project's current
