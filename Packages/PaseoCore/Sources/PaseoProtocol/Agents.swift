@@ -124,9 +124,18 @@ public struct SendAgentMessageRequest: PaseoRequest {
     public var messageId: String?
     /// `steer` or `interrupt` when the agent is mid-turn.
     public var activeTurnBehavior: String?
+    /// Inline base64 images. Text-only provider models reject these, so prefer a file attachment
+    /// and a path hint for those providers.
+    public var images: [ImageAttachment]?
+    /// Structured attachments (`text`, `review`, `uploaded_file`, forge links).
+    public var attachments: [AgentAttachment]?
 
-    public init(agentId: String, text: String, messageId: String? = nil, activeTurnBehavior: String? = nil) {
-        self.agentId = agentId; self.text = text; self.messageId = messageId; self.activeTurnBehavior = activeTurnBehavior
+    public init(
+        agentId: String, text: String, messageId: String? = nil, activeTurnBehavior: String? = nil,
+        images: [ImageAttachment]? = nil, attachments: [AgentAttachment]? = nil
+    ) {
+        self.agentId = agentId; self.text = text; self.messageId = messageId
+        self.activeTurnBehavior = activeTurnBehavior; self.images = images; self.attachments = attachments
     }
 
     public struct Response: Decodable, Sendable {

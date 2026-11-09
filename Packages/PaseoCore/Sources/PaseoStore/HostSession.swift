@@ -85,6 +85,7 @@ public final class HostSession {
         if let snapshot = agents.first(where: { $0.id == agentId }) {
             store.applyAgent(snapshot)
         }
+        store.update(serverInfo: serverInfo)
         conversations[agentId] = store
         sendSubscription()
 
@@ -155,6 +156,7 @@ public final class HostSession {
             workspaceDirectory.update(serverInfo: info)
             gitExtras.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
+            for store in conversations.values { store.update(serverInfo: info) }
             if sawReconnect {
                 sawReconnect = false
                 await resync()
@@ -175,6 +177,7 @@ public final class HostSession {
         let stores = Array(conversations.values)
         for store in stores {
             await store.catchUp()
+            await store.reloadSubagents()
         }
         workspaceDirectory.prepareForReconnect()
         await workspaceDirectory.reload()
@@ -204,6 +207,7 @@ public final class HostSession {
             terminals.handle(messageType: messageType, raw: raw)
             agentControl.handle(messageType: messageType, raw: raw, conversations: conversations)
             hostSettings.handle(messageType: messageType, raw: raw)
+            for store in conversations.values { store.handleSubagentUpdate(messageType: messageType, raw: raw) }
             await handleUnhandled(messageType: messageType, raw: raw)
 
         case .binaryFrame(let data):
@@ -328,8 +332,12 @@ public final class ConversationStore: Identifiable {
     public private(set) var actionError: String?
     /// The composer text. Lives here so it survives navigating away and back.
     public var draft = ""
+    /// In-conversation search (find bar). Owned here so results survive view churn.
+    public let search: ConversationSearch
+    /// Provider-managed subagents for this agent's track.
+    public let subagents: ConversationSubagents
 
-    private let client: (any DaemonClient)?
+    internal let client: (any DaemonClient)?
     private var isCatchingUp = false
 
     /// True while the agent works: an active turn, or status `.running`.
@@ -338,11 +346,15 @@ public final class ConversationStore: Identifiable {
     init(agentId: String) {
         self.agentId = agentId
         self.client = nil
+        self.search = ConversationSearch(agentId: agentId, client: nil)
+        self.subagents = ConversationSubagents(agentId: agentId, client: nil)
     }
 
     internal init(agentId: String, client: any DaemonClient) {
         self.agentId = agentId
         self.client = client
+        self.search = ConversationSearch(agentId: agentId, client: client)
+        self.subagents = ConversationSubagents(agentId: agentId, client: client)
     }
 
     /// Loads the tail page. Called by `HostSession` when the conversation opens.
@@ -630,7 +642,7 @@ public final class ConversationStore: Identifiable {
         }
     }
 
-    private func rollBackSend(clientId: String, text: String, error: String) {
+    internal func rollBackSend(clientId: String, text: String, error: String) {
         timeline.removePendingUserMessage(clientMessageId: clientId)
         updateTurns()
         if draft.isEmpty { draft = text }
@@ -647,7 +659,15 @@ public final class ConversationStore: Identifiable {
         turns = TurnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
     }
 
-    private static func nowTimestamp() -> String {
+    /// Optimistic bubble for a send performed by a feature extension.
+    internal func showPendingSend(text: String, clientId: String, timestamp: String) {
+        timeline.addPendingUserMessage(text: text, clientMessageId: clientId, timestamp: timestamp)
+        updateTurns()
+    }
+
+    internal func markSendAccepted() { actionError = nil }
+
+    internal static func nowTimestamp() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: Date())

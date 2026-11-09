@@ -53,6 +53,10 @@ let usage = """
                                create, inspect, update, pause/resume, run once, logs and delete
       git-extras [cwd]         full stack on /tmp/fixture-git: modern-vs-legacy diff,
                                branch suggestions/switch, discard, live file watch, PR badge
+      attachments-search <agentId> [query]
+                               full stack: search the conversation, list provider subagents and
+                               send a message with a structured text attachment (default query
+                               "ready")
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -323,6 +327,12 @@ do {
     case "git-extras":
         try await runGitExtras(
             connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-git/scratch-repo")
+    case "attachments-search":
+        guard let agentId = arguments.commandArguments.first else {
+            throw ProbeError("attachments-search needs an <agentId>")
+        }
+        let query = arguments.commandArguments.dropFirst().first ?? "ready"
+        try await runAttachmentsSearch(connection, agentId: agentId, query: query)
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -1013,4 +1023,38 @@ func eventuallyProbe(timeout: TimeInterval, _ condition: @MainActor () -> Bool) 
         try? await Task.sleep(for: .milliseconds(100))
     }
     return condition()
+}
+
+// MARK: - T12: attachments, search and subagents
+
+@MainActor
+func runAttachmentsSearch(_ connection: DaemonConnection, agentId: String, query: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    let store = session.conversation(for: agentId)
+    try await waitUntil("the conversation to load", timeout: 30) { store.phase == .ready }
+
+    print("agent \(String(agentId.prefix(8))) rows=\(store.timeline.rows.count) turns=\(store.turns.count)")
+    print("provider subagents supported=\(store.subagents.isSupported)")
+
+    await store.subagents.load()
+    print("provider subagents=\(store.subagents.items.count) active=\(store.subagents.active.count) error=\(store.subagents.error ?? "none")")
+    for subagent in store.subagents.items {
+        let title = subagent.title ?? "-"
+        print("  \(String(subagent.id.prefix(8))) \(subagent.provider) \(subagent.status) \(title)")
+    }
+
+    _ = await store.search.search(query)
+    print("search query=\"\(query)\" epoch=\(store.search.epoch ?? "-") locations=\(store.search.locations.count) matches=\(store.search.matchCount) error=\(store.search.error ?? "none")")
+    for location in store.search.locations.prefix(10) {
+        print("  seq=\(location.seq) role=\(location.role) count=\(location.count ?? 1)")
+    }
+
+    let attachment = AgentAttachment.text(
+        .init(text: "T12 probe attachment: hello from the sandbox.", title: "T12 probe"))
+    await store.sendWithAttachments(
+        "T12 probe: acknowledging the attached note.", attachments: [attachment])
+    print("send actionError=\(store.actionError ?? "none") pending=\(store.timeline.rows.contains { $0.isPending })")
+    session.closeConversation(agentId)
 }
