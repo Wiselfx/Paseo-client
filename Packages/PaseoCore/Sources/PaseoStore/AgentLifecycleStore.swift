@@ -121,6 +121,30 @@ public final class AgentLifecycleStore {
         }
     }
 
+    /// Promotes a managed subagent to a standalone agent (`agent.detach.request`): the daemon
+    /// clears its `paseo.parent-agent-id` label, so it stops appearing under its parent. The
+    /// label change itself arrives on the usual `agent_update` stream. Hosts without
+    /// `features.agentDetach` reject the request; the message is surfaced in `actionError`.
+    @discardableResult
+    public func detach(agentId: String) async -> Bool {
+        guard !isWorking else { return false }
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            let response = try await client.send(AgentDetachRequest(agentId: agentId))
+            guard response.accepted else {
+                actionError = response.error ?? "The daemon rejected the detach."
+                return false
+            }
+            patch(agentId) { $0.labels?.removeValue(forKey: AgentParentLabel.agentId) }
+            actionError = nil
+            return true
+        } catch let caught {
+            actionError = paseoStoreErrorText(caught)
+            return false
+        }
+    }
+
     /// Renames the agent (`update_agent_request`).
     @discardableResult
     public func rename(agentId: String, to name: String) async -> Bool {

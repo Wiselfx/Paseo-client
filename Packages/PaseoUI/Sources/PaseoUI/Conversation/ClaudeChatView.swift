@@ -206,8 +206,12 @@ public struct ClaudeChatView: View {
             ClaudeAgentControlsSheet(session: session, store: store)
         case .subagents:
             ChatSubagentsSheet(
-                subagents: store.subagents, typography: typography,
-                hiddenIds: $hiddenSubagentIds)
+                session: session, parentAgentId: store.agentId, subagents: store.subagents,
+                typography: typography, hiddenIds: $hiddenSubagentIds,
+                onOpenAgent: { agentId in
+                    sheet = nil
+                    onOpenAgent?(agentId)
+                })
         case .backgroundWork:
             ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork, typography: typography)
         case .turnNav:

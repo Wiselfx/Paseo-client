@@ -216,6 +216,21 @@ public struct UpdateAgentRequest: PaseoRequest {
     public typealias Response = AgentActionResponse
 }
 
+// Source: messages.ts `AgentDetachRequestMessageSchema`, `AgentDetachResponseMessageSchema`
+
+/// Promotes a managed subagent: the daemon clears the `paseo.parent-agent-id` label and the
+/// child continues as a standalone agent (upstream `AgentDetachRequestMessageSchema`,
+/// messages.ts:2151-2161). Only hosts advertising `features.agentDetach` accept it.
+public struct AgentDetachRequest: PaseoRequest {
+    public static let type = "agent.detach.request"
+    public static let responseType = "agent.detach.response"
+    public var requestId = ""
+    public var agentId: String
+    public init(agentId: String) { self.agentId = agentId }
+
+    public typealias Response = AgentActionResponse
+}
+
 // Source: messages.ts `ArchiveAgentRequestMessageSchema`, `AgentArchivedMessageSchema`
 
 /// Soft delete. There is no dedicated response message: the daemon broadcasts `agent_archived`,

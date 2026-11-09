@@ -8,21 +8,29 @@ import UIKit
 
 /// Counts the pill reports: the ticket's wording is `N subagents`, `N working`, `N failed`.
 /// Provider rows carry no attention/needs-input signal, so there is no "needs input" mark here.
+/// Managed rows are ordinary agents (`session.subagents(of:)`), so they do carry status.
 struct SubagentTrackPill: View {
     let items: [ProviderSubagent]
+    /// Paseo-managed child agents: ordinary agents labelled with this parent's id.
+    var managed: [AgentSnapshot] = []
     let action: () -> Void
 
     private let typography = ClaudeTypography()
 
-    var running: Int { items.filter { $0.status == .running }.count }
-    var failed: Int { items.filter { $0.status == .failed }.count }
+    var running: Int {
+        items.filter { $0.status == .running }.count + managed.filter { $0.status == .running }.count
+    }
+    var failed: Int {
+        items.filter { $0.status == .failed }.count + managed.filter { $0.status == .error }.count
+    }
+    var total: Int { items.count + managed.count }
 
     var text: String {
         var parts: [String] = []
         if running > 0 { parts.append("\(running) working") }
         if failed > 0 { parts.append("\(failed) failed") }
         if parts.isEmpty {
-            return items.count == 1 ? "1 subagent" : "\(items.count) subagents"
+            return total == 1 ? "1 subagent" : "\(total) subagents"
         }
         return parts.joined(separator: " · ")
     }
@@ -31,7 +39,7 @@ struct SubagentTrackPill: View {
         var parts: [String] = []
         if running > 0 { parts.append("\(running) working") }
         if failed > 0 { parts.append("\(failed) failed") }
-        if parts.isEmpty { parts.append(items.count == 1 ? "1 subagent" : "\(items.count) subagents") }
+        if parts.isEmpty { parts.append(total == 1 ? "1 subagent" : "\(total) subagents") }
         return parts.joined(separator: ", ")
     }
 
@@ -84,20 +92,73 @@ enum SubagentStatusWord {
     }
 }
 
-/// The sheet that lists provider subagents with status. Rows open a read-only timeline.
-/// "Archive finished" hides every non-running row for this session (app-side only, in memory —
-/// provider rows die with the provider session).
+/// The sheet that lists subagents. Managed rows (ordinary agents labelled with this parent,
+/// `session.subagents(of:)`) open their conversation and can be detached; provider rows are
+/// read-only and open a timeline. "Archive finished" hides every non-running provider row for
+/// this session (app-side only, in memory — provider rows die with the provider session).
 struct ChatSubagentsSheet: View {
+    let session: HostSession
+    let parentAgentId: String
     let subagents: ConversationSubagents
     let typography: ClaudeTypography
     @Binding var hiddenIds: Set<String>
+    /// Opens a managed subagent in the shell; the caller dismisses the sheet.
+    var onOpenAgent: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var pushTarget: ProviderSubagent?
-    @State private var confirmArchiveFinished = false
+    /// One dialog slot: SwiftUI only presents the last dialog attached to a view, so both
+    /// confirmations share this state.
+    @State private var confirmation: Confirmation?
+    @State private var detachingId: String?
+    @State private var detachError: String?
+
+    private enum Confirmation {
+        case detach(AgentSnapshot)
+        case archiveFinished
+
+        var title: String {
+            switch self {
+            case .detach: "Detach subagent?"
+            case .archiveFinished: "Archive finished subagents?"
+            }
+        }
+
+        /// Upstream `resolveDetachSubagentDialog` wording; the archive copy is this app's.
+        var message: String {
+            switch self {
+            case .detach(let agent):
+                "\(Self.detachLabel(agent)) will leave this track and continue as a standalone agent."
+            case .archiveFinished:
+                "Finished rows disappear until the app is relaunched."
+            }
+        }
+
+        /// Upstream `resolveSubagentLabel` (`subagents/detach-subagent.ts`): a blank title, or
+        /// the "new agent" placeholder, names nothing, so the dialog says "This subagent".
+        static func detachLabel(_ agent: AgentSnapshot) -> String {
+            let trimmed = agent.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !trimmed.isEmpty, trimmed.lowercased() != "new agent" else {
+                return "This subagent"
+            }
+            return trimmed
+        }
+    }
 
     private var items: [ProviderSubagent] {
         subagents.items.filter { !hiddenIds.contains($0.id) }
+    }
+
+    /// Paseo-managed child agents, oldest first like upstream's track (`select.ts` sorts by
+    /// `createdAt`); they are ordinary agents, so they never appear in `subagents.items`.
+    private var managed: [AgentSnapshot] {
+        session.subagents(of: parentAgentId)
+            .sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+    }
+
+    /// Upstream gates Detach on `features.agentDetach` (`panels/agent-tracks.tsx:67`).
+    private var canDetach: Bool {
+        session.serverInfo?.hasFeature("agentDetach") == true
     }
 
     private var finishedCount: Int {
@@ -110,7 +171,7 @@ struct ChatSubagentsSheet: View {
                 if subagents.isLoading && items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if items.isEmpty {
+                } else if items.isEmpty && managed.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "person.2")
                             .font(.system(size: 28, weight: .light))
@@ -128,13 +189,19 @@ struct ChatSubagentsSheet: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
+                            ForEach(managed) { agent in
+                                managedRow(agent)
+                                if agent.id != managed.last?.id || !items.isEmpty {
+                                    ClaudeDivider().padding(.leading, 44)
+                                }
+                            }
                             ForEach(items) { item in
                                 subagentRow(item)
                                 if item.id != items.last?.id {
                                     ClaudeDivider().padding(.leading, 44)
                                 }
                             }
-                            if let error = subagents.error {
+                            if let error = detachError ?? subagents.error {
                                 Text(error)
                                     .font(typography.sans(12))
                                     .foregroundStyle(ClaudePalette.failureInk)
@@ -159,7 +226,7 @@ struct ChatSubagentsSheet: View {
                     VStack(spacing: 0) {
                         ClaudeDivider()
                         Button("Archive finished") {
-                            confirmArchiveFinished = true
+                            confirmation = .archiveFinished
                         }
                         .font(typography.sans(15))
                         .foregroundStyle(ClaudePalette.ink)
@@ -174,16 +241,29 @@ struct ChatSubagentsSheet: View {
                     subagents: subagents, subagent: subagent, typography: typography)
             }
             .confirmationDialog(
-                "Archive finished subagents?",
-                isPresented: $confirmArchiveFinished,
-                titleVisibility: .visible
-            ) {
-                Button("Archive finished", role: .destructive) {
-                    hiddenIds.formUnion(items.filter { $0.status != .running }.map(\.id))
+                confirmation?.title ?? "",
+                isPresented: Binding(
+                    get: { confirmation != nil },
+                    set: { if !$0 { confirmation = nil } }),
+                titleVisibility: .visible,
+                presenting: confirmation
+            ) { item in
+                switch item {
+                case .detach(let agent):
+                    // Upstream's confirm is not destructive: detaching loses nothing.
+                    Button("Detach") {
+                        confirmation = nil
+                        Task { await detach(agent) }
+                    }
+                case .archiveFinished:
+                    Button("Archive finished", role: .destructive) {
+                        confirmation = nil
+                        hiddenIds.formUnion(items.filter { $0.status != .running }.map(\.id))
+                    }
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Finished rows disappear until the app is relaunched.")
+                Button("Cancel", role: .cancel) { confirmation = nil }
+            } message: { item in
+                Text(item.message)
             }
             .task { await subagents.load() }
             .presentationDetents([.medium, .large])
@@ -226,6 +306,111 @@ struct ChatSubagentsSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(rowTitle(item)), \(SubagentStatusWord.label(item.status))")
+    }
+
+    /// A managed subagent: ordinary agent row plus the detach action. Upstream shows the action
+    /// cluster always on compact form factors (a phone) and on hover on desktop
+    /// (`subagents-track.tsx`, `actionsAlwaysVisible`), so the button is visible here; the context
+    /// menu carries the same action for a long press.
+    private func managedRow(_ agent: AgentSnapshot) -> some View {
+        HStack(spacing: 12) {
+            PaseoStatusDot(kind: managedStatus(agent))
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(managedTitle(agent))
+                    .font(typography.sans(15, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .lineLimit(1)
+                Text(providerLabel(agent))
+                    .font(typography.sans(12))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if canDetach {
+                if detachingId == agent.id {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 28, height: 28)
+                        .accessibilityLabel("Detaching")
+                } else {
+                    Button {
+                        confirmation = .detach(agent)
+                    } label: {
+                        Image(systemName: "person.badge.minus")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .frame(width: 28, height: 28)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Detach \(managedTitle(agent))")
+                    .accessibilityIdentifier("subagents.detach")
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ClaudePalette.tertiaryInk)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 56)
+        .contentShape(.rect)
+        .onTapGesture {
+            Haptics.selection()
+            onOpenAgent(agent.id)
+        }
+        .contextMenu {
+            Button("Open agent", systemImage: "arrow.up.right.square") {
+                onOpenAgent(agent.id)
+            }
+            if canDetach {
+                Button("Detach", systemImage: "person.badge.minus") {
+                    confirmation = .detach(agent)
+                }
+            }
+        }
+    }
+
+    private func managedTitle(_ agent: AgentSnapshot) -> String {
+        let trimmed = agent.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "New agent" : trimmed
+    }
+
+    private func providerLabel(_ agent: AgentSnapshot) -> String {
+        session.agentControl.provider(agent.provider)?.label ?? agent.provider
+    }
+
+    /// The same dot the panel's agent rows use: attention first, then the lifecycle status.
+    private func managedStatus(_ agent: AgentSnapshot) -> PaseoStatusDot.Kind {
+        switch agent.attention {
+        case .permission: return .needsInput
+        case .error: return .failed
+        case .finished: return .unread
+        case .unknown, nil: break
+        }
+        switch agent.status {
+        case .running: .running
+        case .error: .failed
+        case .initializing, .idle, .closed, .unknown: .idle
+        }
+    }
+
+    /// Detach, then open the agent: upstream's `requestDetachSubagent` opens the detached agent
+    /// and reports a failure through the toast. Here the failure lands in the sheet's error line.
+    private func detach(_ agent: AgentSnapshot) async {
+        detachingId = agent.id
+        detachError = nil
+        let detached = await session.agentLifecycle.detach(agentId: agent.id)
+        detachingId = nil
+        guard detached else {
+            detachError = session.agentLifecycle.actionError ?? "The detach failed."
+            return
+        }
+        // The label is gone on the daemon; refresh so the row leaves this list and the agent
+        // list stops nesting it.
+        await session.refreshAgents()
+        Haptics.success()
+        onOpenAgent(agent.id)
     }
 
     private func rowTitle(_ item: ProviderSubagent) -> String {
