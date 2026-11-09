@@ -93,15 +93,15 @@ lines of dead ClaudeUI demo code (ClaudeAppearance now its own file), M7g backgr
 (gated: daemon 0.15.2 lacks it) + tappable file paths in chat (fixed M7f's subagent timeline wire
 shape), M1b saved hosts (Keychain per host), TLS + advanced URI, footer host switcher, Settings →
 Hosts; Info.plist mic/speech keys moved into project.yml (PaseoCore 445/135/17 = 597 green).
-M3i's PR section was never instantiated: fix assigned to M3j. R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+M2.12 workspace labels (+ M7e's
+missing HostSession wiring), M9 Search row + command palette, M3j Save to Files/Reveal, Choose URL,
+file into terminal, gh callout, side-by-side diff, M3i PR section now mounted, M4e About/Diagnostics
+(scrubbed report)/Terminal/Sidebar pages (PaseoCore 466/139/17 = 622 green; PARITY 269 done / 80
+missing of 421). Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - M7h `m7h-message-actions` on worker 0778f3b0-0603-4eae-ab7a-3a01b367bf53: Edit/Rerun, fork, images in prose.
-- M4e `m4e-about` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: About, Diagnostics, scrollback, sidebar settings.
-- M9 `m9-command-center` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: Search row + command palette.
-- M3j `m3j-panel-leftovers` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: save to Files, script URLs, file into terminal, forge callout, side-by-side diff.
-- M2.12 `m212-labels` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: workspace labels store + sidebar UI.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
 Next candidates: advertise `owned_subscriptions` (DeepSeek, off-peak; complex); notifications/push research (DeepSeek after 10:00 UTC).
