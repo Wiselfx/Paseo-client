@@ -66,19 +66,47 @@ extension PaseoSidebar {
         } else {
             pinnedSection(pinned)
             ForEach(visible) { bucket in
-                sectionHeader(bucket.title)
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(bucket.workspaces) { workspace in
-                        workspaceRow(workspace)
+                dateGroupHeader(bucket)
+                SidebarRoll(expanded: !isDateGroupCollapsed(bucket.id)) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(bucket.workspaces) { workspace in
+                            workspaceRow(workspace)
+                        }
                     }
+                    // Animated reorder (active-first); None under Reduce Motion.
+                    .animation(
+                        reduceMotion ? nil : .easeInOut(duration: 0.3),
+                        value: bucket.workspaces.map(\.id))
                 }
-                // Animated reorder (active-first); None under Reduce Motion.
-                .animation(
-                    reduceMotion ? nil : .easeInOut(duration: 0.3),
-                    value: bucket.workspaces.map(\.id))
             }
             trailingRows
         }
+    }
+
+    /// The date-group header, collapsible like a project row (persisted by bucket id).
+    func dateGroupHeader(_ bucket: SidebarDateBucket) -> some View {
+        let collapsed = isDateGroupCollapsed(bucket.id)
+        return Button {
+            Haptics.selection()
+            withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+                toggleDateGroupCollapsed(bucket.id)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                ClaudeChevron(expanded: !collapsed)
+                Text(bucket.title)
+                    .font(typography.sans(15))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 18)
+            .padding(.bottom, 6)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(bucket.title)
+        .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
     }
 
     /// The Pinned section, shared by both groupings.
@@ -224,38 +252,102 @@ extension PaseoSidebar {
         workspace.createdAt.flatMap(PaseoDate.parse)
     }
 
-    /// Date buckets over the same visible/label-filtered set the project grouping uses:
-    /// today / yesterday / earlier by last activity, sorted and floated within each bucket.
+    /// Date buckets per DSH `date-groups`: today, yesterday, weekday names for the last six
+    /// days, then one `earlier` bucket for anything a week or more old. Same visible/label-
+    /// filtered set as the project grouping; each bucket is sorted and floated (active-first).
     func dateBuckets() -> [SidebarDateBucket] {
         let calendar = Calendar.current
         let now = Date()
         let startOfToday = calendar.startOfDay(for: now)
-        let startOfYesterday =
-            calendar.date(byAdding: .day, value: -1, to: startOfToday) ?? startOfToday
+        var byBucket: [String: [WorkspaceDescriptor]] = ["today": [], "yesterday": [], "earlier": []]
+        for offset in 2...6 { byBucket["day-\(offset)"] = [] }
         let visible = session.workspaceDirectory.workspaces.filter {
             !$0.isPinned && isVisible($0) && matchesLabelFilter($0)
         }
-        var today: [WorkspaceDescriptor] = []
-        var yesterday: [WorkspaceDescriptor] = []
-        var earlier: [WorkspaceDescriptor] = []
         for workspace in visible {
             let date = activityDate(for: workspace)
-            if let date, date >= startOfToday {
-                today.append(workspace)
-            } else if let date, date >= startOfYesterday {
-                yesterday.append(workspace)
-            } else {
-                earlier.append(workspace)
+            let start = date.map { calendar.startOfDay(for: $0) }
+            let offset = start.map {
+                calendar.dateComponents([.day], from: $0, to: startOfToday).day ?? 999
             }
+            let key: String
+            switch offset {
+            case .some(let days) where days <= 0: key = "today"
+            case .some(1): key = "yesterday"
+            case .some(let days) where (2...6).contains(days): key = "day-\(days)"
+            default: key = "earlier"
+            }
+            byBucket[key, default: []].append(workspace)
         }
-        return [
+        var buckets: [SidebarDateBucket] = [
             SidebarDateBucket(
-                id: "today", title: "Today", workspaces: sortedWorkspaces(today)),
+                id: "today", title: "Today", workspaces: sortedWorkspaces(byBucket["today"] ?? [])),
             SidebarDateBucket(
-                id: "yesterday", title: "Yesterday", workspaces: sortedWorkspaces(yesterday)),
-            SidebarDateBucket(
-                id: "earlier", title: "Earlier", workspaces: sortedWorkspaces(earlier)),
+                id: "yesterday", title: "Yesterday",
+                workspaces: sortedWorkspaces(byBucket["yesterday"] ?? [])),
         ]
+        let symbols = calendar.weekdaySymbols
+        for offset in 2...6 {
+            let start = calendar.date(byAdding: .day, value: -offset, to: startOfToday) ?? startOfToday
+            let weekdayIndex = calendar.component(.weekday, from: start) - 1
+            let title = symbols.indices.contains(weekdayIndex) ? symbols[weekdayIndex] : "Earlier"
+            buckets.append(
+                SidebarDateBucket(
+                    id: "day-\(offset)", title: title,
+                    workspaces: sortedWorkspaces(byBucket["day-\(offset)"] ?? [])))
+        }
+        buckets.append(
+            SidebarDateBucket(
+                id: "earlier", title: "Earlier",
+                workspaces: sortedWorkspaces(byBucket["earlier"] ?? [])))
+        return buckets
+    }
+
+    // MARK: Date-group collapse (persisted, like projects)
+
+    var collapsedDateGroupsSet: Set<String> {
+        Set(collapsedDateGroups.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+    }
+
+    func isDateGroupCollapsed(_ id: String) -> Bool {
+        collapsedDateGroupsSet.contains(id)
+    }
+
+    func toggleDateGroupCollapsed(_ id: String) {
+        var collapsed = collapsedDateGroupsSet
+        if collapsed.contains(id) {
+            collapsed.remove(id)
+        } else {
+            collapsed.insert(id)
+        }
+        collapsedDateGroups = collapsed.sorted().joined(separator: ",")
+    }
+
+    // MARK: Manual unread marks (persisted locally, DSH `manual-unread`)
+
+    var manualUnreadSet: Set<String> {
+        Set(manualUnread.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+    }
+
+    func isManuallyUnread(_ workspace: WorkspaceDescriptor) -> Bool {
+        manualUnreadSet.contains(workspace.id)
+    }
+
+    func toggleManualUnread(_ workspace: WorkspaceDescriptor) {
+        var set = manualUnreadSet
+        if set.contains(workspace.id) {
+            set.remove(workspace.id)
+        } else {
+            set.insert(workspace.id)
+        }
+        manualUnread = set.sorted().joined(separator: ",")
+    }
+
+    /// Cleared when the workspace is opened.
+    func clearManualUnread(_ workspace: WorkspaceDescriptor) {
+        var set = manualUnreadSet
+        guard set.remove(workspace.id) != nil else { return }
+        manualUnread = set.sorted().joined(separator: ",")
     }
 
     /// Workspaces within a project per the sidebar sort; projects ordered by their newest

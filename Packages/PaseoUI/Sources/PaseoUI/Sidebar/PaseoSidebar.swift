@@ -41,6 +41,10 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.activeFirst") var activeFirst = true
     /// Project ids whose "Set up worktree scripts" callout was dismissed.
     @AppStorage("paseo.sidebar.setupCalloutDismissed") var setupCalloutDismissed = ""
+    /// Workspace ids manually marked unread (DSH manual-unread). Cleared on open.
+    @AppStorage("paseo.sidebar.manualUnread") var manualUnread = ""
+    /// Date-group ids (today/yesterday/day-2…day-6/earlier) whose section is collapsed.
+    @AppStorage("paseo.sidebar.collapsedDateGroups") var collapsedDateGroups = ""
     @AppStorage("paseo.sidebar.hiddenWorkspaces") var hiddenWorkspaces = ""
     /// The sidebar label filter: the raw label name, or "" for All (one at a time, by design).
     @AppStorage("paseo.sidebar.labelFilter") var labelFilter = ""
