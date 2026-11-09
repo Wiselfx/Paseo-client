@@ -340,6 +340,8 @@ public final class ConversationStore: Identifiable {
     public let search: ConversationSearch
     /// Provider-managed subagents for this agent's track.
     public let subagents: ConversationSubagents
+    /// File uploads for this conversation (`file.upload.request` + binary frames).
+    public let uploads: ConversationUpload
 
     internal let client: (any DaemonClient)?
     private var isCatchingUp = false
@@ -352,6 +354,7 @@ public final class ConversationStore: Identifiable {
         self.client = nil
         self.search = ConversationSearch(agentId: agentId, client: nil)
         self.subagents = ConversationSubagents(agentId: agentId, client: nil)
+        self.uploads = ConversationUpload(client: nil)
     }
 
     internal init(agentId: String, client: any DaemonClient) {
@@ -359,6 +362,7 @@ public final class ConversationStore: Identifiable {
         self.client = client
         self.search = ConversationSearch(agentId: agentId, client: client)
         self.subagents = ConversationSubagents(agentId: agentId, client: client)
+        self.uploads = ConversationUpload(client: client)
     }
 
     /// Loads the tail page. Called by `HostSession` when the conversation opens.

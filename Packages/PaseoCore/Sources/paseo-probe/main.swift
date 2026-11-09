@@ -57,6 +57,10 @@ let usage = """
                                create, inspect, update, pause/resume, run once, logs and delete
       git-extras [cwd]         full stack on /tmp/fixture-git: modern-vs-legacy diff,
                                branch suggestions/switch, discard, live file watch, PR badge
+      upload <agentId> <localFile>
+                               full stack: upload a tiny text file to the sandbox agent through
+                               file.upload.request + binary frames, then ask it to print the
+                               file's first line, showing the reply
       attachments-search <agentId> [query]
                                full stack: search the conversation, list provider subagents and
                                send a message with a structured text attachment (default query
@@ -174,6 +178,18 @@ final class LoggingDaemonClient: DaemonClient, @unchecked Sendable {
         }
     }
 
+    func initiate<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> InitiatedResponse<R> {
+        let started = Date()
+        do {
+            let initiated = try await inner.initiate(request, timeout: timeout)
+            print("  req \(R.type) \(milliseconds(since: started)) ok")
+            return initiated
+        } catch {
+            print("  req \(R.type) \(milliseconds(since: started)) FAILED \(error)")
+            throw error
+        }
+    }
+
     func send<M: PaseoOutboundMessage>(_ message: M) async throws {
         let started = Date()
         do {
@@ -181,6 +197,17 @@ final class LoggingDaemonClient: DaemonClient, @unchecked Sendable {
             print("  msg \(M.type) \(milliseconds(since: started))")
         } catch {
             print("  msg \(M.type) \(milliseconds(since: started)) FAILED \(error)")
+            throw error
+        }
+    }
+
+    func send(binary: Data) async throws {
+        let started = Date()
+        do {
+            try await inner.send(binary: binary)
+            print("  bin ✓ \(binary.count)B \(milliseconds(since: started))")
+        } catch {
+            print("  bin ✗ \(binary.count)B \(milliseconds(since: started)) FAILED \(error)")
             throw error
         }
     }
@@ -377,6 +404,14 @@ do {
     case "git-extras":
         try await runGitExtras(
             connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-git/scratch-repo")
+    case "upload":
+        guard let agentId = arguments.commandArguments.first else {
+            throw ProbeError("upload needs an <agentId> <localFile>")
+        }
+        guard let path = arguments.commandArguments.dropFirst().first else {
+            throw ProbeError("upload needs an <agentId> <localFile>")
+        }
+        try await runUpload(connection, agentId: agentId, path: path)
     case "attachments-search":
         guard let agentId = arguments.commandArguments.first else {
             throw ProbeError("attachments-search needs an <agentId>")
@@ -1240,4 +1275,67 @@ func runAttachmentsSearch(_ connection: DaemonConnection, agentId: String, query
         "T12 probe: acknowledging the attached note.", attachments: [attachment])
     print("send actionError=\(store.actionError ?? "none") pending=\(store.timeline.rows.contains { $0.isPending })")
     session.closeConversation(agentId)
+}
+
+// MARK: - T14: file upload
+
+@MainActor
+func runUpload(_ connection: DaemonConnection, agentId: String, path: String) async throws {
+    let url = URL(fileURLWithPath: path)
+    guard let data = try? Data(contentsOf: url) else {
+        throw ProbeError("cannot read file at \(path)")
+    }
+    let fileName = url.lastPathComponent
+    let mimeType = mimeTypeForUpload(extension: url.pathExtension.lowercased())
+
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    let store = session.conversation(for: agentId)
+    try await waitUntil("the conversation to load", timeout: 30) { store.phase == .ready }
+
+    print("uploading \(fileName) (\(data.count) bytes, \(mimeType)) to agent \(String(agentId.prefix(8)))")
+    let file = await store.upload(data: data, fileName: fileName, mimeType: mimeType)
+    guard let file else {
+        throw ProbeError("upload failed: \(store.uploads.error ?? "unknown")")
+    }
+    print("uploaded id=\(file.id) fileName=\(file.fileName) size=\(file.size) path=\(file.path)")
+    print("progress=\(store.uploads.progress) bytesSent=\(store.uploads.bytesSent)/\(store.uploads.totalBytes)")
+
+    let prompt =
+        "I uploaded a file to you at \(file.path). Print exactly its first line and nothing else."
+    await store.sendWithAttachments(prompt, attachments: [.uploadedFile(file)])
+    print("send actionError=\(store.actionError ?? "none") pending=\(store.timeline.rows.contains { $0.isPending })")
+
+    var last = ""
+    var sawRunning = false
+    let deadline = Date().addingTimeInterval(240)
+    while Date() < deadline {
+        let line = describe(store.turns.last, running: store.isRunning)
+        if line != last { print(line); last = line }
+        if store.isRunning { sawRunning = true }
+        if sawRunning, !store.isRunning { break }
+        try await Task.sleep(for: .milliseconds(150))
+    }
+    print("final: turns=\(store.turns.count) running=\(store.isRunning)")
+    if let turn = store.turns.last {
+        for segment in turn.segments {
+            if case .prose(let row) = segment, case .assistantMessage(let message) = row.item {
+                print("reply: \(message.text)")
+            }
+        }
+    }
+    session.closeConversation(agentId)
+}
+
+func mimeTypeForUpload(extension ext: String) -> String {
+    switch ext {
+    case "txt": "text/plain"
+    case "md": "text/markdown"
+    case "json": "application/json"
+    case "png": "image/png"
+    case "jpg", "jpeg": "image/jpeg"
+    case "pdf": "application/pdf"
+    default: "application/octet-stream"
+    }
 }

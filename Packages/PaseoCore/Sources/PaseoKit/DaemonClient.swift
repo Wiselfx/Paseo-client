@@ -61,12 +61,21 @@ public enum DaemonEvent: Sendable {
 /// What PaseoStore depends on. `DaemonConnection` is the real one; tests use a fake.
 public protocol DaemonClient: AnyObject, Sendable {
     /// Sends a request and waits for the response with the same `requestId`. Assigns a fresh
-    /// `requestId`; the caller's value is ignored. Throws `ConnectionError`.
+    /// `requestId` (unless one was pre-set on the request); throws `ConnectionError`.
     func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response
+
+    /// Sends a request and returns as soon as its frame has been written to the socket —
+    /// without awaiting the response. Multi-phase flows (file upload) initiate, stream their
+    /// correlated binary frames in order, then await the response.
+    func initiate<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> InitiatedResponse<R>
 
     /// Sends a session message with no correlated response (`terminal_input`,
     /// `subscribe_terminals_request`, `unsubscribe_terminal_request`). Throws `ConnectionError`.
     func send<M: PaseoOutboundMessage>(_ message: M) async throws
+
+    /// Sends a raw binary WebSocket frame, unparsed — `FileBegin`/`FileChunk`/`FileEnd` frames
+    /// for file upload ride here, correlated by `requestId`. Throws `ConnectionError`.
+    func send(binary: Data) async throws
 
     /// Unsolicited daemon messages, in arrival order. Single consumer.
     var events: AsyncStream<DaemonEvent> { get }
@@ -81,9 +90,28 @@ extension DaemonClient {
     }
 }
 
+/// A request whose frame has been written but whose response has not arrived yet.
+/// `value()` suspends until the daemon answers; throws `ConnectionError`.
+public struct InitiatedResponse<R: PaseoRequest>: Sendable {
+    /// The id the daemon will correlate its response to.
+    public let requestId: String
+    private let perform: @Sendable () async throws -> R.Response
+
+    public init(requestId: String, perform: @escaping @Sendable () async throws -> R.Response) {
+        self.requestId = requestId
+        self.perform = perform
+    }
+
+    public func value() async throws -> R.Response {
+        try await perform()
+    }
+}
+
 /// A text/binary WebSocket. `URLSessionWebSocketTransport` is the real one.
 public protocol WebSocketTransport: Sendable {
     func send(text: String) async throws
+    /// Sends a raw binary frame. File-upload frames ride here.
+    func send(binary: Data) async throws
     /// Suspends until the next frame. Throws when the socket closes or fails.
     func receive() async throws -> WebSocketFrame
     func close(code: Int)

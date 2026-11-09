@@ -46,6 +46,10 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [any PaseoRequest] = []
     private var recordedMessages: [any PaseoOutboundMessage] = []
+    private var sentBinary: [Data] = []
+    /// Test hook invoked right before a binary frame is recorded. Lets a test block the
+    /// upload mid-stream (e.g. to cancel it deterministically).
+    var onBinarySend: (@Sendable (Data) async throws -> Void)?
     private var fetchAgentsHandler: FetchAgentsHandler?
     private var fetchTimelineHandler: FetchTimelineHandler?
     private var sendMessageHandler: SendMessageHandler?
@@ -166,6 +170,8 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
     // MARK: Recorded requests
 
     var requests: [any PaseoRequest] { locked { recorded } }
+    /// Every binary frame sent, in order.
+    var binaryMessages: [Data] { locked { sentBinary } }
 
     func requests<R: PaseoRequest>(_ type: R.Type) -> [R] {
         requests.compactMap { $0 as? R }
@@ -173,9 +179,20 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
 
     // MARK: DaemonClient
 
-    func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
-        locked { recorded.append(request) }
+    func initiate<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> InitiatedResponse<R> {
+        let requestId = request.requestId.isEmpty ? UUID().uuidString : request.requestId
+        var copy = request
+        copy.requestId = requestId
+        locked { recorded.append(copy) }
+        let sent = copy
 
+        return InitiatedResponse(requestId: requestId) { [self] in
+            let response = try await self.handle(request: sent)
+            return response
+        }
+    }
+
+    private func handle<R: PaseoRequest>(request: R) async throws -> R.Response {
         if let handler = locked({ genericHandlers[R.type] }) {
             let value = try await handler(request)
             guard let typed = value as? R.Response else {
@@ -270,6 +287,17 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
 
     func send<M: PaseoOutboundMessage>(_ message: M) async throws {
         locked { recordedMessages.append(message) }
+    }
+
+    func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
+        try await initiate(request, timeout: timeout).value()
+    }
+
+    func send(binary: Data) async throws {
+        if let onBinarySend {
+            try await onBinarySend(binary)
+        }
+        locked { sentBinary.append(binary) }
     }
 
     // MARK: Helpers

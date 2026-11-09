@@ -143,14 +143,16 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         setState(.idle)
     }
 
-    public func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
+    public func initiate<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> InitiatedResponse<R> {
         let isConnected = mutex.withLock { core -> Bool in
             if case .connected = core.state, core.transport != nil { return true }
             return false
         }
         guard isConnected else { throw ConnectionError.disconnected }
 
-        let requestId = UUID().uuidString
+        // Honor a pre-set requestId: callers that stream correlated binary frames (file upload)
+        // choose their id up front. Everyone else leaves it empty and gets a fresh UUID.
+        let requestId = request.requestId.isEmpty ? UUID().uuidString : request.requestId
         var request = request
         request.requestId = requestId
 
@@ -164,41 +166,51 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
             throw ConnectionError.protocolViolation("\(R.type) did not encode as UTF-8")
         }
 
-        let data: Data = try await withCheckedThrowingContinuation { continuation in
-            // Register before sending so a very fast response cannot be missed.
-            let transport = mutex.withLock { core -> (any WebSocketTransport)? in
-                guard case .connected = core.state, let transport = core.transport else { return nil }
-                core.pending[requestId] = RequestWaiter(continuation)
-                return transport
-            }
-            guard let transport else {
-                continuation.resume(throwing: ConnectionError.disconnected)
-                return
-            }
-
-            Task { [weak self] in
-                do {
-                    try await transport.send(text: text)
-                } catch {
-                    let mapped = Self.connectionError(from: error)
-                    self?.resolvePending(requestId, with: .failure(mapped))
-                }
-            }
-
-            Task { [weak self] in
-                do {
-                    try await Task.sleep(for: timeout)
-                } catch {
-                    return
-                }
-                self?.resolvePending(requestId, with: .failure(.timeout))
-            }
+        // Register before sending so a very fast response cannot be missed.
+        let waiter = RequestWaiter()
+        let transport = mutex.withLock { core -> (any WebSocketTransport)? in
+            guard case .connected = core.state, let transport = core.transport else { return nil }
+            core.pending[requestId] = waiter
+            return transport
+        }
+        guard let transport else {
+            _ = mutex.withLock { core in core.pending.removeValue(forKey: requestId) }
+            throw ConnectionError.disconnected
         }
 
+        // Write the frame before returning. A caller that streams binary frames afterwards
+        // (file upload) then has them ride the same socket in a deterministic order.
         do {
-            return try JSONDecoder().decode(SessionPayloadEnvelope<R.Response>.self, from: data).payload
+            try await transport.send(text: text)
         } catch {
-            throw ConnectionError.protocolViolation("could not decode \(R.responseType): \(error)")
+            let mapped = Self.connectionError(from: error)
+            resolvePending(requestId, with: .failure(mapped))
+            throw mapped
+        }
+
+        startTimeout(requestId: requestId, timeout: timeout)
+        return InitiatedResponse(requestId: requestId) {
+            let data = try await waiter.wait()
+            do {
+                return try JSONDecoder().decode(SessionPayloadEnvelope<R.Response>.self, from: data).payload
+            } catch {
+                throw ConnectionError.protocolViolation("could not decode \(R.responseType): \(error)")
+            }
+        }
+    }
+
+    public func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
+        try await initiate(request, timeout: timeout).value()
+    }
+
+    private func startTimeout(requestId: String, timeout: Duration) {
+        Task { [weak self] in
+            do {
+                try await Task.sleep(for: timeout)
+            } catch {
+                return
+            }
+            self?.resolvePending(requestId, with: .failure(.timeout))
         }
     }
 
@@ -223,6 +235,20 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         }
         do {
             try await transport.send(text: text)
+        } catch {
+            throw Self.connectionError(from: error)
+        }
+    }
+
+    public func send(binary: Data) async throws {
+        let transport = mutex.withLock { core -> (any WebSocketTransport)? in
+            guard case .connected = core.state, let transport = core.transport else { return nil }
+            return transport
+        }
+        guard let transport else { throw ConnectionError.disconnected }
+
+        do {
+            try await transport.send(binary: binary)
         } catch {
             throw Self.connectionError(from: error)
         }
@@ -876,18 +902,42 @@ private final class HelloWaiter: @unchecked Sendable {
 
 /// One pending request. A late response finds no entry and is dropped.
 private final class RequestWaiter: @unchecked Sendable {
-    private let continuation: CheckedContinuation<Data, any Error>
+    private struct Box {
+        /// Buffered result, for when the response (or timeout) beats the wait() call.
+        var result: Result<Data, ConnectionError>?
+        /// Suspended waiter, created lazily inside wait().
+        var continuation: CheckedContinuation<Data, any Error>?
+    }
 
-    init(_ continuation: CheckedContinuation<Data, any Error>) {
-        self.continuation = continuation
+    private let mutex = Mutex(Box())
+
+    /// Awaits the daemon's response payload, suspending until `resolvePending` fires.
+    /// Replays immediately if the result arrived first.
+    func wait() async throws -> Data {
+        try await withCheckedThrowingContinuation { continuation in
+            let immediate = mutex.withLock { box -> Result<Data, ConnectionError>? in
+                if let result = box.result { return result }
+                box.continuation = continuation
+                return nil
+            }
+            if let immediate { continuation.resume(with: immediate.mapError { $0 as any Error }) }
+        }
     }
 
     func resume(with result: Result<Data, ConnectionError>) {
-        continuation.resume(with: result)
+        let continuation = mutex.withLock { box -> CheckedContinuation<Data, any Error>? in
+            if let continuation = box.continuation {
+                box.continuation = nil
+                return continuation
+            }
+            box.result = result
+            return nil
+        }
+        continuation?.resume(with: result)
     }
 
     func resume(throwing error: ConnectionError) {
-        continuation.resume(throwing: error)
+        resume(with: .failure(error))
     }
 }
 
@@ -913,6 +963,10 @@ public final class URLSessionWebSocketTransport: WebSocketTransport, @unchecked 
 
     public func send(text: String) async throws {
         try await task.send(.string(text))
+    }
+
+    public func send(binary: Data) async throws {
+        try await task.send(.data(binary))
     }
 
     public func receive() async throws -> WebSocketFrame {
