@@ -87,24 +87,31 @@ extension ClaudeChatView {
 
     /// The crab, feet on the composer card's top edge, flush with its right edge, above the card.
     /// 104 × 72 pt of art; only the resting body takes touches.
-    /// Tap or long-press opens the cost bubble (M17): the conversation's cost/tokens from
-    /// the context-usage data, when the provider reports them. No balance line — Paseo
-    /// has no balance source.
+    /// Long-press opens the cost bubble (M17): the conversation's cost/tokens from the
+    /// context-usage data, when the provider reports them. Tap stays the poke. The bubble
+    /// sits above the crab and closes on tap or after a few seconds. No balance line —
+    /// Paseo has no balance source.
     @ViewBuilder var mascotCrab: some View {
         if mascotEnabled {
-            ZStack(alignment: .topTrailing) {
-                ComposerCrab(state: mascot.state)
-                    .offset(y: -72)
-                    .onTapGesture { showCostBubble.toggle() }
-                    .onLongPressGesture { showCostBubble = true }
-                if showCostBubble, let usage = store.contextUsage,
-                    usage.totalCostUsd != nil || usage.inputTokens != nil || usage.outputTokens != nil
-                {
-                    costBubble(usage: usage)
-                        .offset(y: -72)
-                        .padding(.trailing, 4)
+            ComposerCrab(state: mascot.state)
+                .onLongPressGesture(minimumDuration: 0.35) { showCostBubble = true }
+                .overlay(alignment: .topTrailing) {
+                    if showCostBubble, let usage = store.contextUsage,
+                        usage.totalCostUsd != nil || usage.inputTokens != nil || usage.outputTokens != nil
+                    {
+                        costBubble(usage: usage)
+                            .fixedSize()
+                            .alignmentGuide(.top) { $0[.bottom] + 6 }
+                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottomTrailing)))
+                            .onTapGesture { showCostBubble = false }
+                            .task {
+                                try? await Task.sleep(for: .seconds(4))
+                                showCostBubble = false
+                            }
+                    }
                 }
-            }
+                .animation(.easeOut(duration: 0.18), value: showCostBubble)
+                .offset(y: -72)
         }
     }
 
@@ -118,16 +125,8 @@ extension ClaudeChatView {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(ClaudePalette.ink)
             }
-            if let input = usage.inputTokens, let output = usage.outputTokens {
-                Text("\(input + output) tokens")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudePalette.secondary)
-            } else if let input = usage.inputTokens {
-                Text("\(input) tokens")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudePalette.secondary)
-            } else if let output = usage.outputTokens {
-                Text("\(output) tokens")
+            if let tokens = tokenTotal(usage) {
+                Text("\(tokens.formatted()) tokens")
                     .font(.system(size: 12))
                     .foregroundStyle(ClaudePalette.secondary)
             }
@@ -141,6 +140,15 @@ extension ClaudeChatView {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Session cost")
+    }
+
+    private func tokenTotal(_ usage: ContextUsage) -> Int? {
+        switch (usage.inputTokens, usage.outputTokens) {
+        case let (i?, o?): i + o
+        case let (i?, nil): i
+        case let (nil, o?): o
+        case (nil, nil): nil
+        }
     }
 
 }
