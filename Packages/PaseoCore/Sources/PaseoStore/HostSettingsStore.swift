@@ -100,6 +100,23 @@ public final class HostSettingsStore {
         (config?.providers ?? [:]).sorted { $0.key < $1.key }.map { (provider: $0.key, settings: $0.value) }
     }
 
+    /// The user's custom models for one provider, from `config.providers[id].additionalModels`.
+    public func additionalModels(for provider: String) -> [DaemonProviderModel] {
+        config?.providers[provider]?.additionalModels ?? []
+    }
+
+    /// The result of the last `providerDiagnostic(_:)` call for a provider, keyed by provider id.
+    public private(set) var providerDiagnostics: [String: ProviderDiagnosticState] = [:]
+
+    /// What one provider's diagnostic did most recently. Observable; the UI reads it.
+    public enum ProviderDiagnosticState: Sendable, Equatable {
+        case loading
+        /// The daemon's probe output; shown mono in the provider sheet.
+        case ready(String)
+        /// The probe failed; the message is shown in place of the log.
+        case failed(String)
+    }
+
     /// A provider is enabled unless the config explicitly disables it.
     public func isProviderEnabled(_ providerId: String) -> Bool {
         config?.providers[providerId]?.enabled ?? true
@@ -118,6 +135,37 @@ public final class HostSettingsStore {
     public var profiles: [AgentProfile] {
         guard supportsProfiles else { return [] }
         return config?.agentProfiles ?? []
+    }
+
+    /// Persists the whole profile list; there is no per-profile RPC. Gated on the daemon's
+    /// `features.agentProfiles`: returns false with `error` set when the daemon cannot store
+    /// profiles (an old daemon would silently drop the key on save).
+    @discardableResult
+    public func saveProfiles(_ next: [AgentProfile]) async -> Bool {
+        guard supportsProfiles else {
+            error = "This host cannot store agent profiles."
+            return false
+        }
+        var patch = DaemonConfigPatch()
+        patch.agentProfiles = next
+        return await save(patch)
+    }
+
+    /// Re-runs the daemon's probe for one provider and stores the result. Failures are stored as
+    /// `.failed(message)`, never thrown; the daemon's probe can take a while, so this uses a
+    /// longer timeout than ordinary requests.
+    @discardableResult
+    public func providerDiagnostic(_ provider: String) async -> Bool {
+        providerDiagnostics[provider] = .loading
+        do {
+            let response = try await client.send(
+                ProviderDiagnosticRequest(provider: provider), timeout: .seconds(120))
+            providerDiagnostics[provider] = .ready(response.diagnostic)
+            return true
+        } catch {
+            providerDiagnostics[provider] = .failed(hostSettingsErrorText(error))
+            return false
+        }
     }
 
     // MARK: Slash commands
