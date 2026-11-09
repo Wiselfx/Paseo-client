@@ -251,6 +251,7 @@ private struct WelcomeAppearanceSheet: View {
         .presentationCornerRadius(38)
     }
 
+    @ViewBuilder
     private func tilePreview(_ choice: ClaudeAppearance) -> some View {
         switch choice {
         case .light:
