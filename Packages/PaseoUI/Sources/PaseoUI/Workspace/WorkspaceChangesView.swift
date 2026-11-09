@@ -883,11 +883,8 @@ struct WorkspaceChangesView: View {
         _ title: String, reason: String?,
         action: @escaping () -> Void
     ) -> some View {
-        if let reason {
-            return Button {} label: { Text("\(title) — \(reason)") }.disabled(true)
-        } else {
-            return Button(title, action: action)
-        }
+        Button(reason.map { "\(title) — \($0)" } ?? title, action: action)
+            .disabled(reason != nil)
     }
 
     private var pullReason: String? {
@@ -970,12 +967,14 @@ struct WorkspaceChangesView: View {
     }
 
     private var forgeIssue: ForgeIssue? {
-        guard let pr = extras.prStatus ?? checkout.prStatus else { return nil }
-        let forge = pr.forge?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // The auth state rides the payload, not the PR: with the CLI missing there is no PR.
+        let pr = extras.prStatus ?? checkout.prStatus
+        let forge = pr?.forge?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard forge.map({ $0.isEmpty ? "github" : $0 }) ?? "github" == "github" else { return nil }
-        switch pr.authStateText {
-        case "cli_missing": return .cliMissing
-        case "unauthenticated": return .unauthenticated
+        let auth = extras.prAuthState ?? checkout.prAuthState
+        switch auth {
+        case .cliMissing: return .cliMissing
+        case .unauthenticated: return .unauthenticated
         default: return nil  // authenticated / no_remote / error / unknown
         }
     }

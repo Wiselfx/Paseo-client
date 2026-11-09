@@ -41,6 +41,8 @@ public final class CheckoutStore: Identifiable {
     public private(set) var diffPhase: DiffPhase = .idle
     public private(set) var diffError: String?
     public private(set) var prStatus: CheckoutPrStatus?
+    /// The forge CLI auth state from the same payload (`cli_missing`, `unauthenticated`, …).
+    public private(set) var prAuthState: ForgeAuthState?
     public private(set) var prStatusError: String?
     /// Last failed commit/push/refresh/diff action.
     public private(set) var actionError: String?
@@ -120,6 +122,7 @@ public final class CheckoutStore: Identifiable {
         do {
             let payload = try await client.send(CheckoutPrStatusRequest(cwd: cwd))
             prStatus = payload.status
+            prAuthState = payload.forgeAuthState
             prStatusError = payload.error?.message
         } catch {
             prStatusError = paseoStoreErrorText(error)
@@ -243,6 +246,7 @@ public final class CheckoutStore: Identifiable {
         statusError = update.status.error?.message
         if let payload = update.prStatus {
             prStatus = payload.status
+            prAuthState = payload.forgeAuthState
             prStatusError = payload.error?.message
         }
         phase = .ready
