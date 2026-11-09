@@ -18,13 +18,20 @@ struct WorkspaceChangesView: View {
 
     @State private var compare: Compare = .uncommitted
     @State private var openFile: ParsedDiffFile?
+    @State private var openCommit: CheckoutCommit?
     @State private var showCommitSheet = false
     @State private var pendingDiscard: ParsedDiffFile?
     @State private var dismissedError: String?
     @State private var toast: String?
+    @State private var showCreatePRSheet = false
+    @State private var createPRTitle = ""
+    @State private var createPRBody = ""
+    @State private var createPRFailure: String?
+    @State private var mergeCandidate: PullRequestMergeMethod?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
+    @Environment(\.mentionInChat) private var mentionInChat
 
     private let typography = ClaudeTypography()
 
@@ -32,6 +39,11 @@ struct WorkspaceChangesView: View {
     /// the workspace is open. Created through the store (never constructed by hand).
     private var extras: WorkspaceGitExtras {
         session.gitExtras.workspace(for: checkout)
+    }
+
+    /// T15's git actions for this checkout. Created through the store (never by hand).
+    private var gitActions: WorkspaceGitActions {
+        session.gitExtras.gitActions(for: checkout)
     }
 
     /// The ref the "vs base" comparison diffs against. Daemons with the modern pipeline prefer
@@ -68,12 +80,16 @@ struct WorkspaceChangesView: View {
                     .navigationDestination(item: $openFile) { file in
                         WorkspaceChangesDiffView(file: file, extras: extras)
                     }
+                    .navigationDestination(item: $openCommit) { commit in
+                        WorkspaceCommitDiffView(commit: commit, actions: gitActions, extras: extras)
+                    }
             }
             .task {
                 await checkout.loadStatus()
                 if checkout.status?.hasRemote == true { await extras.loadPrStatus() }
                 // The panel may open long after `checkout.load()` ran; only subscribe when idle.
                 if extras.diffPhase == .idle { await reloadDiff() }
+                if gitActions.supportsCommitsList { await gitActions.loadCommits() }
             }
             .onChange(of: compare) { _, _ in
                 Task { await reloadDiff() }
@@ -90,6 +106,9 @@ struct WorkspaceChangesView: View {
             if let visibleError {
                 errorBanner(visibleError)
             }
+            if showsConflictBanner {
+                conflictBanner
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     summary
@@ -103,6 +122,9 @@ struct WorkspaceChangesView: View {
                             }
                         }
                         .padding(.bottom, 12)
+                    }
+                    if gitActions.supportsCommitsList {
+                        commitsSection
                     }
                 }
             }
@@ -127,6 +149,36 @@ struct WorkspaceChangesView: View {
             WorkspaceChangesCommitSheet(checkout: checkout) {
                 Task { await reload() }
             }
+        }
+        .sheet(isPresented: $showCreatePRSheet) {
+            WorkspaceCreatePRSheet(
+                branch: branchLabel,
+                baseRef: baseRef,
+                title: $createPRTitle,
+                body: $createPRBody,
+                failure: createPRFailure,
+                busy: gitActions.isCreatingPullRequest,
+                onCancel: { showCreatePRSheet = false },
+                onCreate: { Task { await performCreatePR() } })
+        }
+        .confirmationDialog(
+            "Merge pull request?",
+            isPresented: Binding(
+                get: { mergeCandidate != nil },
+                set: { if !$0 { mergeCandidate = nil } }),
+            titleVisibility: .visible
+        ) {
+            let method = mergeCandidate ?? .squash
+            Button("Merge (\(method.rawValue))", role: .destructive) {
+                mergeCandidate = nil
+                Task { await performMergePullRequest(method) }
+            }
+            Button("Cancel", role: .cancel) { mergeCandidate = nil }
+        } message: {
+            let method = mergeCandidate ?? .squash
+            let number = extras.prBadge?.number.map { "#\($0)" } ?? ""
+            let base = extras.prStatus?.baseRefName ?? checkout.prStatus?.baseRefName ?? baseRef ?? "base"
+            Text("This merges pull request \(number) into \(base) using \(method.rawValue). This cannot be undone.")
         }
         .confirmationDialog(
             "Discard changes?",
@@ -437,63 +489,419 @@ struct WorkspaceChangesView: View {
 
     // MARK: Action bar
 
+    private enum PrimaryAction {
+        case commit, push, createPR, viewPR
+    }
+
+    private var primaryAction: PrimaryAction {
+        if checkout.isDirty { return .commit }
+        if (checkout.aheadBehind?.ahead ?? 0) > 0 { return .push }
+        if extras.prBadge == nil { return .createPR }
+        return .viewPR
+    }
+
+    /// One quiet primary action, adapting: Commit when dirty, Push when ahead, Create PR when
+    /// pushed with no PR open, View PR otherwise. The "…" menu holds the rest.
     private var actionBar: some View {
         VStack(spacing: 0) {
             ClaudeDivider()
             HStack(spacing: 10) {
-                Button {
-                    showCommitSheet = true
-                } label: {
-                    if checkout.isCommitting {
-                        ProgressView().tint(ClaudePalette.background)
-                            .frame(maxWidth: .infinity).frame(height: 46)
-                    } else {
-                        Text("Commit")
-                            .font(typography.sans(15, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.background)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 46)
-                    }
-                }
-                .background(ClaudePalette.ink.opacity(checkout.isDirty ? 1 : 0.35), in: .capsule)
-                .disabled(!checkout.isDirty || checkout.isCommitting)
-                .accessibilityLabel("Commit changes")
-
-                Button {
-                    Task {
-                        let pushed = await checkout.push()
-                        if pushed {
-                            Haptics.success()
-                            showToast("Pushed")
-                            await reload()
-                        } else {
-                            Haptics.failure()
-                        }
-                    }
-                } label: {
-                    if checkout.isPushing {
-                        ProgressView().tint(ClaudePalette.ink)
-                            .frame(width: 96, height: 46)
-                    } else {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("Push")
-                                .font(typography.sans(15, weight: .semibold))
-                        }
-                        .foregroundStyle(ClaudePalette.ink)
-                        .frame(width: 96, height: 46)
-                    }
-                }
-                .background(ClaudePalette.chip, in: .capsule)
-                .disabled(checkout.isPushing)
-                .accessibilityLabel("Push")
+                primaryButton
+                moreMenu
             }
             .padding(.horizontal, 20)
             .padding(.top, 10)
             .padding(.bottom, 12)
         }
         .background(ClaudePalette.panel)
+    }
+
+    @ViewBuilder private var primaryButton: some View {
+        switch primaryAction {
+        case .commit:
+            Button {
+                showCommitSheet = true
+            } label: {
+                if checkout.isCommitting {
+                    ProgressView().tint(ClaudePalette.background)
+                        .frame(maxWidth: .infinity).frame(height: 46)
+                } else {
+                    Text("Commit")
+                        .font(typography.sans(15, weight: .semibold))
+                        .foregroundStyle(ClaudePalette.background)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                }
+            }
+            .background(ClaudePalette.ink, in: .capsule)
+            .disabled(checkout.isCommitting)
+            .accessibilityLabel("Commit changes")
+        case .push:
+            Button {
+                Task {
+                    let pushed = await checkout.push()
+                    if pushed {
+                        Haptics.success()
+                        showToast("Pushed")
+                        await reload()
+                    } else {
+                        Haptics.failure()
+                    }
+                }
+            } label: {
+                if checkout.isPushing {
+                    ProgressView().tint(ClaudePalette.background)
+                        .frame(maxWidth: .infinity).frame(height: 46)
+                } else {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Push")
+                            .font(typography.sans(15, weight: .semibold))
+                    }
+                    .foregroundStyle(ClaudePalette.background)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                }
+            }
+            .background(ClaudePalette.ink, in: .capsule)
+            .disabled(checkout.isPushing)
+            .accessibilityLabel("Push")
+        case .createPR:
+            Button {
+                Haptics.selection()
+                prepareCreatePR()
+            } label: {
+                if gitActions.isCreatingPullRequest {
+                    ProgressView().tint(ClaudePalette.background)
+                        .frame(maxWidth: .infinity).frame(height: 46)
+                } else {
+                    Text("Create PR")
+                        .font(typography.sans(15, weight: .semibold))
+                        .foregroundStyle(ClaudePalette.background)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                }
+            }
+            .background(ClaudePalette.ink, in: .capsule)
+            .disabled(gitActions.isCreatingPullRequest)
+            .accessibilityLabel("Create pull request")
+        case .viewPR:
+            Button {
+                Haptics.selection()
+                if let url = extras.prBadge.flatMap({ URL(string: $0.url) }),
+                    !(extras.prBadge?.url.isEmpty ?? true)
+                {
+                    openURL(url)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("View PR")
+                        .font(typography.sans(15, weight: .semibold))
+                }
+                .foregroundStyle(ClaudePalette.background)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+            }
+            .background(ClaudePalette.ink, in: .capsule)
+            .accessibilityLabel("View pull request")
+        }
+    }
+
+    /// The "…" menu: Pull, Update from <base>, Merge PR (squash/merge/rebase with confirmation),
+    /// and the auto-merge toggle when the host supports it. Disabled items carry a one-line reason.
+    private var moreMenu: some View {
+        Menu {
+            gitMenuItem("Pull", reason: pullReason) {
+                Task { await performPull() }
+            }
+            gitMenuItem(updateBaseTitle, reason: baseRef == nil ? "no base branch" : nil) {
+                Task { await performMergeFromBase() }
+            }
+            mergePRMenu
+            if gitActions.supportsAutoMerge {
+                autoMergeSection
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(ClaudePalette.ink)
+                .frame(width: 46, height: 46)
+                .background(ClaudePalette.chip, in: .circle)
+        }
+        .accessibilityLabel("More git actions")
+    }
+
+    private func gitMenuItem(
+        _ title: String, reason: String?,
+        action: @escaping () -> Void
+    ) -> some View {
+        if let reason {
+            return Button {} label: { Text("\(title) — \(reason)") }.disabled(true)
+        } else {
+            return Button(title, action: action)
+        }
+    }
+
+    private var pullReason: String? {
+        checkout.status?.hasRemote == true ? nil : "no remote"
+    }
+
+    private var updateBaseTitle: String {
+        baseRef.map { "Update from \($0)" } ?? "Update from base"
+    }
+
+    private var canMergePR: Bool {
+        guard let badge = extras.prBadge else { return false }
+        return badge.isOpen && !badge.isMerged
+    }
+
+    @ViewBuilder private var mergePRMenu: some View {
+        if !canMergePR {
+            Button {} label: {
+                Text("Merge PR — no open PR")
+            }
+            .disabled(true)
+        } else {
+            Menu("Merge PR") {
+                Button("Merge (squash)") { mergeCandidate = .squash }
+                Button("Merge (merge)") { mergeCandidate = .merge }
+                Button("Merge (rebase)") { mergeCandidate = .rebase }
+            }
+        }
+    }
+
+    @ViewBuilder private var autoMergeSection: some View {
+        let state = autoMergeState
+        Toggle("Auto-merge (squash)", isOn: autoMergeBinding)
+            .disabled(state == nil && extras.prBadge == nil)
+    }
+
+    /// Read from the forge facts when the daemon sent them: present object means auto-merge is
+    /// armed, explicit null means off, missing key means the daemon didn't say.
+    private var autoMergeState: Bool? {
+        guard let github = (extras.prStatus?.github ?? checkout.prStatus?.github) else { return nil }
+        switch github["autoMergeRequest"] {
+        case nil: return nil
+        case .some(.null): return false
+        case .some: return true
+        }
+    }
+
+    private var autoMergeBinding: Binding<Bool> {
+        Binding(
+            get: { autoMergeState ?? false },
+            set: { wants in
+                Task {
+                    let ok = await gitActions.setAutoMerge(enabled: wants, method: wants ? .squash : nil)
+                    if ok {
+                        Haptics.success()
+                        showToast(wants ? "Auto-merge enabled" : "Auto-merge disabled")
+                        await reload()
+                    } else {
+                        Haptics.failure()
+                    }
+                }
+            })
+    }
+
+    // MARK: Merge conflict banner
+
+    private var conflictFiles: [String] {
+        guard showsConflictBanner else { return [] }
+        return files.map(\.path)
+    }
+
+    private var showsConflictBanner: Bool {
+        if gitActions.lastFailure?.code == .mergeConflict { return true }
+        return extras.prBadge?.mergeable == .conflicting
+    }
+
+    private var conflictBanner: some View {
+        let count = conflictFiles.count
+        let title: String = {
+            if gitActions.lastFailure?.code == .mergeConflict {
+                return count > 0
+                    ? "Merge conflict in \(count) \(count == 1 ? "file" : "files")"
+                    : "Merge conflict"
+            }
+            return "Conflicts with \(baseRef ?? "the base branch")"
+        }()
+        return HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(ClaudePalette.warning)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(typography.sans(12, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                Text("Ask the agent to resolve it.")
+                    .font(typography.sans(12))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !conflictFiles.isEmpty, let mentionInChat {
+                Button {
+                    Haptics.selection()
+                    for path in conflictFiles.prefix(10) {
+                        mentionInChat(path)
+                    }
+                } label: {
+                    Text("Ask the agent")
+                        .font(typography.sans(12, weight: .medium))
+                        .foregroundStyle(ClaudePalette.background)
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(ClaudePalette.ink, in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Mention the conflicted files in chat")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(ClaudePalette.warning.opacity(0.08))
+    }
+
+    // MARK: Commits section
+
+    /// "Commits ahead of <base>" rows, behind the `commitsList` gate. Tapping a row opens the
+    /// commit's files; each file opens the shared diff view without the discard affordance.
+    @ViewBuilder private var commitsSection: some View {
+        if !gitActions.commits.isEmpty || gitActions.commitsError != nil {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("Commits ahead of \(baseRef ?? "base")")
+                        .font(typography.sans(13, weight: .medium))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                    Spacer(minLength: 8)
+                    if !gitActions.commits.isEmpty {
+                        Text("\(gitActions.commits.count)")
+                            .font(typography.mono(12))
+                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                if let message = gitActions.commitsError {
+                    Text(message)
+                        .font(typography.sans(12))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                } else {
+                    ForEach(gitActions.commits) { commit in
+                        commitRow(commit)
+                        if commit.id != gitActions.commits.last?.id {
+                            ClaudeDivider().padding(.leading, 20)
+                        }
+                    }
+                    .padding(.bottom, 12)
+                }
+            }
+        }
+    }
+
+    private func commitRow(_ commit: CheckoutCommit) -> some View {
+        Button {
+            Haptics.selection()
+            openCommit = commit
+        } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(commit.subject)
+                        .font(typography.sans(13))
+                        .foregroundStyle(ClaudePalette.ink)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(commit.shortSha)
+                            .font(typography.mono(11))
+                            .foregroundStyle(ClaudePalette.secondaryInk)
+                        Text("· \(relativeAge(commit.authorDate))")
+                            .font(typography.sans(11))
+                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Commit \(commit.shortSha), \(commit.subject)")
+    }
+
+    private func relativeAge(_ iso: String) -> String {
+        guard let date = PaseoDate.parse(iso) else { return "" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func performPull() async {
+        let ok = await gitActions.pull()
+        if ok {
+            Haptics.success()
+            showToast("Pulled")
+            await reload()
+        } else {
+            Haptics.failure()
+            await reload()
+        }
+    }
+
+    private func performMergeFromBase() async {
+        let ok = await gitActions.mergeFromBase()
+        if ok {
+            Haptics.success()
+            showToast("Updated from \(baseRef ?? "base")")
+        } else {
+            Haptics.failure()
+        }
+        await reload()
+    }
+
+    private func performMergePullRequest(_ method: PullRequestMergeMethod) async {
+        let badge = extras.prBadge
+        let ok = await gitActions.mergePullRequest(method: method)
+        if ok {
+            Haptics.success()
+            showToast("Merged \(badge?.number.map { "#\($0)" } ?? "")".trimmingCharacters(in: .whitespaces))
+        } else {
+            Haptics.failure()
+        }
+        await reload()
+    }
+
+    private func prepareCreatePR() {
+        let branch = branchLabel
+        let lastSubject = gitActions.commits.first?.subject
+        createPRTitle = lastSubject ?? "Changes on \(branch)"
+        createPRBody = "Changes from \(branch)"
+        createPRFailure = nil
+        showCreatePRSheet = true
+    }
+
+    private func performCreatePR() async {
+        let result = await gitActions.createPullRequest(
+            title: createPRTitle, body: createPRBody, baseRef: nil)
+        guard let result else {
+            createPRFailure = gitActions.actionError ?? "The pull request could not be opened."
+            return
+        }
+        showCreatePRSheet = false
+        if let url = URL(string: result.url) {
+            openURL(url)
+        }
+        Haptics.success()
+        showToast("PR opened \(result.number.map { "#\($0)" } ?? "")".trimmingCharacters(in: .whitespaces))
+        await reload()
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -523,11 +931,12 @@ struct WorkspaceChangesView: View {
 
     // MARK: Actions
 
-    /// Reloads status, PR badge and the diff for the current compare selection.
+    /// Reloads status, PR badge, the diff and the commits list for the current compare selection.
     private func reload() async {
         await checkout.loadStatus()
         if checkout.status?.hasRemote == true { await extras.loadPrStatus() }
         await reloadDiff()
+        if gitActions.supportsCommitsList { await gitActions.loadCommits() }
     }
 
     private func reloadDiff() async {
