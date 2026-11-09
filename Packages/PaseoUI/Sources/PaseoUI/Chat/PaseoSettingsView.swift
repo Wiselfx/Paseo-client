@@ -53,6 +53,7 @@ struct PaseoSettingsView: View {
         case agents
         case metadata
         case metadataModel
+        case voice
         case workspaces
         case projects
         case providers
@@ -72,6 +73,7 @@ struct PaseoSettingsView: View {
             case .agents: "Agents"
             case .metadata: "Metadata"
             case .metadataModel: "Model"
+            case .voice: "Voice"
             case .workspaces: "Workspaces"
             case .projects: "Projects"
             case .providers: "Providers"
@@ -91,6 +93,7 @@ struct PaseoSettingsView: View {
             case .agents: "person.2"
             case .metadata: "wand.and.stars"
             case .metadataModel: "cpu"
+            case .voice: "mic"
             case .workspaces: "square.stack"
             case .projects: "folder"
             case .providers: "cpu"
@@ -236,6 +239,10 @@ struct PaseoSettingsView: View {
                         value: session.hostSettings.config == nil ? "—" : (metadataMode == .automatic ? "Automatic" : "Manual"))
                     rowDivider
                     settingsRow(
+                        .voice, symbol: Page.voice.symbol,
+                        value: voiceSummary)
+                    rowDivider
+                    settingsRow(
                         .workspaces, symbol: Page.workspaces.symbol,
                         value: session.hostSettings.config == nil ? "—" : ((session.hostSettings.config?.autoArchiveAfterMerge ?? false) ? "Auto-archive" : "Manual"))
                     rowDivider
@@ -273,6 +280,7 @@ struct PaseoSettingsView: View {
         case .agents: agentsPage
         case .metadata: metadataPage
         case .metadataModel: metadataModelPage
+        case .voice: VoicePage(session: session)
         case .workspaces: workspacesPage
         case .projects: projectsPage
         case .providers: providersPage
@@ -1575,6 +1583,13 @@ struct PaseoSettingsView: View {
     private var providersSummary: String {
         let count = session.agentControl.providers.count
         return "\(count) provider\(count == 1 ? "" : "s")"
+    }
+
+    private var voiceSummary: String {
+        guard let speech = session.voiceSettings.speechSettings else { return "—" }
+        let dictation = speech.dictationEnabled ? "Dictation on" : "Dictation off"
+        let voiceMode = speech.voiceModeEnabled ? "Voice on" : "Voice off"
+        return "\(dictation) · \(voiceMode)"
     }
 
     private var versionLine: String {

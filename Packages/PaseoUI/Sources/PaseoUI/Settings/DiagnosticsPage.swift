@@ -152,7 +152,8 @@ struct DiagnosticsPage: View {
     /// token/password/secret assignments are redacted, and the daemon host's home directory
     /// is shortened to `~`, so no secret or home path leaves the device. The bundle is an
     /// opaque string upstream; this is best-effort on its free text, like the app report's
-    /// machine-codes-only rule.
+    /// machine-codes-only rule. JSON `apiKey` values (the speech provider secret) are
+    /// redacted too — the app report never includes speech config or keys at all.
     static func scrubHostDiagnostic(_ text: String) -> String {
         var result = text
         let home = FileManager.default.homeDirectoryForCurrentUser().path
@@ -160,6 +161,9 @@ struct DiagnosticsPage: View {
             result = result.replacingOccurrences(of: home, with: "~")
         }
         result = Self.redact(pattern: #"(?i)\b(Bearer)\s+\S+"#, in: result, replacement: "$1 [redacted]")
+        result = Self.redact(
+            pattern: #"(?i)"(api[_-]?key)"\s*:\s*"[^"]*""#, in: result,
+            replacement: "\"$1\": \"[redacted]\"")
         result = Self.redact(
             pattern: #"(?i)\b(token|password|passwd|secret|api[_-]?key|access[_-]?key)\s*[:=]\s*[^\s,;]+"#,
             in: result, replacement: "$1: [redacted]")

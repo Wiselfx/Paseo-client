@@ -31,6 +31,8 @@ public final class HostSession {
     public let schedules: SchedulesStore
     /// Host config, presence, slash commands and push registration for this daemon.
     public private(set) var hostSettings: HostSettingsStore
+    /// Host Voice settings + local speech models (M13). Reads/writes through hostSettings.
+    public let voiceSettings: VoiceSettingsStore
     /// Worktree setup observation (running/failed/blocked snapshot per workspace).
     public let setupObservation: WorkspaceSetupObservationStore
     /// Socket-wide event subscription for pushes the other subscriptions don't carry
@@ -76,7 +78,8 @@ public final class HostSession {
         self.hostUsage = HostUsageStore(client: client)
         self.agentControl = AgentControlStore(client: client)
         self.schedules = SchedulesStore(client: client)
-        self.hostSettings = HostSettingsStore(client: client)
+        let hostSettings = HostSettingsStore(client: client)
+        self.hostSettings = hostSettings
         self.workspaceDirectory = WorkspaceDirectory(client: client)
         self.gitExtras = GitExtrasStore(client: client)
         self.setupObservation = WorkspaceSetupObservationStore(client: client)
@@ -89,6 +92,7 @@ public final class HostSession {
         self.fileUploader = ConversationUpload(client: client)
         self.projectSetupProbe = ProjectSetupProbe(client: client)
         self.importSession = ImportSessionStore(client: client)
+        self.voiceSettings = VoiceSettingsStore(client: client, hostSettings: hostSettings)
         self.labels.workspaceDirectory = self.workspaceDirectory
     }
 
@@ -201,6 +205,7 @@ public final class HostSession {
             agentControl.serverInfoChanged(info)
             schedules.serverInfoChanged(info)
             hostSettings.serverInfoChanged(info)
+            voiceSettings.serverInfoChanged(info)
             importSession.serverInfoChanged(info)
             hostUsage.update(serverInfo: info)
             workspaceDirectory.update(serverInfo: info)
@@ -224,14 +229,17 @@ public final class HostSession {
         case .reconnecting:
             sawReconnect = true
             ownedEvents.disconnected()
+            voiceSettings.stopModelPolling()
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         case .idle, .connecting:
             ownedEvents.disconnected()
+            voiceSettings.stopModelPolling()
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         case .failed:
             ownedEvents.disconnected()
+            voiceSettings.stopModelPolling()
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         }

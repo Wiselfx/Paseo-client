@@ -279,6 +279,9 @@ public struct DaemonConfigPatch: Encodable, Sendable, Equatable {
     public var appendSystemPrompt: String?
     public var agentProfiles: [AgentProfile]?
     public var pluginsEnabled: Bool?
+    /// Speech settings (`config.features`), as a deep-partial JSON object. The Voice page
+    /// only ever sets the speech subtree; keys the daemon owns are untouched.
+    public var features: JSONValue?
 
     public init() {}
 }
