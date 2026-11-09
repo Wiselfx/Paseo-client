@@ -82,7 +82,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Sidebar header rows History / Search / Schedules (configurable, reorderable/visibility in Settings) — Status: `missing` — Source: `docs/research/01-app-features.md:99`
 - [ ] Feature: History nav row — Status: `done` (the "History" row opens the History sheet — every agent on this host, newest first, day groups, title filter) — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/PaseoSidebar.swift` (`navigationRow`, `.history` sheet), `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:15`
 - [ ] Feature: Schedules nav row — Status: `done` (the "Scheduled" row opens the Schedules sheet — list, detail, create/edit, pause/resume, run now) — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/PaseoSidebar.swift` (`navigationRow`, `.schedules` sheet), `Schedules/ClaudeSchedulesView.swift`; `docs/research/01-app-features.md:16`
-- [ ] Feature: Search nav row / command center — See Search & history section — Status: `missing` — Source: `docs/research/01-app-features.md:254`
+- [ ] Feature: Search nav row / command center — See Search & history section — Status: `done` (the "Search" row opens the command center sheet — grouped results, keyboard-driven) — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/PaseoSidebar.swift` (`navigationRow`, `.search`), `Sidebar/CommandCenterView.swift`; `docs/research/01-app-features.md:254`
 - [ ] Feature: Footer Usage row (pinned-window summary meters) — Status: `done` (summary-flagged windows per provider report as thin bars; hidden by default behind Settings → General “Show usage in sidebar”; tap → reports sheet) — Source: this client `Sidebar/PaseoSidebar.swift` (`usageSection`), `Chat/ClaudeUsageReportsSheet.swift`; `docs/research/01-app-features.md:100`; `docs/research/01-app-features.md:391-398`
 - [ ] Feature: Projects grouped list, collapsible, ordered by newest activity — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/SidebarDirectory.swift`
 - [ ] Feature: Workspace rows — title-or-branch, project/branch + relative-activity meta line — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Sidebar/SidebarWorkspaceRow.swift` (`workspaceRow`)
@@ -418,10 +418,10 @@ Status counts are in `## Counts` at the very bottom.
 
 - [x] Feature: Sessions / History screen — See Workspaces & projects — Status: `done` (History sheet: agents across workspaces, newest first, Today/Yesterday/Earlier grouping, title filter; active agents only, tap opens the agent) — Source: this client `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:135`
 - [x] Feature: Timeline search (query the agent's timeline through the daemon; match positions; paginate) — Status: `done` — Source: this client `Packages/PaseoCore/Sources/PaseoStore/ConversationSearch.swift`, `Packages/PaseoProtocol/TimelineSearch.swift`; UI: `Conversation/ChatFind.swift` (find bar, `findSeq`), `Conversation/ChatTranscript.swift` (scroll-to-match, brief highlight, expands the work group holding the match), `Chat/ClaudeFindBar.swift`; docs/research/04-protocol-agents-permissions-settings.md:889; fixtures `Packages/PaseoCore/Tests/PaseoFixtures/Fixtures/attachments-search/`
-- [ ] Feature: Command center (Cmd+K: Actions / Files / Workspaces / Agents / Models / Thinking / Mode / Fast groups, keyboard-driven, shortcut badges) — Status: `missing` — Source: `docs/research/01-app-features.md:252-264`
-- [ ] Feature: Command palette in DSH style (redraw of the host palette; searches sessions/projects/actions) — Status: `missing` — Source: folder `dsh-claude-style-reference/packages/client/src/features/search/` (Ctrl+K takeover, Recents/Actions/Sessions/Projects filters)
+- [ ] Feature: Command center (Cmd+K: Actions / Files / Workspaces / Agents / Models / Thinking / Mode / Fast groups, keyboard-driven, shortcut badges) — Status: `done` (M9: full-height palette-styled sheet from the sidebar Search row; groups Recents (empty query) / Agents (live + archived — archived unarchives on open) / Workspaces / Projects / Files (open workspace, MentionIndex) / Actions (New agent, New workspace, Open settings, Toggle panel, Switch host expandable); keyboard: Return opens the selected row, up/down arrows move, Esc closes; no Models/Thinking/Mode/Fast groups, no ⌘K, no shortcut badges) — Source: this client `Sidebar/CommandCenterView.swift`, `Sidebar/PaseoSidebar.swift` (`.search`); `docs/research/01-app-features.md:252-264`
+- [ ] Feature: Command palette in DSH style (redraw of the host palette; searches sessions/projects/actions) — Status: `done` (M9: DSH palette chrome over the sidebar — one field, section headers, hairline dividers, mono file paths, keyboard-driven; a native overlay sheet, not the host-takeover modal) — Source: this client `Sidebar/CommandCenterView.swift`; folder `dsh-claude-style-reference/packages/client/src/features/search/`
 - [ ] Feature: Keyboard shortcuts dialog (all bindings, grouped, "Not set" states) — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:408`
-- [ ] Feature: "Search" placeholder/action in sidebar — See Sidebar & navigation — Status: `missing` — Source: `docs/research/01-app-features.md:99`
+- [ ] Feature: "Search" placeholder/action in sidebar — See Sidebar & navigation — Status: `done` (Search row in the sidebar header — see Sidebar & navigation) — Source: this client `Sidebar/PaseoSidebar.swift` (`navigationRow`); `docs/research/01-app-features.md:99`
 - [x] Feature: Search history (History screen: "Search history") — Status: `done` (title filter in the History screen) — Source: this client `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:137,293-300`
 - [ ] Feature: Find in pane — See Desktop-only — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:57`
 - [ ] Feature: Slash-command search in the composer — See Composer — Status: `done` (the `/` menu filters as you type) — Source: `docs/research/01-app-features.md:89`; this client `…/Conversation/ChatSlashCommands.swift`
@@ -507,7 +507,7 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 - [x] Feature: `question-card` — model question card restyled to Claude look, moved to the end of the conversation — Status: `done` (restyled as the banded Claude card described above; still rendered at the end of the conversation while pending) — Source: `…/features/question-card/` (`question-card.ts`, `question-card.css`); this client `…/Chat/ClaudePermissionCard.swift` (`questionCard`)
 - [ ] Feature: `rightbar-fit` — right panel's box in page pixels under web zoom (panel vs track mismatch) — Status: `not applicable (web host zoom plumbing)` — Source: `…/features/rightbar-fit/` (`rightbar-fit.ts`)
 - [ ] Feature: `row-skip` — `content-visibility: auto` skip-marking of settled transcript rows (paint/layout perf) — Status: `not applicable (SwiftUI LazyVStack; web layout engine)` — Source: `…/features/row-skip/` (`row-skip.ts`, `row-skip.css`)
-- [ ] Feature: `search` — Ctrl+K command palette takeover of the host sidebar search (Recents / Actions / Sessions / Projects / Plugins / Skills / Shortcuts, filters, keyboard-driven) — Status: `missing` — Source: `…/features/search/` (`search.ts`, `sources.ts`, `search-host-takeover.ts`)
+- [ ] Feature: `search` — Ctrl+K command palette takeover of the host sidebar search (Recents / Actions / Sessions / Projects / Plugins / Skills / Shortcuts, filters, keyboard-driven) — Status: `done` (native palette in the same spirit — Recents / Agents / Workspaces / Projects / Files / Actions, one field, keyboard-driven; no Plugins/Skills/Shortcuts groups, no filters, no Ctrl+K, not the host takeover) — Source: this client `Sidebar/CommandCenterView.swift`; `…/features/search/`
 - [ ] Feature: `session-actions` — session-row context menu (right-click → the host menu's commands: rename/archive/…) — Status: `done` (History rows: Rename, Archive/Unarchive, Copy agent ID, Delete permanently; sidebar workspace rows unchanged) — Source: `…/features/session-actions/` (`session-actions.ts`, `context-menu.ts`); this client `…/Chat/ClaudeHistoryView.swift`
 - [ ] Feature: `session-title` — header session title is the session's own name; press to edit inline, rename via host `session.rename` — Status: `done` (rename via the header title menu → "Rename…" → "Rename agent" alert — not press-to-edit inline; `agent.update.request`) — Source: `…/features/session-title/` (`session-title.ts`); this client `…/Conversation/ChatHeader.swift` (`beginRename`)
 - [ ] Feature: `settings` — the plugin's seven settings tabs (general/appearance/sidebar/icons/main-window/zoom/motion) incl. theme style, auto-popover, quick providers, page zoom, reasoning display — Status: `missing` (our settings shell has General + host pages; no sidebar/icons/zoom/motion tabs) — Source: `…/features/settings/` (`settings.ts`, `settings-tab-*.ts`); this client `…/Chat/PaseoSettingsView.swift`
@@ -529,21 +529,20 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 242 | 57.6 % |
-| `missing` | 104 | 24.8 % |
+| `done` | 257 | 61.0 % |
+| `missing` | 92 | 21.9 % |
 | `desktop-only (flag)` | 47 | 11.2 % |
-| `store only (no UI)` | 7 | 1.7 % |
-| `store gap` | 1 | 0.2 % |
+| `store only (no UI)` | 6 | 1.4 % |
 | `in flight` | 0 | 0 % |
 | `not applicable` | 19 | 4.5 % |
-| **Total** | **420** | 100 % |
+| **Total** | **421** | 100 % |
 
 What the numbers say: the client is at parity in the *conversation* area (turn layout, DSH
 live-observation turn UX, permissions, markdown, markdown code blocks) and in the
 *connection/discovery/store plumbing* — T1–T13 are merged, fixtures-tested, and wired into the UI
 (presence, slash commands, attachments, search, the Schedules screen, rich content, the mascot).
-The remaining `missing` rows concentrate in desktop-only and host-side surfaces (command center,
-notifications/push, voice, relay pairing, onboarding/welcome), turn and composer parity leftovers
+The remaining `missing` rows concentrate in desktop-only and host-side surfaces
+(notifications/push, voice, relay pairing, onboarding/welcome), turn and composer parity leftovers
 (collapse levels, question-card restyle, message actions, fork, editing) and providers/profiles
 (cards are M4d in flight). The remaining `store only (no UI)` rows are provider/profile/subagent
 and push registration — logic that exists without a screen. No rows are `in flight`: the M3

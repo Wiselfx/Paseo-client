@@ -14,6 +14,8 @@ struct PaseoSidebar: View {
     var onSelectAgent: (String) -> Void
     var onNewAgent: (WorkspaceDescriptor) -> Void
     var onDisconnect: () -> Void
+    /// Toggles the right-side workspace panel; nil hides the Toggle panel action in Search.
+    var onTogglePanel: (() -> Void)? = nil
 
     @State var sheet: PaseoSidebarSheet?
     @State var showHidden = false
@@ -90,6 +92,23 @@ struct PaseoSidebar: View {
                         sheet = nil
                         onSelectAgent(agentId)
                     })
+            case .search:
+                CommandCenterSheet(
+                    session: session,
+                    onOpenAgent: { agentId in
+                        sheet = nil
+                        onSelectAgent(agentId)
+                    },
+                    onNewAgent: { workspace in
+                        sheet = nil
+                        onNewAgent(workspace)
+                    },
+                    onNewWorkspace: { sheet = .newWorkspace },
+                    onOpenSettings: { sheet = .settings },
+                    onTogglePanel: onTogglePanel,
+                    onShowToast: { showToast($0) },
+                    onClose: { sheet = nil },
+                    selectedAgentId: selectedAgentId)
             case .newWorkspace:
                 ClaudeNewWorkspaceSheet(
                     session: session, defaultProjectId: selectedWorkspaceProjectId
@@ -268,6 +287,7 @@ struct PaseoSidebar: View {
         VStack(spacing: 0) {
             navigationRow("Scheduled", symbol: "clock") { sheet = .schedules }
             navigationRow("History", symbol: "clock.arrow.2.circlepath") { sheet = .history }
+            navigationRow("Search", symbol: "magnifyingglass") { sheet = .search }
         }
         .padding(.top, 4)
     }
@@ -468,6 +488,7 @@ private enum PaseoSidebarSheet: Identifiable {
     case settings
     case schedules
     case history
+    case search
     case newWorkspace
     case addProject
     case usage
@@ -477,6 +498,7 @@ private enum PaseoSidebarSheet: Identifiable {
         case .settings: "settings"
         case .schedules: "schedules"
         case .history: "history"
+        case .search: "search"
         case .newWorkspace: "newWorkspace"
         case .addProject: "addProject"
         case .usage: "usage"
