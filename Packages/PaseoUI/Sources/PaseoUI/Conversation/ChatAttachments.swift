@@ -24,7 +24,12 @@ extension ClaudeChatView {
     var canSendMessage: Bool {
         guard !hasUploadingAttachment else { return false }
         if !trimmedDraft.isEmpty { return true }
-        return trayItems.contains { if case .done = $0.phase { true } else { false } }
+        return trayItems.contains { item in
+            switch item.phase {
+            case .done, .attached: return true
+            case .pending, .uploading, .failed: return false
+            }
+        }
     }
 
     var cameraAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
@@ -78,7 +83,7 @@ extension ClaudeChatView {
         }
     }
 
-    /// "Mention a file": inserts `@` and focuses the composer.
+    /// Mention a file: inserts @ and focuses the composer.
     func mentionFile() {
         if store.draft.isEmpty {
             store.draft = "@"
@@ -127,6 +132,51 @@ extension ClaudeChatView {
             }
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
         }
+    }
+
+    // MARK: Forge issue/PR (M12)
+
+    /// The workspace's forge, from the checkout's PR status (upstream getForgePresentation
+    /// source). Unknown or absent forges read as GitHub, like old daemons.
+    var forgeId: String {
+        guard let workspaceId = store.agent?.workspaceId,
+            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+        else { return "github" }
+        let forge = session.checkout(for: workspace).prStatus?.forge?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return forge.isEmpty ? "github" : forge
+    }
+
+    var forgeIsGitLab: Bool { forgeId.lowercased() == "gitlab" }
+
+    /// The forge items already in the tray, by picker row id (kind:number).
+    var selectedForgeIds: [String] {
+        trayItems.compactMap { item in
+            guard case .attached(let attachment) = item.phase else { return nil }
+            switch attachment {
+            case .forgeChangeRequest(let forge): "change_request:\(forge.number)"
+            case .forgeIssue(let forge): "issue:\(forge.number)"
+            default: nil
+            }
+        }
+    }
+
+    /// Toggles one picker row into the tray (upstream toggleForgeAttachment): picking an
+    /// attached row removes it.
+    func toggleForgeAttachment(_ item: ForgeSearchItem) {
+        if let existing = trayItems.first(where: { candidate in
+            guard case .attached(let attachment) = candidate.phase else { return false }
+            switch (attachment, item.kind) {
+            case (.forgeChangeRequest(let forge), .changeRequest): forge.number == item.number
+            case (.forgeIssue(let forge), .issue): forge.number == item.number
+            default: false
+            }
+        }) {
+            attachmentStore.remove(existing.id, from: store.agentId, store: store)
+            return
+        }
+        guard let attachment = item.asAttachment else { return }
+        attachmentStore.addForge(attachment, to: store.agentId, store: store)
     }
 
 }

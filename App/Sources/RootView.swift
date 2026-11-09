@@ -76,6 +76,11 @@ struct RootView: View {
     private func deliverNotifications(_ session: HostSession) {
         let intents = session.attention.drain()
         guard !intents.isEmpty else { return }
+        // Sound cues (M12): foreground only, and AttentionCenter already dropped the agent
+        // the user is looking at.
+        if scenePhase == .active {
+            SoundCuePlayer.shared.playCues(for: intents)
+        }
         Task { await notifications.deliver(intents) }
     }
 }
