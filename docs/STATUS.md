@@ -116,6 +116,7 @@ bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages
 Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
+- M11 `m11-import-session` on Crouton via pi c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: Import session, terminal tap → terminal, stale review drafts.
 - T17 `t17-owned-subscriptions` on DeepSeek 8872f024-782e-46a0-b371-3f2f19526184: advertise owned_subscriptions (done; contract `docs/research/09`; now merging foundation + proving attention and every push still arrive on the modern socket before merge).
 Known store gaps: fork can't carry provider feature values.
 Next candidates: advertise `owned_subscriptions` (DeepSeek, off-peak; complex); notifications/push research (DeepSeek after 10:00 UTC).
