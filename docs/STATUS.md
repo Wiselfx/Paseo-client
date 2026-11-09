@@ -72,13 +72,12 @@ restart/view service, local links, 2k scrollback, M3h file sort/share/Markdown+i
 diff options (hunk-level whitespace hide, wrap, collapse) and jump-to-file, M8d @-file mention
 popover (scratch WorkspaceFiles walk) + on-device dictation (Info.plist mic/speech keys), R10 split:
 `Sidebar/` and `Schedules/` folders; restored a missing `sectionHeader` the Pinned section called
-(swiftc -parse can't catch missing symbols: Xcode will) (PaseoCore 355/126/17 = 498 green; one-off
-DaemonConnectionTests flake → T16). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+(swiftc -parse can't catch missing symbols: Xcode will) T16 flake fixed (test-side race) + context/usage store
+(`contextUsage`, `session.hostUsage`; no UI yet) (PaseoCore 367/133/17 = 517 green). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - M7d `m7d-anchor-reveal` on worker 0778f3b0: chat-anchor, reveal, rewind (transcript).
-- T16 `t16-flake-usage` on worker 918fee9a: connection-test flake, context/usage store.
 - M3i `m3i-pr-pane` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: PR checks/timeline, base branch picker.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
