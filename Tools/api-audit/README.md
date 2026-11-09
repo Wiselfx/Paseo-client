@@ -65,10 +65,12 @@ extend the checker, keep them suppressed:
 
 ## Known false positives (baseline, 2026-11-09)
 
-Nine findings are expected on a clean tree; anything else is new:
+Seventeen findings are expected on a clean tree; anything else is new:
 
 - `missing-member`: `ClaudeStatusLine.swift` `.blur`, `EdgeDrawer.swift` `.simultaneousGesture` (generic `Content`),
-  `VoiceAudioEngine.swift` `AVAudioConverter.convert` (Apple type the index doesn't model).
+  `VoiceAudioEngine.swift` `AVAudioConverter.convert` (Apple type the index doesn't model), plus eight
+  `AVAudioPCMBuffer` members (`frameLength`, `format`, `floatChannelData`, `int16ChannelData`) on locals
+  named `buffer`: since M15c the index types `buffer` from `ThinkingTone.buffer` (real Apple members).
 - `missing-static`: `AllCases` / `RawValue` in `PaseoSettingsView.swift` and `WelcomeView.swift` (generic `Option`).
 - `init-labels`: `DaemonEndpoint(url:credential:)` in `App/Sources/AppModel.swift` (the tool ignores the
   defaulted `relay:` parameter).
