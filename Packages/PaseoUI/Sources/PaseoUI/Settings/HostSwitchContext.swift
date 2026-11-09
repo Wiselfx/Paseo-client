@@ -165,7 +165,7 @@ public struct HostAppearance: Sendable, Equatable, Codable {
 }
 
 public struct HostSwitchEnvironmentKey: EnvironmentKey {
-    public static let defaultValue: HostSwitchContext? = nil
+    public static var defaultValue: HostSwitchContext? { nil }
 }
 
 extension EnvironmentValues {

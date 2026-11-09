@@ -6,13 +6,13 @@ import UIKit
 /// The action a "Mention in chat" button triggers. Internal, so the panel's pages can reach it
 /// without widening their fixed constructors. Nil disables the action.
 struct MentionInChatKey: EnvironmentKey {
-    static let defaultValue: ((String) -> Void)? = nil
+    static var defaultValue: ((String) -> Void)? { nil }
 }
 
 /// The live-file watch (T11) for the workspace the panel shows. Published by the panel;
 /// consumed by the Files page and its viewer.
 struct WorkspaceGitExtrasKey: EnvironmentKey {
-    static let defaultValue: WorkspaceGitExtras? = nil
+    static var defaultValue: WorkspaceGitExtras? { nil }
 }
 
 extension EnvironmentValues {

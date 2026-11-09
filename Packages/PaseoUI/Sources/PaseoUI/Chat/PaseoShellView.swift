@@ -5,7 +5,7 @@ import SwiftUI
 /// One-shot signal from the shell into the composer to take keyboard focus. A Binding so the
 /// composer can reset it after consuming. Internal so the composer can see it.
 struct ComposerFocusKey: EnvironmentKey {
-    static let defaultValue: Binding<Bool> = .constant(false)
+    static var defaultValue: Binding<Bool> { .constant(false) }
 }
 
 extension EnvironmentValues {

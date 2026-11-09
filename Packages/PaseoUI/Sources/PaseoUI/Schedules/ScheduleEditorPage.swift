@@ -33,10 +33,10 @@ struct ScheduleEditorPage: View {
         case provider, model, mode, thinking, workspace
     }
 
-    @State private var picker: Picker?
+    @State var picker: Picker?
     @State private var isSaving = false
 
-    @State private var name: String
+    @State var name: String
     @State private var prompt: String
     @State private var cron: String
     @State private var usePreset: Int?
@@ -44,18 +44,18 @@ struct ScheduleEditorPage: View {
     /// A cadence that is `.every` or otherwise not one we can edit as cron: shown read-only.
     @State private var readOnlyCadence: String?
     @State private var maxRuns: String
-    @State private var cwd: String
-    @State private var providerId: String
-    @State private var modelId: String
-    @State private var modeId: String
-    @State private var thinkingId: String
+    @State var cwd: String
+    @State var providerId: String
+    @State var modelId: String
+    @State var modeId: String
+    @State var thinkingId: String
 
     private var schedules: SchedulesStore { session.schedules }
-    private var workspaces: [WorkspaceDescriptor] {
+    var workspaces: [WorkspaceDescriptor] {
         session.workspaceDirectory.groups.flatMap(\.workspaces)
     }
     private var isHeartbeat: Bool { seed.isHeartbeat }
-    private var catalog: AgentControlStore { session.agentControl }
+    var catalog: AgentControlStore { session.agentControl }
 
     init(
         session: HostSession, typography: ClaudeTypography, seed: ClaudeSchedulesView.EditorSeed,
@@ -416,7 +416,7 @@ struct ScheduleEditorPage: View {
             .first(where: { $0.id == thinkingId })?.label ?? thinkingId
     }
 
-    private var resolvedThinkingModelId: String? {
+    var resolvedThinkingModelId: String? {
         if !modelId.isEmpty { return modelId }
         return catalog.defaultModel(forProvider: providerId)?.id
     }
