@@ -71,8 +71,13 @@ final class ComposerAttachmentStore {
     /// Removes an item; cancels the in-flight upload when there is one (the daemon-side partial
     /// file is abandoned to its stale timeout).
     func remove(_ itemId: UUID, from id: String, store: ConversationStore) {
+        let wasUploading = items[id]?.contains { item in
+            guard item.id == itemId, case .uploading = item.phase else { return false }
+            return true
+        } ?? false
         items[id]?.removeAll { $0.id == itemId }
-        store.cancelUpload()
+        // Cancel is whole-conversation: only cancel when the removed pill is the one in flight.
+        if wasUploading { store.cancelUpload() }
     }
 
     /// Drops the successful attachments (the ones that rode this send). Failed ones stay.
