@@ -582,6 +582,22 @@ public final class ConversationStore: Identifiable {
         }
     }
 
+    /// Loads older history until `timeline.hasOlder` is false, one page at a time.
+    ///
+    /// Used where "the rest of the conversation" is the point rather than a page: the
+    /// Jump-to-message sheet lists every prompt, and the transcript's top-of-viewport auto-load
+    /// keeps going while the reader stays at the top. Stops on a failed page, and on a page that
+    /// does not move the start cursor, so a daemon that keeps answering `hasOlder` with nothing
+    /// new cannot spin this loop.
+    public func loadAllOlder() async {
+        while timeline.hasOlder, let cursor = timeline.startCursor, !isLoadingOlder {
+            backgroundError = nil
+            await loadOlder()
+            guard backgroundError == nil else { return }
+            guard timeline.startCursor != cursor else { return }
+        }
+    }
+
     /// Sends `text` (trimmed; no-op when empty). Shows it at once as a pending row, then sends
     /// `SendAgentMessageRequest` with a fresh `messageId`. When the agent is running, the plain
     /// call steers (`activeTurnBehavior: "steer"`); pass `behavior: "interrupt"` to interrupt the

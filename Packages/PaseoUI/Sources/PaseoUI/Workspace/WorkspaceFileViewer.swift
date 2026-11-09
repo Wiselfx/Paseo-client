@@ -37,19 +37,35 @@ struct WorkspaceFileViewer: View {
     @State private var saveSuccessFlash = false
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
     private var fileName: String { WorkspaceFileFormat.lastComponent(relPath) }
     private static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mdwn", "mdx"]
+    private static let htmlExtensions: Set<String> = ["html", "htm"]
+
+    /// Lowercased extension of the file on screen, from the path the daemon reported.
+    private var fileExtension: String? {
+        let path = file?.path ?? relPath
+        return path.split(separator: ".", omittingEmptySubsequences: true).last.map { $0.lowercased() }
+    }
 
     /// Whether this file renders through the Markdown preview path (text-like only).
     private var isMarkdown: Bool {
         guard let file, file.kind == .text || file.kind == .image else { return false }
-        let ext = file.path.split(separator: ".", omittingEmptySubsequences: true).last
-            .map { $0.lowercased() }
-        return ext.map(Self.markdownExtensions.contains) ?? false
+        return fileExtension.map(Self.markdownExtensions.contains) ?? false
     }
+
+    /// An HTML page: gets a Preview / Source control, previewed in the sandboxed web view.
+    private var isHTML: Bool {
+        guard let file, file.kind == .text else { return false }
+        return fileExtension.map(Self.htmlExtensions.contains) ?? false
+    }
+
+    /// SVG arrives from the daemon as image bytes (it is not a bitmap UIKit can decode), so it
+    /// takes the web-view path instead of `UIImage`.
+    private var isSVG: Bool { file?.kind == .image && fileExtension == "svg" }
 
     /// Text files under ~512 KB, when the host allows editing (`features.workspaceFileEditing`).
     private var editableFile: FileExplorerFile? {
@@ -83,9 +99,9 @@ struct WorkspaceFileViewer: View {
             }
             if isEditing {
                 editingContent
-            } else if isMarkdownPreview {
+            } else if isMarkdown || isHTML {
                 previewToggleRow
-                markdownContent
+                if isMarkdown { markdownContent } else { htmlContent }
             } else {
                 content
             }
@@ -407,7 +423,7 @@ struct WorkspaceFileViewer: View {
         if let file {
             switch file.kind {
             case .image:
-                zoomableImage(file)
+                if isSVG { svgContent(file) } else { zoomableImage(file) }
             case .binary:
                 unsupportedShareableView(
                     icon: "doc", title: "Binary file",
@@ -420,11 +436,6 @@ struct WorkspaceFileViewer: View {
         } else {
             ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    /// Markdown files only: whether the user flipped to source view.
-    private var isMarkdownPreview: Bool {
-        isMarkdown && !isEditing
     }
 
     @ViewBuilder private func textView(_ file: FileExplorerFile) -> some View {
@@ -501,6 +512,46 @@ struct WorkspaceFileViewer: View {
                 icon: "doc.text", title: "No content",
                 detail: "The daemon returned no text for this file.")
         }
+    }
+
+    /// An HTML page with the Preview / Source control: Preview is the sandboxed web view
+    /// (JavaScript off, no network), Source the highlighted markup (UX spec §6).
+    @ViewBuilder private var htmlContent: some View {
+        if let text = file?.textContent {
+            if previewAsSource {
+                WorkspaceCodeView(source: text, language: "html")
+            } else if text.utf16.count > 200_000 {
+                unsupportedView(
+                    icon: "doc.text", title: "File too large to preview",
+                    detail: "\(WorkspaceFileFormat.bytes(file?.size ?? 0)) · Switch to Source.")
+            } else {
+                sandboxedPreview(WorkspaceFileWebDocument.html(text, dark: colorScheme == .dark))
+            }
+        } else {
+            unsupportedView(
+                icon: "doc.text", title: "No content",
+                detail: "The daemon returned no text for this file.")
+        }
+    }
+
+    /// An SVG file: decoded from the daemon's base64 image bytes and rendered by the sandboxed
+    /// web view, fitted to the width. No scripts can run (UX spec §6).
+    @ViewBuilder private func svgContent(_ file: FileExplorerFile) -> some View {
+        if let data = imageData, let source = String(data: data, encoding: .utf8) {
+            sandboxedPreview(WorkspaceFileWebDocument.svg(source, dark: colorScheme == .dark))
+        } else {
+            unsupportedView(
+                icon: "photo", title: "Image can't be shown",
+                detail: "The daemon sent SVG bytes this view can't decode.")
+        }
+    }
+
+    /// The file preview web view: scrollable, filling the viewer, page JavaScript off.
+    private func sandboxedPreview(_ html: String) -> some View {
+        SandboxedHTMLView(
+            html: html, heightFloor: 0, heightCeiling: 0, onHeightChange: { _ in },
+            fillsFrame: true, allowsScripts: false
+        )
     }
 
     /// Images render zoomable: pinch, drag while zoomed, double-tap to toggle 1x/2x.

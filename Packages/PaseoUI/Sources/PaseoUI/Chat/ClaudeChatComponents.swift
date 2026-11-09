@@ -127,6 +127,10 @@ struct ClaudeCopyButton: View {
 ///
 /// Long-press → "Rewind to here" appears only once the provider acknowledged the message
 /// (`rewindChoices` non-empty). The actual rewind confirm lives in the transcript.
+///
+/// The long-press preview is the bubble itself, clipped to its rounded shape (UX spec §4.3),
+/// and text selection moved out of the bubble into "Select text": selection drawn inside the
+/// padded, filled bubble painted a full-width rectangle (B12).
 struct ClaudeUserBubble: View {
     var text: String
     var isPending: Bool
@@ -147,6 +151,11 @@ struct ClaudeUserBubble: View {
     /// Captured at insertion: true only for a message that was pending when it appeared
     /// (i.e. sent this session). History rows are never pending, so they never animate.
     @State private var entered: Bool
+    /// The "Select text" sheet.
+    @State private var showingText = false
+
+    /// The bubble's shape, shared by the fill and the context-menu preview.
+    private static let bubbleRadius: CGFloat = 20
 
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
@@ -167,16 +176,7 @@ struct ClaudeUserBubble: View {
     var body: some View {
         HStack {
             Spacer(minLength: 42)
-            bodyText
-                .font(ClaudeTypography().sans(14))
-                .foregroundStyle(ClaudePalette.primaryInk)
-                .textSelection(.enabled)
-                .lineSpacing(8) // 14 / 22
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(ClaudePalette.userBubble, in: .rect(cornerRadius: 20))
-                .opacity(isPending ? 0.6 : 1)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isPending)
+            bubble
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
         .scaleEffect(shownScale, anchor: .bottomTrailing)
@@ -187,28 +187,52 @@ struct ClaudeUserBubble: View {
                 : .timingCurve(0.22, 1, 0.36, 1, duration: 0.2),
             value: entered)
         .onAppear { entered = true }
-        .contextMenu {
-            Button("Copy", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = text
-                Haptics.selection()
-            }
-            if let onRewind, !rewindChoices.isEmpty {
-                Divider()
-                if rewindChoices.count == 1, let scope = rewindChoices.first {
-                    Button("Rewind to here", systemImage: "arrow.uturn.left") { onRewind(scope) }
-                } else {
-                    Menu("Rewind to here", systemImage: "arrow.uturn.left") {
-                        ForEach(rewindChoices, id: \.self) { scope in
-                            Button(rewindScopeTitle(scope)) { onRewind(scope) }
-                        }
+    }
+
+    /// The filled bubble, and the thing the context-menu preview shows.
+    private var bubble: some View {
+        bodyText
+            .font(ClaudeTypography().sans(14))
+            .foregroundStyle(ClaudePalette.primaryInk)
+            .lineSpacing(8) // 14 / 22
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                ClaudePalette.userBubble, in: .rect(cornerRadius: Self.bubbleRadius, style: .continuous)
+            )
+            .contentShape(
+                .contextMenuPreview,
+                RoundedRectangle(cornerRadius: Self.bubbleRadius, style: .continuous))
+            .opacity(isPending ? 0.6 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isPending)
+            .contextMenu { menuItems }
+            .sheet(isPresented: $showingText) { MessageTextSheet(text: text) }
+    }
+
+    @ViewBuilder private var menuItems: some View {
+        Button("Copy", systemImage: "doc.on.doc") {
+            UIPasteboard.general.string = text
+            Haptics.selection()
+        }
+        Button("Select text", systemImage: "textformat.alt") {
+            showingText = true
+        }
+        if let onRewind, !rewindChoices.isEmpty {
+            Divider()
+            if rewindChoices.count == 1, let scope = rewindChoices.first {
+                Button("Rewind to here", systemImage: "arrow.uturn.left") { onRewind(scope) }
+            } else {
+                Menu("Rewind to here", systemImage: "arrow.uturn.left") {
+                    ForEach(rewindChoices, id: \.self) { scope in
+                        Button(rewindScopeTitle(scope)) { onRewind(scope) }
                     }
                 }
             }
-            if let onEdit, let onRerun, canRewrite {
-                Divider()
-                Button("Edit", systemImage: "pencil") { onEdit() }
-                Button("Rerun", systemImage: "arrow.clockwise") { onRerun() }
-            }
+        }
+        if let onEdit, let onRerun, canRewrite {
+            Divider()
+            Button("Edit", systemImage: "pencil") { onEdit() }
+            Button("Rerun", systemImage: "arrow.clockwise") { onRerun() }
         }
     }
 

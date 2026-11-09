@@ -16,7 +16,7 @@ import Testing
                 == [
                     "hello_rejection": true,
                     "terminal_chunked_replay": true,
-                    "providerSubagents": true,
+                    "provider_subagents": true,
                     "owned_subscriptions": true,
                     "workspace_setup_observation": true,
                     // M15: realtime voice mode is implemented (`VoiceModeSession`), so the
