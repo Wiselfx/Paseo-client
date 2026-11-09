@@ -16,9 +16,9 @@ extension EnvironmentValues {
 }
 
 /// The app after connecting: a drawer of workspaces and their agents on the left, the selected
-/// agent's conversation in the middle, and the workspace panel sliding in from the right edge.
-/// Both edges share the `EdgeDrawer` physics; the main surface tracks the finger, settles by
-/// position and velocity, and takes the display's corner radius on all four sides.
+/// agent's conversation in the middle, and the workspace panel pushed over both from the right
+/// edge. Both edges share the `EdgeDrawer` physics; the surfaces track the finger, settle by
+/// projected position, and keep the display's corner radius throughout.
 public struct PaseoShellView: View {
     let session: HostSession
     var onDisconnect: () -> Void
@@ -45,7 +45,10 @@ public struct PaseoShellView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let drawerFraction: CGFloat = 0.82
-    private let panelFraction: CGFloat = 0.88
+    /// The panel is a full-width push, not a drawer (§1.3).
+    private let panelFraction: CGFloat = 1
+    /// How far the conversation slides left while the panel is up (§1.3).
+    private let panelParallax: CGFloat = 0.3
 
     public init(
         session: HostSession, onDisconnect: @escaping () -> Void,
@@ -61,81 +64,7 @@ public struct PaseoShellView: View {
 
     public var body: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width
-            let drawerWidth = width * drawerFraction
-            let panelWidth = width * panelFraction
-            let corner = EdgeDrawer.cornerRadius(forScreenWidth: width)
-            ZStack(alignment: .leading) {
-                ClaudePalette.sidebarBackground.ignoresSafeArea()
-                PaseoSidebar(
-                    session: session,
-                    selectedAgentId: selectedAgentId,
-                    onSelectAgent: { select($0) },
-                    onNewAgent: { openNewAgent(workspace: $0) },
-                    onDisconnect: onDisconnect,
-                    onTogglePanel: { settlePanel(open: !isPanelOpen) },
-                    addProjectRequest: $addProjectRequested
-                )
-                .frame(width: drawerWidth)
-                .frame(maxHeight: .infinity, alignment: .top)
-
-                main
-                    .frame(width: width, height: geometry.size.height)
-                    .background(ClaudePalette.background.ignoresSafeArea())
-                    .environment(\.composerFocusRequested, $composerFocusRequested)
-                    .clipShape(
-                        .rect(cornerRadius: corner * drawerProgress, style: .continuous)
-                    )
-                    .overlay {
-                        EdgeDrawerDim(progress: drawerProgress) { settleDrawer(open: false) }
-                    }
-                    .offset(x: drawerWidth * drawerProgress)
-                    .shadow(
-                        color: .black.opacity(0.25 * Double(drawerProgress)),
-                        radius: 8 * drawerProgress)
-                    .edgeDrawerDrag(
-                        edge: .leading, screenWidth: width, drawerWidth: drawerWidth,
-                        isOpen: isDrawerOpen, blocked: isPanelOpen,
-                        progress: $drawerProgress, onSettle: { settleDrawer(open: $0) })
-                    .edgeDrawerDrag(
-                        edge: .trailing, screenWidth: width, drawerWidth: panelWidth,
-                        isOpen: isPanelOpen, blocked: isDrawerOpen,
-                        progress: $panelProgress, onSettle: { settlePanel(open: $0) })
-
-                EdgeDrawerDim(progress: panelProgress) { settlePanel(open: false) }
-
-                if isPanelOpen || panelProgress > 0 {
-                    WorkspacePanel(
-                        session: session,
-                        workspace: selectedWorkspace,
-                        currentAgentId: selectedAgentId,
-                        onSelectAgent: { id in
-                            select(id)
-                            settlePanel(open: false)
-                        },
-                        onNewAgent: { workspace in
-                            openNewAgent(workspace: workspace)
-                            settlePanel(open: false)
-                        },
-                        onMentionInChat: mentionInChat,
-                        initialTerminalId: panelTerminalId
-                    )
-                    .frame(width: panelWidth)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .clipShape(
-                        .rect(cornerRadius: corner * panelProgress, style: .continuous)
-                    )
-                    .shadow(
-                        color: .black.opacity(0.25 * Double(panelProgress)),
-                        radius: 8 * panelProgress)
-                    .offset(x: width - panelWidth * panelProgress)
-                    .edgeDrawerDrag(
-                        edge: .trailing, screenWidth: width, drawerWidth: panelWidth,
-                        isOpen: isPanelOpen, blocked: isDrawerOpen,
-                        progress: $panelProgress, onSettle: { settlePanel(open: $0) })
-                }
-            }
-            .clipped()
+            shell(width: geometry.size.width, height: geometry.size.height)
         }
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
@@ -192,6 +121,102 @@ public struct PaseoShellView: View {
                 select(first.id, closeDrawer: false)
             }
         }
+    }
+
+    // MARK: Shell
+
+    /// Three surfaces, one material (§1): the sidebar revealed underneath, the conversation card,
+    /// and the workspace panel pushed over both. The canvas and both cards are full bleed — the
+    /// status bar and the home indicator area always belong to whichever surface is on top — and
+    /// the cards keep the display's corner radius at every point of the move.
+    private func shell(width: CGFloat, height: CGFloat) -> some View {
+        let drawerWidth = width * drawerFraction
+        return ZStack(alignment: .leading) {
+            // Sidebar canvas == conversation canvas (§1.1): only the hairline and the dim
+            // separate the two surfaces.
+            ClaudePalette.background.ignoresSafeArea()
+            sidebarSurface(width: drawerWidth)
+            conversationSurface(width: width, height: height, drawerWidth: drawerWidth)
+            panelSurface(width: width, height: height)
+        }
+    }
+
+    private func sidebarSurface(width: CGFloat) -> some View {
+        PaseoSidebar(
+            session: session,
+            selectedAgentId: selectedAgentId,
+            onSelectAgent: { select($0) },
+            onNewSession: { openNewSession(workspaceId: $0) },
+            onNewAgent: { openNewAgent(workspace: $0) },
+            currentWorkspaceId: conversation?.agent?.workspaceId,
+            onDisconnect: onDisconnect,
+            onTogglePanel: { settlePanel(open: !isPanelOpen) },
+            addProjectRequest: $addProjectRequested
+        )
+        .frame(width: width)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private func conversationSurface(width: CGFloat, height: CGFloat, drawerWidth: CGFloat)
+        -> some View
+    {
+        let offset = drawerWidth * drawerProgress - width * panelParallax * panelProgress
+        return main
+            .frame(width: width, height: height)
+            .background { EdgeDrawerCard() }
+            .environment(\.composerFocusRequested, $composerFocusRequested)
+            .overlay {
+                EdgeDrawerDim(progress: max(drawerProgress, panelProgress), onTap: closeDrawers)
+            }
+            .overlay { EdgeDrawerHairline(progress: drawerProgress) }
+            .offset(x: offset)
+            .edgeDrawerDrag(
+                edge: .leading, screenWidth: width, drawerWidth: drawerWidth,
+                isOpen: isDrawerOpen, blocked: isPanelOpen,
+                progress: $drawerProgress, onSettle: { settleDrawer(open: $0) })
+            .edgeDrawerDrag(
+                edge: .trailing, screenWidth: width, drawerWidth: width * panelFraction,
+                isOpen: isPanelOpen, blocked: isDrawerOpen,
+                progress: $panelProgress, onSettle: { settlePanel(open: $0) })
+    }
+
+    /// The panel stays mounted so its tab, its scroll position and its gesture state survive a
+    /// close and reopen for the same workspace; it is off screen unless it is up (§1.3, §1.4).
+    private func panelSurface(width: CGFloat, height: CGFloat) -> some View {
+        WorkspacePanel(
+            session: session,
+            workspace: selectedWorkspace,
+            currentAgentId: selectedAgentId,
+            onSelectAgent: { id in
+                select(id)
+                settlePanel(open: false)
+            },
+            onNewAgent: { workspace in
+                openNewAgent(workspace: workspace)
+                settlePanel(open: false)
+            },
+            onMentionInChat: mentionInChat,
+            initialTerminalId: panelTerminalId,
+            onClose: { settlePanel(open: false) },
+            dismissDrag: PanelDismissDrag(
+                progress: $panelProgress, width: width,
+                onSettle: { settlePanel(open: $0) })
+        )
+        // Per-workspace identity: the panel's tab is stored per workspace, and a workspace
+        // switch must load that workspace's own remembered tab. Closing and reopening the same
+        // workspace keeps the identity, so the tab and scroll position survive.
+        .id(selectedWorkspace?.id ?? "none")
+        .frame(width: width * panelFraction, height: height, alignment: .top)
+        .background { EdgeDrawerCard() }
+        .overlay { EdgeDrawerHairline(progress: panelProgress) }
+        .offset(x: width * (1 - panelProgress))
+        .edgeDrawerDrag(
+            edge: .leading, screenWidth: width, drawerWidth: width,
+            isOpen: isPanelOpen, blocked: isDrawerOpen, openDirection: .trailing,
+            requiresEdgeZone: true,
+            progress: $panelProgress, onSettle: { settlePanel(open: $0) })
+        .accessibilityHidden(panelProgress == 0)
+        .allowsHitTesting(panelProgress > 0)
     }
 
     // MARK: Main
@@ -304,24 +329,28 @@ public struct PaseoShellView: View {
     }
 
     private func settleDrawer(open: Bool) {
-        let changed = open != isDrawerOpen
-        if open { settlePanel(open: false) }
-        isDrawerOpen = open
-        let animation: Animation = EdgeDrawer.settleAnimation(reduceMotion: reduceMotion)
-        withAnimation(animation) {
-            drawerProgress = open ? 1 : 0
-        }
-        if changed { Haptics.selection() }
+        settle(drawer: open, panel: false)
     }
 
     private func settlePanel(open: Bool) {
-        let changed = open != isPanelOpen
-        if open { settleDrawer(open: false) }
-        if !open { panelTerminalId = nil }
-        isPanelOpen = open
-        let animation: Animation = EdgeDrawer.settleAnimation(reduceMotion: reduceMotion)
+        settle(drawer: false, panel: open)
+    }
+
+    private func closeDrawers() {
+        settle(drawer: false, panel: false)
+    }
+
+    /// Both progresses settle inside one `withAnimation`: opening one drawer closes the other in
+    /// the same frame with the same curve, so there is no double animation and no desync (§1.4).
+    private func settle(drawer: Bool, panel: Bool) {
+        let changed = drawer != isDrawerOpen || panel != isPanelOpen
+        isDrawerOpen = drawer
+        isPanelOpen = panel
+        if !panel { panelTerminalId = nil }
+        let animation = EdgeDrawer.settleAnimation(reduceMotion: reduceMotion)
         withAnimation(animation) {
-            panelProgress = open ? 1 : 0
+            drawerProgress = drawer ? 1 : 0
+            panelProgress = panel ? 1 : 0
         }
         if changed { Haptics.selection() }
     }
@@ -429,6 +458,36 @@ public struct PaseoShellView: View {
             }
         }
         if closeDrawer && isDrawerOpen { self.settleDrawer(open: false) }
+    }
+
+    /// One route for every "new session" entry point the sidebar owns (U1). U2 replaces the
+    /// body with the draft session; until then it opens the existing New agent sheet for the
+    /// requested workspace, the current conversation's workspace, or the most recently used one.
+    private func openNewSession(workspaceId: String?) {
+        if let workspaceId, let workspace = session.workspaceDirectory.workspace(id: workspaceId) {
+            openNewAgent(workspace: workspace)
+            return
+        }
+        if let workspace = mostRecentWorkspace {
+            openNewAgent(workspace: workspace)
+            return
+        }
+        // No workspace at all: U2's draft shows the hero with an Add project action. Until then,
+        // take the user there instead of leaving the pill dead.
+        settleDrawer(open: true)
+        addProjectRequested = true
+    }
+
+    /// The workspace with the newest activity, for “New session” with no conversation on
+    /// screen (§2.2).
+    private var mostRecentWorkspace: WorkspaceDescriptor? {
+        func stamp(_ workspace: WorkspaceDescriptor) -> Date {
+            for value in [workspace.activityAt, workspace.lastUserMessageAt, workspace.createdAt] {
+                if let value, let date = PaseoDate.parse(value) { return date }
+            }
+            return .distantPast
+        }
+        return session.workspaceDirectory.workspaces.max { stamp($0) < stamp($1) }
     }
 
     private func openNewAgent(prompt: String) {
