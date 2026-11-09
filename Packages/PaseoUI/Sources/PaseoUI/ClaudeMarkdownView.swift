@@ -1,29 +1,36 @@
 #if canImport(UIKit)
     import SwiftUI
 
-    /// Theme values are independent of the AST. Claude's uncaptured rich-block metrics remain provisional.
+    /// Theme values follow `docs/research/08-dsh-live-observation.md` §6: 14 / 23 serif body,
+    /// 12 pt between blocks, 13 pt mono code. Claude's uncaptured rich-block metrics remain provisional.
     public struct ClaudeMarkdownTheme {
         public var bodyFont: Font
         public var headingFonts: [Font]
         public var codeFont: Font
         public var foreground: Color = .primary
         public var secondary: Color = .secondary
-        public var link: Color = ClaudePalette.adaptive(light: 0.30, dark: 0.75)
-        public var inlineCodeForeground: Color = Color(red: 0.40, green: 0.64, blue: 0.91)
-        public var quoteBar: Color = .secondary.opacity(0.45)
-        public var codeBackground: Color = ClaudePalette.adaptive(light: 1, dark: 0.125)
-        public var inlineCodeBackground: Color = .secondary.opacity(0.10)
+        public var link: Color = ClaudePalette.proseLink
+        public var inlineCodeForeground: Color = ClaudePalette.primaryInk
+        /// The blockquote's wash: rgba(20,20,19,0.04) light / rgba(250,249,245,0.06) dark.
+        public var quoteWash: Color = ClaudePalette.quoteWash
+        public var codeBackground: Color = ClaudePalette.codeSurface
+        public var inlineCodeBackground: Color = ClaudePalette.inlineCodeFill
         public var tableHeaderBackground: Color = ClaudePalette.adaptive(light: 1, dark: 0.16)
-        public var rule: Color = .secondary.opacity(0.25)
-        public var blockSpacing: CGFloat = 18
-        public var lineSpacing: CGFloat = 4
+        public var rule: Color = ClaudePalette.divider
+        public var blockSpacing: CGFloat = 12
+        public var lineSpacing: CGFloat = 9
         public var listSpacing: CGFloat = 9
         public var tableColumnWidth: CGFloat = 150
         public init(serifName: String = "Newsreader16pt-Regular", bodySize: CGFloat = 20) {
-            foreground = ClaudePalette.ink
+            foreground = ClaudePalette.primaryInk
             bodyFont = .custom(serifName, size: bodySize, relativeTo: .body)
-            headingFonts = [28, 25, 22, 20, 19, 18].map { .custom(serifName, size: $0, relativeTo: .headline).bold() }
-            codeFont = ClaudeTypography().mono(15, relativeTo: .body)
+            // h1 21/30, h2 18/26, h3 16/24 700; h4 14/24 600; h5/h6 keep the h4 face smaller.
+            let headingSizes: [CGFloat] = [21, 18, 16, 14, 13, 12]
+            headingFonts = headingSizes.enumerated().map { index, size in
+                Font.custom(serifName, size: size, relativeTo: index < 3 ? .headline : .body)
+                    .weight(index < 3 ? .bold : .semibold)
+            }
+            codeFont = ClaudeTypography().mono(13, relativeTo: .body)
         }
         public static var artifact: Self {
             var theme = Self()
@@ -143,9 +150,16 @@
                 return AnyView(Rectangle().fill(theme.rule).frame(height: 1).accessibilityLabel("Horizontal rule"))
             case .quote(let children):
                 return AnyView(
-                    HStack(alignment: .top, spacing: 14) { blocks(children) }.padding(.leading, 17).overlay(
-                        alignment: .leading
-                    ) { Rectangle().fill(theme.quoteBar).frame(width: 3) }.accessibilityIdentifier("markdown.quote"))
+                    blocks(children)
+                        .foregroundStyle(theme.secondary)
+                        .padding(.horizontal, 14) // .6em 1em ≈ .6em vertical, 1em horizontal
+                        .padding(.vertical, 8.4)
+                        .background(
+                            theme.quoteWash,
+                            in: UnevenRoundedRectangle(
+                                topLeadingRadius: 0, bottomLeadingRadius: 0, bottomTrailingRadius: 8,
+                                topTrailingRadius: 8))
+                        .accessibilityIdentifier("markdown.quote"))
             case .list(let start, let items):
                 return AnyView(
                     VStack(alignment: .leading, spacing: theme.listSpacing) {
@@ -254,6 +268,7 @@
                         value.link = link
                         value.foregroundColor = theme.link
                         value.underlineStyle = .single
+                        value.font = value.font?.weight(.medium) // the prose link is 500
                     }
                     if case .code = child {
                         piece = Text(value).customAttribute(InlineCodeAttribute())
@@ -295,7 +310,7 @@
                         run.foregroundColor = theme.inlineCodeForeground
                         run.backgroundColor = theme.inlineCodeBackground
                     }
-                    if bold { face = face.bold() }
+                    if bold { face = face.weight(.semibold) } // DSH strong is 600, not 700
                     if italic { face = face.italic() }
                     run.font = face
                     run.strikethroughStyle = strike ? .single : nil
@@ -325,7 +340,7 @@
                 for run in line {
                     if run[InlineCodeAttribute.self] != nil {
                         context.fill(
-                            Path(roundedRect: run.typographicBounds.rect.insetBy(dx: -3, dy: -1), cornerRadius: 6),
+                            Path(roundedRect: run.typographicBounds.rect.insetBy(dx: -1, dy: -1), cornerRadius: 4),
                             with: .color(background))
                     }
                     context.draw(run)

@@ -4,8 +4,10 @@ import Foundation
 import PaseoStore
 import SwiftUI
 
-/// The fixed set of states the waiting line shows (`docs/research/06-dsh-ux-spec.md` §2).
-/// No whimsical verbs: one of these, with the model's own file where the app can read it.
+/// The states the waiting line shows while the turn runs (`docs/research/08-dsh-live-observation.md`
+/// §3.1): the fixed set the copy names, plus the model's own words — a started file call fills
+/// `{file}`, a shell call contributes its own first line as the `description` argument would,
+/// and reasoning contributes the clause the model is on.
 enum ClaudeActivity: Hashable {
     case thinking
     case writing
@@ -14,6 +16,8 @@ enum ClaudeActivity: Hashable {
     case reading(String)
     case editing(String)
     case writingFile(String)
+    /// The model's own words — a shell call's command line or a reasoning clause.
+    case model(String)
 
     var text: String {
         switch self {
@@ -24,6 +28,16 @@ enum ClaudeActivity: Hashable {
         case .reading(let file): "Reading \(file)"
         case .editing(let file): "Editing \(file)"
         case .writingFile(let file): "Writing \(file)"
+        case .model(let words): words
+        }
+    }
+
+    /// The call's own words may not be lost to the standing wording lock: they wait for it and
+    /// are written at the first tick that finds it expired.
+    var isCallOwnWords: Bool {
+        switch self {
+        case .reading, .editing, .writingFile, .model: true
+        default: false
         }
     }
 
@@ -34,13 +48,25 @@ enum ClaudeActivity: Hashable {
         case .work(let group):
             guard let row = group.rows.last else { return .thinking }
             switch row.item {
-            case .reasoning: return .thinking
+            case .reasoning(let reasoning):
+                if let clause = ClaudeReasoningClause.extract(from: reasoning.text) {
+                    return .model(clause)
+                }
+                return .thinking
             case .toolCall(let call): return forToolCall(call)
             default: return .thinking
             }
         case .prose, .todo, .notice:
             return .writing
         }
+    }
+
+    /// True when the newest block is reasoning — the case where a previously read clause is held
+    /// across the gaps between clauses (`wait-state.ts`: the model's own clause is held).
+    static func reasoningIsNewest(_ turn: Turn) -> Bool {
+        guard case .work(let group) = turn.segments.last, let row = group.rows.last else { return false }
+        if case .reasoning = row.item { return true }
+        return false
     }
 
     static func forToolCall(_ call: ToolCall) -> ClaudeActivity {
@@ -51,11 +77,24 @@ enum ClaudeActivity: Hashable {
             return .editing(fileName(path))
         case .write(let path, _):
             return .writingFile(fileName(path))
+        case .shell(let command, _, _, _):
+            // Our protocol model carries no separate `description` argument for shell calls,
+            // so the command's own first line stands in — first letter capitalised, whitespace
+            // collapsed — the shape the reference applies to a real `description`.
+            let line = firstLine(command)
+            guard !line.isEmpty else { return .runningTools }
+            let collapsed = line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            return .model(collapsed.prefix(1).uppercased() + collapsed.dropFirst())
         case .unknown:
             return call.status == .running ? .preparingToolCall : .runningTools
         default:
             return .runningTools
         }
+    }
+
+    static func firstLine(_ text: String) -> String {
+        let line = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? text
+        return line.trimmingCharacters(in: .whitespaces)
     }
 
     static func fileName(_ path: String) -> String {
@@ -92,13 +131,17 @@ extension Turn {
     }
 }
 
-/// Loader dots (18 × 14 box, 4 pt accents bouncing and flattening against the floor), the words
-/// with their highlight sweep, the turn clock, and "No response yet" after 10 s of silence.
+/// Loader (18 × 14, the accent), the words with the host's highlight band swept across them,
+/// the turn clock, and "No response yet" after 10 s of silence (doc 08 §2, §3).
 struct ClaudeLiveStatusLine: View {
     let turn: Turn
     let typography: ClaudeTypography
     @State private var activity: ClaudeActivity
     @State private var wordingChangedAt = Date()
+    /// A wording of the call's own words seen during a stand, held to be written first when it ends.
+    @State private var pendingDetail: ClaudeActivity?
+    /// The clause the model last said it was on, held across the gaps between clauses.
+    @State private var lastModelWords: String?
     @State private var lastActivityAt = Date()
     @State private var now = Date()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -116,16 +159,12 @@ struct ClaudeLiveStatusLine: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            ClaudeLoaderDots()
+            ClaudeLoader()
             ClaudeSweepText(text: activity.text, font: typography.sans(14))
                 .id(activity)
-                .transition(
-                    .asymmetric(
-                        insertion: .offset(y: 8).combined(with: .opacity),
-                        removal: .offset(y: -8).combined(with: .opacity))
-                )
+                .transition(.asymmetric(insertion: .claudeWordEntrance, removal: .claudeWordExit))
             Text(DurationText.short(elapsed))
-                .font(typography.mono(13))
+                .font(typography.sans(13).monospacedDigit())
                 .foregroundStyle(ClaudePalette.captionInk)
                 .padding(.leading, 2)
             if showsOvertime {
@@ -133,7 +172,8 @@ struct ClaudeLiveStatusLine: View {
                     .font(typography.sans(11, weight: .medium))
                     .foregroundStyle(ClaudePalette.warning)
                     .padding(.horizontal, 6)
-                    .frame(height: 18)
+                    .padding(.leading, 2)
+                    .frame(height: 16)
                     .background(ClaudePalette.warning.opacity(0.16), in: .rect(cornerRadius: 5))
                     .transition(.offset(y: 4).combined(with: .scale(scale: 0.92)).combined(with: .opacity))
             }
@@ -147,12 +187,25 @@ struct ClaudeLiveStatusLine: View {
         .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
         .onReceive(ticker) { date in
             now = date
-            let next = ClaudeActivity.current(for: turn)
+            var next = ClaudeActivity.current(for: turn)
+            if case .model(let words) = next {
+                lastModelWords = words
+            } else if next == .thinking, ClaudeActivity.reasoningIsNewest(turn), let held = lastModelWords {
+                next = .model(held)
+            }
             // A wording stands for a second so a fast turn reads as one line, not a flicker.
-            if next != activity, date.timeIntervalSince(wordingChangedAt) >= ClaudeMotion.wordLock {
-                activity = next
-                wordingChangedAt = date
-                lastActivityAt = date
+            // The call's own words are never lost to the lock: they wait for it and are written
+            // first when it ends.
+            if date.timeIntervalSince(wordingChangedAt) >= ClaudeMotion.wordLock {
+                let winner = pendingDetail ?? next
+                if winner != activity {
+                    activity = winner
+                    wordingChangedAt = date
+                    lastActivityAt = date
+                }
+                pendingDetail = nil
+            } else if next.isCallOwnWords, next != activity {
+                pendingDetail = next
             }
         }
         .accessibilityElement(children: .combine)
@@ -161,10 +214,13 @@ struct ClaudeLiveStatusLine: View {
 }
 
 /// The words with the host's highlight band swept across them while the turn runs.
+/// The band is a masked copy of the glyphs tinted the shimmer ink — never a coloured wash.
 struct ClaudeSweepText: View {
     let text: String
     let font: Font
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The words' first appearance anchors the band's 300 ms delay.
+    @State private var start = Date()
 
     @ViewBuilder var body: some View {
         let base = Text(text).font(font).foregroundStyle(ClaudePalette.secondaryInk)
@@ -172,55 +228,52 @@ struct ClaudeSweepText: View {
             base
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                let phase =
-                    context.date.timeIntervalSinceReferenceDate.truncatingRemainder(
-                        dividingBy: ClaudeMotion.statusPeriod) / ClaudeMotion.statusPeriod
-                base.overlay {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: max(0, phase - 0.25)),
-                            .init(color: ClaudePalette.ink.opacity(0.85), location: phase),
-                            .init(color: .clear, location: min(1, phase + 0.25)),
-                        ],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                    .mask(Text(text).font(font))
+                base.overlay(alignment: .leading) {
+                    if let phase = ClaudeSweep.phase(startedAt: start, at: context.date) {
+                        Text(text)
+                            .font(font)
+                            .foregroundStyle(ClaudePalette.shimmerInk)
+                            .mask(ClaudeSweep.windowGradient(phase: phase))
+                            .allowsHitTesting(false)
+                    }
                 }
             }
         }
     }
 }
 
-/// Three accents bouncing out of phase, flattening as they land.
-struct ClaudeLoaderDots: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let period: Double = 0.5
+/// The swap the line trades wordings by: old words leave upward through a 2 pt blur, new words
+/// enter from below, 150 ms ease-in-out with an 8 pt travel.
+private struct ClaudeBlurSwap: ViewModifier {
+    var blur: CGFloat
+    var y: CGFloat
+    var alpha: CGFloat
 
-    var body: some View {
-        if reduceMotion {
-            dots(at: 0)
-        } else {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                dots(at: context.date.timeIntervalSinceReferenceDate)
-            }
+    var animatableData: AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(blur, AnimatablePair(y, alpha)) }
+        set {
+            blur = newValue.first
+            y = newValue.second.first
+            alpha = newValue.second.second
         }
     }
 
-    private func dots(at time: TimeInterval) -> some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            ForEach(0..<3, id: \.self) { index in
-                let raw = time / period + Double(index) * 0.4
-                let phase = raw - raw.rounded(.down)
-                let lift = CGFloat(max(0, sin(Double.pi * phase)))
-                Circle()
-                    .fill(ClaudePalette.orange)
-                    .frame(width: 4, height: 4)
-                    .scaleEffect(x: 1, y: 1 - 0.35 * lift, anchor: .bottom)
-                    .offset(y: -7 * lift)
-            }
-        }
-        .frame(width: 18, height: 14, alignment: .bottom)
-        .accessibilityHidden(true)
+    func body(content: Content) -> some View {
+        content.blur(radius: blur).offset(y: y).opacity(alpha)
+    }
+}
+
+extension AnyTransition {
+    static var claudeWordEntrance: AnyTransition {
+        .modifier(
+            active: ClaudeBlurSwap(blur: 2, y: 8, alpha: 0),
+            identity: ClaudeBlurSwap(blur: 0, y: 0, alpha: 1))
+    }
+
+    static var claudeWordExit: AnyTransition {
+        .modifier(
+            active: ClaudeBlurSwap(blur: 2, y: -8, alpha: 0),
+            identity: ClaudeBlurSwap(blur: 0, y: 0, alpha: 1))
     }
 }
 #endif

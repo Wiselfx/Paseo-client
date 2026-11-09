@@ -59,7 +59,7 @@ struct ClaudeToolCallDetail: View {
                     .textSelection(.enabled)
             }
         case .plan(let text):
-            Text(text).font(typography.serif(16)).foregroundStyle(ClaudePalette.ink).textSelection(.enabled)
+            Text(text).font(typography.serif(16)).foregroundStyle(ClaudePalette.primaryInk).textSelection(.enabled)
         case .worktreeSetup(_, _, let log):
             ClaudeCodeBlock(output: log)
         case .unknown(_, let raw):
@@ -128,7 +128,7 @@ struct ClaudeDiffView: View {
                     ForEach(lines) { line in
                         Text(line.text.isEmpty ? " " : line.text)
                             .font(typography.mono(12.5))
-                            .foregroundStyle(line.kind == .header ? ClaudePalette.tertiaryInk : ClaudePalette.ink)
+                            .foregroundStyle(line.kind == .header ? ClaudePalette.tertiaryInk : ClaudePalette.primaryInk)
                             .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 12)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -171,7 +171,7 @@ struct ClaudeSearchResults: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(result.title)
                                     .font(typography.sans(14, weight: .medium))
-                                    .foregroundStyle(ClaudePalette.ink)
+                                    .foregroundStyle(ClaudePalette.primaryInk)
                                     .lineLimit(2)
                                 Text(url.host() ?? result.url)
                                     .font(typography.sans(13))
@@ -203,7 +203,7 @@ struct ClaudeTodoCard: View {
         ClaudeCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Text("Tasks").font(typography.sans(14, weight: .medium)).foregroundStyle(ClaudePalette.ink)
+                    Text("Tasks").font(typography.sans(14, weight: .medium)).foregroundStyle(ClaudePalette.primaryInk)
                     Spacer(minLength: 8)
                     Text("\(completed)/\(list.items.count) tasks")
                         .font(typography.sans(13))
@@ -217,7 +217,7 @@ struct ClaudeTodoCard: View {
                             .foregroundStyle(todo.completed ? ClaudePalette.successInk : ClaudePalette.secondaryInk)
                         Text(todo.status == "in_progress" ? (todo.activeForm ?? todo.text) : todo.text)
                             .font(typography.sans(14))
-                            .foregroundStyle(todo.completed ? ClaudePalette.secondaryInk : ClaudePalette.ink)
+                            .foregroundStyle(todo.completed ? ClaudePalette.secondaryInk : ClaudePalette.primaryInk)
                             .strikethrough(todo.completed, color: ClaudePalette.tertiaryInk)
                     }
                 }
