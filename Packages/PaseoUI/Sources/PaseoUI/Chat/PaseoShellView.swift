@@ -31,7 +31,17 @@ public struct PaseoShellView: View {
 
     @State private var selectedAgentId: String?
     @State private var conversation: ConversationStore?
-    @State private var newAgentRequest: NewAgentRequest?
+    /// The draft session (UX-SPEC §3): shown while no agent is selected and after every "New
+    /// session" entry point. One slot, like one draft tab.
+    @State private var draft: DraftSession?
+    /// Rebuilds the draft's view when the slot is filled with a different draft, so its focus and
+    /// attachment tray never leak from one workspace to another.
+    @State private var draftId = UUID()
+    /// The last settings picked in a draft, for the next one on this host (§3.1).
+    @State private var lastDraftPreferences = DraftPreferences()
+    /// True when the draft was opened from an entry point rather than by the idle shell, so a
+    /// late agent list never yanks it away from someone who is typing.
+    @State private var draftOpenedByUser = false
     @State private var isDrawerOpen = false
     @State private var drawerProgress: CGFloat = 0
     @State private var isPanelOpen = false
@@ -68,27 +78,12 @@ public struct PaseoShellView: View {
         }
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
-        .sheet(item: $newAgentRequest) { request in
-            ClaudeNewAgentSheet(
-                session: session,
-                workspaceId: request.workspaceId,
-                cwd: request.cwd,
-                initialPrompt: request.prompt
-            ) { agentId in
-                if let prompt = request.trimmedPrompt, conversation?.draft.trimmingCharacters(
-                    in: .whitespacesAndNewlines) == prompt
-                {
-                    conversation?.draft = ""
-                }
-                newAgentRequest = nil
-                select(agentId)
-            }
-        }
         .onAppear {
             session.hostSettings.startPresence(
                 focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
             session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
             if selectedAgentId == nil, let first = session.agents.first { select(first.id, closeDrawer: false) }
+            showDefaultDraftIfIdle()
             handleNotificationTarget()
             handleDeepLinkTarget()
         }
@@ -117,9 +112,15 @@ public struct PaseoShellView: View {
                     self.selectedAgentId = nil
                     if let first = agents.first { select(first.id, closeDrawer: false) }
                 }
-            } else if let first = agents.first {
+            } else if let first = agents.first, !draftOpenedByUser, draftIsUntouched {
+                // An empty shell adopts the newest agent; a draft someone opened — or has
+                // already typed into — stays.
                 select(first.id, closeDrawer: false)
             }
+            showDefaultDraftIfIdle()
+        }
+        .onChange(of: session.workspaceDirectory.hasLoaded) { _, _ in
+            showDefaultDraftIfIdle()
         }
     }
 
@@ -270,19 +271,36 @@ public struct PaseoShellView: View {
         VStack(spacing: 0) {
             connectionBanner
             if let conversation {
-            ClaudeChatView(
-                session: session,
-                store: conversation,
-                onOpenSidebar: { settleDrawer(open: true) },
-                onOpenPanel: { settlePanel(open: true) },
-                onNewAgent: { prompt in openNewAgent(prompt: prompt) },
-                onForkAgent: { agentId in select(agentId) },
-                onOpenAgent: { agentId in select(agentId) }
-            )
-            .id(conversation.agentId)
-        } else {
-            emptyMain
-        }
+                ClaudeChatView(
+                    session: session,
+                    store: conversation,
+                    onOpenSidebar: { settleDrawer(open: true) },
+                    onOpenPanel: { settlePanel(open: true) },
+                    onNewAgent: { prompt in openNewAgent(prompt: prompt) },
+                    onForkAgent: { agentId in select(agentId) },
+                    onOpenAgent: { agentId in select(agentId) }
+                )
+                .id(conversation.agentId)
+            } else if let draft {
+                DraftChatView(
+                    session: session,
+                    draft: draft,
+                    onOpenSidebar: { settleDrawer(open: true) },
+                    onOpenPanel: { settlePanel(open: true) },
+                    onAddProject: {
+                        settleDrawer(open: true)
+                        addProjectRequested = true
+                    },
+                    onCreated: { agentId in
+                        self.lastDraftPreferences = draft.preferences
+                        self.draft = nil
+                        select(agentId)
+                    }
+                )
+                .id(draftId)
+            } else {
+                emptyMain
+            }
         }
     }
 
@@ -305,7 +323,7 @@ public struct PaseoShellView: View {
             .padding(.horizontal, 12)
             .frame(height: 48)
             ZStack {
-                ClaudeHomeHero(hint: "Pick a workspace from the sidebar to start.")
+                ClaudeHomeHero()
                 if let error = session.agentsError {
                     VStack {
                         Spacer()
@@ -446,6 +464,9 @@ public struct PaseoShellView: View {
     }
 
     private func select(_ agentId: String, closeDrawer: Bool = true) {
+        // Picking an agent always leaves the draft, even when it is the agent the sidebar still
+        // shows selected: the row is the way back to the conversation.
+        dropDraft()
         if selectedAgentId != agentId {
             selectedAgentId = agentId
             conversation = session.conversation(for: agentId)
@@ -460,22 +481,36 @@ public struct PaseoShellView: View {
         if closeDrawer && isDrawerOpen { self.settleDrawer(open: false) }
     }
 
-    /// One route for every "new session" entry point the sidebar owns (U1). U2 replaces the
-    /// body with the draft session; until then it opens the existing New agent sheet for the
-    /// requested workspace, the current conversation's workspace, or the most recently used one.
-    private func openNewSession(workspaceId: String?) {
-        if let workspaceId, let workspace = session.workspaceDirectory.workspace(id: workspaceId) {
-            openNewAgent(workspace: workspace)
+    // MARK: Drafts
+
+    /// The draft system's one entry point: the sidebar's "New session" pill and each workspace's
+    /// `+` (both `onNewSession(workspaceId:)`), the panel's Agents tab, the composer's menu, the
+    /// command center and the deep links all land here.
+    private func openNewSession(workspaceId: String?, userInitiated: Bool = true) {
+        let directory = session.workspaceDirectory
+        let onScreen = conversation?.agent?.workspaceId
+        let resolved =
+            workspaceId.flatMap { directory.workspace(id: $0) }
+            ?? onScreen.flatMap { directory.workspace(id: $0) }
+            ?? mostRecentWorkspace
+        if userInitiated { draftOpenedByUser = true }
+        settleDrawer(open: false)
+        // A new session is not the agent that was on screen: the draft replaces the chat, and
+        // the sidebar stops marking a row as current.
+        selectedAgentId = nil
+        conversation = nil
+        if let current = draft, current.workspaceId == resolved?.id,
+            current.pendingPrompt == nil
+        {
             return
         }
-        if let workspace = mostRecentWorkspace {
-            openNewAgent(workspace: workspace)
-            return
-        }
-        // No workspace at all: U2's draft shows the hero with an Add project action. Until then,
-        // take the user there instead of leaving the pill dead.
-        settleDrawer(open: true)
-        addProjectRequested = true
+        let preferences = draft?.preferences ?? lastDraftPreferences
+        if let current = draft { lastDraftPreferences = current.preferences }
+        // No workspace at all: the draft's hero offers "Add project" instead of a composer
+        // (§2.2), so there is still somewhere to go.
+        draft = DraftSession(
+            workspaceId: resolved?.id, cwd: resolved?.cwd ?? "", preferences: preferences)
+        draftId = UUID()
     }
 
     /// The workspace with the newest activity, for “New session” with no conversation on
@@ -490,36 +525,44 @@ public struct PaseoShellView: View {
         return session.workspaceDirectory.workspaces.max { stamp($0) < stamp($1) }
     }
 
+    /// "New agent" in a conversation's menu: the typed text moves into the draft rather than
+    /// being copied, so the conversation it came from is left empty.
     private func openNewAgent(prompt: String) {
-        guard let agent = conversation?.agent else { return }
-        newAgentRequest = NewAgentRequest(
-            id: UUID().uuidString,
-            workspaceId: agent.workspaceId,
-            cwd: agent.cwd,
-            prompt: prompt
-        )
+        let from = conversation
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        openNewSession(workspaceId: from?.agent?.workspaceId)
+        guard !trimmed.isEmpty else { return }
+        if let current = draft, current.text.isEmpty { current.text = prompt }
+        if from?.draft.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed {
+            from?.draft = ""
+        }
     }
 
     private func openNewAgent(workspace: WorkspaceDescriptor) {
-        newAgentRequest = NewAgentRequest(
-            id: UUID().uuidString,
-            workspaceId: workspace.id,
-            cwd: workspace.cwd,
-            prompt: ""
-        )
+        openNewSession(workspaceId: workspace.id)
     }
-}
 
-/// One presentation of the new-agent sheet, carrying the composer's first prompt.
-private struct NewAgentRequest: Identifiable {
-    var id: String
-    var workspaceId: String?
-    var cwd: String
-    var prompt: String
+    /// True when there is no draft, or one nobody has touched yet: the idle shell may still
+    /// adopt an arriving agent in that case.
+    private var draftIsUntouched: Bool {
+        guard let draft else { return true }
+        return !draft.isCreating && draft.pendingPrompt == nil
+            && draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
-    var trimmedPrompt: String? {
-        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+    /// No agent on screen and the directory is known: show the draft for the workspace that was
+    /// last in use, as Claude's home does.
+    private func showDefaultDraftIfIdle() {
+        guard selectedAgentId == nil, draft == nil, session.workspaceDirectory.hasLoaded else {
+            return
+        }
+        openNewSession(workspaceId: nil, userInitiated: false)
+    }
+
+    private func dropDraft() {
+        if let draft { lastDraftPreferences = draft.preferences }
+        draft = nil
+        draftOpenedByUser = false
     }
 }
 #endif

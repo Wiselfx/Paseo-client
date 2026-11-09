@@ -77,35 +77,6 @@ enum ClaudeGreeting {
     }
 }
 
-/// The Claude asterisk: twelve tapered rays around a shared centre.
-struct ClaudeAsteriskMark: Shape {
-    var rays: Int = 12
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let radius = min(rect.width, rect.height) / 2
-        guard radius > 0, rays > 0 else { return path }
-        let inner = radius * 0.06
-        let baseHalf = radius * 0.07
-        for index in 0..<rays {
-            let angle = CGFloat(index) / CGFloat(rays) * .pi * 2 - .pi / 2
-            let direction = CGPoint(x: cos(angle), y: sin(angle))
-            let perpendicular = CGPoint(x: -sin(angle), y: cos(angle))
-            let base = CGPoint(x: center.x + direction.x * inner, y: center.y + direction.y * inner)
-            let tip = CGPoint(x: center.x + direction.x * radius, y: center.y + direction.y * radius)
-            path.move(
-                to: CGPoint(
-                    x: base.x + perpendicular.x * baseHalf, y: base.y + perpendicular.y * baseHalf))
-            path.addLine(to: tip)
-            path.addLine(to: CGPoint(
-                x: base.x - perpendicular.x * baseHalf, y: base.y - perpendicular.y * baseHalf))
-            path.closeSubpath()
-        }
-        return path
-    }
-}
-
 /// The home state: the mark above a serif greeting, both rising in on the DSH tokens.
 struct ClaudeHomeHero: View {
     var hint: String?
@@ -121,8 +92,11 @@ struct ClaudeHomeHero: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            ClaudeAsteriskMark()
-                .fill(ClaudePalette.orange)
+            // The DSH Claude mark (clay, vector): `packages/assets/src/brand/claude-mark-clay.svg`
+            // from the Claude style reference. No drawn stand-in.
+            Image("ClaudeMark", bundle: .module)
+                .resizable()
+                .scaledToFit()
                 .frame(width: 44, height: 44)
                 .accessibilityHidden(true)
                 .modifier(ClaudeHeroRise(visible: markIn, reduceMotion: reduceMotion))

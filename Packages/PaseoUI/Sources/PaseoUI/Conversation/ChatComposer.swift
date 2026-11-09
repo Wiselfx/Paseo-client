@@ -8,6 +8,13 @@ import UniformTypeIdentifiers
 extension ClaudeChatView {
     // MARK: Composer
 
+    /// §4.1: the pill at rest, the two-row card once it is focused or holds something. Every
+    /// other composer control keys off this one value so the shape never half-changes.
+    var composerExpanded: Bool {
+        focused || !trimmedDraft.isEmpty || !trayItems.isEmpty || store.actionError != nil
+            || voiceActiveForAgent || voice.phase == .starting
+    }
+
     var composer: some View {
         VStack(alignment: .leading, spacing: 6) {
             slashMenu
@@ -15,48 +22,34 @@ extension ClaudeChatView {
             queueStack
             composerCard
         }
-        .padding(.horizontal, focused ? 8 : 16)
-        .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: focused)
+        .padding(.horizontal, composerExpanded ? 8 : 16)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: composerExpanded)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: slashQuery != nil)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: mentionQuery != nil)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isQueueNonEmpty)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: !trayItems.isEmpty)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: fastModeActive)
     }
 
     var composerCard: some View {
-        let card = VStack(alignment: .leading, spacing: 8) {
-            attachmentTray
-            dictationDeniedBanner
-            if let error = store.actionError {
+        let card = VStack(alignment: .leading, spacing: composerExpanded ? 8 : 0) {
+            if composerExpanded { attachmentTray }
+            if composerExpanded { dictationDeniedBanner }
+            if composerExpanded, let error = store.actionError {
                 Text(error)
                     .font(typography.sans(13))
                     .foregroundStyle(ClaudePalette.failureInk)
                     .padding(.horizontal, 8)
                     .transition(.opacity)
             }
-            composerTextField
-            if voiceActiveForAgent || voice.phase == .starting {
+            composerFieldRow
+            if composerExpanded, voiceActiveForAgent || voice.phase == .starting {
                 voiceBar
             }
-            HStack(spacing: 8) {
-                composerAddMenu
-                composerModelChip
-                fastModeChip
-                Spacer(minLength: 0)
-                contextMeter
-                voiceModeButton
-                dictateButton
-                composerSendControl
-            }
+            if composerExpanded { composerControlRow }
         }
         let framed = card
-        .padding(8)
-        .padding(.top, 1)
-        .background(ClaudePalette.composer, in: .rect(cornerRadius: 27))
-        .overlay {
-            RoundedRectangle(cornerRadius: 27).stroke(ClaudePalette.composerBorder, lineWidth: 0.7)
-        }
+        .composerCardChrome(expanded: composerExpanded)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: composerExpanded)
         .onChange(of: composerFocusRequested.wrappedValue) { _, requested in
             guard requested else { return }
             focused = true
@@ -70,6 +63,42 @@ extension ClaudeChatView {
             FullScreenComposer(draft: $store.draft, isRunning: store.isRunning) { send() }
         }
         return withComposerVoiceWiring(withComposerSheets(framed))
+    }
+
+    /// Row 1. At rest this row *is* the pill: the add button, the placeholder, the mic and the
+    /// voice control, one line high (§4.1). Expanded, the field takes the row alone and the
+    /// controls move below it.
+    ///
+    /// The add button is an overlay, not a leading sibling: the field must keep the same
+    /// structural position in both states or SwiftUI rebuilds it and the keyboard drops when the
+    /// pill grows.
+    @ViewBuilder var composerFieldRow: some View {
+        HStack(spacing: 8) {
+            composerTextField
+                .padding(.leading, composerExpanded ? 0 : 44)
+                .overlay(alignment: .leading) {
+                    if !composerExpanded { composerAddMenu }
+                }
+            if !composerExpanded {
+                dictateButton
+                voiceModeButton
+                if store.isRunning { composerSendControl }
+            }
+        }
+    }
+
+    /// Row 2: every chip the conversation has, then the trailing controls (§4.1).
+    @ViewBuilder var composerControlRow: some View {
+        HStack(spacing: 8) {
+            composerAddMenu
+            composerModelChip
+            fastModeChip
+            Spacer(minLength: 0)
+            contextMeter
+            voiceModeButton
+            dictateButton
+            composerSendControl
+        }
     }
 
     @ViewBuilder var dictationDeniedBanner: some View {
@@ -106,12 +135,12 @@ extension ClaudeChatView {
             axis: .vertical
         )
         .font(typography.sans(18))
-        .lineLimit(1...12)
+        .lineLimit(composerExpanded ? 1...12 : 1...1)
         .fixedSize(horizontal: false, vertical: true)
         .focused($focused)
         .tint(ClaudePalette.orange)
-        .padding(.horizontal, 6)
-        .padding(.top, 7)
+        .padding(.horizontal, composerExpanded ? 6 : 2)
+        .padding(.top, composerExpanded ? 7 : 0)
         .accessibilityIdentifier("composer.draft")
     }
 
@@ -168,26 +197,10 @@ extension ClaudeChatView {
     }
 
     var composerModelChip: some View {
-        Button {
+        ComposerModelChip(modelLabel: modelChipTitle, thinkingLabel: thinkingLabel) {
             focused = false
             sheet = .controls
-        } label: {
-            HStack(spacing: 3) {
-                Text(modelChipTitle)
-                if let thinkingLabel {
-                    Text(thinkingLabel).foregroundStyle(ClaudePalette.secondaryInk)
-                }
-            }
-            .font(typography.sans(14))
-            .foregroundStyle(ClaudePalette.ink)
-            .lineLimit(1)
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(ClaudePalette.chip, in: .capsule)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Model, thinking and mode")
-        .accessibilityIdentifier("composer.model")
     }
 
     @ViewBuilder var composerSendControl: some View {
@@ -648,28 +661,133 @@ extension ClaudeChatView {
     /// The dictation mic, split out of the composer row so the type checker sees one small
     /// expression at a time.
     var dictateButton: some View {
-        let listening = dictation.isListening
-        let ink: Color = listening ? .white : ClaudePalette.ink
-        let fill: Color = listening ? ClaudePalette.orange : ClaudePalette.chip
-        let scale: CGFloat = listening && !reduceMotion ? 1 + CGFloat(dictation.level) * 0.18 : 1
-        let pulse: Animation? = reduceMotion ? nil : .easeOut(duration: 0.12)
-        return Button {
-            if listening {
+        ComposerMicButton(isListening: dictation.isListening, level: Double(dictation.level)) {
+            if dictation.isListening {
                 dictation.stop(keepingDraft: true)
             } else {
                 dictation.toggle(currentDraft: store.draft)
             }
-        } label: {
-            Image(systemName: listening ? "mic.fill" : "mic")
+        }
+    }
+}
+
+// MARK: - Shared composer pieces
+
+/// The composer's card: a one-line pill at rest, a lifted card once open (UX-SPEC §4.1). Shared
+/// by the live conversation and the draft so both grow the same way.
+struct ComposerCardChrome: ViewModifier {
+    let expanded: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, expanded ? 8 : 12)
+            .padding(.vertical, expanded ? 8 : 0)
+            .frame(minHeight: 48)
+            .background(
+                ClaudePalette.composer,
+                in: .rect(cornerRadius: expanded ? 27 : 24, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: expanded ? 27 : 24, style: .continuous)
+                    .stroke(ClaudePalette.composerBorder, lineWidth: 0.7)
+            }
+    }
+}
+
+extension View {
+    func composerCardChrome(expanded: Bool) -> some View {
+        modifier(ComposerCardChrome(expanded: expanded))
+    }
+}
+
+/// "Model *Thinking*" in one grey chip (§4.1b). A draft passes its provider's label, because the
+/// provider is still a choice there (§3.1); a live agent has one already and shows the model only.
+/// No accent in any state (§0.1).
+struct ComposerModelChip: View {
+    var modelLabel: String
+    var thinkingLabel: String?
+    /// Draft only: draws the provider's glyph in front of the model.
+    var providerLabel: String?
+    var action: () -> Void
+
+    private let typography = ClaudeTypography()
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let providerLabel {
+                    ProviderGlyph(label: providerLabel)
+                }
+                Text(modelLabel)
+                if let thinkingLabel {
+                    Text(thinkingLabel).foregroundStyle(ClaudePalette.secondaryInk)
+                }
+            }
+            .font(typography.sans(14))
+            .foregroundStyle(ClaudePalette.ink)
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(ClaudePalette.chip, in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Model, thinking and mode")
+        .accessibilityIdentifier("composer.model")
+    }
+}
+
+/// The provider's mark in the model chip's leading edge. Host catalogues carry per-provider brand
+/// SVGs (`ProviderSnapshotEntry.iconSvg`), which this app does not render; the glyph is a two-
+/// letter monogram on a small tile instead, so it reads the same for every provider and stays
+/// monochrome (§0.1).
+struct ProviderGlyph: View {
+    let label: String
+
+    var body: some View {
+        Text(monogram)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(ClaudePalette.secondaryInk)
+            .frame(width: 16, height: 16)
+            .background(ClaudePalette.panel, in: .rect(cornerRadius: 4, style: .continuous))
+            .accessibilityHidden(true)
+    }
+
+    /// "Claude" → "Cl", "openai/codex" → "Co".
+    private var monogram: String {
+        let letters = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            .drop { !$0.isLetter }
+        guard let first = letters.first else { return "?" }
+        return String(first).uppercased() + String(letters.dropFirst().prefix(1)).lowercased()
+    }
+}
+
+/// The dictation mic: ink on `chip`, accented and pulsing while it listens. The draft and the live
+/// conversation draw the same control.
+struct ComposerMicButton: View {
+    let isListening: Bool
+    /// 0…1 input level while listening.
+    let level: Double
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isListening ? "mic.fill" : "mic")
                 .font(.system(size: 17, weight: .medium))
                 .frame(width: 36, height: 36)
-                .foregroundStyle(ink)
-                .background(fill, in: .circle)
+                .foregroundStyle(isListening ? Color.white : ClaudePalette.ink)
+                .background(isListening ? ClaudePalette.orange : ClaudePalette.chip, in: .circle)
                 .scaleEffect(scale)
-                .animation(pulse, value: dictation.level)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: level)
         }
-        .accessibilityLabel(listening ? "Stop dictation" : "Dictate")
+        .accessibilityLabel(isListening ? "Stop dictation" : "Dictate")
         .accessibilityIdentifier("composer.dictate")
+    }
+
+    private var scale: CGFloat {
+        guard isListening, !reduceMotion else { return 1 }
+        return 1 + CGFloat(level) * 0.18
     }
 }
 #endif
