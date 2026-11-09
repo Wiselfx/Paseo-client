@@ -62,3 +62,14 @@ extend the checker, keep them suppressed:
 - **Cross-file receiver inference is per-file.** A view extension (`extension ClaudeChatView`)
   that uses a property declared in another file of the same type is not linked across files;
   such receivers resolve to nothing and are skipped, never guessed.
+
+## Known false positives (baseline, 2026-11-09)
+
+Eight findings are expected on a clean tree; anything else is new:
+
+- `missing-member`: `ClaudeStatusLine.swift` `.blur`, `EdgeDrawer.swift` `.simultaneousGesture` (generic `Content`).
+- `missing-static`: `AllCases` / `RawValue` in `PaseoSettingsView.swift` and `WelcomeView.swift` (generic `Option`).
+- `init-labels`: `DaemonEndpoint(url:credential:)` in `App/Sources/AppModel.swift` (the tool ignores the
+  defaulted `relay:` parameter).
+
+`unknown-type` hits for Apple framework types (UIKit, AVFoundation, UserNotifications…) are noise.
