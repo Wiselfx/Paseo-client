@@ -15,6 +15,8 @@ struct PaseoSettingsView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
+    /// Shared with the sidebar usage footer row; hidden by default.
+    @AppStorage("paseo.usage.showInSidebar") private var showUsageInSidebar = false
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
     @AppStorage(PaseoSettingsKeys.haptics) private var haptics = true
     @AppStorage(PaseoSettingsKeys.mascot) private var mascot = true
@@ -349,6 +351,21 @@ struct PaseoSettingsView: View {
                     .frame(height: 52)
                 }
                 Text("Applies when you tap send while a turn is running. Long-press on send does the opposite between Steer and Queue.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .padding(.leading, 16)
+                sectionLabel("Usage")
+                RowGroup {
+                    Toggle(isOn: $showUsageInSidebar) {
+                        Label("Show usage in sidebar", systemImage: "chart.bar")
+                            .font(.system(size: 17))
+                    }
+                    .tint(.blue)
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .accessibilityIdentifier("settings.showUsageInSidebar")
+                }
+                Text("One line per account the host reports usage for, with its pinned-window meters. Hidden by default.")
                     .font(.system(size: 13))
                     .foregroundStyle(ClaudePalette.secondary)
                     .padding(.leading, 16)

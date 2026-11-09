@@ -76,6 +76,8 @@ public struct ClaudeChatView: View {
     @State private var composerQueue = ComposerQueueStore.shared
     /// M8b: the full-height editor for long drafts (expand control in the card's top-right).
     @State private var showFullScreenComposer = false
+    /// M8e: context meter tap → the details sheet (wired to `store.contextUsage`).
+    @State private var showContextSheet = false
     /// M8b: debounce for saved-draft writes (~500 ms).
     @State private var draftSaveTask: Task<Void, Never>?
     /// M6a: attachments for this conversation, app-scope so they survive agent switches.
@@ -135,6 +137,9 @@ public struct ClaudeChatView: View {
         .overlay(alignment: .bottom) { backToEnd }
         .sheet(item: $sheet) { _ in
             ClaudeAgentControlsSheet(session: session, store: store)
+        }
+        .sheet(isPresented: $showContextSheet) {
+            ClaudeContextSheet(store: store)
         }
         .sheet(isPresented: Binding(
             get: { openFilePath != nil },
@@ -1448,6 +1453,7 @@ public struct ClaudeChatView: View {
                 .accessibilityIdentifier("composer.model")
                 fastModeChip
                 Spacer(minLength: 0)
+                contextMeter
                 Button {
                     if dictation.isListening {
                         dictation.stop(keepingDraft: true)
@@ -1603,6 +1609,26 @@ public struct ClaudeChatView: View {
             .accessibilityLabel("Fast mode on; turn off")
             .accessibilityIdentifier("composer.fastmode")
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
+        }
+    }
+
+    /// The quiet context-window meter in the toolbar: the host's window occupancy, visible
+    /// only when the agent reports a window. Tapping opens the details sheet.
+    @ViewBuilder private var contextMeter: some View {
+        if let percent = store.contextUsage?.percentUsed,
+            store.contextUsage?.usedTokens != nil,
+            store.contextUsage?.maxTokens != nil
+        {
+            Button {
+                Haptics.selection()
+                showContextSheet = true
+            } label: {
+                ClaudeMeterRing(percent: percent, size: 16, lineWidth: 1.5)
+                    .frame(width: 36, height: 36)
+                    .contentShape(.rect)
+            }
+            .accessibilityLabel("Context window, \(Int(percent.rounded())) percent used")
+            .accessibilityIdentifier("composer.contextMeter")
         }
     }
 
