@@ -43,8 +43,19 @@ public final class WorkspaceDirectory {
     public private(set) var supportsGithubRepositorySearch = false
     public private(set) var supportsBackgroundWorkspaces = false
     public private(set) var supportsExplicitEventSubscriptions = false
+    /// `features.workspacePinning`: pin/unpin RPC exists (added in v0.1.107).
+    public private(set) var supportsWorkspacePinning = false
+    /// `features.workspaceBaseBranch`: base-branch RPC exists (added after v0.11.2).
+    public private(set) var supportsWorkspaceBaseBranch = false
+    /// `features.workspaceArchiveUndo`: archive undo RPC exists (added in v0.15.3).
+    public private(set) var supportsWorkspaceArchiveUndo = false
 
-    private let client: any DaemonClient
+    /// Snapshot of the last optimistically-archived workspace, kept for `undoArchive`. One at a
+    /// time: a newer archive overwrites it.
+    internal var lastArchiveSnapshot: WorkspaceDescriptor?
+
+    // internal so WorkspaceDirectory+Mutations.swift (same module) can send RPCs.
+    internal let client: any DaemonClient
     private var subscriptionId: String?
     private var eventSubscriptionId: String?
 
@@ -310,6 +321,9 @@ public final class WorkspaceDirectory {
         supportsGithubRepositorySearch = serverInfo?.hasFeature("workspaceGithubRepositorySearch") ?? false
         supportsBackgroundWorkspaces = serverInfo?.hasFeature("backgroundWorkspaces") ?? false
         supportsExplicitEventSubscriptions = serverInfo?.hasFeature("explicitEventSubscriptions") ?? false
+        supportsWorkspacePinning = serverInfo?.hasFeature("workspacePinning") ?? false
+        supportsWorkspaceBaseBranch = serverInfo?.hasFeature("workspaceBaseBranch") ?? false
+        supportsWorkspaceArchiveUndo = serverInfo?.hasFeature("workspaceArchiveUndo") ?? false
     }
 
     /// A reconnect means the daemon forgot the event subscription too.
@@ -443,6 +457,40 @@ public final class WorkspaceDirectory {
             if let timestamp, let date = PaseoDate.parse(timestamp) { return date }
         }
         return nil
+    }
+
+    // MARK: Internal seam for `WorkspaceDirectory+Mutations.swift`
+
+    /// Sets `actionError` (errors land there, not thrown).
+    internal func setActionError(_ message: String?) {
+        actionError = message
+    }
+
+    /// Removes `id` from the directory and returns the removed descriptor (optimistic archive).
+    internal func snapshotAndRemoveWorkspace(id: String) -> WorkspaceDescriptor? {
+        guard let index = workspaces.firstIndex(where: { $0.id == id }) else { return nil }
+        return workspaces.remove(at: index)
+    }
+
+    /// Puts a snapshot back (archive failed, another undo won, or the archive was canceled).
+    internal func restoreWorkspace(_ workspace: WorkspaceDescriptor) {
+        guard !workspaces.contains(where: { $0.id == workspace.id }) else { return }
+        workspaces.append(workspace)
+        sortWorkspaces()
+    }
+
+    /// Applies a renamed project row locally (the daemon reverts to the derived name on nil).
+    internal func renameProjectLocally(_ projectId: String, customName: String?) {
+        guard let index = projects.firstIndex(where: { $0.projectId == projectId }) else { return }
+        projects[index].projectCustomName = customName
+        sortProjects()
+    }
+
+    /// Sets or clears `pinnedAt` locally (nil clears), keeping the list sorted.
+    internal func setPinLocally(_ workspaceId: String, pinnedAt: String?) {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else { return }
+        workspaces[index].pinnedAt = pinnedAt
+        sortWorkspaces()
     }
 }
 
