@@ -342,7 +342,7 @@ struct PaseoSettingsView: View {
                                     Text(choice.rawValue)
                                         .font(.system(size: 14))
                                         .foregroundStyle(
-                                            appearance == choice.rawValue ? .blue : ClaudePalette.secondary)
+                                            appearance == choice.rawValue ? .blue : ClaudePalette.secondaryInk)
                                 }
                             }
                             .buttonStyle(.plain)

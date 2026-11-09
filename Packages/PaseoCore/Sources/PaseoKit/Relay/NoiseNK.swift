@@ -298,7 +298,10 @@ public struct NoiseNK: Sendable {
 // MARK: - SymmetricState
 
 /// Noise spec §5.2 for SHA-256 (HASHLEN 32).
-private struct SymmetricState {
+///
+/// Internal rather than private so the test target's responder half can drive the same state
+/// machine: only the initiator ships in the app.
+struct SymmetricState {
     private static let hashByteCount = 32
     private static let empty = [UInt8]()
 

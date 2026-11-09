@@ -235,16 +235,25 @@ struct ClaudeHistoryView: View {
                 Image(systemName: "exclamationmark.circle")
                     .font(.system(size: 30, weight: .light))
                     .foregroundStyle(ClaudePalette.failureInk)
+                Text("Couldn't load agent history")
+                    .font(typography.sans(16, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
                 Text(message)
                     .font(typography.sans(13))
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
-                Button("Try again") {
+                Button {
                     Task { await session.agentLifecycle.load() }
+                } label: {
+                    Text("Retry")
+                        .font(typography.sans(14, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                        .padding(.horizontal, 18)
+                        .frame(height: 44)
+                        .background(ClaudePalette.chip, in: .capsule)
                 }
-                .font(typography.sans(14, weight: .medium))
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready:
@@ -261,14 +270,12 @@ struct ClaudeHistoryView: View {
             Image(systemName: "clock.arrow.2.circlepath")
                 .font(.system(size: 26, weight: .light))
                 .foregroundStyle(ClaudePalette.tertiaryInk)
-            Text(query.isEmpty ? "No agents yet" : "No matches")
+            Text(query.isEmpty ? "No sessions yet" : "No sessions match")
                 .font(typography.sans(15, weight: .medium))
                 .foregroundStyle(ClaudePalette.ink)
-            if !query.isEmpty {
-                Text("Try a different title.")
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-            }
+            Text(query.isEmpty ? "Start one from the sidebar." : "Try a different title.")
+                .font(typography.sans(13))
+                .foregroundStyle(ClaudePalette.secondaryInk)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 32)

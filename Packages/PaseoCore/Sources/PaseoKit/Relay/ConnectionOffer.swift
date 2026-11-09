@@ -29,8 +29,9 @@ public enum ConnectionOfferError: Error, Equatable, Sendable {
 /// A validated relay pairing offer. Constructing one means every field has been checked, so the
 /// rest of the client never re-parses key material.
 public struct ConnectionOffer: Sendable, Equatable {
-    /// The only endpoint security this client accepts on a relay connection.
-    public enum Security: String, Sendable, Equatable {
+    /// The only endpoint security this client accepts on a relay connection. `Codable` so the
+    /// floor can be pinned next to the daemon key, which is not a secret.
+    public enum Security: String, Sendable, Equatable, Codable {
         case protected
     }
 

@@ -133,6 +133,14 @@ protected mode only); swift-crypto added to PaseoKit (user-approved). PaseoCore 
 M17 (Crouton): map cards (strict standalone coordinates / geo: / Maps URLs, MapKit snapshot), drag
 Files/Changes rows into the composer (@path mention), cost bubble on long-press of the crab.
 PaseoCore 559/166/86 = 811 green; PARITY 313 done / 36 missing.
+P1 (DeepSeek): polish audit `docs/research/12-polish-audit.md` + low-risk fixes (upstream copy, adaptive
+grays, 0.5 pt dividers, a11y labels/traits, 44 pt composer targets, Reduce Motion gaps, GitHub casing,
+`#-1`). Its blue→orange/system→ClaudeTypography swaps in Settings were reverted (ClaudeUI pinned).
+Proposals (header, ToastHost, 44 pt pass, Files toolbar) wait for the polish pass with the user.
+Platform priority: iPhone first, then Mac; no iPad-only work (M18 dropped).
+R17 (DeepSeek): relay transport (`RelayWebSocketTransport` wraps any socket; queued sends, stable hello
+retries, 32 MiB wire bound, 4001 retry / 4002-4003 terminal, protected-only admission after
+`server_info`), `RelayPinning` (pins + secret store protocols). PaseoCore 559/166/127 = 852 green.
 Xcode: the new package needs File → Packages → Resolve/Reset Package Caches. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
@@ -140,10 +148,9 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
-- P1 `p1-polish-audit` on DeepSeek 85844e34-6c29-4638-ae82-0b781364abc7: UI/UX audit doc + low-risk fixes (frontend-design skill as a lens at /tmp/polish-skill, outside the repo; pinned ClaudeUI/DSH style wins).
-- R17 `r17-relay-transport` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: relay transport, reconnect, pinning.
+- R18 `r18-pairing-ui` on Crouton c2f9fb62: scan/paste/confirm + SavedHosts identity; DeepSeek 6db40c26 (R17 author) reviews before merge.
 - M15 `m15-voice-mode` (Crouton 6705fee4, done): DeepSeek 8872f024 reviewing before merge (rule: risky Crouton work gets a DeepSeek review pass).
-- Idle: Crouton c2f9fb62 (M17).
+- Idle: DeepSeek 85844e34 (P1 polish context), DeepSeek 6db40c26 (R17; reviewer for R18).
 Known store gaps: fork can't carry provider feature values.
 
 Roadmap order: see PARITY.md suggested milestones, renumbered below.

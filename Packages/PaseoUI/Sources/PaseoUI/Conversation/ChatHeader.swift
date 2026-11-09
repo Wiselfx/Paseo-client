@@ -64,7 +64,7 @@ extension ClaudeChatView {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .contentShape(.rect)
             }
-            .accessibilityLabel("Agent menu")
+            .accessibilityLabel("Agent menu, \(store.agent?.title ?? "Agent")")
             if let onOpenPanel {
                 Button(action: onOpenPanel) {
                     Image(systemName: "sidebar.right").font(.system(size: 17, weight: .medium))

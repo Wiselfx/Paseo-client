@@ -220,7 +220,7 @@ public struct ClaudeChatView: View {
                     .presentationDetents([.height(240)])
                 }
             }
-        .animation(.easeInOut(duration: 0.15), value: isFollowing)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFollowing)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: findOpen)
         .overlay(alignment: .top) {
             if let toast {

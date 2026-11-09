@@ -126,10 +126,10 @@ final class FakeTransportFactory: @unchecked Sendable {
     var urls: [URL] { urlHistory.withLock { $0 } }
 
     func makeFactory() -> WebSocketTransportFactory {
-        { [self] url in
+        { [self] endpoint in
             let transport = FakeTransport()
             mutex.withLock { $0.append(transport) }
-            urlHistory.withLock { $0.append(url) }
+            urlHistory.withLock { $0.append(endpoint.url) }
             return transport
         }
     }

@@ -94,7 +94,7 @@ extension PaseoSidebar {
         Haptics.selection()
         clearManualUnread(workspace)
         guard let target = agents(in: workspace).first else {
-            showToast("No agents in this workspace yet — long-press to create one.")
+            showToast("No agents yet. Long-press the workspace to create one.")
             return
         }
         onSelectAgent(target.id)

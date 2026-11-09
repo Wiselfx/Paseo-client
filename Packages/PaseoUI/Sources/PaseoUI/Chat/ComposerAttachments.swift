@@ -191,11 +191,13 @@ struct ComposerAttachmentPill: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
+            // The pill is one element; the remove button stays a separate action, so
+            // VoiceOver can remove an attachment without opening it.
             pill
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(accessibilityText)
             removeButton
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityText)
     }
 
     @ViewBuilder private var pill: some View {

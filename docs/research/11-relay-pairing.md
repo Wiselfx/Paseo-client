@@ -110,6 +110,19 @@ this into the same offer; the `password` query param is the daemon password. Ups
 both forms in paste and scan; the scanner only accepts data containing `#offer=`, `#connect=` or
 starting with `relay://` (`packages/app/src/hosts/add-host/internal/pair-scan-model.ts:97-103`).
 
+Four rejection rules live in that parser rather than in the offer schema, because it goes through
+`new URL(...)` (`daemon-endpoints.ts:33-40`):
+
+- an explicit port is required — `relay://host/serverId` is invalid, `:443` is not implied;
+- userinfo is refused — `relay://user:pass@host:443/…` throws (`url.username || url.password`);
+- `security`, when present, must be exactly `protected`; anything else throws instead of being
+  ignored (`:56-61`);
+- `serverId` must be non-empty and must not contain `/` after percent-decoding (`:47-50`).
+
+The `key` is *not* validated by the schema (`z.string().min(1)`), only later by
+`importPublicKey` in `packages/relay/src/crypto.ts` — strict canonical standard base64, exactly 32
+bytes. We validate at parse time instead, so a bad key never becomes a saved host.
+
 A trailing detail that must be copied exactly: `useTls` is optional in the offer and defaults to
 "port == 443" for the hosted relay (`daemon-endpoints.ts:264-271`, applied in
 `host-target.ts:74-88`).
@@ -190,9 +203,22 @@ wire record     = (u16 BE ciphertextLength || ciphertext)+
 
 Receiver-side rejections (all fatal, nothing partial delivered): record not starting with FIRST,
 FIRST repeated, kind/length changed mid-record, FINAL flag misplaced, non-final chunk not exactly
-65513 bytes, byte total ≠ `totalLength`, trailing bytes, empty record, reserved flags, invalid kind,
-and a claimed length that does not match the received wire length *checked before allocation*
+65513 bytes, byte total ≠ `totalLength`, empty record, reserved flags, invalid kind, and a claimed
+length that does not match the received wire length *checked before allocation*
 (`protected-records.ts:81-198`).
+
+Two notes from implementing this (R16):
+
+- The "trailing bytes" case in upstream's decoder is **unreachable**, and is kept here only as
+  defence in depth. Because the first chunk's authenticated `totalLength` pins the record's exact
+  wire length, bytes appended after a complete record are a *length mismatch*, and a well-formed
+  extra chunk cannot exist: the length check already fixes the chunk count (`:158-165` sets
+  `expectedChunks` from it). Upstream has the same dead branch (`:84-88` checks for a chunk after
+  the final one before decoding it, which the length check has already made impossible). Test the
+  length mismatch, not trailing bytes.
+- `invalidChunkLength`'s upper bound is also unreachable: the prefix is a `u16`, so it cannot
+  exceed the 65535-byte Noise message limit. Only the lower bound (shorter than a 6-byte header
+  plus a 16-byte tag) can fire.
 
 ### 4.3 WebSocket representation
 
@@ -365,6 +391,14 @@ So: **ask the lead to approve `swift-crypto` (one dependency, Apple-maintained, 
 `PaseoKit` target only.** It is the smaller of the two risks, and it also gives a Linux CI story.
 Fallback if the answer is no: the whole relay feature is blocked on Linux verification, not just
 slower.
+
+**Approved, and one API difference bit us in R16:** swift-crypto's `SymmetricKey` is *not*
+`Sendable` (CryptoKit's is). A `NoiseCipherState` that must cross an actor boundary therefore
+stores the raw 32 key bytes and builds a `SymmetricKey` per operation, rather than holding a
+`SymmetricKey` — the same code compiles on both platforms if you never persist the wrapper type
+in a `Sendable` struct. Everything else (`Curve25519`, `ChaChaPoly`, `HMAC`, `SHA256`) behaves
+identically, and the NK vectors pass against upstream's cacophony file, so the primitives agree
+byte for byte.
 
 ### 8.2 Where it fits
 

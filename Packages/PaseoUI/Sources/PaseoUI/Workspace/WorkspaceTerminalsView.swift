@@ -39,6 +39,7 @@ struct WorkspaceTerminalsView: View {
     @State private var toast: String?
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let typography = ClaudeTypography()
 
@@ -120,7 +121,7 @@ struct WorkspaceTerminalsView: View {
             Text("Choose a name for this terminal.")
         }
         .confirmationDialog(
-            closeCandidate.map { "Kill “\(displayName($0))”?" } ?? "Kill terminal?",
+            closeCandidate.map { "Close “\(displayName($0))”?" } ?? "Close terminal?",
             isPresented: Binding(
                 get: { closeCandidate != nil },
                 set: { if !$0 { closeCandidate = nil } }),
@@ -128,7 +129,7 @@ struct WorkspaceTerminalsView: View {
             Button("Close terminal", role: .destructive) { commitClose() }
             Button("Cancel", role: .cancel) { closeCandidate = nil }
         } message: {
-            Text("The process in this terminal will be terminated.")
+            Text("Any running process in this terminal will be stopped immediately.")
         }
         .sheet(item: $linkedFile) { target in
             WorkspaceTerminalFileSheet(checkout: checkout, target: target)
@@ -205,10 +206,10 @@ struct WorkspaceTerminalsView: View {
     }
 
     private func showToast(_ text: String) {
-        withAnimation { toast = text }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = text }
         Task {
             try? await Task.sleep(for: .seconds(2))
-            withAnimation { toast = nil }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = nil }
         }
     }
 

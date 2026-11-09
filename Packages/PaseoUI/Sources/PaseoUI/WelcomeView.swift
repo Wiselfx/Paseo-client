@@ -38,7 +38,7 @@ struct WelcomeView<DirectForm: View>: View {
                                 Text("Welcome")
                             }
                             .font(typography.sans(16, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .foregroundStyle(ClaudePalette.secondaryInk)
                             .frame(height: 44)
                             .contentShape(.rect)
                         }
@@ -94,9 +94,9 @@ struct WelcomeView<DirectForm: View>: View {
                     Haptics.selection()
                     showAppearance = true
                 } label: {
-                    Label("Settings", systemImage: "gearshape")
+                    Label("Appearance", systemImage: "circle.lefthalf.filled")
                         .font(typography.sans(15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                         .frame(height: 40)
                 }
                 .buttonStyle(.plain)
@@ -129,12 +129,12 @@ struct WelcomeView<DirectForm: View>: View {
                         .foregroundStyle(ClaudePalette.ink)
                     Text("Local network or VPN.")
                         .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .foregroundStyle(ClaudePalette.secondaryInk)
             }
             .padding(.horizontal, 18)
             .frame(height: 68)
@@ -189,7 +189,7 @@ private struct WelcomeAppearanceSheet: View {
                                         .font(.system(size: 12))
                                         .foregroundStyle(
                                             appearance == choice.rawValue
-                                                ? .blue : ClaudePalette.secondary)
+                                                ? .blue : ClaudePalette.secondaryInk)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -268,10 +268,10 @@ private struct WelcomeAppearanceSheet: View {
                 HStack(spacing: 5) {
                     Text(current)
                         .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                 }
             }
         }

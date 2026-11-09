@@ -131,6 +131,7 @@ struct SchedulesListPage: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Schedule \(title(summary))")
+        .accessibilityValue("\(subtitle(summary)), \(nextCaption(summary, state: state))")
     }
 
     private func title(_ summary: ScheduleSummary) -> String {
@@ -158,12 +159,14 @@ struct SchedulesListPage: View {
                 .frame(width: 48, height: 48)
                 .background(ClaudePalette.panel, in: .circle)
             VStack(spacing: 4) {
-                Text("No schedules yet").font(.system(size: 18))
+                Text("No schedules yet")
+                    .font(typography.serif(20, relativeTo: .title3))
+                    .foregroundStyle(ClaudePalette.ink)
                 Text("Schedules run agents on a cadence.")
-                    .font(.system(size: 16))
+                    .font(typography.sans(14))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
                     .multilineTextAlignment(.center)
             }
-            .foregroundStyle(ClaudePalette.secondary)
             Button {
                 Haptics.selection()
                 onNew()

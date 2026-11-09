@@ -261,6 +261,7 @@ struct ClaudeStepRow: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             if isExpanded {
                 detail
                     .transition(.opacity.combined(with: .offset(y: -2)))

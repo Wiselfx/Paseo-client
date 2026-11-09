@@ -609,9 +609,17 @@ struct WorkspaceChangesView: View {
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
-                Button("Try again") { Task { await reloadDiff() } }
-                    .font(typography.sans(14, weight: .medium))
-                    .buttonStyle(.bordered)
+                Button {
+                    Task { await reloadDiff() }
+                } label: {
+                    Text("Retry")
+                        .font(typography.sans(14, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                        .padding(.horizontal, 18)
+                        .frame(height: 44)
+                        .background(ClaudePalette.chip, in: .capsule)
+                }
+                .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 64)
