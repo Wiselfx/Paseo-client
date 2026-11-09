@@ -83,7 +83,9 @@ status; live push needs `owned_subscriptions`, not advertised) and worktree arch
 unpushed counts), M4d Providers sheet (diagnostic, custom models) + agent profiles CRUD (config patch
 `agentProfiles`, gated) M7e History with archived agents
 (fetch_agent_history paging), unarchive (refresh_agent_request), archive/delete/rename rows
-(PaseoCore 413/133/17 = 563 green). Follow-ups: profile picker in
+M7f chat display (Full/Collapse
+tool calls/Collapse turns), provider-subagents pill + sheet, DSH question card (PaseoCore
+416/133/17 = 566 green). Store gap: background work (`agent.background_work.*`) has no wire/store. Follow-ups: profile picker in
 ClaudeNewAgentSheet; advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
@@ -91,7 +93,6 @@ Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01â€
 - M2.11 `m211-project-settings` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: Settings projects list + project page (icon, paseo.json scripts/hooks).
 - M8f `m8f-profile-picker` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: profile picker in new agent, metadata generation setting.
 - M2.12 `m212-labels` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: workspace labels store + sidebar UI.
-- M7f `m7f-transcript` on worker 0778f3b0-0603-4eae-ab7a-3a01b367bf53: chat display/turn collapse, subagents track, DSH question card, background work.
 - R12 `r12-parity-sync` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: PARITY.md reconcile with code (doc only).
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
