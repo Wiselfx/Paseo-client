@@ -59,6 +59,14 @@ struct PaseoSidebar: View {
                 PaseoSettingsView(session: session, onDisconnect: onDisconnect)
             case .schedules:
                 ClaudeSchedulesView(session: session)
+            case .history:
+                ClaudeHistoryView(
+                    session: session,
+                    onClose: { sheet = nil },
+                    onOpenAgent: { agentId in
+                        sheet = nil
+                        onSelectAgent(agentId)
+                    })
             case .newWorkspace:
                 ClaudeNewWorkspaceSheet(
                     session: session, defaultProjectId: selectedWorkspaceProjectId
@@ -162,6 +170,7 @@ struct PaseoSidebar: View {
     private var navigation: some View {
         VStack(spacing: 0) {
             navigationRow("Scheduled", symbol: "clock") { sheet = .schedules }
+            navigationRow("History", symbol: "clock.arrow.2.circlepath") { sheet = .history }
         }
         .padding(.top, 4)
     }
@@ -571,12 +580,14 @@ private struct SidebarRollHeightKey: PreferenceKey {
 private enum PaseoSidebarSheet: Identifiable {
     case settings
     case schedules
+    case history
     case newWorkspace
 
     var id: String {
         switch self {
         case .settings: "settings"
         case .schedules: "schedules"
+        case .history: "history"
         case .newWorkspace: "newWorkspace"
         }
     }

@@ -27,6 +27,21 @@ public struct ClaudeChatView: View {
     @State private var sheet: ClaudeChatSheet?
     @State private var toast: String?
     @FocusState private var focused: Bool
+    // Find in conversation (M7 §2). The transcript owns the scroll; `store.search` owns the matches.
+    @State private var findOpen = false
+    @State private var findQuery = ""
+    @State private var findIndex = 0
+    @State private var findFlash: Int?
+    @State private var findAnchor: String?
+    @State private var findSearchTask: Task<Void, Never>?
+    @State private var scrollProxy: ScrollViewProxy?
+    /// The last turn row that appeared; the find restore anchors to it.
+    @State private var lastTrackedTurn: String?
+    @FocusState private var findFocused: Bool
+    // Header title menu (M7 §1).
+    @State private var renamingAgent = false
+    @State private var renameText = ""
+    @State private var archiveAgentConfirm = false
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -47,6 +62,10 @@ public struct ClaudeChatView: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
+            if findOpen {
+                findBar
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+            }
             if let banner = connectionBanner {
                 banner.padding(.horizontal, 16).padding(.bottom, 6)
             }
@@ -81,6 +100,102 @@ public struct ClaudeChatView: View {
         }
     }
 
+    // MARK: Find in conversation
+
+    /// The seqEnd of the match currently on screen; nil when the results are empty.
+    private var findSeq: Int? {
+        let locations = store.search.locations
+        guard findIndex < locations.count else { return nil }
+        return locations[findIndex].seq
+    }
+
+    private var findBar: some View {
+        ClaudeFindBar(
+            typography: typography, query: $findQuery,
+            isSearching: store.search.isSearching,
+            resultCount: store.search.locations.count, currentIndex: findIndex,
+            error: store.search.error,
+            onStep: stepFind, onCancel: closeFind, focused: $findFocused)
+    }
+
+    private func openFind() {
+        Haptics.selection()
+        guard !findOpen else { return }
+        findAnchor = lastTrackedTurn // restore at turn granularity; bottom stays bottom
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { findOpen = true }
+        findFocused = true
+    }
+
+    private func closeFind() {
+        Haptics.selection()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { findOpen = false }
+        findQuery = ""
+        findSearchTask?.cancel()
+        findSearchTask = nil
+        store.search.clear()
+        findFocused = false
+    }
+
+    private func stepFind(_ delta: Int) {
+        let locations = store.search.locations
+        guard !locations.isEmpty else { return }
+        let next = min(max(0, findIndex + delta), locations.count - 1)
+        guard next != findIndex else { return }
+        findIndex = next
+        scrollToFindMatch(animated: true)
+    }
+
+    private func scrollToFindMatch(animated: Bool) {
+        guard let seq = findSeq else { return }
+        flash(seq)
+        guard let scrollProxy else { return }
+        if animated {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                scrollProxy.scrollTo("row:\(seq)", anchor: .center)
+            }
+        } else {
+            scrollProxy.scrollTo("row:\(seq)", anchor: .center)
+        }
+    }
+
+    private func flash(_ seq: Int) {
+        findFlash = seq
+        let captured = seq
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            if findFlash == captured { findFlash = nil }
+        }
+    }
+
+    private func restoreScroll(proxy: ScrollViewProxy) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+            if let findAnchor, store.turns.contains(where: { $0.id == findAnchor }) {
+                // The anchor belongs to this conversation (closing find on an agent switch may
+                // leave it pointing at garbage from the previous one).
+                proxy.scrollTo(findAnchor, anchor: .top)
+            } else {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+        }
+    }
+
+    private func scheduleSearch(_ query: String) {
+        findSearchTask?.cancel()
+        findSearchTask = nil
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            store.search.clear()
+            return
+        }
+        findSearchTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await store.search.search(trimmed)
+            findIndex = 0
+            scrollToFindMatch(animated: true)
+        }
+    }
+
     // MARK: Header
 
     private var header: some View {
@@ -105,18 +220,38 @@ public struct ClaudeChatView: View {
             } else {
                 Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }
-            VStack(alignment: .center, spacing: 1) {
-                Text(store.agent?.title ?? "Agent")
-                    .font(typography.serif(20, relativeTo: .headline))
-                    .lineLimit(1)
-                if let workspaceLine {
-                    Text(workspaceLine)
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .lineLimit(1)
+            Menu {
+                Button("Search in conversation", systemImage: "magnifyingglass") {
+                    openFind()
                 }
+                Button("Rename…", systemImage: "pencil") {
+                    beginRename()
+                }
+                Button("Copy agent ID", systemImage: "doc.on.doc") {
+                    UIPasteboard.general.string = store.agentId
+                    Haptics.selection()
+                    showToast("Agent ID copied")
+                }
+                Divider()
+                Button("Archive agent", systemImage: "archivebox", role: .destructive) {
+                    archiveAgentConfirm = true
+                }
+            } label: {
+                VStack(alignment: .center, spacing: 1) {
+                    Text(store.agent?.title ?? "Agent")
+                        .font(typography.serif(20, relativeTo: .headline))
+                        .lineLimit(1)
+                    if let workspaceLine {
+                        Text(workspaceLine)
+                            .font(typography.sans(12))
+                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .contentShape(.rect)
             }
-            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityLabel("Agent menu")
             if let onOpenPanel {
                 Button(action: onOpenPanel) {
                     Image(systemName: "sidebar.right").font(.system(size: 17, weight: .medium))
@@ -130,6 +265,32 @@ public struct ClaudeChatView: View {
         }
         .frame(height: 48)
         .padding(.horizontal, 12)
+        .alert("Rename agent", isPresented: $renamingAgent) {
+            TextField("Name", text: $renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") {
+                let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                Task { await store.rename(to: trimmed) }
+            }
+        } message: {
+            Text("The name shown in the sidebar and the header.")
+        }
+        .confirmationDialog(
+            "Archive agent?",
+            isPresented: $archiveAgentConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Archive", role: .destructive) {
+                Task { await store.archive() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                store.isRunning
+                    ? "This agent is still running. Archiving it will stop the agent."
+                    : "The agent will disappear from your list.")
+        }
     }
 
     /// `workspace · branch`, small and secondary under the agent title.
@@ -168,6 +329,12 @@ public struct ClaudeChatView: View {
     private func newAgent(draft: String) {
         focused = false
         onNewAgent?(draft)
+    }
+
+    private func beginRename() {
+        Haptics.selection()
+        renameText = store.agent?.title ?? ""
+        renamingAgent = true
     }
 
     // MARK: Connection
@@ -244,9 +411,12 @@ public struct ClaudeChatView: View {
                         ForEach(store.turns) { turn in
                             ClaudeTurnView(
                                 turn: turn, typography: typography,
-                                onMarkdown: handleMarkdown
+                                onMarkdown: handleMarkdown,
+                                highlightedSeq: findFlash,
+                                findTarget: findSeq
                             )
                             .id(turn.id)
+                            .onAppear { lastTrackedTurn = turn.id }
                         }
                         if !store.pendingPermissions.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -272,13 +442,37 @@ public struct ClaudeChatView: View {
                 .onChange(of: focused) { _, isFocused in
                     if isFocused { scrollToBottom(proxy) }
                 }
+                // Switching the open agent lands the transcript at the bottom, without animation —
+                // unless a find session is active; a session belongs to its agent, so it closes.
+                .onChange(of: store.agentId) { _, _ in
+                    if findOpen {
+                        closeFind()
+                        return
+                    }
+                    scrollToBottom(proxy, animated: false)
+                }
+                .onAppear {
+                    scrollProxy = proxy
+                    if !findOpen { scrollToBottom(proxy, animated: false) }
+                }
+                .onChange(of: findOpen) { _, isOpen in
+                    if !isOpen { restoreScroll(proxy: proxy) }
+                }
+                .onChange(of: findQuery) { _, query in
+                    findIndex = 0
+                    scheduleSearch(query)
+                }
                 .environment(\.claudeProcessCap, min(400, geometry.size.height * 0.5))
             }
         }
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+    private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool = true) {
+        if animated {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+        } else {
             proxy.scrollTo("bottom", anchor: .bottom)
         }
     }
@@ -472,6 +666,10 @@ struct ClaudeTurnView: View {
     let turn: Turn
     let typography: ClaudeTypography
     let onMarkdown: (MarkdownAction) -> Void
+    /// The seqEnd of the match flash this row should paint, if any.
+    var highlightedSeq: Int?
+    /// The seqEnd of the current match; work groups containing it expand.
+    var findTarget: Int?
 
     /// Nil until the reader taps, so the default can follow the turn's phase.
     @State private var userExpanded: Bool?
@@ -496,6 +694,8 @@ struct ClaudeTurnView: View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
                 ClaudeUserBubble(text: message.text, isPending: row.isPending)
+                    .id("row:\(row.seqEnd)")
+                    .background(findHighlight(row.seqEnd))
             }
             if showsHeader { header }
             if isExpanded {
@@ -503,13 +703,16 @@ struct ClaudeTurnView: View {
                     ForEach(bodySegments) { segment in
                         ClaudeSegmentView(
                             segment: segment, turnIsRunning: isRunning, typography: typography,
-                            onMarkdown: onMarkdown)
+                            onMarkdown: onMarkdown, highlightedSeq: highlightedSeq,
+                            findTarget: findTarget)
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: -2)))
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown)
+                    .id("row:\(finalProse.seqEnd)")
+                    .background(findHighlight(finalProse.seqEnd))
             }
             if !isRunning, !copyText.isEmpty {
                 HStack(spacing: 17) {
@@ -524,6 +727,13 @@ struct ClaudeTurnView: View {
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { userExpanded = nil }
             }
         }
+    }
+
+    /// A brief wash on the matched row; `findHighlight` reads the view's flash parameter.
+    private func findHighlight(_ seqEnd: Int) -> some View {
+        RoundedRectangle(cornerRadius: 14)
+            .fill(ClaudePalette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: highlightedSeq)
     }
 
     private var copyText: String {
@@ -574,14 +784,25 @@ struct ClaudeSegmentView: View {
     let turnIsRunning: Bool
     let typography: ClaudeTypography
     let onMarkdown: (MarkdownAction) -> Void
+    var highlightedSeq: Int?
+    var findTarget: Int?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         switch segment {
         case .work(let group):
-            ClaudeWorkGroupCell(group: group, turnIsRunning: turnIsRunning, typography: typography)
+            ClaudeWorkGroupCell(
+                group: group, turnIsRunning: turnIsRunning, typography: typography,
+                highlightedSeq: highlightedSeq, findTarget: findTarget)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
                 ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown)
+                    .id("row:\(row.seqEnd)")
+                    .background {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(ClaudePalette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
+                            .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: highlightedSeq)
+                    }
             }
         case .todo(let row):
             if case .todo(let list) = row.item { ClaudeTodoCard(list: list) }
@@ -597,6 +818,8 @@ struct ClaudeWorkGroupCell: View {
     let group: Turn.WorkGroup
     let turnIsRunning: Bool
     let typography: ClaudeTypography
+    var highlightedSeq: Int?
+    var findTarget: Int?
 
     @State private var userExpanded: Bool?
     @State private var contentHeight: CGFloat = 0
@@ -606,6 +829,14 @@ struct ClaudeWorkGroupCell: View {
 
     private var opensByDefault: Bool { turnIsRunning && group.isActive }
     private var isExpanded: Bool { userExpanded ?? opensByDefault }
+
+    /// The find target lives in one of this group's rows: expand so it becomes visible.
+    private func checkFindTarget() {
+        guard let seq = findTarget else { return }
+        if group.rows.contains(where: { $0.seqEnd == seq }) {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) { userExpanded = true }
+        }
+    }
 
     /// The leading seat's activity icon (doc 08 §1.2): the group's content decides the glyph.
     private var seatGlyph: ClaudeGlyph.Kind {
@@ -643,6 +874,9 @@ struct ClaudeWorkGroupCell: View {
                 .contentShape(.rect)
             }
             .buttonStyle(ClaudePressButtonStyle())
+            .id("group:\(group.rows.first?.seqEnd ?? 0)")
+            .onAppear { checkFindTarget() }
+            .onChange(of: findTarget) { _, _ in checkFindTarget() }
             .accessibilityLabel(group.summary)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
@@ -689,6 +923,12 @@ struct ClaudeWorkGroupCell: View {
         }
     }
 
+    private func findHighlight(_ seqEnd: Int) -> some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(ClaudePalette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: highlightedSeq)
+    }
+
     private var card: some View {
         ScrollView(.vertical) {
             rows
@@ -720,6 +960,8 @@ struct ClaudeWorkGroupCell: View {
                 ClaudeStepRow(
                     row: row, isLive: turnIsRunning && index == group.rows.count - 1,
                     typography: typography)
+                    .id("row:\(row.seqEnd)")
+                    .background(findHighlight(row.seqEnd))
             }
         }
     }
