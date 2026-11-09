@@ -22,7 +22,7 @@ struct CommandCenterSheet: View {
     /// Toggles the right-side workspace panel; nil hides the Toggle panel action.
     let onTogglePanel: (() -> Void)?
     /// Opens the Import session sheet; nil hides the action when the daemon lacks the feature.
-    let onImportSession: (() -> Void)? = nil
+    var onImportSession: (() -> Void)? = nil
     let onShowToast: (String) -> Void
     let onClose: () -> Void
     /// The agent open in the chat, if any; the Files group searches its workspace.
