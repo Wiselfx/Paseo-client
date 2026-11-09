@@ -17,8 +17,10 @@ struct PaseoSidebar: View {
 
     @State private var sheet: PaseoSidebarSheet?
     @State private var renamingWorkspace: WorkspaceDescriptor?
-    @State private var workspacePendingArchive: WorkspaceDescriptor?
+    @State private var renamingProject: WorkspaceProjectDescriptor?
     @State private var projectPendingRemoval: WorkspaceProjectDescriptor?
+    @State private var undoToast: (id: String, name: String)?
+    @State private var undoToastToken = UUID()
     @State private var renameText = ""
     @State private var toast: String?
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
@@ -108,28 +110,31 @@ struct PaseoSidebar: View {
         } message: {
             Text("Choose a short name for this workspace.")
         }
-        .confirmationDialog(
-            "Archive workspace?",
+        .alert(
+            "Rename project",
             isPresented: Binding(
-                get: { workspacePendingArchive != nil },
-                set: { if !$0 { workspacePendingArchive = nil } }),
-            titleVisibility: .visible
+                get: { renamingProject != nil },
+                set: { if !$0 { renamingProject = nil } })
         ) {
-            Button("Archive", role: .destructive) {
-                guard let workspace = workspacePendingArchive else { return }
-                workspacePendingArchive = nil
+            TextField("Folder name", text: $renameText)
+            Button("Cancel", role: .cancel) { renamingProject = nil }
+            Button("Rename") {
+                let target = renamingProject
+                let title = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                renamingProject = nil
+                guard let target else { return }
                 Task {
-                    let archived = await session.workspaceDirectory.archiveWorkspace(workspace.id)
-                    if !archived {
+                    let renamed = await session.workspaceDirectory.renameProject(
+                        target.projectId, to: title)
+                    if !renamed {
                         showToast(
                             session.workspaceDirectory.actionError
-                                ?? "Couldn't archive the workspace.")
+                                ?? "Couldn't rename the project.")
                     }
                 }
             }
-            Button("Cancel", role: .cancel) { workspacePendingArchive = nil }
         } message: {
-            Text(archiveMessage(for: workspacePendingArchive))
+            Text("Empty restores the folder name.")
         }
         .confirmationDialog(
             "Remove project?",
@@ -165,6 +170,35 @@ struct PaseoSidebar: View {
                     .padding(.top, 58)
                     .transition(.opacity)
                     .allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let undoToast {
+                HStack(spacing: 14) {
+                    Text("Archived \(undoToast.name)")
+                        .font(typography.sans(13, weight: .medium))
+                        .lineLimit(1)
+                    Button("Undo") {
+                        let target = undoToast
+                        self.undoToast = nil
+                        undoToastToken = UUID()
+                        Task {
+                            let ok = await session.workspaceDirectory.undoArchive(target.id)
+                            if !ok {
+                                showToast(
+                                    session.workspaceDirectory.actionError
+                                        ?? "Couldn't undo the archive.")
+                            }
+                        }
+                    }
+                    .font(typography.sans(13, weight: .semibold))
+                    .accessibilityLabel("Undo archive")
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 44)
+                .glassEffect(in: .capsule)
+                .padding(.bottom, 76)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .onAppear {
@@ -347,6 +381,10 @@ struct PaseoSidebar: View {
         .padding(.bottom, 6)
         .contextMenu {
             Button("New agent", systemImage: "plus") { newAgent(in: group) }
+            Button("Rename…", systemImage: "pencil") {
+                renameText = group.project.projectCustomName ?? ""
+                renamingProject = group.project
+            }
             Button("Copy path", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = group.project.projectRootPath
                 showToast("Path copied")
@@ -418,8 +456,24 @@ struct PaseoSidebar: View {
                     showToast("Branch name copied")
                 }
             }
+            if session.workspaceDirectory.supportsWorkspacePinning {
+                Button(
+                    workspace.isPinned ? "Unpin" : "Pin",
+                    systemImage: workspace.isPinned ? "pin.slash" : "pin"
+                ) {
+                    Task {
+                        let ok = await session.workspaceDirectory.setPinned(
+                            workspace.id, !workspace.isPinned)
+                        if !ok {
+                            showToast(
+                                session.workspaceDirectory.actionError
+                                    ?? "Couldn't change the pin.")
+                        }
+                    }
+                }
+            }
             Button("Archive workspace", systemImage: "archivebox", role: .destructive) {
-                workspacePendingArchive = workspace
+                Task { await archiveWorkspace(workspace) }
             }
         }
     }
@@ -600,12 +654,41 @@ struct PaseoSidebar: View {
         return session.workspaceDirectory.workspace(id: workspaceId)?.projectId
     }
 
-    private func archiveMessage(for workspace: WorkspaceDescriptor?) -> String {
-        guard let workspace else { return "" }
-        if agents(in: workspace).contains(where: { $0.status == .running }) {
-            return "This agent is still running. Archiving it will stop the agent."
+    /// Archives a workspace right away (no confirmation: the undo toast is the safety net), and
+    /// surfaces the outcome as a bottom toast with an Undo for ~5 s.
+    private func archiveWorkspace(_ workspace: WorkspaceDescriptor) {
+        let supportsUndo = session.workspaceDirectory.supportsWorkspaceArchiveUndo
+        Task {
+            let archived = await session.workspaceDirectory.archiveWorkspaceWithUndo(workspace.id)
+            guard archived else {
+                showToast(
+                    session.workspaceDirectory.actionError ?? "Couldn't archive the workspace.")
+                return
+            }
+            if supportsUndo {
+                showArchiveToast(for: workspace)
+            } else {
+                showToast("Archived \(workspaceTitle(workspace))")
+            }
         }
-        return "The workspace and its agents will be archived."
+    }
+
+    private func showArchiveToast(for workspace: WorkspaceDescriptor) {
+        let name = workspaceTitle(workspace)
+        let token = UUID()
+        undoToastToken = token
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+            undoToast = (workspace.id, name)
+        }
+        Haptics.selection()
+        UIAccessibility.post(notification: .announcement, argument: "Workspace archived: \(name). Undo is available.")
+        Task {
+            try? await Task.sleep(for: .seconds(5))
+            guard undoToastToken == token else { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                undoToast = nil
+            }
+        }
     }
 
     private func showToast(_ text: String) {

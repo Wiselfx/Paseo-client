@@ -55,6 +55,8 @@ let usage = """
                                list a directory in a workspace
       schedules                full stack (SchedulesStore) on a sandbox schedule:
                                create, inspect, update, pause/resume, run once, logs and delete
+      workspace-mutations      full stack on the sandbox workspace and a throwaway project:
+                               pin, unpin, rename (incl. clear) and remove; reports archive-undo support
       git-extras [cwd]         full stack on /tmp/fixture-git: modern-vs-legacy diff,
                                branch suggestions/switch, discard, live file watch, PR badge
       upload <agentId> <localFile>
@@ -403,6 +405,8 @@ do {
         try await runFiles(connection, workspaceId: workspaceId, path: arguments.commandArguments.dropFirst().first)
     case "schedules":
         try await runSchedules(connection)
+    case "workspace-mutations":
+        try await runWorkspaceMutations(connection)
     case "git-extras":
         try await runGitExtras(
             connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-git/scratch-repo")
