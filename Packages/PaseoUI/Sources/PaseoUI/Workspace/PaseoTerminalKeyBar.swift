@@ -24,8 +24,9 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private let onInput: (String) -> Void
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private var ctrlButton: UIButton?
-    private var resetObserver: NSObjectProtocol?
-    private let keysRow: UIStackView
+    /// Written once in init, read once in deinit (which is nonisolated).
+    nonisolated(unsafe) private var resetObserver: NSObjectProtocol?
+    private let keysRow = UIStackView()
     private let uploadRow = UIStackView()
     private let uploadFileLabel = UILabel()
     private let uploadProgress = UIProgressView(progressViewStyle: .default)
@@ -45,7 +46,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         autoresizingMask = [.flexibleWidth]
         backgroundColor = UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 1)
 
-        let keys = UIStackView()
+        let keys = keysRow
         keys.axis = .horizontal
         keys.distribution = .fillEqually
         keys.alignment = .center
@@ -86,12 +87,14 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
             self?.toggleKeyboard()
         }
         keys.addArrangedSubview(hide)
-        self.keysRow = keys
 
         // SwiftTerm resets controlModifier after the next key; keep the Ctrl button in sync.
         resetObserver = NotificationCenter.default.addObserver(
             forName: .terminalViewControlModifierReset, object: terminalView, queue: .main) { [weak self] _ in
-            self?.ctrlButton?.tintColor = Self.ink
+            // Delivered on the main queue, so the main actor is already current.
+            MainActor.assumeIsolated {
+                self?.ctrlButton?.tintColor = Self.ink
+            }
         }
 
         // The upload row replaces the keys while a T14 file transfer is in flight: spinner,
@@ -198,9 +201,9 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private func toggleKeyboard() {
         guard let terminalView else { return }
         if terminalView.isFirstResponder {
-            terminalView.resignFirstResponder()
+            _ = terminalView.resignFirstResponder()
         } else {
-            terminalView.becomeFirstResponder()
+            _ = terminalView.becomeFirstResponder()
         }
     }
 }
