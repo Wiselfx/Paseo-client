@@ -1,6 +1,9 @@
 #if canImport(UIKit)
 import PaseoStore
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
+import UIKit
 
 /// The "Terminal" page of the workspace panel (`WorkspacePanel`).
 ///
@@ -25,6 +28,12 @@ struct WorkspaceTerminalsView: View {
     @State private var renameTarget: TerminalInfo?
     @State private var renameText = ""
     @State private var closeCandidate: TerminalInfo?
+    /// "Attach a file" from the key bar: the action sheet, the pickers, and the last upload's
+    /// result toast.
+    @State private var showAttachMenu = false
+    @State private var showPhotoPicker = false
+    @State private var showFileImporter = false
+    @State private var toast: String?
 
     @Environment(\.openURL) private var openURL
 
@@ -65,6 +74,39 @@ struct WorkspaceTerminalsView: View {
             markCurrentViewed()
         }
         .onChange(of: selectedTerminalId) { _, _ in markCurrentViewed() }
+        .confirmationDialog(
+            "Attach a file",
+            isPresented: $showAttachMenu,
+            titleVisibility: .hidden
+        ) {
+            Button("Photos…") { showPhotoPicker = true }
+            Button("Files…") { showFileImporter = true }
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showPhotoPicker) {
+            PhotoPickerView(onPick: { data, fileName, mimeType in
+                showPhotoPicker = false
+                Task { await attach(data: data, fileName: fileName, mimeType: mimeType) }
+            }, onCancel: {
+                showPhotoPicker = false
+            })
+        }
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item]) { result in
+            guard case .success(let url) = result else { return }
+            Task {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                guard let data = try? Data(contentsOf: url) else {
+                    showToast("Couldn't read that file.")
+                    return
+                }
+                let ext = url.pathExtension.lowercased()
+                let mimeType = UTType(filenameExtension: ext)?.preferredMIMEType
+                    ?? "application/octet-stream"
+                await attach(data: data, fileName: url.lastPathComponent, mimeType: mimeType)
+            }
+        }
+        .overlay(alignment: .bottom) { toastView }
         .alert("Rename terminal", isPresented: Binding(
             get: { renameTarget != nil },
             set: { if !$0 { renameTarget = nil } })) {
@@ -101,6 +143,63 @@ struct WorkspaceTerminalsView: View {
     private func markCurrentViewed() {
         guard let selectedTerminalId else { return }
         lastViewed[selectedTerminalId] = Date().timeIntervalSince1970 * 1000
+    }
+
+    // MARK: Attach a file
+
+    /// The key bar's progress row, straight off the T14 uploader (one upload at a time).
+    private var uploadSnapshot: TerminalUploadSnapshot? {
+        let uploader = session.fileUploader
+        guard uploader.isUploading, let name = uploader.fileName else { return nil }
+        return TerminalUploadSnapshot(fileName: name, progress: uploader.progress)
+    }
+
+    /// T14 (`file.upload`, 50 MB cap), then the remote path is typed into the focused terminal
+    /// shell-quoted. Errors surface as a toast; oversized files are rejected before the RPC.
+    private func attach(data: Data, fileName: String, mimeType: String) async {
+        guard data.count <= ConversationUpload.maxBytes else {
+            showToast("That file is over 50 MB — too large to attach.")
+            return
+        }
+        let attachment = await session.fileUploader.upload(
+            data: data, fileName: fileName, mimeType: mimeType)
+        if let attachment {
+            if let terminalId = selectedTerminalId {
+                store.sendInput(Self.shellQuote(attachment.path), to: terminalId)
+                showToast("Uploaded \(attachment.fileName)")
+            } else {
+                showToast("Uploaded \(attachment.fileName) — no terminal focused, path not inserted")
+            }
+        } else if let error = session.fileUploader.error {
+            showToast(error)
+        }
+    }
+
+    /// Single-quote for POSIX shells: `abc'def` → `'abc'\''def'`.
+    private static func shellQuote(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private var toastView: some View {
+        Group {
+            if let toast {
+                Text(toast)
+                    .font(typography.sans(13))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .glassEffect()
+                    .padding(.bottom, 18)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation { toast = text }
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            withAnimation { toast = nil }
+        }
     }
 
     // MARK: Terminals
@@ -278,8 +377,13 @@ struct WorkspaceTerminalsView: View {
                     terminalId: selectedTerminalId,
                     onExit: { message in exitMessage = exitLine(for: message) },
                     onOutput: { markCurrentViewed() },
-                    onOpenLink: handleOpenLink
-                )
+                    onOpenLink: handleOpenLink,
+                    upload: uploadSnapshot,
+                    onAttach: {
+                        Haptics.selection()
+                        showAttachMenu = true
+                    },
+                    onCancelUpload: { session.fileUploader.cancel() })
                 .id("\(selectedTerminalId)-\(exitGeneration)")
                 if let exitMessage {
                     exitOverlay(exitMessage)
@@ -498,6 +602,24 @@ struct WorkspaceTerminalsView: View {
             Button("Restart", systemImage: "arrow.clockwise") {
                 Task { await restart(script) }
             }
+            let urlTargets = scriptURLTargets(script)
+            if !urlTargets.isEmpty {
+                Menu("Choose URL", systemImage: "link") {
+                    ForEach(urlTargets) { target in
+                        Button {
+                            UIPasteboard.general.string = target.url
+                            Haptics.success()
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text("Copy \(target.title) URL")
+                                Text(target.hostLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
             if let serviceURL = script.preferredURL {
                 Button("Copy URL", systemImage: "doc.on.doc") {
                     UIPasteboard.general.string = serviceURL
@@ -505,6 +627,44 @@ struct WorkspaceTerminalsView: View {
                 }
             }
         }
+    }
+
+    /// One URL the daemon advertises for a running service. Follows upstream's COMPAT split:
+    /// `localProxyUrl` (or a loopback-looking `proxyUrl`) is "Memorable", `publicProxyUrl` (or a
+    /// non-loopback `proxyUrl`) is "Reverse proxy", and `port` yields the direct URL. Deduped by
+    /// URL, and shown only when the script is a running service.
+    private struct ScriptURLTarget: Identifiable {
+        let kind: String
+        let title: String
+        let url: String
+        let hostLabel: String
+        var id: String { kind }
+    }
+
+    private func scriptURLTargets(_ script: WorkspaceScript) -> [ScriptURLTarget] {
+        guard script.type == .service, script.lifecycle == .running else { return [] }
+        func isLoopbackURL(_ url: String) -> Bool {
+            guard let host = URLComponents(string: url)?.host?.lowercased() else { return true }
+            return host == "localhost" || host == "127.0.0.1" || host == "::1" || host.hasSuffix(".localhost")
+        }
+        var targets: [ScriptURLTarget] = []
+        func add(_ kind: String, title: String, url: String?) {
+            guard let url, !url.isEmpty, !targets.contains(where: { $0.url == url }) else { return }
+            let host = URLComponents(string: url)?.host ?? url
+            targets.append(ScriptURLTarget(kind: kind, title: title, url: url, hostLabel: host))
+        }
+        let local = script.localProxyUrl
+            ?? (script.proxyUrl.map(isLoopbackURL) == true ? script.proxyUrl : nil)
+        let pub = script.publicProxyUrl
+            ?? (script.proxyUrl.map { !isLoopbackURL($0) } == true ? script.proxyUrl : nil)
+        add("public", title: "Reverse proxy", url: pub)
+        add("paseo", title: "Memorable", url: local)
+        // No connection info on this client to build a true direct URL; localhost is the
+        // honest default (matches upstream when there is no directTcp connection).
+        if let port = script.port {
+            add("direct", title: "Direct", url: "http://localhost:\(port)")
+        }
+        return targets
     }
 
     /// Restart = stop then start, one action. No confirmation: the script is designed to be
@@ -605,6 +765,55 @@ struct WorkspaceTerminalsView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(ClaudePalette.failureInk.opacity(0.08))
+    }
+}
+
+/// PHPicker wrapper (iOS 14+, no library-permission prompt for `.images`): one image, its
+/// original bytes, file name from the content type. SwiftUI's own `.photosPicker` modifier is
+/// avoided because availability varies across SDKs.
+private struct PhotoPickerView: UIViewControllerRepresentable {
+    var onPick: (Data, String, String) -> Void
+    var onCancel: () -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick, onCancel: onCancel) }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let onPick: (Data, String, String) -> Void
+        let onCancel: () -> Void
+
+        init(onPick: @escaping (Data, String, String) -> Void, onCancel: @escaping () -> Void) {
+            self.onPick = onPick
+            self.onCancel = onCancel
+        }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let result = results.first else {
+                Task { @MainActor in onCancel() }
+                return
+            }
+            let provider = result.itemProvider
+            let type = provider.registeredContentTypes.first { $0.conforms(to: .image) } ?? .image
+            provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { [onPick, onCancel] data, _ in
+                let ext = type.preferredFilenameExtension ?? "jpg"
+                let mime = type.preferredMIMEType ?? "image/jpeg"
+                if let data {
+                    Task { @MainActor in onPick(data, "photo.\(ext)", mime) }
+                } else {
+                    Task { @MainActor in onCancel() }
+                }
+            }
+        }
     }
 }
 #endif

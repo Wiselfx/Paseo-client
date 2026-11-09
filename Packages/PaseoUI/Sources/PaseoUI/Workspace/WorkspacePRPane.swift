@@ -42,6 +42,8 @@ struct WorkspacePRSection: View {
                 if !status.checks.isEmpty { checksBlock(status) }
                 openOnForgeRow(status)
                 activityBlock(status)
+                // Keep the section visually separate from the file list below it.
+                ClaudeDivider()
             }
         }
     }

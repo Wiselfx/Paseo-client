@@ -12,14 +12,30 @@ import UIKit
 /// for the app's cursor-key mode. Esc/Tab/punctuation are sent as raw bytes through
 /// `TerminalsStore.sendInput`. Ctrl flips `TerminalView.controlModifier`, which SwiftTerm
 /// clears after the next key automatically.
+/// One-line snapshot of an in-flight T14 (`file.upload`) transfer, for the key bar's progress
+/// row. `progress` is 0…1 bytes-sent; the daemon answers only after all bytes arrive.
+struct TerminalUploadSnapshot: Equatable {
+    let fileName: String
+    let progress: Double
+}
+
 final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private weak var terminalView: TerminalView?
     private let onInput: (String) -> Void
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private var ctrlButton: UIButton?
     private var resetObserver: NSObjectProtocol?
+    private let keysRow: UIStackView
+    private let uploadRow = UIStackView()
+    private let uploadFileLabel = UILabel()
+    private let uploadProgress = UIProgressView(progressViewStyle: .default)
 
     private static let ink = UIColor(red: 0.949, green: 0.937, blue: 0.914, alpha: 1)
+
+    /// Set by the coordinator; invoked when the paperclip is tapped.
+    var onAttach: (() -> Void)?
+    /// Set by the coordinator; invoked when the upload row's cancel button is tapped.
+    var onCancelUpload: (() -> Void)?
 
     init(terminalView: TerminalView, onInput: @escaping (String) -> Void) {
         self.terminalView = terminalView
@@ -63,10 +79,14 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         keys.addArrangedSubview(makeKey(title: "~", label: "Tilde") { [weak self] _ in self?.press("~") })
         keys.addArrangedSubview(makeKey(title: "/", label: "Slash") { [weak self] _ in self?.press("/") })
         keys.addArrangedSubview(makeKey(title: "-", label: "Minus") { [weak self] _ in self?.press("-") })
+        keys.addArrangedSubview(makeKey(image: "paperclip", label: "Attach a file") { [weak self] _ in
+            self?.onAttach?()
+        })
         let hide = makeKey(image: "keyboard", label: "Hide keyboard") { [weak self] _ in
             self?.toggleKeyboard()
         }
         keys.addArrangedSubview(hide)
+        self.keysRow = keys
 
         // SwiftTerm resets controlModifier after the next key; keep the Ctrl button in sync.
         resetObserver = NotificationCenter.default.addObserver(
@@ -74,13 +94,60 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
             self?.ctrlButton?.tintColor = Self.ink
         }
 
-        addSubview(keys)
+        // The upload row replaces the keys while a T14 file transfer is in flight: spinner,
+        // file name, byte progress and a cancel button.
+        uploadRow.axis = .horizontal
+        uploadRow.alignment = .center
+        uploadRow.spacing = 10
+        uploadRow.translatesAutoresizingMaskIntoConstraints = false
+        uploadRow.isHidden = true
+
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.color = Self.ink
+        spinner.startAnimating()
+        uploadRow.addArrangedSubview(spinner)
+        uploadFileLabel.font = UIFont(name: ClaudeTypography.anthropicMono, size: 12)
+            ?? .monospacedSystemFont(ofSize: 12, weight: .regular)
+        uploadFileLabel.textColor = Self.ink.withAlphaComponent(0.85)
+        uploadFileLabel.lineBreakMode = .byTruncatingMiddle
+        uploadFileLabel.text = ""
+        uploadRow.addArrangedSubview(uploadFileLabel)
+        uploadProgress.tintColor = Self.ink
+        uploadProgress.trackTintColor = Self.ink.withAlphaComponent(0.25)
+        uploadProgress.setProgress(0, animated: false)
+        uploadRow.addArrangedSubview(uploadProgress)
+        uploadProgress.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        let cancel = makeKey(image: "xmark", label: "Cancel upload") { [weak self] _ in
+            self?.onCancelUpload?()
+        }
+        uploadRow.addArrangedSubview(cancel)
+        uploadFileLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        addSubview(keysRow)
+        addSubview(uploadRow)
         NSLayoutConstraint.activate([
-            keys.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            keys.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            keys.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            keys.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            keysRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            keysRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            keysRow.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            keysRow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            uploadRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            uploadRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            uploadRow.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            uploadRow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
         ])
+    }
+
+    /// Swaps the keys row for the upload progress row (or back). Pass nil when idle.
+    func setUpload(_ snapshot: TerminalUploadSnapshot?) {
+        guard let snapshot else {
+            keysRow.isHidden = false
+            uploadRow.isHidden = true
+            return
+        }
+        keysRow.isHidden = true
+        uploadRow.isHidden = false
+        uploadFileLabel.text = snapshot.fileName
+        uploadProgress.setProgress(Float(min(1, max(0, snapshot.progress))), animated: true)
     }
 
     deinit {

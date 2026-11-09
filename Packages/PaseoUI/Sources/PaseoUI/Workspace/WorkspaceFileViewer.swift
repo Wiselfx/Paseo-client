@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
+import UniformTypeIdentifiers
 import UIKit
 
 /// The Files page's file viewer: text with syntax highlighting and a line-number gutter, an image
@@ -11,6 +12,8 @@ struct WorkspaceFileViewer: View {
     let relPath: String
     let onBack: () -> Void
     let backLabel: String
+    /// "Reveal in Files page"; nil hides the action (e.g. Preview sheets).
+    var onReveal: (() -> Void)? = nil
 
     @Environment(\.mentionInChat) private var mentionInChat
     @Environment(\.workspaceGitExtras) private var gitExtras
@@ -27,6 +30,11 @@ struct WorkspaceFileViewer: View {
     @State private var shareTarget: SharePayload?
     @State private var isSharing = false
     @State private var shareFailure: String?
+    @State private var isPreparingSave = false
+    @State private var exportDocument: WorkspaceExportDocument?
+    @State private var exportType: UTType?
+    @State private var exportName: String?
+    @State private var saveSuccessFlash = false
     @Environment(\.openURL) private var openURL
     private let typography = ClaudeTypography()
 
@@ -99,6 +107,29 @@ struct WorkspaceFileViewer: View {
         }
         .sheet(item: $shareTarget) { target in
             ActivityView(items: [target.url])
+        }
+        .fileExporter(
+            isPresented: Binding(
+                get: { exportDocument != nil },
+                set: { if !$0 { exportDocument = nil } }),
+            document: exportDocument ?? WorkspaceExportDocument(data: Data()),
+            contentType: exportType ?? .data,
+            defaultFilename: exportName
+        ) { result in
+            exportDocument = nil
+            switch result {
+            case .success:
+                Haptics.success()
+                saveSuccessFlash = true
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    saveSuccessFlash = false
+                }
+            case .failure(let error):
+                guard !WorkspaceShare.isUserCancellation(error) else { return }
+                Haptics.failure()
+                shareFailure = "Couldn't save: \(error.localizedDescription)"
+            }
         }
         .alert("Changed on disk", isPresented: $showConflict) {
             Button("Reload") { Task { await reloadForConflict() } }
@@ -271,7 +302,7 @@ struct WorkspaceFileViewer: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Mention in chat")
                 }
-                if savedFlash {
+                if savedFlash || saveSuccessFlash {
                     Image(systemName: "checkmark")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(ClaudePalette.successInk)
@@ -283,10 +314,38 @@ struct WorkspaceFileViewer: View {
                     Color.clear.frame(width: 28, height: 28)
                 }
                 if editableFile != nil { editButton } else { Color.clear.frame(width: 28, height: 28) }
+                overflowMenu
             }
         }
         .padding(.horizontal, 10)
         .frame(height: 38)
+    }
+
+    private var overflowMenu: some View {
+        Menu {
+            if let onReveal {
+                Button("Reveal in Files page", systemImage: "folder") {
+                    Haptics.selection()
+                    onReveal()
+                }
+            }
+            Button("Share…", systemImage: "square.and.arrow.up") { shareCurrentFile() }
+            Button("Save to Files…", systemImage: "square.and.arrow.down") { saveCurrentFile() }
+        } label: {
+            Group {
+                if isPreparingSave {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                }
+            }
+            .frame(width: 28, height: 28)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("More file actions")
     }
 
     private var editButton: some View {
@@ -485,6 +544,30 @@ struct WorkspaceFileViewer: View {
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Reads the bytes into memory and presents `fileExporter` (socket read via WorkspaceShare;
+    /// the HTTP token route is unreachable from this client).
+    private func saveCurrentFile() {
+        guard !isPreparingSave, let file else { return }
+        isPreparingSave = true
+        shareFailure = nil
+        Haptics.selection()
+        Task {
+            do {
+                let name = file.path.split(separator: "/").last.map(String.init)
+                let payload = try await WorkspaceShare.prepareExport(
+                    checkout, path: relativePath, name: name)
+                exportName = payload.displayName
+                exportType = payload.contentType
+                exportDocument = WorkspaceExportDocument(data: payload.data)
+            } catch let error as WorkspaceShare.ShareError {
+                if case .unreadable(let message) = error { shareFailure = message }
+            } catch {
+                shareFailure = "Couldn't prepare the file."
+            }
+            isPreparingSave = false
+        }
     }
 
     private func shareCurrentFile() {
