@@ -36,3 +36,12 @@ Branch `u5-outline` from `foundation`. Read `_U-common.md`.
 ## Done
 
 PaseoCore green, `-parse` clean. Commit "U5: prompt outline". Final message per the common rules, plus whether our daemon advertises `agentTimelinePromptIndex`. Check the daemon's version string or the `server_info` features in an existing fixture. Do not call the real daemon.
+
+## Haptics: the rail's signature feel (user request)
+
+Dragging along the rail feels like an iOS picker wheel (the time picker):
+
+- **One crossing, one tick.** Each time the finger crosses into a different prompt slot, fire one selection tick (`UISelectionFeedbackGenerator.selectionChanged()`, or SwiftUI `.sensoryFeedback(.selection, trigger: hoveredIndex)`). Exactly one tick per slot change; never on the same slot. The generator is `prepare()`d when the touch begins, so the first tick has no latency.
+- **Releasing to jump:** one `.impact(weight: .light)`. Cancelling (dragging off the rail) gives nothing.
+- **Dense rails:** when there are many prompts (slots smaller than ~6 pt of finger travel), throttle to at most one tick per ~35 ms so it stays crisp instead of buzzing.
+- Respect the app's existing Haptics setting (`Haptics` helper / the Settings toggle). No haptics while just scrolling the transcript, only for direct touch on the rail.
