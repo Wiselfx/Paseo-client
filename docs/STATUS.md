@@ -53,25 +53,27 @@ Tickets: `docs/tickets/`. Worktrees: `/home/paseo/.paseo/worktrees/0264elgj/<bra
    build once produced a fake failure.
 4. After merging, `swift test` must be fully green.
 
-## In flight (2026-11-09, user away from the Mac)
+## In flight (2026-11-09, late morning; user away from the Mac)
 
-Merged since: M2.5a/b, research 8, M2.6a sidebar, M2.6b turn UI (all built by the user in Xcode).
-Now running (inkling; DeepSeek is off on weekdays 01–04 and 06–10 UTC):
-- M3a `m3a-panel` (reused M2.6a worker): right-edge workspace panel (Agents · Files · Changes ·
-  Terminal), clean chat header (agent tab chips removed), sidebar bottom bar spacing.
-- M3b `m3b-files` (reused M2.6b worker), M3c `m3c-changes`, M3d `m3d-terminal` (SwiftTerm): the
-  panel's pages, against contract stubs in `PaseoUI/Workspace/`.
-- R9 `r9-parity`: `docs/PARITY.md`, a parity checklist vs Paseo's app and the DSH plugin, plus
-  suggested milestones. It becomes the roadmap.
-Merged: M3a–d (panel, files, changes, terminal via SwiftTerm), R9 `docs/PARITY.md`.
-Running: M4a settings, M4b schedules, M5a crab, M5b rich content, T14 file upload.
+Merged on `foundation` and pushed, NOT yet built in Xcode by the user: M3a–e (right-edge
+workspace panel: Agents/Files/Changes/Terminal via SwiftTerm, mention-in-chat, live file
+updates), M4a settings, M4b schedules, M5a crab (+ Settings "Show mascot"), M5b rich content,
+R9 `docs/PARITY.md` (the roadmap). Last user-built commit: dbad49b (M2.6b + underline fix).
+When the user is back: pull, Reset Package Caches (SwiftTerm is new), build, paste errors.
 
-Roadmap (from PARITY.md, renumbered to what is already running):
-M4 settings + schedules · M5 rich content + crab · M6 attention (notifications, push, deep links)
-+ composer attachments (T14 upload) · M7 search, history/sessions, command center · M8 composer
-and turn parity (queue/steer, @-files and slash autocomplete, drafts, context meter, fork/rewind,
-question forms) · M9 voice (dictation, voice mode). Later: relay pairing, iPad. Backlog: "Mention in chat" from Files (publish the draft through the
-environment) and live file updates (pass `session.gitExtras` to the files page, use `watchFile`).
+Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
+- M7 `m7-search-history` on worker 0778f3b0: agent menu from the title, in-conversation search,
+  History screen, scroll-to-bottom on agent switch. Owns the chat header + transcript.
+- T14 `t14-file-upload` on worker 918fee9a: binary upload frames (backend, live-probed).
+- M8a `m8a-composer` on worker 04d2d898: slash command menu, presence heartbeat, per-message copy,
+  bubble enter animation. Owns the composer section.
+- M2.7 `m27-projects` on worker 79dd09d6: add project + GitHub clone, full new-workspace flow,
+  diff stats + pinned section in sidebar rows.
+- Idle: worker ffaacc65 (did M3d terminal, M5b rich).
+Next candidates: composer attachments UI after T14 (M6), notifications/push research (DeepSeek),
+chat-follow button + fade band (after M7), sidebar Archive with undo.
+Roadmap order: see PARITY.md suggested milestones, renumbered below.
+
 UX decisions so far: left drawer = navigation (projects → workspaces), right panel = inside the
 workspace, the chat stays clean. Composer keeps the Claude iOS shape; turn UI follows DSH.
 
