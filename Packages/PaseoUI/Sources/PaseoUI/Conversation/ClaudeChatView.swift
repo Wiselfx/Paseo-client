@@ -23,6 +23,9 @@ public struct ClaudeChatView: View {
     var onBack: (() -> Void)?
     /// Called with the composer's text so a new agent can start with it.
     var onNewAgent: ((String) -> Void)?
+    /// M7h fork: called with the new agent's id after "Fork from here" creates it; the shell
+    /// navigates to it. Nil hides the fork affordance.
+    var onForkAgent: ((String) -> Void)?
 
     let typography = ClaudeTypography()
 
@@ -59,6 +62,8 @@ public struct ClaudeChatView: View {
     @State var pendingRewind: PendingRewind?
     /// True while a confirmed rewind RPC is in flight; double-taps on the confirm button no-op.
     @State var rewindInFlight = false
+    /// M7h message actions: the one awaiting confirmation (Edit/Rerun rewind on confirm).
+    @State var pendingMessageAction: PendingMessageAction?
     // Header title menu (M7 §1).
     @State var renamingAgent = false
     @State var renameText = ""
@@ -111,7 +116,7 @@ public struct ClaudeChatView: View {
     public init(
         session: HostSession, store: ConversationStore, onOpenSidebar: (() -> Void)? = nil,
         onOpenPanel: (() -> Void)? = nil, onBack: (() -> Void)? = nil,
-        onNewAgent: ((String) -> Void)? = nil
+        onNewAgent: ((String) -> Void)? = nil, onForkAgent: ((String) -> Void)? = nil
     ) {
         self.session = session
         self.store = store
@@ -119,6 +124,7 @@ public struct ClaudeChatView: View {
         self.onOpenPanel = onOpenPanel
         self.onBack = onBack
         self.onNewAgent = onNewAgent
+        self.onForkAgent = onForkAgent
         ClaudeFontResources.register()
     }
 

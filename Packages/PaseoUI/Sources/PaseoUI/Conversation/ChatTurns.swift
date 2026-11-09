@@ -24,6 +24,15 @@ struct ClaudeTurnView: View {
     var rewindChoices: [RewindScope] = []
     /// Called with (scope, messageId); the transcript presents the confirmation dialog.
     var onRewind: ((RewindScope, String) -> Void)? = nil
+    /// M7h rewind-based message actions: true only where the provider can rewind the conversation.
+    var canRewrite: Bool = false
+    /// Called with (messageId, text) when Edit is chosen; the transcript puts the text back in
+    /// the composer and rewinds to before the message on confirm.
+    var onEdit: ((String, String) -> Void)? = nil
+    /// Called with (messageId, text) when Rerun is chosen; the transcript rewinds and resends.
+    var onRerun: ((String, String) -> Void)? = nil
+    /// M7h fork: called with the final assistant row when Fork is chosen. Nil hides the button.
+    var onFork: ((TimelineRow) -> Void)? = nil
     /// False for every turn except the most recent one; only that turn never collapses.
     var isLatestTurn: Bool = true
 
@@ -113,7 +122,10 @@ struct ClaudeTurnView: View {
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
                     onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
-                    attributed: bubbleAttributed(message.text)
+                    attributed: bubbleAttributed(message.text),
+                    canRewrite: canRewrite,
+                    onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
+                    onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -171,7 +183,10 @@ struct ClaudeTurnView: View {
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
                     onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
-                    attributed: bubbleAttributed(message.text)
+                    attributed: bubbleAttributed(message.text),
+                    canRewrite: canRewrite,
+                    onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
+                    onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -194,9 +209,26 @@ struct ClaudeTurnView: View {
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
             }
-            if !isRunning, !copyText.isEmpty {
+            if !isRunning, let forkTarget = finalProse, (!copyText.isEmpty || onFork != nil) {
                 HStack(spacing: 17) {
-                    ClaudeCopyButton(text: copyText, label: "Copy response")
+                    if !copyText.isEmpty {
+                        ClaudeCopyButton(text: copyText, label: "Copy response")
+                    }
+                    if let onFork {
+                        // Fork chat from here: seed a new agent with the history up to this answer.
+                        Button {
+                            Haptics.selection()
+                            onFork(forkTarget)
+                        } label: {
+                            Image(systemName: "arrow.branch")
+                                .font(.system(size: 15, weight: .light))
+                                .foregroundStyle(ClaudePalette.tertiaryInk)
+                                .frame(width: 28, height: 28)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Fork from here")
+                    }
                 }
                 .padding(.top, 2)
             }

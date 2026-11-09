@@ -96,15 +96,19 @@ public struct CreateAgentRequest: PaseoRequest {
     /// Placement. Omitting it uses the caller's workspace; `cwd` still decides the runtime.
     public var workspaceId: String?
     public var labels: [String: String]?
+    /// Structured attachments, e.g. the `chat_history` fork seed (M7h). Encoded flat next to
+    /// `initialPrompt`, omitting the key when nil.
+    public var attachments: [AgentAttachment]?
 
     public init(
         config: AgentSessionConfig, initialPrompt: String? = nil, workspaceId: String? = nil,
-        labels: [String: String]? = nil
+        labels: [String: String]? = nil, attachments: [AgentAttachment]? = nil
     ) {
         self.config = config
         self.initialPrompt = initialPrompt
         self.workspaceId = workspaceId
         self.labels = labels
+        self.attachments = attachments
     }
 
     /// Either `agent_created` (with `agent`) or `agent_create_failed` (with `error`).

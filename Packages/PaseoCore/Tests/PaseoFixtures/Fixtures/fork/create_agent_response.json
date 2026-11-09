@@ -1,0 +1,91 @@
+{
+  "type": "session",
+  "message": {
+    "type": "status",
+    "payload": {
+      "status": "agent_created",
+      "agentId": "fork-fixture-1",
+      "requestId": "fork-create-source",
+      "agent": {
+        "id": "fork-fixture-1",
+        "provider": "opencode",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_8e7094134948e805",
+        "model": "opencode/iceman-free",
+        "thinkingOptionId": null,
+        "effectiveThinkingOptionId": "default",
+        "runtimeInfo": {
+          "provider": "opencode",
+          "sessionId": "ses_e407db8f0ffe876uaV9G9FK5sX",
+          "model": "opencode/iceman-free",
+          "thinkingOptionId": "default",
+          "modeId": "build"
+        },
+        "createdAt": "2026-11-09T08:52:28.618Z",
+        "updatedAt": "2026-11-09T08:52:28.628Z",
+        "lastUserMessageAt": null,
+        "status": "running",
+        "activeTurn": {
+          "turnId": "fork-fixture-2",
+          "startedAt": "2026-11-09T08:52:28.628Z"
+        },
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true,
+          "supportsSessionListing": true,
+          "supportsDynamicModes": true,
+          "supportsMcpServers": true,
+          "supportsReasoningStream": true,
+          "supportsToolInvocations": true,
+          "supportsRewindBoth": true,
+          "supportsRewindConversation": false,
+          "supportsRewindFiles": false
+        },
+        "currentModeId": "build",
+        "availableModes": [
+          {
+            "id": "build",
+            "label": "Build",
+            "description": "The default agent. Executes tools based on configured permissions."
+          },
+          {
+            "id": "plan",
+            "label": "Plan",
+            "description": "Read-only agent for exploring the codebase and planning work before implementation."
+          }
+        ],
+        "features": [
+          {
+            "type": "toggle",
+            "id": "auto_accept",
+            "label": "Auto-accept",
+            "value": false
+          }
+        ],
+        "pendingPermissions": [],
+        "persistence": {
+          "provider": "opencode",
+          "sessionId": "ses_e407db8f0ffe876uaV9G9FK5sX",
+          "nativeHandle": "ses_e407db8f0ffe876uaV9G9FK5sX",
+          "metadata": {
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-sandbox",
+            "model": "opencode/iceman-free",
+            "openCodeRuntimeNotices": [
+              {
+                "major": 2,
+                "timestamp": "2026-11-09T08:52:28.618Z"
+              }
+            ]
+          }
+        },
+        "title": "M7h fork probe: reply with exactly READY and nothing else.",
+        "labels": {},
+        "archivedAt": null,
+        "requiresAttention": false,
+        "attentionReason": null,
+        "attentionTimestamp": null
+      }
+    }
+  }
+}

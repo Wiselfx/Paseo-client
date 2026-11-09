@@ -1,0 +1,175 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agent_timeline_response",
+    "payload": {
+      "requestId": "fork-timeline",
+      "agentId": "fork-fixture-1",
+      "agent": {
+        "id": "fork-fixture-1",
+        "provider": "opencode",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_8e7094134948e805",
+        "model": "opencode/iceman-free",
+        "thinkingOptionId": null,
+        "effectiveThinkingOptionId": "default",
+        "runtimeInfo": {
+          "provider": "opencode",
+          "sessionId": "ses_e407db8f0ffe876uaV9G9FK5sX",
+          "model": "opencode/iceman-free",
+          "thinkingOptionId": "default",
+          "modeId": "build"
+        },
+        "createdAt": "2026-11-09T08:52:28.618Z",
+        "updatedAt": "2026-11-09T08:52:30.669Z",
+        "lastUserMessageAt": "2026-11-09T08:52:28.680Z",
+        "status": "idle",
+        "activeTurn": null,
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true,
+          "supportsSessionListing": true,
+          "supportsDynamicModes": true,
+          "supportsMcpServers": true,
+          "supportsReasoningStream": true,
+          "supportsToolInvocations": true,
+          "supportsRewindBoth": true,
+          "supportsRewindConversation": false,
+          "supportsRewindFiles": false
+        },
+        "currentModeId": "build",
+        "availableModes": [
+          {
+            "id": "build",
+            "label": "Build",
+            "description": "The default agent. Executes tools based on configured permissions."
+          },
+          {
+            "id": "plan",
+            "label": "Plan",
+            "description": "Read-only agent for exploring the codebase and planning work before implementation."
+          }
+        ],
+        "features": [
+          {
+            "type": "toggle",
+            "id": "auto_accept",
+            "label": "Auto-accept",
+            "value": false
+          }
+        ],
+        "pendingPermissions": [],
+        "persistence": {
+          "provider": "opencode",
+          "sessionId": "ses_e407db8f0ffe876uaV9G9FK5sX",
+          "nativeHandle": "ses_e407db8f0ffe876uaV9G9FK5sX",
+          "metadata": {
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-sandbox",
+            "model": "opencode/iceman-free",
+            "openCodeRuntimeNotices": [
+              {
+                "major": 2,
+                "timestamp": "2026-11-09T08:52:28.618Z"
+              }
+            ]
+          }
+        },
+        "title": "M7h fork probe: reply with exactly READY and nothing else.",
+        "labels": {},
+        "archivedAt": null,
+        "lastUsage": {
+          "inputTokens": 11207,
+          "cachedInputTokens": 0,
+          "outputTokens": 24,
+          "totalCostUsd": 0,
+          "contextWindowMaxTokens": 262144,
+          "contextWindowUsedTokens": 10793
+        },
+        "requiresAttention": true,
+        "attentionReason": "finished",
+        "attentionTimestamp": "2026-11-09T08:52:30.668Z"
+      },
+      "direction": "tail",
+      "projection": "projected",
+      "epoch": "fork-fixture-3",
+      "reset": false,
+      "staleCursor": false,
+      "gap": false,
+      "window": {
+        "minSeq": 1,
+        "maxSeq": 6,
+        "nextSeq": 7
+      },
+      "startCursor": {
+        "epoch": "fork-fixture-3",
+        "seq": 1
+      },
+      "endCursor": {
+        "epoch": "fork-fixture-3",
+        "seq": 6
+      },
+      "hasOlder": false,
+      "hasNewer": false,
+      "entries": [
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "user_message",
+            "text": "M7h fork probe: reply with exactly READY and nothing else.",
+            "messageId": "msg_1bf824757001fp8h2giyElsPDX"
+          },
+          "timestamp": "2026-11-09T08:52:28.680Z",
+          "seqStart": 2,
+          "seqEnd": 2,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 2,
+              "endSeq": 2
+            }
+          ],
+          "turnId": "fork-fixture-2",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "reasoning",
+            "text": "**Responding with \"READY\"**\n\nThe user wants me to reply with exactly \"READY\" and nothing else. Okay, that's pretty straightforward. I’ll just send \"READY\" and leave it at that. No extra words, no explanations. Just \"READY.\" Simple enough, right? I’ll make sure to stick to the instructions exactly as they are."
+          },
+          "timestamp": "2026-11-09T08:52:30.326Z",
+          "seqStart": 3,
+          "seqEnd": 5,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 3,
+              "endSeq": 5
+            }
+          ],
+          "turnId": "fork-fixture-2",
+          "collapsed": []
+        },
+        {
+          "provider": "opencode",
+          "item": {
+            "type": "assistant_message",
+            "text": "READY",
+            "messageId": "msg_1bf824767001mh2SR1wHzMc3aN"
+          },
+          "timestamp": "2026-11-09T08:52:30.650Z",
+          "seqStart": 6,
+          "seqEnd": 6,
+          "sourceSeqRanges": [
+            {
+              "startSeq": 6,
+              "endSeq": 6
+            }
+          ],
+          "turnId": "fork-fixture-2",
+          "collapsed": []
+        }
+      ],
+      "error": null
+    }
+  }
+}

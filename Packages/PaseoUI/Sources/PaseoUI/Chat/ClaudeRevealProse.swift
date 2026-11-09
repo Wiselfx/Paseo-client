@@ -18,6 +18,9 @@ struct ClaudeRevealProse: View {
     /// True while the producing turn is running — i.e. prose is actively arriving.
     let isStreaming: Bool
     var localImageLoader: ((String) async -> UIImage?)? = nil
+    /// Renders `![alt](url)` paragraphs: remote http(s) via AsyncImage; workspace paths through
+    /// the local loader. `nil` renders images as text.
+    var imageContent: ((MarkdownImage) -> AnyView)? = nil
 
     static let fadeDuration: Double = 0.12
     static let minOpacity: Double = 0.2
@@ -83,7 +86,9 @@ struct ClaudeRevealProse: View {
                 case .markdown(let chunk):
                     let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
-                        ClaudeMarkdownView(trimmed, theme: theme, onAction: onAction)
+                        ClaudeMarkdownView(
+                            document: MarkdownDocumentModel(source: trimmed), theme: theme,
+                            imageContent: imageContent, onAction: onAction)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .mask(sweepMask(active: ref.isTailMarkdown))
                     }

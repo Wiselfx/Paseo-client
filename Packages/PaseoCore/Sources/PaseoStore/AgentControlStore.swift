@@ -106,17 +106,19 @@ public final class AgentControlStore {
     /// Creates an agent and returns its id, or `nil` with `actionError` set.
     ///
     /// `cwd` places the runtime; `workspaceId` re-homes it into an existing workspace (omit to use
-    /// the caller's). `prompt` is sent as the first turn.
+    /// the caller's). `prompt` is sent as the first turn. `attachments`, when given, ride the
+    /// create request verbatim — e.g. the chat-history seed for a fork.
     public func createAgent(
         cwd: String,
         workspaceId: String? = nil,
         provider: String,
-        model: String,
+        model: String? = nil,
         modeId: String? = nil,
         thinkingOptionId: String? = nil,
         featureValues: [String: JSONValue]? = nil,
         prompt: String? = nil,
-        title: String? = nil
+        title: String? = nil,
+        attachments: [AgentAttachment]? = nil
     ) async -> String? {
         actionError = nil
         lastCreatedAgent = nil
@@ -129,7 +131,8 @@ public final class AgentControlStore {
                 featureValues: (featureValues?.isEmpty == false) ? featureValues : nil,
                 title: title),
             initialPrompt: (trimmedPrompt?.isEmpty == false) ? trimmedPrompt : nil,
-            workspaceId: workspaceId)
+            workspaceId: workspaceId,
+            attachments: (attachments?.isEmpty == false) ? attachments : nil)
 
         do {
             let response = try await client.send(request)
