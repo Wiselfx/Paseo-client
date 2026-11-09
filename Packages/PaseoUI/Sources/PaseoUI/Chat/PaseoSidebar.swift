@@ -717,6 +717,7 @@ struct PaseoSidebar: View {
             if showBranch {
                 Text(workspace.branch ?? workspaceKindLabel(workspace))
                     .foregroundStyle(ClaudePalette.secondaryInk)
+                    .lineLimit(1)
             }
             if showDiffStats, let stat = workspace.diffStat, stat.additions > 0 || stat.deletions > 0 {
                 if showBranch { Text("·").foregroundStyle(ClaudePalette.captionInk) }
