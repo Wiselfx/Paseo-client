@@ -35,7 +35,7 @@ extension PaseoSidebar {
             isManuallyUnread(workspace) ? "Manually marked unread" : (attention ? "Needs attention" : ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
-            Button("New agent here", systemImage: "plus") { onNewAgent(workspace) }
+            Button("New agent here", systemImage: "plus") { onNewSession(workspace.id) }
             Button("Rename workspace", systemImage: "pencil") {
                 renameText = workspace.title ?? workspace.name
                 renamingWorkspace = workspace

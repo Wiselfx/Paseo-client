@@ -124,14 +124,11 @@ extension PaseoSidebar {
         }
     }
 
+    /// Add project moved into the navigation rows above the directory (§2.3); the directory
+    /// keeps only the hidden-workspaces disclosure.
     @ViewBuilder var trailingRows: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if session.workspaceDirectory.supportsProjectAdd {
-                addProjectRow
-            }
-            if !hiddenWorkspacesSet.isEmpty {
-                hiddenWorkspacesRow
-            }
+        if !hiddenWorkspacesSet.isEmpty {
+            hiddenWorkspacesRow
         }
     }
 
