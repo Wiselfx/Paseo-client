@@ -29,6 +29,11 @@ extension ClaudeChatView {
                 Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }
             Menu {
+                if store.turns.filter({ $0.userMessage != nil }).count >= ClaudeTurnRail.minimumTurns {
+                    Button("Jump to message…", systemImage: "list.bullet.indent") {
+                        sheet = .turnNav
+                    }
+                }
                 Button("Search in conversation", systemImage: "magnifyingglass") {
                     openFind()
                 }

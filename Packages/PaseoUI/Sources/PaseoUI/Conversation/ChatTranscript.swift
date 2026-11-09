@@ -20,7 +20,11 @@ extension ClaudeChatView {
                 case .failed(let message):
                     emptyState(title: "Couldn't load agent history", detail: message)
                 case .ready:
-                    ClaudeHomeHero(hint: nil)
+                    VStack(spacing: 4) {
+                        ClaudeHomeHero(hint: nil)
+                        ClaudeHeroSeats(
+                            session: session, store: store, onOpenAgent: onOpenAgent)
+                    }
                 }
             } else {
                 transcript
@@ -149,6 +153,7 @@ extension ClaudeChatView {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .overlay(alignment: .bottom) { transcriptFade }
+                .overlay(alignment: .trailing) { turnRail }
                 // Follows the tail as it streams; loading older pages at the top does not jump.
                 .onChange(of: store.turns.last) { _, _ in
                     guard !findOpen, isFollowing else { return }
@@ -199,6 +204,7 @@ extension ClaudeChatView {
                             - geometry.bounds.height,
                         viewportHeight: geometry.bounds.height)
                 } action: { _, metrics in
+                    revealTurnRail()
                     if anchoringToAnswer {
                         // While anchored, the message stays pinned to the top; only once the
                         // growing content overflows the viewport does tail-follow take over.
@@ -408,6 +414,42 @@ extension ClaudeChatView {
             .transition(.opacity)
             .accessibilityIdentifier("transcript.backToEnd")
             .accessibilityLabel("Back to the end")
+        }
+    }
+
+    /// M7i turn rail: your messages numbered, trailing edge, shown only while scrolling and
+    /// only for chats with enough messages to be worth it. Tap jumps to that turn.
+    @ViewBuilder var turnRail: some View {
+        if turnNavVisible, case .ready = store.phase, store.turns.count >= ClaudeTurnRail.minimumTurns {
+            ClaudeTurnRail(turns: store.turns, currentTurnId: lastTrackedTurn) { id in
+                jumpToTurn(id)
+            }
+            .padding(.trailing, 4)
+            .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
+        }
+    }
+
+    /// Scroll-reveals the rail and keeps it up briefly; hidden again shortly after scrolling stops.
+    func revealTurnRail() {
+        guard store.turns.count >= ClaudeTurnRail.minimumTurns else { return }
+        turnNavVisible = true
+        turnNavIdleTask?.cancel()
+        turnNavIdleTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            turnNavVisible = false
+        }
+    }
+
+    /// Jumps the transcript to `id` (a turn view id). Reduce Motion jumps without animation.
+    func jumpToTurn(_ id: String) {
+        guard let proxy = scrollProxy else { return }
+        // Jumping backwards releases the tail-follow, like M7b.
+        isFollowing = false
+        if reduceMotion {
+            proxy.scrollTo(id, anchor: .top)
+        } else {
+            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
         }
     }
 

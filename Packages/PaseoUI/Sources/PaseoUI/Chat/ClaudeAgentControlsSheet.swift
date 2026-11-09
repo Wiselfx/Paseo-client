@@ -217,6 +217,24 @@ struct ClaudeAgentControlsSheet: View {
     private var thinkingPage: some View {
         ScrollView {
             VStack(spacing: 12) {
+                if let ranked = EffortLadder.ranked(thinkingOptions) {
+                    // Compact Faster ↔ Smarter ladder (effort). The list remains for unranked providers.
+                    EffortLadder(
+                        options: ranked,
+                        selectedId: effectiveThinkingId
+                    ) { chooseThinking($0) }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
+                } else {
+                    plainThinkingList
+                }
+            }
+        }
+    }
+
+    /// The original list of options — used when the provider's levels aren't ranked.
+    private var plainThinkingList: some View {
+        VStack(spacing: 12) {
                 RowGroup {
                     SheetRow(
                         title: "Default", detail: "Use the provider's level for this model",
@@ -246,7 +264,6 @@ struct ClaudeAgentControlsSheet: View {
                     .foregroundStyle(ClaudePalette.secondary)
                     .padding(.horizontal, 16)
                 }
-            }
         }
     }
 

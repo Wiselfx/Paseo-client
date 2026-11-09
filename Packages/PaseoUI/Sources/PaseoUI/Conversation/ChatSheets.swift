@@ -6,6 +6,7 @@ enum ClaudeChatSheet: String, Identifiable {
     case controls
     case subagents
     case backgroundWork
+    case turnNav
     var id: String { rawValue }
 }
 
