@@ -98,12 +98,13 @@ missing HostSession wiring), M9 Search row + command palette, M3j Save to Files/
 file into terminal, gh callout, side-by-side diff, M3i PR section now mounted, M4e About/Diagnostics
 (scrubbed report)/Terminal/Sidebar pages M7h Edit/Rerun on your messages
 (rewind-based), Fork from here (agent.fork_context + chat_history attachment), images in prose
-(PaseoCore 473/139/17 = 629 green; PARITY 272 done / 77 missing of 421). Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+(PaseoCore 473/139/17 = 629 green; PARITY 272 done / 77 missing of 421). M4f Pure black +
+content/code size (font changes rebuild the tree via RootView `.id`: polish pass should move
+typography into the environment; terminal font size not yet scaled). Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - R14 `r14-api-audit` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: PaseoUI→PaseoCore API checker (catch Xcode errors) + fixes.
-- M4f `m4f-appearance` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: Pure black theme, text/code size.
 - M2.13 `m213-dsh-sidebar` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: active-first, group by date, setup callout.
 Known store gaps: commands cache never invalidated; GitHub search has no star count; host
 `diagnostics.request` has no store slot; fork can't carry provider feature values.
