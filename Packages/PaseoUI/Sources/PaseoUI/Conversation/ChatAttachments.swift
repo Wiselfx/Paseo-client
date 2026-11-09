@@ -110,17 +110,15 @@ extension ClaudeChatView {
         focused = true
     }
 
-    /// Pasted images attach; pasted text keeps the default text behavior.
-    func handlePastedItems(_ providers: [NSItemProvider]) {
-        for provider in providers {
-            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) {
-                data, _ in
-                guard let data else { return }
-                Task { @MainActor in
-                    attachImageData(data, fileName: "pasted-\(UUID().uuidString.prefix(8)).jpg")
-                }
-            }
+    /// The add menu's "Paste image" (upstream en.ts:157; failure copy en.ts:184).
+    func pasteImageFromClipboard() {
+        guard let image = UIPasteboard.general.image,
+            let data = image.jpegData(compressionQuality: 1.0)
+        else {
+            showToast("Failed to paste image")
+            return
         }
+        attachImageData(data, fileName: "pasted-\(UUID().uuidString.prefix(8)).jpg")
     }
 
     /// The pill row above the text field: thumbnails/file pills with remove "x";

@@ -126,6 +126,10 @@ extension ClaudeChatView {
                 Button("Camera", systemImage: "camera") { showCameraPicker = true }
             }
             Button("Files", systemImage: "folder") { showFileImporter = true }
+            // iOS has no paste command for views; offer the clipboard image explicitly.
+            if UIPasteboard.general.hasImages {
+                Button("Paste image", systemImage: "doc.on.clipboard") { pasteImageFromClipboard() }
+            }
             Button(
                 forgeIsGitLab ? "Add issue or MR" : "Add issue or PR",
                 systemImage: "arrow.triangle.branch"
@@ -221,11 +225,11 @@ extension ClaudeChatView {
         .sheet(isPresented: $showForgePicker) {
             ForgeSearchPicker(
                 session: session, cwd: store.agent?.cwd ?? "", isMergeRequest: forgeIsGitLab,
-                selectedIds: selectedForgeIds
-            ) { item in
-                toggleForgeAttachment(item)
-                showForgePicker = false
-            }
+                onPick: { item in
+                    toggleForgeAttachment(item)
+                    showForgePicker = false
+                },
+                selectedIds: selectedForgeIds)
         }
         .sheet(isPresented: $showCameraPicker) {
             CameraCaptureView(
@@ -254,7 +258,6 @@ extension ClaudeChatView {
 
     func withComposerVoiceWiring(_ content: some View) -> some View {
         content
-        .onPasteCommand(of: [.image], perform: handlePastedItems)
         // M15: realtime voice wiring. The engine feeds the store (mic PCM + level), the
         // store feeds the engine (next chunks + stop signals). Capture start/stop is
         // driven by the phase; voice mode itself is store state.
