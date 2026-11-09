@@ -25,31 +25,9 @@ extension ClaudeChatView {
     }
 
     var composerCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let card = VStack(alignment: .leading, spacing: 8) {
             attachmentTray
-            if dictation.isDenied {
-                HStack(spacing: 8) {
-                    Image(systemName: "mic.slash")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.failureInk)
-                    Text("Dictation is off. Enable Microphone and Speech Recognition in Settings.")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.failureInk)
-                        .lineLimit(2)
-                    Spacer(minLength: 4)
-                    Button("Settings") {
-                        if let url = URL(string: UIApplication.openSettingsURLString) {
-                            openURL(url)
-                        }
-                    }
-                    .font(typography.sans(12, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.orange)
-                    .accessibilityLabel("Open Settings")
-                    .accessibilityIdentifier("composer.dictation.settings")
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-            }
+            dictationDeniedBanner
             if let error = store.actionError {
                 Text(error)
                     .font(typography.sans(13))
@@ -57,108 +35,22 @@ extension ClaudeChatView {
                     .padding(.horizontal, 8)
                     .transition(.opacity)
             }
-            TextField(
-                "", text: $store.draft,
-                prompt: Text(composerPrompt)
-                    .foregroundStyle(ClaudePalette.secondaryInk),
-                axis: .vertical
-            )
-            .font(typography.sans(18))
-            .lineLimit(1...12)
-            .fixedSize(horizontal: false, vertical: true)
-            .focused($focused)
-            .tint(ClaudePalette.orange)
-            .padding(.horizontal, 6)
-            .padding(.top, 7)
-            .accessibilityIdentifier("composer.draft")
+            composerTextField
             if voiceActiveForAgent || voice.phase == .starting {
                 voiceBar
             }
             HStack(spacing: 8) {
-                Menu {
-                    PhotosPicker(
-                        selection: $photoSelection, maxSelectionCount: 10, matching: .images
-                    ) {
-                        Label("Photo Library", systemImage: "photo.on.rectangle")
-                    }
-                    if cameraAvailable {
-                        Button("Camera", systemImage: "camera") { showCameraPicker = true }
-                    }
-                    Button("Files", systemImage: "folder") { showFileImporter = true }
-                    Button(
-                        forgeIsGitLab ? "Add issue or MR" : "Add issue or PR",
-                        systemImage: "arrow.triangle.branch"
-                    ) {
-                        if let workspaceId = store.agent?.workspaceId,
-                            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
-                        {
-                            Task { await session.checkout(for: workspace).loadPrStatus() }
-                        }
-                        showForgePicker = true
-                    }
-                    Button("Mention a file", systemImage: "at") { mentionFile() }
-                    Divider()
-                    Button("New agent", systemImage: "plus.bubble") {
-                        newAgent(draft: store.draft)
-                    }
-                    Button("Copy agent ID", systemImage: "doc.on.doc") {
-                        UIPasteboard.general.string = store.agentId
-                        Haptics.selection()
-                        showToast("Agent ID copied")
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .regular))
-                        .frame(width: 36, height: 36)
-                        .foregroundStyle(ClaudePalette.ink)
-                        .background(ClaudePalette.chip, in: .circle)
-                }
-                .accessibilityLabel("Add to agent")
-                Button {
-                    focused = false
-                    sheet = .controls
-                } label: {
-                    HStack(spacing: 3) {
-                        Text(modelChipTitle)
-                        if let thinkingLabel {
-                            Text(thinkingLabel).foregroundStyle(
-                                hasCustomThinking ? ClaudePalette.orange.opacity(0.9) : ClaudePalette.secondaryInk)
-                        }
-                    }
-                    .font(typography.sans(14))
-                    .foregroundStyle(hasCustomThinking ? ClaudePalette.orange : ClaudePalette.ink)
-                    .lineLimit(1)
-                    .padding(.horizontal, 14)
-                    .frame(height: 36)
-                    .background(
-                        hasCustomThinking ? ClaudePalette.orange.opacity(0.15) : ClaudePalette.chip,
-                        in: .capsule)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Model, thinking and mode")
-                .accessibilityIdentifier("composer.model")
+                composerAddMenu
+                composerModelChip
                 fastModeChip
                 Spacer(minLength: 0)
                 contextMeter
                 voiceModeButton
                 dictateButton
-                if store.isRunning && trimmedDraft.isEmpty {
-                    roundButton("stop.fill", label: "Stop response", color: ClaudePalette.ink, ink: ClaudePalette.background) {
-                        Task { await store.cancel() }
-                    }
-                    .accessibilityIdentifier("composer.stop")
-                } else {
-                    QueueSendButton(
-                        isRunning: store.isRunning, canSend: canSendMessage
-                    ) {
-                        tapSend()
-                    } onQueue: {
-                        longPressSend()
-                    }
-                    .accessibilityIdentifier("composer.send")
-                }
+                composerSendControl
             }
         }
+        let framed = card
         .padding(8)
         .padding(.top, 1)
         .background(ClaudePalette.composer, in: .rect(cornerRadius: 27))
@@ -177,6 +69,146 @@ extension ClaudeChatView {
         .fullScreenCover(isPresented: $showFullScreenComposer) {
             FullScreenComposer(draft: $store.draft, isRunning: store.isRunning) { send() }
         }
+        return withComposerVoiceWiring(withComposerSheets(framed))
+    }
+
+    @ViewBuilder var dictationDeniedBanner: some View {
+        if dictation.isDenied {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.slash")
+                    .font(typography.sans(12))
+                    .foregroundStyle(ClaudePalette.failureInk)
+                Text("Dictation is off. Enable Microphone and Speech Recognition in Settings.")
+                    .font(typography.sans(12))
+                    .foregroundStyle(ClaudePalette.failureInk)
+                    .lineLimit(2)
+                Spacer(minLength: 4)
+                Button("Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                }
+                .font(typography.sans(12, weight: .semibold))
+                .foregroundStyle(ClaudePalette.orange)
+                .accessibilityLabel("Open Settings")
+                .accessibilityIdentifier("composer.dictation.settings")
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+        }
+    }
+
+    var composerTextField: some View {
+        TextField(
+            "", text: $store.draft,
+            prompt: Text(composerPrompt)
+                .foregroundStyle(ClaudePalette.secondaryInk),
+            axis: .vertical
+        )
+        .font(typography.sans(18))
+        .lineLimit(1...12)
+        .fixedSize(horizontal: false, vertical: true)
+        .focused($focused)
+        .tint(ClaudePalette.orange)
+        .padding(.horizontal, 6)
+        .padding(.top, 7)
+        .accessibilityIdentifier("composer.draft")
+    }
+
+    var composerAddMenu: some View {
+        Menu {
+            PhotosPicker(
+                selection: $photoSelection, maxSelectionCount: 10, matching: .images
+            ) {
+                Label("Photo Library", systemImage: "photo.on.rectangle")
+            }
+            if cameraAvailable {
+                Button("Camera", systemImage: "camera") { showCameraPicker = true }
+            }
+            Button("Files", systemImage: "folder") { showFileImporter = true }
+            Button(
+                forgeIsGitLab ? "Add issue or MR" : "Add issue or PR",
+                systemImage: "arrow.triangle.branch"
+            ) {
+                openForgePicker()
+            }
+            Button("Mention a file", systemImage: "at") { mentionFile() }
+            Divider()
+            Button("New agent", systemImage: "plus.bubble") {
+                newAgent(draft: store.draft)
+            }
+            Button("Copy agent ID", systemImage: "doc.on.doc") {
+                UIPasteboard.general.string = store.agentId
+                Haptics.selection()
+                showToast("Agent ID copied")
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .regular))
+                .frame(width: 36, height: 36)
+                .foregroundStyle(ClaudePalette.ink)
+                .background(ClaudePalette.chip, in: .circle)
+        }
+        .accessibilityLabel("Add to agent")
+    }
+
+    /// Refreshes PR status for the agent's workspace, then opens the issue/PR picker.
+    func openForgePicker() {
+        if let workspaceId = store.agent?.workspaceId,
+            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+        {
+            let checkout = session.checkout(for: workspace)
+            Task { await checkout.loadPrStatus() }
+        }
+        showForgePicker = true
+    }
+
+    var composerModelChip: some View {
+        Button {
+            focused = false
+            sheet = .controls
+        } label: {
+            HStack(spacing: 3) {
+                Text(modelChipTitle)
+                if let thinkingLabel {
+                    Text(thinkingLabel).foregroundStyle(
+                        hasCustomThinking ? ClaudePalette.orange.opacity(0.9) : ClaudePalette.secondaryInk)
+                }
+            }
+            .font(typography.sans(14))
+            .foregroundStyle(hasCustomThinking ? ClaudePalette.orange : ClaudePalette.ink)
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(
+                hasCustomThinking ? ClaudePalette.orange.opacity(0.15) : ClaudePalette.chip,
+                in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Model, thinking and mode")
+        .accessibilityIdentifier("composer.model")
+    }
+
+    @ViewBuilder var composerSendControl: some View {
+        if store.isRunning && trimmedDraft.isEmpty {
+            roundButton("stop.fill", label: "Stop response", color: ClaudePalette.ink, ink: ClaudePalette.background) {
+                Task { await store.cancel() }
+            }
+            .accessibilityIdentifier("composer.stop")
+        } else {
+            QueueSendButton(
+                isRunning: store.isRunning, canSend: canSendMessage
+            ) {
+                tapSend()
+            } onQueue: {
+                longPressSend()
+            }
+            .accessibilityIdentifier("composer.send")
+        }
+    }
+
+    func withComposerSheets(_ content: some View) -> some View {
+        content
         .fileImporter(
             isPresented: $showFileImporter, allowedContentTypes: [.item],
             allowsMultipleSelection: true
@@ -218,6 +250,10 @@ extension ClaudeChatView {
                 AttachmentImageViewer(image: image)
             }
         }
+    }
+
+    func withComposerVoiceWiring(_ content: some View) -> some View {
+        content
         .onPasteCommand(of: [.image], perform: handlePastedItems)
         // M15: realtime voice wiring. The engine feeds the store (mic PCM + level), the
         // store feeds the engine (next chunks + stop signals). Capture start/stop is
@@ -627,7 +663,7 @@ extension ClaudeChatView {
             if listening {
                 dictation.stop(keepingDraft: true)
             } else {
-                Task { await dictation.toggle(currentDraft: store.draft) }
+                dictation.toggle(currentDraft: store.draft)
             }
         } label: {
             Image(systemName: listening ? "mic.fill" : "mic")
