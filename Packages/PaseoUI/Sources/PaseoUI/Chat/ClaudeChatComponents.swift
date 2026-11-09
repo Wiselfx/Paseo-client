@@ -153,11 +153,13 @@ struct ClaudeProse: View {
     var markdown: String
     var typography: ClaudeTypography
     var onAction: (MarkdownAction) -> Void
+    /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
+    var localImageLoader: ((String) async -> UIImage?)? = nil
 
     var body: some View {
-        ClaudeMarkdownView(markdown, theme: Self.theme(typography)) { action in
-            onAction(action)
-        }
+        ClaudeRichDocument(
+            markdown: markdown, theme: Self.theme(typography), onAction: onAction,
+            localImageLoader: localImageLoader)
     }
 
     static func theme(_ typography: ClaudeTypography) -> ClaudeMarkdownTheme {
