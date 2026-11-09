@@ -108,6 +108,16 @@ struct ClaudeTurnView: View {
     /// Overview sentence, or "View turn details" (upstream `summary-line.tsx:18`).
     var turnSummaryLabel: String { TurnSummary(turn: turn).detailsLabel }
 
+    /// "Sent by {{name}}" above the bubble (upstream `user-message/index.tsx:95`, rendered
+    /// from `message.tsx:481`). No agent registry reaches this view, so the name falls back
+    /// to `sender.title ?? sender.id` instead of resolving the agent's live title.
+    @ViewBuilder func sentByLine(_ sender: TimelineItem.AgentMessage.Sender) -> some View {
+        Text(TurnSummary.sentByLabel(name: TurnSummary.senderName(agentTitle: nil, senderTitle: sender.title, senderID: sender.id)))
+            .font(typography.mono(13))
+            .foregroundStyle(ClaudePalette.secondaryInk)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
     var body: some View {
         if showsCollapsedTurn {
             collapsedTurn
@@ -120,6 +130,7 @@ struct ClaudeTurnView: View {
     @ViewBuilder private var collapsedTurn: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
+                if let sender = message.sender { sentByLine(sender) }
                 let rewindable = message.messageId != nil && !rewindChoices.isEmpty
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
@@ -134,9 +145,7 @@ struct ClaudeTurnView: View {
                 .background(findHighlight(row.seqEnd))
             }
             // Upstream TurnSummaryLine sits under the user message, above the final reply, and
-            // opens the turn's work. "Sent by {{name}}" (user-message/index.tsx:95) cannot map
-            // here: the sender lives only on the agent_message tool call upstream, and neither
-            // PaseoProtocol.UserMessage nor ToolCall carries it in our timeline model.
+            // opens the turn's work.
             Button {
                 Haptics.selection()
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
@@ -203,6 +212,7 @@ struct ClaudeTurnView: View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
                 // The provider has to acknowledge the prompt before it can be rewound to.
+                if let sender = message.sender { sentByLine(sender) }
                 let rewindable = message.messageId != nil && !rewindChoices.isEmpty
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,

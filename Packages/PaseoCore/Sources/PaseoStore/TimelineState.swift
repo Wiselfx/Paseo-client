@@ -136,7 +136,7 @@ public struct TimelineState: Sendable, Equatable {
             if appendText(seq: seq, turnId: turnId, text: assistantText(item), isReasoning: false) { return }
         case .toolCall(let call):
             if let index = rows.firstIndex(where: { $0.id == "tool:\(call.callId)" }) {
-                rows[index].item = item
+                rows[index].item = Self.presentedItem(item)
                 rows[index].seqEnd = seq
                 return
             }
@@ -191,7 +191,7 @@ public struct TimelineState: Sendable, Equatable {
         } else {
             id = "seq:\(seq)"
         }
-        let row = TimelineRow(id: id, turnId: turnId, item: item, timestamp: timestamp, seqStart: seq, seqEnd: seq)
+        let row = TimelineRow(id: id, turnId: turnId, item: Self.presentedItem(item), timestamp: timestamp, seqStart: seq, seqEnd: seq)
         if let lastNonPending = rows.lastIndex(where: { !$0.isPending }) {
             rows.insert(row, at: lastNonPending + 1)
         } else {
@@ -206,7 +206,20 @@ public struct TimelineState: Sendable, Equatable {
         } else {
             id = "seq:\(entry.seqStart)"
         }
-        return TimelineRow(id: id, turnId: entry.turnId, item: entry.item, timestamp: entry.timestamp, seqStart: entry.seqStart, seqEnd: entry.seqEnd, isPending: false)
+        return TimelineRow(id: id, turnId: entry.turnId, item: Self.presentedItem(entry.item), timestamp: entry.timestamp, seqStart: entry.seqStart, seqEnd: entry.seqEnd, isPending: false)
+    }
+
+    /// Presentation projection (upstream `app/src/agent-stream/presentation.ts:88-103`): an
+    /// agent-sourced tool call whose `agentMessage.event == "message"` renders as a user
+    /// message with `text` + `sender` (row id keeps the tool-call id, like upstream
+    /// `id: item.id`). Our wire tool calls are all agent-sourced — there is no orchestrator
+    /// payload on the wire — so `agentMessage` itself is the source signal. Every other
+    /// event (and a missing `agentMessage`) leaves the tool call untouched.
+    static func presentedItem(_ item: TimelineItem) -> TimelineItem {
+        guard case .toolCall(let call) = item, let message = call.agentMessage, message.event == .message else {
+            return item
+        }
+        return .userMessage(TimelineItem.UserMessage(text: message.text, sender: message.sender))
     }
 
     private static func mergeIntervals(_ intervals: [(Int, Int)]) -> [(Int, Int)] {

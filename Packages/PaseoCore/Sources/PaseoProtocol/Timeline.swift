@@ -23,8 +23,47 @@ public enum TimelineItem: Sendable, Hashable, Decodable {
         public var text: String
         public var messageId: String?
         public var clientMessageId: String?
-        public init(text: String, messageId: String? = nil, clientMessageId: String? = nil) {
-            self.text = text; self.messageId = messageId; self.clientMessageId = clientMessageId
+        /// Attribution added by presentation for received agent messages (upstream
+        /// `app/src/types/stream.ts:97`, `UserMessageItem.sender`). Never on the wire
+        /// `user_message` item (`protocol/src/agent-types.ts:403`); our timeline builder
+        /// fills it when projecting an agent-sourced tool call (see TimelineState).
+        public var sender: AgentMessage.Sender?
+        public init(text: String, messageId: String? = nil, clientMessageId: String? = nil, sender: AgentMessage.Sender? = nil) {
+            self.text = text; self.messageId = messageId; self.clientMessageId = clientMessageId; self.sender = sender
+        }
+    }
+
+    /// `protocol/src/agent-message.ts:4-12` (`AgentMessageSchema`): semantic provenance for
+    /// agent-originated prompts. Forward compatibility: unknown events decode to `.unknown`
+    /// so a newer daemon never breaks a timeline page; only `.message` is ever projected.
+    public struct AgentMessage: Sendable, Hashable, Decodable {
+        public enum Event: Sendable, Hashable, Decodable {
+            case message, finished, errored, permissionRequired, closed
+            case unknown(String)
+            public init(from decoder: Decoder) throws {
+                switch try decoder.singleValueContainer().decode(String.self) {
+                case "message": self = .message
+                case "finished": self = .finished
+                case "errored": self = .errored
+                case "permission-required": self = .permissionRequired
+                case "closed": self = .closed
+                case let other: self = .unknown(other)
+                }
+            }
+        }
+        public struct Sender: Sendable, Hashable, Decodable {
+            public var id: String
+            public var serverId: String?
+            public var title: String?
+            public init(id: String, serverId: String? = nil, title: String? = nil) {
+                self.id = id; self.serverId = serverId; self.title = title
+            }
+        }
+        public var event: Event
+        public var sender: Sender
+        public var text: String
+        public init(event: Event, sender: Sender, text: String) {
+            self.event = event; self.sender = sender; self.text = text
         }
     }
 
@@ -83,6 +122,10 @@ public struct ToolCall: Sendable, Hashable, Decodable {
     public var detail: ToolCallDetail
     /// Non-null only when `status == .failed`. Usually a string, but any JSON is allowed.
     public var error: JSONValue?
+    /// Upstream `protocol/src/agent-types.ts:342` (`ToolCallBase.agentMessage?`); absent on
+    /// ordinary tool calls and on old payloads. When present with event `message`, the
+    /// timeline renders this call as a user message (see TimelineState).
+    public var agentMessage: TimelineItem.AgentMessage? = nil
 
     public enum Status: Sendable, Hashable, Decodable {
         case running, completed, failed, canceled
