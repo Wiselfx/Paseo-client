@@ -17,10 +17,9 @@ How to read the rows:
 - `M2 merged`; turn UI on DSH live-observation was `M2.6b` (done). Stores from T1–T13 are merged on
   `foundation` (phase 2 + phase 3) and are referenced by the UI (Schedules screen on the T9 store,
   presence + slash commands on T10, attachments/search on T12, rich content and the mascot on T13).
-- Unwired ClaudeUI leftover screens (`ClaudeCode*.swift`, `ClaudeSettingsView.swift`,
-  `ClaudeRoutinesView.swift`, `ClaudeUsageSettingsView.swift`, `ClaudeProjectsView.swift`, …) are dead
-  code: they are not reachable from `App/`, predate the Paseo stores, and are never marked `done`
-  below. Where one is a plausible M4 starting point, the row says so.
+- The unwired ClaudeUI demo screens were deleted in R13 (`ClaudeCode*.swift`, `ClaudeRoutinesView.swift`,
+  `ClaudeProjectsView.swift`, `ScaledFont.swift`, …). Anything still named `Claude…` in the tree is reachable
+  from `App/` and is treated as live.
 
 Scope notes:
 
@@ -339,7 +338,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Schedule form sheet (New/Edit schedule/heartbeat: Name, Prompt, Max runs "Unlimited", Host, Project, Model, Thinking, Mode, Archive on finish, Isolation Local/Worktree, Cadence editor) — Status: `done` (M4b editor: Name, Prompt, Max runs, Project (workspace list), Provider/Model/Mode/Thinking pickers, Cadence presets + custom cron + timezone, New/Edit; heartbeats edit only name/prompt/cadence/max runs; single host — no host picker; no Isolation Local/Worktree, no archive-on-finish toggle; `archiveOnFinish` is shown read-only in the detail page) — Source: this client `Schedules/ScheduleEditorPage.swift`, `Schedules/ScheduleEditorPickers.swift`; `docs/research/01-app-features.md:246`
 - [ ] Feature: Heartbeats (cron prompt back into the same agent; created from agent surfaces/CLI; same form, "Edit heartbeat" title) — Status: `done` ("Edit heartbeat" title; agent/provider fields untouched; created via the CLI or other clients — no create-heartbeat UI in this client; heartbeats list and edit in the Schedules sheet) — Source: this client `Schedules/ScheduleEditorPage.swift` (`isHeartbeat`), `Schedules/ScheduleDetailPage.swift` (Heartbeat row); `docs/research/01-app-features.md:247`
 - [ ] Feature: Cadence editor (cron builder) — Status: `done` (six presets + custom five-field cron with validation + optional timezone; interval/`.every` cadences render read-only) — Source: this client `Schedules/ScheduleEditorPage.swift` (`CadencePreset`, `cadenceSection`); `docs/research/01-app-features.md:246`
-- [ ] Feature: Schedules UI built on the T9 store — planned M4; an unwired ClaudeUI `ClaudeRoutinesView` exists but predates the Paseo store and is not reachable — Status: `done` (M4b shipped the Schedules sheet on the T9 store; `ClaudeRoutinesView` remains dead code — still not reachable) — Source: this client `Schedules/ClaudeSchedulesView.swift`; `docs/STATUS.md:68-69`; `Packages/PaseoUI/Sources/PaseoUI/ClaudeRoutinesView.swift` (dead code)
+- [ ] Feature: Schedules UI built on the T9 store — planned M4; an unwired ClaudeUI `ClaudeRoutinesView` existed but predated the Paseo store and was deleted in R13 — Status: `done` (M4b shipped the Schedules sheet on the T9 store) — Source: this client `Schedules/ClaudeSchedulesView.swift`; `docs/STATUS.md:68-69`
 - [ ] Feature: Schedule live updates — no push channel exists; the screen must poll/refresh — Status: `not applicable (protocol has no schedule-update push; `load()`/`refresh()` only — the M4 screen polls every 5 s)` — Source: this client `SchedulesStore.swift:57-81`; `docs/research/04-protocol-agents-permissions-settings.md:1359`
 
 ## Settings
@@ -389,14 +388,14 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Inline code (5 % ink wash, radius 4, 12–13 pt mono) — Status: `done` — Source: this client `…/ClaudeChatComponents.swift` (`ClaudeSelectableInlineCode`, `ClaudeMarkdownTheme`)
 - [ ] Feature: Links open externally (prose link color `#184F95` / `#8AB4F8`) — Status: `done` — Source: this client `…/Conversation/ChatComposer.swift` (`handleMarkdown(.openLink)`), `…/Chat/ClaudeStyle.swift` (`proseLink`)
 - [ ] Feature: Images in prose (`![alt](url)`) — Status: `missing` (`ClaudeMarkdownView` supports `imageContent` but no caller passes it; bare image URLs and bare/local paths now render via rich blocks — see below) — Source: this client `Packages/PaseoUI/Sources/PaseoUI/ClaudeMarkdownView.swift:51-63,137-138`; `docs/research/05-rich-media-spec.md:266`
-- [ ] Feature: Bare image URLs linkified into images — Status: `done` (bare image URLs render as remote images; tap opens a full-screen viewer) — Source: `docs/research/05-rich-media-spec.md:359`; this client `Rich/ClaudeRichBlocks.swift` (`RichRemoteImage`), `Rich/ClaudeRichDocument.swift`; detector `Packages/PaseoCore/Sources/PaseoStore/Rich/RichContentDetector.swift`
+- [ ] Feature: Bare image URLs linkified into images — Status: `done` (bare image URLs render as remote images; tap opens a full-screen viewer) — Source: `docs/research/05-rich-media-spec.md:359`; this client `Rich/ClaudeRichBlocks.swift` (`RichRemoteImage`), `Chat/ClaudeRevealProse.swift`; detector `Packages/PaseoCore/Sources/PaseoStore/Rich/RichContentDetector.swift`
 - [ ] Feature: Local image paths (absolute/relative) render as images — Status: `done` (absolute, `~` and workspace-relative paths render via `.localImage` → the workspace checkout's `files.read`; unreadable/non-image paths fall back to a path chip) — Source: `docs/research/05-rich-media-spec.md:397`; this client `Rich/ClaudeRichBlocks.swift` (`RichLocalImage`), `Conversation/ChatComposer.swift` (`localImageLoader`)
 - [ ] Feature: Raw SVG blocks rendered inline — Status: `done` (fenced `<svg>` blocks render in a sandboxed WKWebView with a "View source" toggle; no scripts) — Source: `docs/research/05-rich-media-spec.md:442`; this client `Rich/ClaudeRichBlocks.swift` (`RichWebCard`, `.rawSVG`), `Rich/SandboxedHTMLView.swift`
 - [ ] Feature: YouTube (fence, bare URL, in-sentence player) — Status: `done` (fence and bare URLs render a thumbnail card — full-width `youTubePlayer` and inline `youTubeInline` — tap opens the watch URL; no embedded player) — Source: `docs/research/05-rich-media-spec.md:146`; this client `Rich/ClaudeRichBlocks.swift` (`YouTubeRichCard`); detector `Packages/PaseoCore/Sources/PaseoStore/Rich/RichContentDetector.swift` (`YouTubeReference`, `YouTubeURLHit`)
 - [ ] Feature: Link cards (standalone bare link → unfurl card) — Status: `done` (bare links render an LPLinkView unfurl card — metadata fetched once and cached — tap opens an in-app Safari view) — Source: `docs/research/05-rich-media-spec.md:66`; this client `Rich/ClaudeRichBlocks.swift` (`RichLinkCard`, `LinkPreviewView`, `RichLinkMetadataCache`)
 - [ ] Feature: Maps (map card for addresses/coordinates) — Status: `missing` — Source: `docs/research/05-rich-media-spec.md` (referenced by rich registry in `ARCHITECTURE.md:73-77`); no detector entry
 - [ ] Feature: The ` ```visualize ` fence + viz panel (interactive viz bridge) — Status: `done` (the fence renders in a sandboxed WKWebView — no network, self-contained HTML, height reported to the card — with a "View source" toggle; no interactive JS bridge beyond the height reporter) — Source: `docs/research/05-rich-media-spec.md:479,2`; this client `Rich/ClaudeRichBlocks.swift` (`RichWebCard`, `.visualize`), `Rich/SandboxedHTMLView.swift` (`RichHTMLDocument.visualize`)
-- [ ] Feature: Rich content detection (link/YouTube/image/file segments from message text) — Status: `done` (detection runs in assistant prose — `richPieces` memoized via `RichContentCache`; rich blocks interleave with Markdown chunks) — Source: this client `Rich/ClaudeRichDocument.swift`, `Chat/ClaudeRevealProse.swift`, `Rich/ClaudeRichSplice.swift` (`richPieces`, `RichContentCache`), `Rich/ClaudeRichBlocks.swift`; detector `Packages/PaseoCore/Sources/PaseoStore/Rich/RichContentDetector.swift:15-120`; unit tests `Packages/PaseoCore/Tests/PaseoStoreTests/Rich/RichContentDetectorTests.swift`
+- [ ] Feature: Rich content detection (link/YouTube/image/file segments from message text) — Status: `done` (detection runs in assistant prose — `richPieces` memoized via `RichContentCache`; rich blocks interleave with Markdown chunks) — Source: this client `Chat/ClaudeRevealProse.swift`, `Rich/ClaudeRichSplice.swift` (`richPieces`, `RichContentCache`), `Rich/ClaudeRichBlocks.swift`; detector `Packages/PaseoCore/Sources/PaseoStore/Rich/RichContentDetector.swift:15-120`; unit tests `Packages/PaseoCore/Tests/PaseoStoreTests/Rich/RichContentDetectorTests.swift`
 - [ ] Feature: File cards in prose (file path → card that opens the file/editor) — Status: `done` (bare file paths render a mono path chip — tap copies the path; images open a full-screen viewer instead; no open-in-Files jump from prose) — Source: `docs/research/05-rich-media-spec.md:397,1.8`; this client `Rich/ClaudeRichBlocks.swift` (`RichPathChip`, `.localFileLink`)
 - [ ] Feature: Assistant-file links (link to a path in the workspace opens it) — Status: `missing` — Source: `assistant-file-links/` in the reference app; no equivalent in this client
 - [ ] Feature: Media viewer (full-screen image/media grid from the dead ClaudeUI codebase) — Status: `done` (full-screen image viewer reusing `ClaudeMediaViewer` — black canvas, close/share — wired from every rich-block image; the media *grid/browser* UI from the old codebase still doesn't exist) — Source: this client `Rich/ClaudeRichBlocks.swift` (`RichImageViewer`), `ClaudeMediaView.swift` (`ClaudeMediaViewer` reused)
@@ -549,11 +548,10 @@ notifications/push, voice, relay pairing, onboarding/welcome), turn and composer
 and push registration — logic that exists without a screen. No rows are `in flight`: the M3
 tickets merged.
 
-Uncounted but present in the repo and worth naming: the unwired ClaudeUI leftover screens
-(`ClaudeCodeView` / `ClaudeCodeSettingsView` / `ClaudeSettingsView` / `ClaudeRoutinesView` /
-`ClaudeUsageSettingsView` / `ClaudeProjectsView` / `ClaudeVoiceSettingsSheet` / …) are dead code,
-were never marked `done` here, and are candidates for M4–M9 where the row says so.
-(`ClaudeMediaView` is the exception: `RichImageViewer` reuses its `ClaudeMediaViewer`.)
+The unwired ClaudeUI demo screens were removed in R13 (they were never marked `done` here).
+The one `Claude…` file with mixed dead/live content that remains is `ClaudeMediaView`:
+`RichImageViewer` reuses its `ClaudeMediaViewer`; `ClaudeMediaPlaceholder` /
+`ClaudeVideoFileCard` / `ClaudeVideoFileViewer` remain in it uncalled (public API, kept).
 
 
 ## Suggested milestones
