@@ -530,8 +530,8 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 293 | 69.4 % |
-| `missing` | 55 | 13.0 % |
+| `done` | 295 | 69.9 % |
+| `missing` | 53 | 12.6 % |
 | `desktop-only (flag)` | 48 | 11.4 % |
 | `store only (no UI)` | 6 | 1.4 % |
 | `in flight` | 0 | 0.0 % |

@@ -114,13 +114,15 @@ terminal font follows Code size; GitHub search has no stars on the wire (upstrea
 T17 owned subscriptions ON (modern socket: every push family re-acquired, re-subscribed on reconnect;
 kill switch `OwnedSubscriptions.isEnabled`; contract `docs/research/09`; fixed agent attention +
 `notifications: true` so M10 works in modern mode). Setup progress push not seen live yet (no setup
-run in the sandbox). PaseoCore 524/144/20 = 688 green. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+run in the sandbox). PaseoCore 524/144/20 = 688 green. M11 (Crouton): Import session (sidebar, panel Agents page,
+command palette; per-provider recent sessions, search/workspace scope gated), terminal notification
+tap opens that terminal, stale review drafts Clear line. PaseoCore 532/149/20 = 701 green; PARITY 295
+done / 53 missing of 422. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
-- M11 `m11-import-session` on Crouton via pi c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: Import session, terminal tap → terminal, stale review drafts.
 Known store gaps: fork can't carry provider feature values.
 
 Roadmap order: see PARITY.md suggested milestones, renumbered below.
