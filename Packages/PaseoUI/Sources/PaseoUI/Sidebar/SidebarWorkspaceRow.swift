@@ -7,7 +7,7 @@ extension PaseoSidebar {
     func workspaceRow(_ workspace: WorkspaceDescriptor) -> some View {
         let rowAgents = agents(in: workspace)
         let selected = rowAgents.contains { $0.id == selectedAgentId }
-        let attention = rowAgents.contains { $0.requiresAttention == true }
+        let attention = rowAgents.contains { $0.requiresAttention == true } || isManuallyUnread(workspace)
         return Button {
             openWorkspace(workspace)
         } label: {
@@ -31,7 +31,8 @@ extension PaseoSidebar {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(attention ? "Needs attention" : "")
+        .accessibilityValue(
+            isManuallyUnread(workspace) ? "Manually marked unread" : (attention ? "Needs attention" : ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
             Button("New agent here", systemImage: "plus") { onNewAgent(workspace) }
@@ -70,6 +71,13 @@ extension PaseoSidebar {
                     labelsSubmenu(for: workspace)
                 }
             }
+            Button(
+                isManuallyUnread(workspace) ? "Clear unread mark" : "Mark as unread",
+                systemImage: isManuallyUnread(workspace) ? "checkmark.circle" : "circle"
+            ) {
+                Haptics.selection()
+                toggleManualUnread(workspace)
+            }
             Button(isHiddenFromSidebar(workspace) ? "Unhide from sidebar" : "Hide from sidebar", systemImage: isHiddenFromSidebar(workspace) ? "eye" : "eye.slash") {
                 Haptics.selection()
                 toggleHiddenFromSidebar(workspace)
@@ -81,9 +89,10 @@ extension PaseoSidebar {
     }
 
     /// Tapping a workspace opens its most recently active agent; the other agents are the header's
-    /// tab chips.
+    /// tab chips. Opening also clears a manual unread mark.
     func openWorkspace(_ workspace: WorkspaceDescriptor) {
         Haptics.selection()
+        clearManualUnread(workspace)
         guard let target = agents(in: workspace).first else {
             showToast("No agents in this workspace yet — long-press to create one.")
             return

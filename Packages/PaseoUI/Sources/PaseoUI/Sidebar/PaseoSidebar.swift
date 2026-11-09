@@ -41,6 +41,12 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.activeFirst") var activeFirst = true
     /// Project ids whose "Set up worktree scripts" callout was dismissed.
     @AppStorage("paseo.sidebar.setupCalloutDismissed") var setupCalloutDismissed = ""
+    /// Workspace ids manually marked unread (DSH manual-unread). Cleared on open.
+    @AppStorage("paseo.sidebar.manualUnread") var manualUnread = ""
+    /// Date-group ids (today/yesterday/day-2…day-6/earlier) whose section is collapsed.
+    @AppStorage("paseo.sidebar.collapsedDateGroups") var collapsedDateGroups = ""
+    /// The workspace list segment: "active" (default) or "archived".
+    @AppStorage("paseo.sidebar.workspaceSegment") var workspaceSegmentRaw = "active"
     @AppStorage("paseo.sidebar.hiddenWorkspaces") var hiddenWorkspaces = ""
     /// The sidebar label filter: the raw label name, or "" for All (one at a time, by design).
     @AppStorage("paseo.sidebar.labelFilter") var labelFilter = ""
@@ -70,6 +76,7 @@ struct PaseoSidebar: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     navigation
+                    workspaceSegmentSwitch
                     directory
                 }
                 .padding(.horizontal, 20)
@@ -295,6 +302,53 @@ struct PaseoSidebar: View {
             guard !session.workspaceDirectory.hasLoaded, session.workspaceDirectory.error == nil else { return }
             Task { await session.workspaceDirectory.refresh() }
         }
+    }
+
+    // MARK: Active / Archived
+
+    /// DSH `workspace`: the quiet Active / Archived switch above the workspace list.
+    /// The store doesn't expose archived workspaces (the directory feed filters them out and
+    /// there is no archived listing RPC), so the Archived segment is an honest empty state —
+    /// no faked rows, no unarchive/delete buttons.
+    var workspaceSegmentSwitch: some View {
+        Picker(
+            "Workspaces",
+            selection: Binding(
+                get: { archivedSegmentActive },
+                set: { Haptics.selection(); workspaceSegmentRaw = $0 ? "archived" : "active" })
+        ) {
+            Text("Active").tag(false)
+            Text("Archived").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+        .accessibilityLabel("Workspace list")
+    }
+
+    var archivedSegmentActive: Bool {
+        workspaceSegmentRaw == "archived"
+    }
+
+    /// The Archived segment — a store-gap note, not a list.
+    var archivedWorkspacesEmptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "archivebox")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(ClaudePalette.captionInk)
+            Text("Archived workspaces aren't listed yet.")
+                .font(typography.sans(15, weight: .medium))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .multilineTextAlignment(.center)
+            Text("This host can't list archived workspaces. Switch to Active to see yours.")
+                .font(typography.sans(13))
+                .foregroundStyle(ClaudePalette.captionInk)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 260)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 48)
+        .padding(.bottom, 24)
     }
 
     // MARK: Navigation
