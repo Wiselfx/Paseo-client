@@ -233,7 +233,7 @@ struct ChatSubagentsSheet: View {
     }
 
     private func rowSubtitle(_ item: ProviderSubagent) -> String? {
-        if let title = item.title {
+        if item.title != nil {
             return item.description ?? item.subtitle
         }
         return item.subtitle

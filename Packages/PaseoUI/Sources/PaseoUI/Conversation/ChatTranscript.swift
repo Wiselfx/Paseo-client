@@ -8,9 +8,7 @@ extension ClaudeChatView {
 
     @ViewBuilder var content: some View {
         VStack(spacing: 0) {
-            if let pill = subagentPill {
-                pill
-            }
+            subagentPill
             if store.turns.isEmpty, store.pendingPermissions.isEmpty {
                 switch store.phase {
                 case .loading:
@@ -86,6 +84,33 @@ extension ClaudeChatView {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// One turn row, split out of `transcript` so the type checker sees it on its own.
+    func turnView(_ turn: Turn, index: Int) -> some View {
+        let fork: ((TimelineRow) -> Void)? =
+            session.isForkContextSupportedByHost && onForkAgent != nil
+            ? { row in performFork(from: row) } : nil
+        return ClaudeTurnView(
+            turn: turn, typography: typography,
+            onMarkdown: handleMarkdown, localImageLoader: localImageLoader,
+            highlightedSeq: findFlash,
+            findTarget: findSeq,
+            onOpenFile: { path in openFileViewer(at: path) },
+            rewindChoices: rewindMenuScopes,
+            onRewind: { scope, messageId in
+                pendingRewind = PendingRewind(messageId: messageId, scope: scope)
+            },
+            isLatestTurn: index == store.turns.count - 1,
+            canRewrite: canRewrite,
+            onEdit: { messageId, text in
+                pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .edit)
+            },
+            onRerun: { messageId, text in
+                pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .rerun)
+            },
+            onFork: fork
+        )
+    }
+
     var transcript: some View {
         GeometryReader { geometry in
             ScrollViewReader { proxy in
@@ -93,28 +118,7 @@ extension ClaudeChatView {
                     LazyVStack(alignment: .leading, spacing: 27) {
                         if store.timeline.hasOlder { olderHistoryRow }
                         ForEach(Array(store.turns.enumerated()), id: \.element.id) { index, turn in
-                            ClaudeTurnView(
-                                turn: turn, typography: typography,
-                                onMarkdown: handleMarkdown, localImageLoader: localImageLoader,
-                                highlightedSeq: findFlash,
-                                findTarget: findSeq,
-                                onOpenFile: { path in openFileViewer(at: path) },
-                                rewindChoices: rewindMenuScopes,
-                                onRewind: { scope, messageId in
-                                    pendingRewind = PendingRewind(messageId: messageId, scope: scope)
-                                },
-                                isLatestTurn: index == store.turns.count - 1,
-                                canRewrite: canRewrite,
-                                onEdit: { messageId, text in
-                                    pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .edit)
-                                },
-                                onRerun: { messageId, text in
-                                    pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .rerun)
-                                },
-                                onFork: session.isForkContextSupportedByHost && onForkAgent != nil
-                                    ? { row in performFork(from: row) }
-                                    : nil
-                            )
+                            turnView(turn, index: index)
                             .id(turn.id)
                             .onAppear { lastTrackedTurn = turn.id }
                         }
@@ -255,7 +259,9 @@ extension ClaudeChatView {
                 openFileViewer(at: fileLinkDisplayPath(path))
                 return .handled
             }
-            return hostOpenURL(url)
+            // Forward to the host's action (Safari sheet, system browser…); it decides.
+            hostOpenURL(url)
+            return .handled
         }
     }
 
