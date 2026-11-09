@@ -34,6 +34,22 @@ struct DraftChatView: View {
     private let typography = ClaudeTypography()
 
     var body: some View {
+        withDraftPickers(column)
+            .task { await loadCatalogue() }
+            .onChange(of: session.agentControl.providers) { _, _ in seedIfNeeded() }
+            .onChange(of: photoSelection) { _, items in
+                guard !items.isEmpty else { return }
+                handlePickedPhotos(items)
+            }
+            .onAppear {
+                dictation.onDraft = { text in draft.text = text }
+            }
+            .onDisappear { dictation.stop(keepingDraft: true) }
+    }
+
+    /// The draft's page: header, then the greeting or the pending bubble, then the workspace line
+    /// and the composer — or the Add project action when the host has no workspace at all (§3.1).
+    private var column: some View {
         VStack(spacing: 0) {
             header
             stage
@@ -47,52 +63,48 @@ struct DraftChatView: View {
         // No background here: the shell's rounded card is the canvas (UX-SPEC §1.1).
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
-        .task { await loadCatalogue() }
-        .onChange(of: session.agentControl.providers) { _, _ in seedIfNeeded() }
-        .onChange(of: focused) { _, isFocused in
-            if isFocused { Haptics.selection() }
-        }
-        .sheet(isPresented: $showControls) {
-            DraftControlsSheet(session: session, draft: draft)
-        }
-        .sheet(isPresented: $showCameraPicker) {
-            CameraCaptureView(
-                onCapture: { image in
-                    showCameraPicker = false
-                    guard let data = image.jpegData(compressionQuality: 1.0) else {
-                        attachmentError = "Couldn't read that photo."
-                        return
-                    }
-                    attachImageData(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
-                },
-                onCancel: { showCameraPicker = false })
-            .ignoresSafeArea()
-        }
-        .fileImporter(
-            isPresented: $showFileImporter, allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case .success(let urls): attachFileURLs(urls)
-            case .failure(let error): attachmentError = error.localizedDescription
+    }
+
+    private func withDraftPickers(_ content: some View) -> some View {
+        content
+            .sheet(isPresented: $showControls) {
+                DraftControlsSheet(session: session, draft: draft)
             }
-        }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { viewerImage != nil },
-                set: { if !$0 { viewerImage = nil } })
-        ) {
-            if let image = viewerImage {
-                AttachmentImageViewer(image: image)
+            .sheet(isPresented: $showCameraPicker) {
+                cameraSheet
             }
-        }
-        .onChange(of: photoSelection) { _, items in
-            guard !items.isEmpty else { return }
-            handlePickedPhotos(items)
-        }
-        .onAppear {
-            dictation.onDraft = { text in draft.text = text }
-        }
+            .fileImporter(
+                isPresented: $showFileImporter, allowedContentTypes: [.item],
+                allowsMultipleSelection: true
+            ) { result in
+                switch result {
+                case .success(let urls): attachFileURLs(urls)
+                case .failure(let error): attachmentError = error.localizedDescription
+                }
+            }
+            .fullScreenCover(
+                isPresented: Binding(
+                    get: { viewerImage != nil },
+                    set: { if !$0 { viewerImage = nil } })
+            ) {
+                if let image = viewerImage {
+                    AttachmentImageViewer(image: image)
+                }
+            }
+    }
+
+    private var cameraSheet: some View {
+        CameraCaptureView(
+            onCapture: { image in
+                showCameraPicker = false
+                guard let data = image.jpegData(compressionQuality: 1.0) else {
+                    attachmentError = "Couldn't read that photo."
+                    return
+                }
+                attachImageData(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
+            },
+            onCancel: { showCameraPicker = false })
+        .ignoresSafeArea()
     }
 
     // MARK: Header
@@ -455,6 +467,7 @@ struct DraftChatView: View {
         guard canSend else { return }
         dictation.stop(keepingDraft: true)
         attachmentError = nil
+        draft.clearError()
         focused = false
         Haptics.send()
         let attachments = readyAttachments

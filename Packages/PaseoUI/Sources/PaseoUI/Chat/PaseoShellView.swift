@@ -112,8 +112,9 @@ public struct PaseoShellView: View {
                     self.selectedAgentId = nil
                     if let first = agents.first { select(first.id, closeDrawer: false) }
                 }
-            } else if let first = agents.first, !draftOpenedByUser {
-                // An empty shell adopts the newest agent; a draft someone opened stays.
+            } else if let first = agents.first, !draftOpenedByUser, draftIsUntouched {
+                // An empty shell adopts the newest agent; a draft someone opened — or has
+                // already typed into — stays.
                 select(first.id, closeDrawer: false)
             }
             showDefaultDraftIfIdle()
@@ -494,6 +495,10 @@ public struct PaseoShellView: View {
             ?? mostRecentWorkspace
         if userInitiated { draftOpenedByUser = true }
         settleDrawer(open: false)
+        // A new session is not the agent that was on screen: the draft replaces the chat, and
+        // the sidebar stops marking a row as current.
+        selectedAgentId = nil
+        conversation = nil
         if let current = draft, current.workspaceId == resolved?.id,
             current.pendingPrompt == nil
         {
@@ -520,19 +525,29 @@ public struct PaseoShellView: View {
         return session.workspaceDirectory.workspaces.max { stamp($0) < stamp($1) }
     }
 
+    /// "New agent" in a conversation's menu: the typed text moves into the draft rather than
+    /// being copied, so the conversation it came from is left empty.
     private func openNewAgent(prompt: String) {
-        let workspaceId = conversation?.agent?.workspaceId
-        openNewSession(workspaceId: workspaceId)
+        let from = conversation
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        openNewSession(workspaceId: from?.agent?.workspaceId)
         guard !trimmed.isEmpty else { return }
         if let current = draft, current.text.isEmpty { current.text = prompt }
-        if conversation?.draft.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed {
-            conversation?.draft = ""
+        if from?.draft.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed {
+            from?.draft = ""
         }
     }
 
     private func openNewAgent(workspace: WorkspaceDescriptor) {
         openNewSession(workspaceId: workspace.id)
+    }
+
+    /// True when there is no draft, or one nobody has touched yet: the idle shell may still
+    /// adopt an arriving agent in that case.
+    private var draftIsUntouched: Bool {
+        guard let draft else { return true }
+        return !draft.isCreating && draft.pendingPrompt == nil
+            && draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// No agent on screen and the directory is known: show the draft for the workspace that was
