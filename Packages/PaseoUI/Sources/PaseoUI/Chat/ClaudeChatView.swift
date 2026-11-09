@@ -46,6 +46,8 @@ public struct ClaudeChatView: View {
     /// One quiet line per permission answer made this session; the store drops resolved
     /// requests without remembering the answer, so the client keeps the record.
     @State private var permissionResolvedLines: [AnsweredPermission] = []
+    /// A file tapped from a Read/Edit/Write row; presented as the existing Files viewer in a sheet.
+    @State private var openFilePath: String?
     // Header title menu (M7 §1).
     @State private var renamingAgent = false
     @State private var renameText = ""
@@ -115,6 +117,41 @@ public struct ClaudeChatView: View {
         .sheet(item: $sheet) { _ in
             ClaudeAgentControlsSheet(session: session, store: store)
         }
+        .sheet(isPresented: Binding(
+            get: { openFilePath != nil },
+            set: { if !$0 { openFilePath = nil } })) {
+                if let agent = store.agent,
+                    let workspaceId = agent.workspaceId,
+                    let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+                {
+                    NavigationStack {
+                        WorkspaceFileViewer(
+                            checkout: session.checkout(for: workspace),
+                            relPath: openFilePath ?? "",
+                            onBack: { openFilePath = nil },
+                            backLabel: "Files")
+                    }
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                } else {
+                    // The agent's workspace isn't loaded (rare: directory fetch pending).
+                    VStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 24, weight: .light))
+                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                        Text("Workspace not available")
+                            .font(typography.sans(15, weight: .medium))
+                            .foregroundStyle(ClaudePalette.ink)
+                        Button("Close") { openFilePath = nil }
+                            .font(typography.sans(15, weight: .medium))
+                            .foregroundStyle(ClaudePalette.ink)
+                            .padding(.horizontal, 18)
+                            .frame(height: 36)
+                            .background(ClaudePalette.chip, in: .capsule)
+                    }
+                    .presentationDetents([.height(240)])
+                }
+            }
         .animation(.easeInOut(duration: 0.15), value: isFollowing)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: findOpen)
         .overlay(alignment: .top) {
@@ -444,6 +481,11 @@ public struct ClaudeChatView: View {
         onNewAgent?(draft)
     }
 
+    private func openFileViewer(at path: String) {
+        Haptics.selection()
+        openFilePath = path
+    }
+
     private func beginRename() {
         Haptics.selection()
         renameText = store.agent?.title ?? ""
@@ -526,7 +568,8 @@ public struct ClaudeChatView: View {
                                 turn: turn, typography: typography,
                                 onMarkdown: handleMarkdown, localImageLoader: localImageLoader,
                                 highlightedSeq: findFlash,
-                                findTarget: findSeq
+                                findTarget: findSeq,
+                                onOpenFile: { path in openFileViewer(at: path) }
                             )
                             .id(turn.id)
                             .onAppear { lastTrackedTurn = turn.id }
@@ -1300,6 +1343,8 @@ struct ClaudeTurnView: View {
     var highlightedSeq: Int?
     /// The seqEnd of the current match; work groups containing it expand.
     var findTarget: Int?
+    /// Called with an absolute path when the reader taps a filename in a Read/Edit/Write row.
+    var onOpenFile: ((String) -> Void)?
 
     /// Nil until the reader taps, so the default can follow the turn's phase.
     @State private var userExpanded: Bool?
@@ -1334,7 +1379,8 @@ struct ClaudeTurnView: View {
                         ClaudeSegmentView(
                             segment: segment, turnIsRunning: isRunning, typography: typography,
                             onMarkdown: onMarkdown, localImageLoader: localImageLoader,
-                            highlightedSeq: highlightedSeq, findTarget: findTarget)
+                            highlightedSeq: highlightedSeq, findTarget: findTarget,
+                            onOpenFile: onOpenFile)
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: -2)))
@@ -1418,6 +1464,7 @@ struct ClaudeSegmentView: View {
     var localImageLoader: ((String) async -> UIImage?)? = nil
     var highlightedSeq: Int?
     var findTarget: Int?
+    var onOpenFile: ((String) -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -1425,7 +1472,7 @@ struct ClaudeSegmentView: View {
         case .work(let group):
             ClaudeWorkGroupCell(
                 group: group, turnIsRunning: turnIsRunning, typography: typography,
-                highlightedSeq: highlightedSeq, findTarget: findTarget)
+                highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
                 ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
@@ -1452,6 +1499,7 @@ struct ClaudeWorkGroupCell: View {
     let typography: ClaudeTypography
     var highlightedSeq: Int?
     var findTarget: Int?
+    var onOpenFile: ((String) -> Void)?
 
     @State private var userExpanded: Bool?
     @State private var contentHeight: CGFloat = 0
@@ -1509,7 +1557,7 @@ struct ClaudeWorkGroupCell: View {
             .id("group:\(group.rows.first?.seqEnd ?? 0)")
             .onAppear { checkFindTarget() }
             .onChange(of: findTarget) { _, _ in checkFindTarget() }
-            .accessibilityLabel(group.summary)
+            .accessibilityLabel(summaryText)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
             if isExpanded {
@@ -1519,22 +1567,55 @@ struct ClaudeWorkGroupCell: View {
         }
     }
 
-    private func summaryRuns(_ ink: Color) -> some View {
-        HStack(spacing: 3) {
-            if group.thoughtCount > 0 {
-                ClaudeRollingNumber(value: group.thoughtCount)
-                Text(group.thoughtCount == 1 ? "thought" : "thoughts").tracking(-0.14)
-            }
-            if group.thoughtCount > 0 && group.toolCallCount > 0 {
-                Text(",").tracking(-0.14)
-            }
-            if group.toolCallCount > 0 {
-                ClaudeRollingNumber(value: group.toolCallCount)
-                Text(group.toolCallCount == 1 ? "tool call" : "tool calls").tracking(-0.14)
+    /// One sentence of what the group did, such as "Edited 3 files and ran 2 commands". Keeps
+    /// DSH's wording; the headline counts folds and tool kinds into verbs. Revised from raw counts.
+    private var summaryText: String {
+        var editedFiles = Set<String>()
+        var readFiles = Set<String>()
+        var commands = 0, searches = 0, otherTools = 0
+        for row in group.rows {
+            guard case .toolCall(let call) = row.item else { continue }
+            switch call.detail {
+            case .edit(let path, _, _, _), .write(let path, _): editedFiles.insert(path)
+            case .read(let path, _): readFiles.insert(path)
+            case .shell: commands += 1
+            case .search: searches += 1
+            default: otherTools += 1
             }
         }
-        .font(typography.serif(14, weight: .medium))
-        .foregroundStyle(ink)
+        var parts: [String] = []
+        if !editedFiles.isEmpty {
+            parts.append("edited \(editedFiles.count) file\(editedFiles.count == 1 ? "" : "s")")
+        }
+        if commands > 0 {
+            parts.append("ran \(commands) command\(commands == 1 ? "" : "s")")
+        }
+        if !readFiles.isEmpty {
+            parts.append("read \(readFiles.count) file\(readFiles.count == 1 ? "" : "s")")
+        }
+        if searches > 0 {
+            parts.append("searched \(searches) time\(searches == 1 ? "" : "s")")
+        }
+        if otherTools > 0 {
+            parts.append("used \(otherTools) other tool\(otherTools == 1 ? "" : "s")")
+        }
+        if parts.isEmpty { return "Thought" }
+        let joined: String
+        switch parts.count {
+        case 1: joined = parts[0]
+        case 2: joined = parts.joined(separator: " and ")
+        default:
+            joined = parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
+        }
+        guard let first = joined.first else { return "Thought" }
+        return String(first).uppercased() + joined.dropFirst()
+    }
+
+    private func summaryRuns(_ ink: Color) -> some View {
+        Text(summaryText)
+            .font(typography.serif(14, weight: .medium))
+            .tracking(-0.14)
+            .foregroundStyle(ink)
     }
 
     private var summary: some View {
@@ -1583,18 +1664,34 @@ struct ClaudeWorkGroupCell: View {
     }
 
     private var rows: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+        let merged = WorkRow.merging(group.rows)
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(merged.enumerated()), id: \.element.id) { index, item in
                 if index > 0 {
                     Color.clear.frame(height: 4) // the gap above the hairline
                     ClaudeDivider()
                 }
-                ClaudeStepRow(
-                    row: row, isLive: turnIsRunning && index == group.rows.count - 1,
-                    typography: typography)
-                    .id("row:\(row.seqEnd)")
-                    .background(findHighlight(row.seqEnd))
+                rowView(item, isLive: turnIsRunning && index == merged.count - 1)
             }
+        }
+    }
+
+    @ViewBuilder private func rowView(_ item: WorkRow, isLive: Bool) -> some View {
+        switch item {
+        case .thought(let row):
+            ClaudeStepRow(row: row, isLive: isLive, typography: typography)
+                .id("row:\(row.seqEnd)")
+                .background(findHighlight(row.seqEnd))
+        case .tool(let row):
+            ClaudeStepRow(row: row, isLive: isLive, typography: typography)
+                .id("row:\(row.seqEnd)")
+                .background(findHighlight(row.seqEnd))
+        case .fileCall(let call):
+            ClaudeMergedFileRow(
+                call: call, isLive: isLive, typography: typography,
+                onOpenFile: onOpenFile ?? { _ in },
+                highlightedSeq: highlightedSeq, findTarget: findTarget)
+                .id(call.id)
         }
     }
 }
