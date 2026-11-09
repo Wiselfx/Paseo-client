@@ -10,6 +10,7 @@ struct ClaudePermissionCard: View {
     let store: ConversationStore
     @State private var answering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let typography = ClaudeTypography()
 
     private var isPlan: Bool { request.kind == .plan }
 
@@ -29,12 +30,12 @@ struct ClaudePermissionCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     if isPlan {
                         Text("Permission Required")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(typography.sans(11, weight: .semibold))
                             .foregroundStyle(ClaudePalette.tertiaryInk)
                             .textCase(.uppercase)
                     }
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(typography.sans(15, weight: .semibold))
                         .foregroundStyle(ClaudePalette.ink)
                 }
                 Spacer(minLength: 0)
@@ -42,7 +43,7 @@ struct ClaudePermissionCard: View {
             }
             if let description = request.description, !description.isEmpty {
                 Text(description)
-                    .font(.system(size: 14))
+                    .font(typography.sans(14))
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -107,7 +108,7 @@ struct ClaudePermissionCard: View {
             Task { await store.respond(to: requestId, with: response) }
         } label: {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(typography.sans(14, weight: .medium))
                 .lineLimit(1)
                 .padding(.horizontal, 14)
                 .frame(height: 36)

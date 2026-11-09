@@ -23,7 +23,7 @@
             foreground = ClaudePalette.ink
             bodyFont = .custom(serifName, size: bodySize, relativeTo: .body)
             headingFonts = [28, 25, 22, 20, 19, 18].map { .custom(serifName, size: $0, relativeTo: .headline).bold() }
-            codeFont = .system(size: 15, design: .monospaced)
+            codeFont = ClaudeTypography().mono(15, relativeTo: .body)
         }
         public static var artifact: Self {
             var theme = Self()
