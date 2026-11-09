@@ -143,6 +143,9 @@ public struct ClaudeChatView: View {
         .background(ClaudePalette.background.ignoresSafeArea())
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
+        // File links in prose and in your bubbles (`paseo-file://…`) open the file viewer;
+        // ordinary links fall through to the host's handler unchanged.
+        .environment(\.openURL, fileLinkAction)
         .overlay(alignment: .bottom) { backToEnd }
         .sheet(item: $sheet) { item in
             switch item {
@@ -152,6 +155,8 @@ public struct ClaudeChatView: View {
                 ChatSubagentsSheet(
                     subagents: store.subagents, typography: typography,
                     hiddenIds: $hiddenSubagentIds)
+            case .backgroundWork:
+                ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork, typography: typography)
             }
         }
         .sheet(isPresented: $showContextSheet) {

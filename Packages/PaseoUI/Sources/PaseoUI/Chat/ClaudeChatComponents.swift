@@ -134,6 +134,9 @@ struct ClaudeUserBubble: View {
     var rewindChoices: [RewindScope] = []
     /// Called with the chosen scope; the parent presents the confirmation dialog.
     var onRewind: ((RewindScope) -> Void)? = nil
+    /// M7g file mentions: a pre-formatted body with tappable `paseo-file:` links. Nil (the
+    /// default) renders the plain `text` unchanged.
+    var attributed: AttributedString? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Captured at insertion: true only for a message that was pending when it appeared
@@ -142,19 +145,20 @@ struct ClaudeUserBubble: View {
 
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
-        onRewind: ((RewindScope) -> Void)? = nil
+        onRewind: ((RewindScope) -> Void)? = nil, attributed: AttributedString? = nil
     ) {
         self.text = text
         self.isPending = isPending
         self.rewindChoices = rewindChoices
         self.onRewind = onRewind
+        self.attributed = attributed
         self._entered = State(initialValue: !isPending)
     }
 
     var body: some View {
         HStack {
             Spacer(minLength: 42)
-            Text(text)
+            bodyText
                 .font(ClaudeTypography().sans(14))
                 .foregroundStyle(ClaudePalette.primaryInk)
                 .textSelection(.enabled)
@@ -191,6 +195,15 @@ struct ClaudeUserBubble: View {
                     }
                 }
             }
+        }
+    }
+
+    /// The plain text, or the M7g-formatted body with tappable file links.
+    @ViewBuilder private var bodyText: some View {
+        if let attributed {
+            Text(attributed)
+        } else {
+            Text(text)
         }
     }
 

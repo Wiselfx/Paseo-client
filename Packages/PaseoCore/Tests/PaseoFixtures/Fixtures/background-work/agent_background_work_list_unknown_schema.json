@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "rpc_error",
+    "payload": {
+      "requestId": "rewind-bg-list",
+      "requestType": "agent.background_work.list.request",
+      "error": "Unknown request, try upgrading the daemon (currently v0.15.2)",
+      "code": "unknown_schema"
+    }
+  }
+}

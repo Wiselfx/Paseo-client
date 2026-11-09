@@ -246,7 +246,7 @@ struct ChatSubagentTimelineView: View {
     let subagent: ProviderSubagent
     let typography: ClaudeTypography
 
-    @State private var rows: [TimelineEntry] = []
+    @State private var rows: [ProviderSubagentTimelineRequest.Response.Row] = []
     @State private var loading = true
     @State private var error: String?
 
@@ -279,8 +279,8 @@ struct ChatSubagentTimelineView: View {
                         .padding(.top, 60)
                         .frame(maxWidth: .infinity)
                 } else {
-                    ForEach(rows, id: \.seqStart) { entry in
-                        timelineRow(entry)
+                    ForEach(rows, id: \.seq) { row in
+                        timelineRow(row)
                     }
                 }
             }
@@ -300,7 +300,7 @@ struct ChatSubagentTimelineView: View {
     private func load() async {
         loading = true
         if let page = await subagents.timelinePage(for: subagent.id, limit: 50) {
-            rows = page.entries
+            rows = page.rows
             error = nil
         } else {
             error = subagents.error ?? "Couldn't load the timeline."
@@ -309,8 +309,8 @@ struct ChatSubagentTimelineView: View {
     }
 
     @ViewBuilder
-    private func timelineRow(_ entry: TimelineEntry) -> some View {
-        switch entry.item {
+    private func timelineRow(_ row: ProviderSubagentTimelineRequest.Response.Row) -> some View {
+        switch row.item {
         case .userMessage(let message):
             VStack(alignment: .leading, spacing: 4) {
                 Text("TASK")
