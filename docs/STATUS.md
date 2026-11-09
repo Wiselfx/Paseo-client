@@ -53,13 +53,18 @@ Tickets: `docs/tickets/`. Worktrees: `/home/paseo/.paseo/worktrees/0264elgj/<bra
    build once produced a fake failure.
 4. After merging, `swift test` must be fully green.
 
-## In flight (2026-11-09)
+## In flight (2026-11-09, user away from the Mac)
 
-- M2.5a `m25a-bugs`: model switch no-op, pi/omp missing, composer timeout message.
-- M2.5b `m25b-polish`: Anthropic fonts, dark mode, home greeting, interactive sidebar drawer.
-- Research 8 `research-dsh-live`: live DSH observation (silver work rows, loader, quips,
-  composer, palette). Feeds an M2.6 pass on the turn UI. The quality bar is Apple-level
-  invisible polish; DSH is the visual truth.
+Merged since: M2.5a/b, research 8, M2.6a sidebar, M2.6b turn UI (all built by the user in Xcode).
+Now running (inkling; DeepSeek is off on weekdays 01–04 and 06–10 UTC):
+- M3a `m3a-panel` (reused M2.6a worker): right-edge workspace panel (Agents · Files · Changes ·
+  Terminal), clean chat header (agent tab chips removed), sidebar bottom bar spacing.
+- M3b `m3b-files` (reused M2.6b worker), M3c `m3c-changes`, M3d `m3d-terminal` (SwiftTerm): the
+  panel's pages, against contract stubs in `PaseoUI/Workspace/`.
+- R9 `r9-parity`: `docs/PARITY.md`, a parity checklist vs Paseo's app and the DSH plugin, plus
+  suggested milestones. It becomes the roadmap.
+UX decisions so far: left drawer = navigation (projects → workspaces), right panel = inside the
+workspace, the chat stays clean. Composer keeps the Claude iOS shape; turn UI follows DSH.
 
 ## Next (UI, decided by the lead, built by workers)
 
