@@ -42,6 +42,10 @@ let usage = """
       agent-control [cwd]      full stack (AgentControlStore/ConversationStore) on a sandbox:
                                list providers, create an omp agent, switch its mode, answer a
                                permission request, rename and archive it (default cwd /tmp/fixture-sandbox)
+      agent-config [cwd]       create a sandbox agent, then switch model, thinking and mode through
+                               ConversationStore and print what the daemon reports afterwards
+      open <agentId> [secs]    open a conversation the way the chat screen does, printing every
+                               request type and latency and any errors for [secs] (default 10)
       host-settings [agentId]
                                host config, provider switches, slash commands, 15 s presence
                                heartbeat and push-token revocation (default: fixture sandbox agent)
@@ -149,6 +153,44 @@ func makeConnection(_ arguments: ParsedArguments) throws -> DaemonConnection {
         // identify a modern version. The app passes its own version; the probe passes this floor.
         appVersion: "0.1.45"
     )
+}
+
+/// Prints every request the store layer sends with its latency, so `open` can show what a chat
+/// screen actually asks for and which request fails. Delegates everything to the real connection.
+final class LoggingDaemonClient: DaemonClient, @unchecked Sendable {
+    private let inner: any DaemonClient
+
+    init(_ inner: any DaemonClient) { self.inner = inner }
+
+    func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
+        let started = Date()
+        do {
+            let response = try await inner.send(request, timeout: timeout)
+            print("  req \(R.type) \(milliseconds(since: started)) ok")
+            return response
+        } catch {
+            print("  req \(R.type) \(milliseconds(since: started)) FAILED \(error)")
+            throw error
+        }
+    }
+
+    func send<M: PaseoOutboundMessage>(_ message: M) async throws {
+        let started = Date()
+        do {
+            try await inner.send(message)
+            print("  msg \(M.type) \(milliseconds(since: started))")
+        } catch {
+            print("  msg \(M.type) \(milliseconds(since: started)) FAILED \(error)")
+            throw error
+        }
+    }
+
+    var events: AsyncStream<DaemonEvent> { inner.events }
+    var states: AsyncStream<ConnectionState> { inner.states }
+
+    private func milliseconds(since date: Date) -> String {
+        "\(Int(Date().timeIntervalSince(date) * 1000))ms"
+    }
 }
 
 func statusText(_ status: AgentStatus) -> String {
@@ -305,6 +347,14 @@ do {
         try await runTerminal(connection, workspaceId: workspaceId, cwd: cwd)
     case "agent-control":
         try await runAgentControl(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
+    case "agent-config":
+        try await runAgentConfig(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
+    case "open":
+        guard let agentId = arguments.commandArguments.first else {
+            throw ProbeError("open needs an <agentId>")
+        }
+        let seconds = arguments.commandArguments.count > 1 ? Int(arguments.commandArguments[1]) ?? 10 : 10
+        try await runOpen(connection, agentId: agentId, seconds: seconds)
     case "host-settings":
         try await runHostSettings(
             connection,
@@ -484,6 +534,139 @@ func waitUntil(
 
 func modeText(_ agent: AgentSnapshot?) -> String {
     agent?.currentModeId ?? "-"
+}
+
+/// Mimics the app's chat screen opening: connect, start the session, open the conversation and
+/// watch it settle. Every request and its latency is logged, so a wrongly encoded request (the
+/// daemon rejects it, nobody answers, the caller times out) is visible in one run.
+@MainActor
+func runOpen(_ connection: DaemonConnection, agentId: String, seconds: Int) async throws {
+    try await connection.connect()
+    let session = HostSession(client: LoggingDaemonClient(connection))
+    await session.start()
+    print("opening \(String(agentId.prefix(8)))")
+    let store = session.conversation(for: agentId)
+    try await waitUntil("the conversation to load", timeout: 20) { store.phase != .loading }
+    print(
+        "loaded: phase=\(store.phase) rows=\(store.timeline.rows.count) turns=\(store.turns.count)"
+            + " actionError=\(store.actionError ?? "none") backgroundError=\(store.backgroundError ?? "none")"
+    )
+
+    var last = ""
+    let deadline = Date().addingTimeInterval(Double(seconds))
+    while Date() < deadline {
+        let line =
+            "running=\(store.isRunning) actionError=\(store.actionError ?? "none")"
+            + " backgroundError=\(store.backgroundError ?? "none")"
+        if line != last {
+            print("  \(line)")
+            last = line
+        }
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    session.closeConversation(agentId)
+}
+
+/// Verifies that model, thinking and mode switches reach the daemon: each change goes through
+/// `ConversationStore`, then the agent snapshot is fetched again from the daemon and printed.
+/// Only ever creates an agent in the sandbox cwd, and archives it.
+@MainActor
+func runAgentConfig(_ connection: DaemonConnection, cwd: String) async throws {
+    let sandbox = "/tmp/fixture-sandbox"
+    guard cwd == sandbox else {
+        throw ProbeError("agent-config only runs in \(sandbox); refusing to create an agent in \(cwd)")
+    }
+
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    await session.agentControl.loadCatalog(cwd: sandbox)
+    guard session.agentControl.phase == .ready else {
+        throw ProbeError("provider catalogue failed: \(session.agentControl.phase)")
+    }
+
+    let provider = "omp"
+    let models = session.agentControl.models(forProvider: provider)
+    let modes = session.agentControl.modes(forProvider: provider).map(\.id)
+    guard let firstModel = models.first?.id else { throw ProbeError("\(provider) reports no models") }
+    guard
+        let agentId = await session.agentControl.createAgent(
+            cwd: sandbox, provider: provider, model: firstModel, modeId: modes.first,
+            prompt: "Reply with the single word: ready", title: "M2.5a config probe")
+    else {
+        throw ProbeError("create failed: \(session.agentControl.actionError ?? "unknown error")")
+    }
+    print("created \(String(agentId.prefix(8))) model=\(firstModel)")
+    var archived = false
+
+    do {
+        let store = session.conversation(for: agentId)
+        try await waitUntil("the conversation to load") { store.phase == .ready }
+        try await waitUntil("the first turn to finish", timeout: 120) { !store.isRunning }
+        print(
+            "start: store model=\(store.agent?.model ?? "-") thinking=\(store.agent?.effectiveThinkingOptionId ?? "-")"
+                + " mode=\(store.agent?.currentModeId ?? "-")"
+        )
+
+        if let nextModel = models.first(where: { $0.id != firstModel && $0.isSelectable != false })?.id {
+            await store.setModel(nextModel)
+            try await waitUntil("the model switch", timeout: 20) { store.agent?.model == nextModel }
+            if let daemon = try await daemonAgent(connection, id: agentId) {
+                print(
+                    "model -> \(nextModel): store=\(store.agent?.model ?? "-") daemon=\(daemon.model ?? "-")"
+                        + " actionError=\(store.actionError ?? "none")"
+                )
+            }
+        }
+
+        let thinking =
+            models.first { $0.id == (store.agent?.model ?? firstModel) }?.thinkingOptions ?? []
+        if let option = thinking.first(where: { $0.id != store.agent?.effectiveThinkingOptionId })?.id {
+            await store.setThinking(option)
+            try await waitUntil("the thinking switch", timeout: 20) {
+                store.agent?.effectiveThinkingOptionId == option
+            }
+            if let daemon = try await daemonAgent(connection, id: agentId) {
+                print(
+                    "thinking -> \(option): store=\(store.agent?.effectiveThinkingOptionId ?? "-")"
+                        + " daemon=\(daemon.effectiveThinkingOptionId ?? "-")"
+                        + " actionError=\(store.actionError ?? "none")"
+                )
+            }
+        }
+
+        if let mode = modes.first(where: { $0 != store.agent?.currentModeId }) {
+            await store.setMode(mode)
+            try await waitUntil("the mode switch", timeout: 20) { store.agent?.currentModeId == mode }
+            if let daemon = try await daemonAgent(connection, id: agentId) {
+                print(
+                    "mode -> \(mode): store=\(store.agent?.currentModeId ?? "-")"
+                        + " daemon=\(daemon.currentModeId ?? "-")"
+                        + " actionError=\(store.actionError ?? "none")"
+                )
+            }
+        }
+
+        await store.archive()
+        archived = true
+        try await waitUntil("the agent to leave the list", timeout: 30) {
+            !session.agents.contains { $0.id == agentId }
+        }
+        print("archived; agents listed now: \(session.agents.count)")
+        session.closeConversation(agentId)
+    } catch {
+        if !archived {
+            _ = try? await connection.send(ArchiveAgentRequest(agentId: agentId))
+            print("cleanup: archived \(String(agentId.prefix(8))) after failure")
+        }
+        throw error
+    }
+}
+
+/// The daemon's own view of one agent, bypassing every store cache.
+func daemonAgent(_ connection: DaemonConnection, id: String) async throws -> AgentSnapshot? {
+    let response = try await connection.send(FetchAgentsRequest(page: .init(limit: 200)))
+    return response.entries.first { $0.agent.id == id }?.agent
 }
 
 /// End-to-end check of T6 against the live daemon: catalogue, create, mode switch, permission

@@ -31,6 +31,10 @@ public final class AgentControlStore {
     public private(set) var lastCreatedAgent: AgentSnapshot?
 
     private let client: any DaemonClient
+    /// Scope of the catalogue we hold, i.e. the `cwd` of the last `loadCatalog`.
+    /// `providers_snapshot_update` frames for other workspaces share the socket; applying those
+    /// would swap the pickers' models out from under the user.
+    private var catalogCwd: String?
 
     public init(client: any DaemonClient) {
         self.client = client
@@ -41,6 +45,7 @@ public final class AgentControlStore {
     /// Loads the catalogue for the pickers. `cwd` targets a workspace-specific catalogue; omit it
     /// for the global one. Safe to call again (pull to refresh).
     public func loadCatalog(cwd: String? = nil) async {
+        catalogCwd = cwd
         phase = .loading
         actionError = nil
         do {
@@ -145,7 +150,8 @@ public final class AgentControlStore {
         isSupported = info.hasFeature("providersSnapshot")
     }
 
-    /// Routes unsolicited permission messages to the conversation that shows the card.
+    /// Routes unsolicited catalogue and permission messages: the pickers' incremental snapshot
+    /// pushes, and permission events to the conversation that shows the card.
     internal func handle(
         messageType: String, raw: Data, conversations: [String: ConversationStore]
     ) {
@@ -167,12 +173,36 @@ public final class AgentControlStore {
             else { return }
             conversations[event.agentId]?.removePermission(requestId: event.requestId)
 
+        case "providers_snapshot_update":
+            applySnapshotUpdate(raw)
+
         default:
             break
         }
     }
 
     // MARK: Internals
+
+    /// Merges an incremental catalogue push for the scope we last requested. A provider that came
+    /// back `loading` in the first snapshot becomes `ready` here, models and all, so the pickers
+    /// fill in without another request.
+    private func applySnapshotUpdate(_ raw: Data) {
+        guard isSupported,
+            let update = try? JSONDecoder().decode(
+                SessionPayloadEnvelope<ProvidersSnapshotUpdate>.self, from: raw
+            ).payload,
+            update.cwd == catalogCwd
+        else { return }
+
+        for entry in update.entries {
+            if let index = providers.firstIndex(where: { $0.provider == entry.provider }) {
+                providers[index] = entry
+            } else {
+                providers.append(entry)
+            }
+        }
+        if phase != .ready { phase = .ready }
+    }
 
     /// Older daemons have no provider snapshot: one availability probe, then models and modes per
     /// available provider. Same entry shape, so callers don't branch.
