@@ -110,7 +110,7 @@ struct ClaudeUsageReportsSheet: View {
                 Text("Tokens by day")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(ClaudePalette.secondary)
-                Chart(overview.days) { day in
+                Chart(overview.days, id: \.date) { day in
                     BarMark(
                         x: .value("Day", day.date, unit: .day),
                         y: .value("Tokens", day.tokens))
@@ -127,7 +127,7 @@ struct ClaudeUsageReportsSheet: View {
                     Text("Tokens by model")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(ClaudePalette.secondary)
-                    Chart(overview.models.prefix(6)) { model in
+                    Chart(overview.models.prefix(6), id: \.model) { model in
                         BarMark(
                             x: .value("Model", model.model),
                             y: .value("Tokens", model.tokens))
