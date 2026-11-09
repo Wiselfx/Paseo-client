@@ -61,10 +61,13 @@ public final class WorkspaceSetupObservationStore {
         capabilities.observation = serverInfo?.hasFeature("workspaceSetupObservation") ?? false
         capabilities.run = serverInfo?.hasFeature("workspaceSetupRun") ?? false
         // Read the client's *hello* capability, not the host's feature flag: the daemon only
-        // accepts owned subscriptions on sockets that advertised owned_subscriptions, and this
-        // client does not. (Hosting hosts that flip this flag need the client to flip its hello.)
+        // accepts owned subscriptions on sockets that advertised owned_subscriptions, and only
+        // runs the subscribe RPC when the client also advertises the observation companion.
+        // The host still has to advertise the feature, because a daemon that never heard of the
+        // capability keeps the legacy detach paths (`OwnedSubscriptions`).
         capabilities.ownedSubscriptions =
             ClientCapabilities.implemented[SetupCapabilityNames.ownedSubscriptions] == true
+            && (serverInfo?.supportsOwnedSubscriptions ?? false)
     }
 
     // MARK: Observing
@@ -106,7 +109,18 @@ public final class WorkspaceSetupObservationStore {
         pollTasks.removeValue(forKey: workspaceId)
         isPolling.remove(workspaceId)
         if let subscriptionId = subscriptionIds.removeValue(forKey: workspaceId) {
-            _ = try? await client.send(SubscriptionReleaseRequest(subscriptionId: subscriptionId))
+            await client.releaseOwnedSubscription(subscriptionId)
+        }
+    }
+
+    /// After a reconnect the daemon forgot every owned subscription: drop the stale ids and
+    /// re-subscribe the workspaces this store was observing.
+    internal func resubscribe() async {
+        let observed = subscriptionIds.keys.sorted()
+        subscriptionIds.removeAll()
+        guard capabilities.ownedSubscriptions else { return }
+        for workspaceId in observed {
+            await subscribe(workspaceId)
         }
     }
 
@@ -143,6 +157,12 @@ public final class WorkspaceSetupObservationStore {
         snapshots[workspaceId]
     }
 
+    /// The server-assigned owned subscription id for a workspace, when the subscribe path is in
+    /// use. Nil while polling a legacy socket, or before the subscribe response arrives.
+    public func subscriptionId(for workspaceId: String) -> String? {
+        subscriptionIds[workspaceId]
+    }
+
     /// Whether setup is running, failed or blocked (the quiet-line cases).
     public func needsAttention(_ workspaceId: String) -> Bool {
         guard let status = snapshots[workspaceId]?.status else { return false }
@@ -155,6 +175,11 @@ public final class WorkspaceSetupObservationStore {
     // MARK: Subscribe path (owned subscriptions only)
 
     private func subscribe(_ workspaceId: String) async {
+        // A modern socket treats every subscribe as a new ownership; drop the previous one first
+        // so repeated panel appearances don't accumulate duplicate progress frames.
+        if let previous = subscriptionIds.removeValue(forKey: workspaceId) {
+            await client.releaseOwnedSubscription(previous)
+        }
         do {
             let response = try await client.send(WorkspaceSetupSubscribeRequest(workspaceId: workspaceId))
             if let subscriptionId = response.subscriptionId {

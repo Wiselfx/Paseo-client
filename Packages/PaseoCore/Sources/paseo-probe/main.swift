@@ -305,6 +305,7 @@ func runInfo(_ connection: DaemonConnection) async throws {
     print("serverId: \(info.serverId)")
     print("version: \(info.version ?? "-")")
     print("protocolVersion: \(info.protocolVersion.map(String.init) ?? "-")")
+    print("ownedSubscriptions: feature=\(info.hasFeature(OwnedSubscriptions.feature)) client=\(OwnedSubscriptions.isEnabled) modern=\(info.supportsOwnedSubscriptions)")
 }
 
 func runAgents(_ connection: DaemonConnection) async throws {
@@ -604,11 +605,19 @@ func runTerminal(_ connection: DaemonConnection, workspaceId: String, cwd: Strin
     guard store.isSupported else { throw ProbeError("host does not support terminal restore modes") }
     await store.open(workspaceId: workspaceId, cwd: cwd)
 
+    // The directory's owned subscription id arrives with the first terminals_changed snapshot.
+    let directoryDeadline = Date().addingTimeInterval(2)
+    while store.directorySubscriptionId(for: workspaceId) == nil, Date() < directoryDeadline {
+        try await Task.sleep(for: .milliseconds(50))
+    }
+    print("directory subscription: \(store.directorySubscriptionId(for: workspaceId) ?? "none (legacy)")")
+
     let terminal = await store.createTerminal(in: workspaceId, cwd: cwd, name: "paseo-probe")
     guard let terminal else { throw ProbeError("create terminal failed: \(store.error ?? "unknown")") }
     print("created \(terminal.id) name=\(terminal.name) cwd=\(terminal.cwd ?? "-")")
 
     let stream = await store.attach(terminal.id, size: TerminalSize(rows: 24, cols: 80))
+    print("stream subscription: \(store.subscriptionId(forTerminal: terminal.id) ?? "none (legacy)")")
     let collector = Task { () -> (bytes: Data, markers: [String]) in
         var bytes = Data()
         var markers: [String] = []
@@ -632,6 +641,7 @@ func runTerminal(_ connection: DaemonConnection, workspaceId: String, cwd: Strin
     store.sendInput("printf 'hello\\n'; ls\r", to: terminal.id)
     try await Task.sleep(for: .seconds(2))
     store.detach(terminal.id)
+    print("stream subscription after detach: \(store.subscriptionId(forTerminal: terminal.id) ?? "released")")
     let received = await collector.value
     print("markers: \(received.markers.joined(separator: ", "))")
     print("bytes: \(escapedTerminalBytes(received.bytes))")
@@ -1667,7 +1677,9 @@ func runSetupObservation(_ connection: DaemonConnection, cwd: String) async thro
     }
     let store = session.setupObservation
     print("workspace \(workspace.id) observation=\(store.capabilities.observation) run=\(store.capabilities.run) owned=\(store.capabilities.ownedSubscriptions)")
-    await store.refresh(workspace.id)
+    // `observe` uses the owned subscribe path when available and falls back to a status read.
+    await store.observe(workspace.id)
+    print("setup subscription: \(store.subscriptionId(for: workspace.id) ?? "none (polling)")")
     if let snapshot = store.snapshot(for: workspace.id) {
         print("status=\(snapshot.status) branch=\(snapshot.detail.branchName) logBytes=\(snapshot.detail.log.utf8.count) commands=\(snapshot.detail.commands.count)")
         if let error = snapshot.error { print("error=\(error)") }

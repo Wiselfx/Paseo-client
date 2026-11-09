@@ -21,12 +21,21 @@ public enum ClientCapabilities {
     /// to clients advertising this capability.
     public static let providerSubagents = "providerSubagents"
     /// Every behavior this client actually implements. No `binary_chunking_v1` sends (we never
-    /// chunk) and no `owned_subscriptions` (we detach through the legacy terminal unsubscribe).
-    public static let implemented: [String: Bool] = [
-        helloRejection: true,
-        terminalChunkedReplay: true,
-        providerSubagents: true,
-    ]
+    /// chunk). `owned_subscriptions` and its `workspace_setup_observation` companion are
+    /// advertised only while `OwnedSubscriptions.isEnabled`; every subscription path in the
+    /// stores implements the modern protocol (see `docs/research/09-owned-subscriptions.md`).
+    public static let implemented: [String: Bool] = {
+        var capabilities: [String: Bool] = [
+            helloRejection: true,
+            terminalChunkedReplay: true,
+            providerSubagents: true,
+        ]
+        if OwnedSubscriptions.isEnabled {
+            capabilities[OwnedSubscriptions.capability] = true
+            capabilities[OwnedSubscriptions.setupObservationCapability] = true
+        }
+        return capabilities
+    }()
 }
 
 /// Oldest app version the daemon treats as provider-aware. Before it (see `MIN_VERSION_ALL_PROVIDERS`

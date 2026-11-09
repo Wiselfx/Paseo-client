@@ -19,9 +19,9 @@ import Foundation
 /// client cannot handle.
 public enum SetupCapabilityNames {
     /// Modern owned subscriptions; required by the setup-subscribe path.
-    public static let ownedSubscriptions = "owned_subscriptions"
+    public static let ownedSubscriptions = OwnedSubscriptions.capability
     /// Worktree setup observation (modern `workspace.setup.subscribe.request` companion).
-    public static let workspaceSetupObservation = "workspace_setup_observation"
+    public static let workspaceSetupObservation = OwnedSubscriptions.setupObservationCapability
 }
 
 /// Per-command status. Source: messages.ts `WorktreeSetupCommandSnapshotSchema.status`.

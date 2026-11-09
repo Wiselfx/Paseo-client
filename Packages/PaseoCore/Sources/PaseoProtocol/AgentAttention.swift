@@ -100,8 +100,9 @@ public struct AgentAttentionDetail: Sendable, Decodable, Equatable {
     }
 }
 
-/// The modern top-level `agent_attention_required` message. Not used for delivery today (this
-/// client is a legacy source), but decoded by tests and future-capable hosts.
+/// The modern top-level `agent_attention_required` message. A socket that advertises
+/// `owned_subscriptions` receives attention only this way: the daemon skips the
+/// `attention_required` frame inside `agent_stream` for modern sources.
 public struct AgentAttentionRequired: Sendable, Decodable, Equatable {
     public var subscriptionId: String?
     public var agentId: String

@@ -98,6 +98,10 @@ public struct FetchAgentsRequest: PaseoRequest {
 
     public struct Response: Decodable, Sendable {
         public var requestId: String
+        /// Present when the request subscribed. On a modern socket it is the server-assigned
+        /// id used to release the subscription (`subscription.release.request`); legacy
+        /// daemons also send their locally chosen id.
+        public var subscriptionId: String?
         public var entries: [Entry]
         public struct Entry: Decodable, Sendable {
             public var agent: AgentSnapshot

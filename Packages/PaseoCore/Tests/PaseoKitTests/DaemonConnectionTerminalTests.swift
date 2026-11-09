@@ -16,9 +16,11 @@ import Testing
 
         #expect(hello["capabilities"]?["hello_rejection"] == .bool(true))
         #expect(hello["capabilities"]?["terminal_chunked_replay"] == .bool(true))
-        // We do not pace chunked sends and detach through the legacy terminal unsubscribe.
+        // We do not pace chunked sends; detach is owned by the modern subscription protocol
+        // (T17) and advertising it drops every legacy broadcast path.
         #expect(hello["capabilities"]?["binary_chunking_v1"] == nil)
-        #expect(hello["capabilities"]?["owned_subscriptions"] == nil)
+        #expect(hello["capabilities"]?["owned_subscriptions"] == .bool(true))
+        #expect(hello["capabilities"]?["workspace_setup_observation"] == .bool(true))
 
         transport.push(text: try fixtureText("server_info"))
         _ = try await awaitValue(connectTask)

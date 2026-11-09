@@ -68,6 +68,9 @@ public final class TerminalsStore {
     private var watched: [String: WatchedWorkspace] = [:]
     private var attachments: [String: Attachment] = [:]
     private var slotTerminalIds: [UInt8: String] = [:]
+    /// Server-assigned directory subscription id per workspace. Present only on modern sockets
+    /// (the daemon tags `terminals_changed` with `subscriptionId`); nil on legacy ones.
+    private var directorySubscriptionIds: [String: String] = [:]
     private var connectionState: ConnectionState = .idle
     private var wasConnected = false
     private var sawReconnect = false
@@ -90,6 +93,18 @@ public final class TerminalsStore {
         attachments[terminalId] != nil
     }
 
+    /// The daemon's owned subscription id for a workspace's terminal directory, when this socket
+    /// negotiated owned subscriptions. Nil on legacy sockets and before the first snapshot.
+    public func directorySubscriptionId(for workspaceId: String) -> String? {
+        directorySubscriptionIds[workspaceId]
+    }
+
+    /// The daemon's owned subscription id for one attached terminal, when owned subscriptions are
+    /// in use. Nil on legacy sockets.
+    public func subscriptionId(forTerminal terminalId: String) -> String? {
+        attachments[terminalId]?.subscriptionId
+    }
+
     /// The workspace whose list contains `terminalId`, when this store has seen that list.
     public func workspaceId(forTerminal terminalId: String) -> String? {
         terminalsByWorkspace.first { _, terminals in
@@ -107,7 +122,12 @@ public final class TerminalsStore {
         let previousCwd = watched[workspaceId]?.cwd
         watched[workspaceId] = WatchedWorkspace(cwd: cwd ?? previousCwd)
         if case .connected = connectionState {
-            send(SubscribeTerminalsRequest(cwd: watched[workspaceId]?.cwd, workspaceId: workspaceId))
+            // A modern socket creates a new owned subscription per subscribe; drop the old one so
+            // repeated screen appearances don't accumulate duplicate snapshots.
+            if let previous = directorySubscriptionIds.removeValue(forKey: workspaceId) {
+                await client.releaseOwnedSubscription(previous)
+            }
+            subscribeDirectory(workspaceId: workspaceId, cwd: watched[workspaceId]?.cwd)
             await refreshTerminals(in: workspaceId)
             await refreshScripts(in: workspaceId)
         }
@@ -116,8 +136,13 @@ public final class TerminalsStore {
     /// Stops delivering directory updates and ends this workspace's terminal streams.
     public func close(workspaceId: String) {
         guard let workspace = watched.removeValue(forKey: workspaceId) else { return }
+        let directorySubscriptionId = directorySubscriptionIds.removeValue(forKey: workspaceId)
         if case .connected = connectionState {
-            send(UnsubscribeTerminalsRequest(cwd: workspace.cwd, workspaceId: workspaceId))
+            if let directorySubscriptionId {
+                releaseOwned(directorySubscriptionId)
+            } else {
+                send(UnsubscribeTerminalsRequest(cwd: workspace.cwd, workspaceId: workspaceId))
+            }
         }
         for terminal in terminals(in: workspaceId) {
             detach(terminal.id)
@@ -235,7 +260,7 @@ public final class TerminalsStore {
             slotTerminalIds.removeValue(forKey: slot)
         }
         attachment.continuation.finish()
-        send(UnsubscribeTerminalRequest(terminalId: terminalId))
+        releaseStream(terminalId, subscriptionId: attachment.subscriptionId)
     }
 
     // MARK: Input and resize
@@ -367,9 +392,7 @@ public final class TerminalsStore {
             } else {
                 wasConnected = true
                 for (workspaceId, workspace) in watched {
-                    send(
-                        SubscribeTerminalsRequest(
-                            cwd: workspace.cwd, workspaceId: workspaceId))
+                    subscribeDirectory(workspaceId: workspaceId, cwd: workspace.cwd)
                 }
                 // `open` may have run before the first connection was established.
                 for workspaceId in watched.keys {
@@ -486,6 +509,8 @@ public final class TerminalsStore {
         var size: TerminalSize
         var restore: TerminalRestoreOptions
         var slot: UInt8?
+        /// Server-assigned stream subscription id, present only on modern sockets.
+        var subscriptionId: String?
         var isReplaying = false
         let continuation: AsyncStream<TerminalOutput>.Continuation
     }
@@ -496,10 +521,14 @@ public final class TerminalsStore {
                 SubscribeTerminalRequest(
                     terminalId: attachment.terminalId, restore: attachment.restore))
 
-            // The view detached while the response was in flight: release the slot we just got.
+            // The view detached while the response was in flight: release the subscription we
+            // just got, by id on a modern socket and through the legacy RPC otherwise.
             guard attachments[attachment.terminalId]?.id == attachment.id else {
                 if response.slot != nil {
-                    send(UnsubscribeTerminalRequest(terminalId: attachment.terminalId))
+                    await client.releaseSubscription(response.subscriptionId) { [client] in
+                        _ = try? await client.send(
+                            UnsubscribeTerminalRequest(terminalId: attachment.terminalId))
+                    }
                 }
                 return
             }
@@ -515,6 +544,7 @@ public final class TerminalsStore {
                 slotTerminalIds.removeValue(forKey: previous)
             }
             attachments[attachment.terminalId]?.slot = slot
+            attachments[attachment.terminalId]?.subscriptionId = response.subscriptionId
             attachments[attachment.terminalId]?.isReplaying = false
             slotTerminalIds[slot] = attachment.terminalId
             error = nil
@@ -531,7 +561,7 @@ public final class TerminalsStore {
 
     private func resync() async {
         for (workspaceId, workspace) in watched {
-            send(SubscribeTerminalsRequest(cwd: workspace.cwd, workspaceId: workspaceId))
+            subscribeDirectory(workspaceId: workspaceId, cwd: workspace.cwd)
         }
         for workspaceId in watched.keys {
             await refreshTerminals(in: workspaceId)
@@ -543,6 +573,8 @@ public final class TerminalsStore {
                 slotTerminalIds.removeValue(forKey: slot)
                 attachments[terminalId]?.slot = nil
             }
+            // The daemon forgot every subscription with the socket; ids are re-learned below.
+            attachments[terminalId]?.subscriptionId = nil
             guard let current = attachments[terminalId] else { continue }
             await establish(current, reportTransportFailure: false)
         }
@@ -550,8 +582,10 @@ public final class TerminalsStore {
 
     private func markDisconnected() {
         slotTerminalIds.removeAll()
+        directorySubscriptionIds.removeAll()
         for terminalId in attachments.keys {
             attachments[terminalId]?.slot = nil
+            attachments[terminalId]?.subscriptionId = nil
             attachments[terminalId]?.isReplaying = false
         }
     }
@@ -574,7 +608,35 @@ public final class TerminalsStore {
     private func apply(_ payload: TerminalsChanged) {
         let workspaceId = payload.workspaceId ?? workspaceId(matchingCwd: payload.cwd)
         guard let workspaceId else { return }
+        if let subscriptionId = payload.subscriptionId {
+            directorySubscriptionIds[workspaceId] = subscriptionId
+        }
         terminalsByWorkspace[workspaceId] = payload.terminals
+    }
+
+    /// Sends the directory subscribe with a fresh `requestId`. A modern daemon refuses an owned
+    /// subscription whose request has no `requestId` ("Owned subscriptions require a requestId",
+    /// `session/owned-subscriptions/index.ts:286-288`), and the first snapshot echoes it.
+    private func subscribeDirectory(workspaceId: String, cwd: String?) {
+        send(
+            SubscribeTerminalsRequest(
+                cwd: cwd, workspaceId: workspaceId, requestId: UUID().uuidString))
+    }
+
+    /// Releases a terminal stream: by the server-assigned id on a modern socket, through the
+    /// legacy `unsubscribe_terminal_request` otherwise (the daemon strips the id on legacy).
+    private func releaseStream(_ terminalId: String, subscriptionId: String?) {
+        if let subscriptionId, !subscriptionId.isEmpty {
+            releaseOwned(subscriptionId)
+        } else {
+            send(UnsubscribeTerminalRequest(terminalId: terminalId))
+        }
+    }
+
+    /// Fire-and-forget modern release. There is no response to wait for.
+    private func releaseOwned(_ subscriptionId: String) {
+        let client = self.client
+        Task { await client.releaseOwnedSubscription(subscriptionId) }
     }
 
     private func applyAttention(_ payload: TerminalAttentionRequired) {

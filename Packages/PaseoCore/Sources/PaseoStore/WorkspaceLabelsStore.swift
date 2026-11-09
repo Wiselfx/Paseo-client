@@ -26,6 +26,8 @@ public final class WorkspaceLabelsStore {
     public private(set) var isWorking = false
     /// `features.workspaceLabels` (added in v0.5.0).
     public private(set) var supportsLabels = false
+    /// `features.ownedSubscriptions` plus this client's hello capability.
+    public private(set) var supportsOwnedSubscriptions = false
 
     private let client: any DaemonClient
     private var subscriptionId: String?
@@ -61,7 +63,15 @@ public final class WorkspaceLabelsStore {
         }
         do {
             let response = try await client.send(WorkspaceLabelListRequest(subscribe: .init()))
+            let previousSubscriptionId = subscriptionId
             subscriptionId = response.subscriptionId
+            // A modern socket creates a new owned subscription per subscribe; an old one would
+            // keep delivering the same changes (and break the seq cursor). Release it.
+            if supportsOwnedSubscriptions, let previousSubscriptionId,
+                previousSubscriptionId != subscriptionId
+            {
+                await client.releaseOwnedSubscription(previousSubscriptionId)
+            }
             switch response.sync.mode {
             case .snapshot:
                 labels = sorted(response.labels)
@@ -263,6 +273,13 @@ public final class WorkspaceLabelsStore {
 
     internal func update(serverInfo: ServerInfo?) {
         supportsLabels = serverInfo?.hasFeature("workspaceLabels") ?? false
+        supportsOwnedSubscriptions = serverInfo?.supportsOwnedSubscriptions ?? false
+    }
+
+    /// A reconnect drops the daemon's owned subscriptions; forget the id without releasing it on
+    /// the dead socket.
+    internal func prepareForReconnect() {
+        subscriptionId = nil
     }
 
     /// Set by `HostSession` at construction; used to mirror assignment responses into the
