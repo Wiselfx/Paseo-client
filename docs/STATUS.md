@@ -78,15 +78,17 @@ from hand-written fixtures, Add to chat) + base-branch picker M8e context ring +
 composer, opt-in sidebar usage row + reports sheet, M7d chat anchor on send, per-chunk prose reveal,
 Rewind to here (opencode: `both` only; the sandbox agent's tail was truncated at seq 36 by a rewind)
 R11 split ClaudeChatView into
-`Conversation/` (13 files, pure move) (PaseoCore 385/133/17 = 535 green). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+`Conversation/` (13 files, pure move), M2.10 setup line + sheet (polls
+status; live push needs `owned_subscriptions`, not advertised) and worktree archive warning (dirty/
+unpushed counts), M4d Providers sheet (diagnostic, custom models) + agent profiles CRUD (config patch
+`agentProfiles`, gated) (PaseoCore 403/133/17 = 553 green). Follow-ups: profile picker in
+ClaudeNewAgentSheet; advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - M7f `m7f-transcript` on worker 0778f3b0-0603-4eae-ab7a-3a01b367bf53: chat display/turn collapse, subagents track, DSH question card, background work.
 - R12 `r12-parity-sync` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: PARITY.md reconcile with code (doc only).
-- M4d `m4d-providers` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: providers page/diagnostics/custom model, agent profiles.
 - M7e `m7e-agent-lifecycle` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: archived agents in History, unarchive, delete.
-- M2.10 `m210-setup-archive` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: setup observation/rerun, worktree archive warning.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
 Next candidates: notifications/push research (DeepSeek after 10:00 UTC).
