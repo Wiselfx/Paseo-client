@@ -31,6 +31,15 @@ import Testing
         func waitConnected() async throws -> ServerInfo {
             let connectTask = Task { try await connection.connect() }
             let socket = try await Self.awaitSocket(factory)
+            // Wait for the app hello to reach the fake daemon, not just for its side of the
+            // handshake to finish. `peer.isOpen` is set when the daemon *builds* its ready, one
+            // step before the client receives it (`RelayResponderFake.swift:183` vs `:200`), so a
+            // frame pushed on that signal can arrive while the client transport is still
+            // handshaking, where it is dropped as pre-open noise (`RelayTransport.swift:390`).
+            // A real daemon answers the hello with server_info; this is that order.
+            try await waitUntil {
+                socket.peer.receivedTexts.contains { $0.contains(#""type":"hello""#) }
+            }
             socket.pushDaemonText(RelayConnectionTests.serverInfoJSON)
             return try await awaitValue(connectTask)
         }
@@ -90,7 +99,9 @@ import Testing
                 #expect(text.hasPrefix("{") ? text.contains("e2ee_hello") : Data(base64Encoded: text) != nil)
             }
         }
-        #expect(harness.stateLog.states.contains(.connected(info)))
+        // The state log drains in its own task, so an awaited `connect()` does not order the
+        // append: await the entry, do not read it.
+        try await waitForLoggedState(.connected(info), in: harness.stateLog)
         harness.connection.disconnect()
     }
 
@@ -223,6 +234,10 @@ import Testing
         try await waitUntil(timeout: .seconds(5)) { harness.factory.count == 2 }
         let second = try #require(harness.factory.sockets.last)
         try await waitUntil { second.peer.isOpen }
+        // Same gate as `waitConnected`: `isOpen` is one step ahead of the ready reaching the client.
+        try await waitUntil {
+            second.peer.receivedTexts.contains { $0.contains(#""type":"hello""#) }
+        }
         second.pushDaemonText(Self.serverInfoJSON)
         try await waitUntil(timeout: .seconds(5)) {
             harness.stateLog.states.contains { state in
