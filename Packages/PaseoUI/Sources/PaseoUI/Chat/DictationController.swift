@@ -119,6 +119,9 @@ final class DictationController: NSObject {
 
     /// Stops recording, keeping the draft text (partial output committed).
     func stop(keepingDraft: Bool) {
+        // Not dictating: nothing to stop, and emitting here would overwrite the typed draft
+        // with the (empty) dictation snapshot — send() calls this before reading the draft.
+        guard isListening || engine != nil else { return }
         silenceTask?.cancel()
         silenceTask = nil
         if let engine {
