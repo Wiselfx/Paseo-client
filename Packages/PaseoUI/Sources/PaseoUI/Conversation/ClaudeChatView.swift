@@ -318,22 +318,15 @@ public struct ClaudeChatView: View {
                 isFollowing = true
             }
         }
-        .onChange(of: store.draft) { _, newValue in
-            scheduleDraftSave(newValue)
-        }
-        .onChange(of: mentionQuery) { _, query in
-            mentionDebounce?.cancel()
-            if query != nil {
-                Task { await loadMentionIndexIfNeeded() }
-                mentionDebounce = Task {
-                    try? await Task.sleep(for: .milliseconds(150))
-                    guard !Task.isCancelled, let query = mentionQuery else { return }
-                    mentionMatches = mentionIndex.matches(query: query, recent: recentMentions)
-                }
-            } else {
-                mentionMatches = []
-            }
-        }
+        // P3: the draft and the mention query are watched by a modifier with its own body, so a
+        // keystroke re-evaluates that and the text field — not this whole conversation.
+        .draftObserver(
+            store: store,
+            onDraftChange: { newValue in
+                scheduleDraftSave(newValue)
+                feedMascot(.userActivity(at: Date()))
+            },
+            onMentionQueryChange: handleMentionQuery)
         .onChange(of: photoSelection) { _, items in
             guard !items.isEmpty else { return }
             handlePickedPhotos(items)
@@ -416,19 +409,77 @@ public struct ClaudeChatView: View {
             if active, !attentionActive { feedMascot(.attention(at: Date())) }
             attentionActive = active
         }
-        .onChange(of: store.draft) { _, _ in
-            feedMascot(.userActivity(at: Date()))
-        }
+        // The draft's mascot feed lives in the single draft observer (`withChatInputWiring`).
         .onChange(of: focused) { _, isFocused in
             if isFocused { feedMascot(.userActivity(at: Date())) }
         }
-        .task {
-            // The sleep timer advances without events: 60 quiet seconds dozes off.
+        // The sleep timer advances without events: 60 quiet seconds dozes off. Only while the
+        // machine has something left to expire — an idle machine would otherwise invalidate this
+        // whole view every second for nothing (P3).
+        .task(id: mascotTicking) {
+            guard mascotTicking else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
                 mascot.tick(now: Date())
             }
         }
+    }
+
+    /// True while the mascot's own clock has work to do: on stage, waking, or counting down to
+    /// sleep. Once it is asleep only an event can move it, so the ticker stops — and an event that
+    /// wakes it changes this id, which restarts the ticker (P3).
+    var mascotTicking: Bool {
+        mascot.state != .sleeping
+    }
+
+    /// The mention popover's debounce, driven by the draft observer
+    /// (`DraftObserver`), never by the body of this view.
+    func handleMentionQuery(_ query: String?) {
+        mentionDebounce?.cancel()
+        if query != nil {
+            Task { await loadMentionIndexIfNeeded() }
+            mentionDebounce = Task {
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled, let query = mentionQuery else { return }
+                mentionMatches = mentionIndex.matches(query: query, recent: recentMentions)
+            }
+        } else {
+            mentionMatches = []
+        }
+    }
+}
+
+/// Watches the composer's text in a body of its own (P3).
+///
+/// `.onChange(of: store.draft)` placed on the conversation's root view subscribed that whole
+/// body to the draft, so every keystroke re-evaluated the header, the transcript's turns and the
+/// turn rail. A view modifier's body is a separate value in the graph: reading the draft here
+/// re-evaluates this modifier and the text field, and nothing else.
+struct DraftObserver: ViewModifier {
+    let store: ConversationStore
+    let onDraftChange: (String) -> Void
+    let onMentionQueryChange: (String?) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: store.draft) { _, newValue in onDraftChange(newValue) }
+            .onChange(of: mentionQuery) { _, query in onMentionQueryChange(query) }
+    }
+
+    /// The open mention query for the current draft; nil when there is none.
+    private var mentionQuery: String? { ChatMentions.query(in: store.draft) }
+}
+
+extension View {
+    func draftObserver(
+        store: ConversationStore, onDraftChange: @escaping (String) -> Void,
+        onMentionQueryChange: @escaping (String?) -> Void
+    ) -> some View {
+        modifier(
+            DraftObserver(
+                store: store, onDraftChange: onDraftChange,
+                onMentionQueryChange: onMentionQueryChange))
     }
 }
 #endif

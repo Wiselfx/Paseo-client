@@ -3,12 +3,11 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-extension ClaudeChatView {
-    // MARK: Mentions (M8d)
-
-    /// The `@token` query while the draft is exactly one mention token after whitespace/start.
-    var mentionQuery: String? {
-        let text = store.draft
+/// The draft-text half of the mention popover, pure so the draft observer can ask without
+/// reading anything else from the conversation (P3).
+enum ChatMentions {
+    /// The `@token` query while `text` is exactly one mention token after whitespace/start.
+    static func query(in text: String) -> String? {
         guard let at = text.lastIndex(of: "@") else { return nil }
         let before = text[..<at]
         let preceded =
@@ -18,6 +17,13 @@ extension ClaudeChatView {
         if query.contains(where: { $0.isWhitespace }) { return nil }
         return query
     }
+}
+
+extension ClaudeChatView {
+    // MARK: Mentions (M8d)
+
+    /// The `@token` query while the draft is exactly one mention token after whitespace/start.
+    var mentionQuery: String? { ChatMentions.query(in: store.draft) }
 
     /// The open workspace's checkout (same pattern as `localImageLoader`).
     var mentionCheckout: CheckoutStore? {
