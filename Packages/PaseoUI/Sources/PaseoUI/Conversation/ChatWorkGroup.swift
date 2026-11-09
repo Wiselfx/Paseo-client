@@ -228,6 +228,7 @@ struct ClaudeStepRow: View {
     let typography: ClaudeTypography
 
     @State private var userExpanded: Bool?
+    @AppStorage("paseo.reasoning.alwaysExpand") private var alwaysExpandReasoning = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // File calls never reach this row: they merge into `ClaudeMergedFileRow` (see ClaudeFileCalls).
@@ -238,7 +239,7 @@ struct ClaudeStepRow: View {
         return .tool
     }
 
-    var isExpanded: Bool { userExpanded ?? isLive }
+    var isExpanded: Bool { userExpanded ?? (isLive || (alwaysExpandReasoning && kind == .thought)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

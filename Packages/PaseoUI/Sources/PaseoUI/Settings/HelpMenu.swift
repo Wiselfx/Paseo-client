@@ -2,11 +2,7 @@
 import SwiftUI
 
 /// The upstream Help & support menu, adapted for iOS (hardware-keyboard shortcuts omitted).
-/// **Not wired in this build**: the Settings navigator and the sidebar footer are outside this
-/// ticket's file list, and the correct host for this menu is one of those two. The full menu is
-/// staged here, reviewed and ready — wiring it is a few lines (a Settings row opening it, or the
-/// sidebar footer menu the app keeps its actions in). `onRunDiagnostics` is `nil` while the
-/// diagnostics page is unreachable, and the item hides.
+/// Shown as Settings → About → Help & support. `onRunDiagnostics` nil hides that item.
 struct HelpMenuItems: View {
     /// Presents the app's Diagnostics page (M4e). Nil hides the item.
     var onRunDiagnostics: (() -> Void)?

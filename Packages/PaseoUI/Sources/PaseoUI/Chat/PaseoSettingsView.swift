@@ -27,6 +27,7 @@ struct PaseoSettingsView: View {
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
     /// M7f: Full / Collapse tool calls / Collapse turns (Settings → General → Chat).
     @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
+    @AppStorage("paseo.reasoning.alwaysExpand") private var alwaysExpandReasoning = false
     @State private var page: Page?
     @State private var providerSheetID: String?
     @State private var confirmDisconnect = false
@@ -55,6 +56,7 @@ struct PaseoSettingsView: View {
         case sidebar
         case terminal
         case diagnostics
+        case help
 
         var id: String { rawValue }
 
@@ -73,6 +75,7 @@ struct PaseoSettingsView: View {
             case .sidebar: "Sidebar"
             case .terminal: "Terminal"
             case .diagnostics: "Diagnostics"
+            case .help: "Help & support"
             }
         }
 
@@ -91,6 +94,7 @@ struct PaseoSettingsView: View {
             case .sidebar: "sidebar.left"
             case .terminal: "terminal"
             case .diagnostics: "stethoscope"
+            case .help: "questionmark.circle"
             }
         }
     }
@@ -244,6 +248,8 @@ struct PaseoSettingsView: View {
                     settingsRow(.about, symbol: Page.about.symbol, value: versionLine)
                     rowDivider
                     settingsRow(.diagnostics, symbol: Page.diagnostics.symbol)
+                    rowDivider
+                    settingsRow(.help, symbol: Page.help.symbol)
                 }
             }
             .padding(.horizontal, 16)
@@ -270,6 +276,16 @@ struct PaseoSettingsView: View {
         case .sidebar: SidebarPage()
         case .terminal: TerminalPage()
         case .diagnostics: DiagnosticsPage(session: session)
+        case .help:
+            ScrollView {
+                HelpMenuItems(
+                    onRunDiagnostics: { open(.diagnostics) },
+                    daemonVersion: session.serverInfo?.version
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+            }
+            .scrollIndicators(.hidden)
         }
     }
 
@@ -414,6 +430,15 @@ struct PaseoSettingsView: View {
                     }
                     .padding(.horizontal, 16)
                     .frame(height: 52)
+                    Divider().padding(.leading, 16)
+                    Toggle(isOn: $alwaysExpandReasoning) {
+                        Text("Always expand reasoning")
+                            .font(.system(size: 17))
+                    }
+                    .tint(.blue)
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .accessibilityIdentifier("settings.alwaysExpandReasoning")
                     Divider().padding(.leading, 16)
                     HStack(spacing: 12) {
                         Text("When the agent is running")
