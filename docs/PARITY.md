@@ -75,7 +75,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Startup splash + managed-daemon failure/retry states — Status: `missing` — Source: `docs/research/01-app-features.md:415`
 - [ ] Feature: Built-in daemon management (desktop: manage/keep-running/logs/restart, quitting overlay) — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:366`
 - [ ] Feature: Remote SSH connection method — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:360`
-- [ ] Feature: Presence / client heartbeat for focus and open-agent awareness — Status: `store only (no UI)` — Source: docs/research/04-protocol-agents-permissions-settings.md:705-749; this client `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:162-225` (not called by any view)
+- [ ] Feature: Presence / client heartbeat for focus and open-agent awareness — Status: `done` — Source: docs/research/04-protocol-agents-permissions-settings.md:705-749; this client `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoShellView.swift` (`startPresence` on appear, `updateFocus` on selection change, `updateVisibility` on `scenePhase`, `stopPresence` on disappear); `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:162-225`
 
 ## Sidebar & navigation
 
@@ -157,11 +157,11 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: DSH turn UX — answer anchored to the top of the conversation when generation begins — Status: `missing` — Source: `docs/research/06-dsh-ux-spec.md` (feature `chat-anchor`), folder `dsh-claude-style-reference/packages/client/src/features/chat-anchor/`
 - [ ] Feature: DSH turn UX — new-text reveal (per-character fade-in on arriving prose) — Status: `missing` — Source: folder `dsh-claude-style-reference/packages/client/src/features/chat-reveal/`
 - [ ] Feature: DSH message actions — Retract / Edit / Rerun / Delete turn (opens a new session) — Status: `missing` — Source: `docs/research/06-dsh-ux-spec.md:81-85` (folder `message-actions/`)
-- [ ] Feature: DSH chat-send — message bubble enters ("grow in place" or "fly up from the composer") — Status: `missing` — Source: folder `dsh-claude-style-reference/packages/client/src/features/chat-send/`
+- [ ] Feature: DSH chat-send — message bubble enters ("grow in place" or "fly up from the composer") — Status: `done` (grow-in-place variant: scale 0.96 + fade, 200 ms `cubic-bezier(0.22, 1, 0.36, 1)`; Reduce Motion fades; sent-this-session messages only) — Source: folder `dsh-claude-style-reference/packages/client/src/features/chat-send/`; this client `…/Chat/ClaudeChatComponents.swift` (`ClaudeUserBubble`)
 - [ ] Feature: DSH chat-files — file-call rows (Read/Edit/Write) with verb-dot-filename, dotted underline link, merged per file, diff stats — Status: `missing` (reads/edits render as generic tool rows without file-name links or merging) — Source: this client `…/Chat/ClaudeToolDetail.swift` (`case .read/.edit/.write`); `docs/research/08-dsh-live-observation.md:133-160`; folder `chat-files/`
 - [ ] Feature: DSH question-card — model question card restyled, moved to end of conversation — Status: `missing` — Source: folder `dsh-claude-style-reference/packages/client/src/features/question-card/`
 - [ ] Feature: Copy response on a completed assistant turn — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift:525-631` (`ClaudeTurnView`)
-- [ ] Feature: Copy per message (user and assistant) — Status: `missing` — Source: `docs/research/01-app-features.md:43`
+- [ ] Feature: Copy per message (user and assistant) — Status: `done` (user bubbles: long-press → Copy; assistant prose: per-reply Copy response button, copies the turn's markdown) — Source: `docs/research/01-app-features.md:43`; this client `…/Chat/ClaudeChatComponents.swift` (`ClaudeUserBubble`), `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: "Worked for {{duration}}" completed-turn footer label — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (`DurationText.completed`, `header` on `.completed`); `docs/research/01-app-features.md:45`, `docs/research/06-dsh-ux-spec.md:30`
 - [ ] Feature: In-flight turn shows an elapsed clock + loader — Status: `done` — Source: this client `…/Chat/ClaudeStatusLine.swift` (turn clock); `docs/research/01-app-features.md:45`
 - [ ] Feature: Fork chat from here ("Fork in a new tab" / "Fork in a new workspace", hidden on provider-subagent panes) — Status: `missing` — Source: `docs/research/01-app-features.md:44`
@@ -169,7 +169,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Queue message (client-side queue until the turn ends; queued rows: Edit / Send now) — Status: `missing` (sending while running steers instead) — Source: `docs/research/01-app-features.md:46`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:406-434` (`activeTurnBehavior: "steer"`)
 - [ ] Feature: Send and interrupt (follow-up admitted by interrupting the turn) — Status: `missing` — Source: `docs/research/01-app-features.md:47`
 - [ ] Feature: Interrupt the running turn (square stop button / Escape) — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.stop`, `store.cancel()`); `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:434-453`
-- [ ] Feature: Slash commands (`/exit`, `/clear` + provider commands and skills in the composer `/` menu) — Status: `store only (no UI)` — Source: `docs/research/01-app-features.md:62-63`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:128-160` (`loadCommands`), `Packages/PaseoProtocol/HostSettings.swift` — never called by any view
+- [ ] Feature: Slash commands (`/exit`, `/clear` + provider commands and skills in the composer `/` menu) — Status: `done` (menu above the composer card: name in Mono, argument hint, description, skill sparkle, filter as you type, max ~6 rows with scroll; spinner row while loading; hidden when the agent has none; placeholder "Type / for commands" then) — Source: `docs/research/01-app-features.md:62-63`; this client `…/Chat/ClaudeChatView.swift` (`slashMenu`); `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:128-160`
 - [ ] Feature: Subagents track (pill: N subagents / N working / N failed / N needs input; panel with Detach/Archive/Archive finished; "Back to parent") — Status: `store only (no UI)` — Source: `docs/research/01-app-features.md:52`; this client `Packages/PaseoCore/Sources/PaseoStore/ConversationSubagents.swift`, `ConversationExtras.swift:68`; docs/research/04-protocol-agents-permissions-settings.md:980
 - [ ] Feature: Tasks track (pill above composer: {{completed}}/{{total}} tasks) — Status: `done` (inline card, not the pill/panel) — Source: this client `…/Chat/ClaudeChatView.swift` (`ClaudeTodoCard` on `.todo` segment); `docs/research/01-app-features.md:53`
 - [ ] Feature: Tool calls — collapsible rows with Input/Output expansion and an Error state; error output in mono red — Status: `done` — Source: this client `…/Chat/ClaudeStepRow`, `ClaudeToolCallDetail.swift` (`.failed` branch); `docs/research/01-app-features.md:54`
@@ -426,7 +426,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: "Search" placeholder/action in sidebar — See Sidebar & navigation — Status: `missing` — Source: `docs/research/01-app-features.md:99`
 - [ ] Feature: Search history (History screen: "Search history") — Status: `missing` — Source: `docs/research/01-app-features.md:137,293-300`
 - [ ] Feature: Find in pane — See Desktop-only — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:57`
-- [ ] Feature: Slash-command search in the composer — See Composer — Status: `missing` — Source: `docs/research/01-app-features.md:89`
+- [ ] Feature: Slash-command search in the composer — See Composer — Status: `done` (the `/` menu filters as you type) — Source: `docs/research/01-app-features.md:89`; this client `…/Chat/ClaudeChatView.swift`
 
 ## Voice
 
@@ -488,9 +488,9 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 - [ ] Feature: `chat-fold` — process-group folding: counted header ("{n} thoughts, {n} tool calls"), digit roll (160 ms), fold "door" (200 ms), reasoning replay window (400 px cap), user-message clamp (320 px) — Status: `done` — Source: `…/features/chat-fold/` (`process-fold.ts`, `process-summary.ts`, `fold-glide.ts`, `reasoning-fold.ts`, `message-fold.ts`); this client `ClaudeWorkGroupCell`/`ClaudeStepRow` in `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: `chat-follow` — chat follow: keeps the tail in view as it streams, holds when the reader scrolls, and re-places the host's "back to end" button (12 px above the composer, centered) — Status: `done` (auto-follow only; no back-to-end button, no follow-hold distinction) — Source: `…/features/chat-follow/` (`chat-follow.ts`, `process-follow.ts`, `chat-follow.css`); this client `…/Chat/ClaudeChatView.swift:294-341`
 - [ ] Feature: `chat-reveal` — new arriving assistant text fades in per character via CSS `::highlight()` ranges (24-step, ~2.4 ms stagger, 120 ms) — Status: `missing` — Source: `…/features/chat-reveal/` (`reveal-engine.ts`, `reveal-paint.ts`, `reveal-params.ts`)
-- [ ] Feature: `chat-send` — message-bubble enter animation ("grow into its place" or "fly up from the composer", two reader choices) — Status: `missing` — Source: `…/features/chat-send/` (`send-flight.ts`, `send-grow.ts`, `send-morph.ts`)
+- [ ] Feature: `chat-send` — message-bubble enter animation ("grow into its place" or "fly up from the composer", two reader choices) — Status: `done` (grow-in-place variant) — Source: `…/features/chat-send/` (`send-flight.ts`, `send-grow.ts`, `send-morph.ts`); this client `…/Chat/ClaudeChatComponents.swift`
 - [ ] Feature: `chat-wait` — the waiting line: fixed state wording + model's own words (file/command/reasoning clause), 1 s wording lock, 250 ms tick, sweep/wash, loader dots (3 lanes, 10 s rotation), 10 s overtime badge, turn clock — Status: `done` — Source: `…/features/chat-wait/` (`wait-state.ts`, `chat-wait.ts`, `wait-loader.ts`); this client `…/Chat/ClaudeStatusLine.swift`, `…/Chat/ClaudeLoader.swift`, `…/Chat/ClaudeReasoningClause.swift`; measured `docs/research/08-dsh-live-observation.md:212-425`
-- [ ] Feature: `composer` — composer restyle (hero card on home / flat 14 px conversation bar; radius, focus halo, bottom gap preference, placeholder "Type / for commands", two-tier footer tray on the classic layout) — Status: `done` (our composer is restyled but drifts: 27 pt capsule, filled orange circle send, no drawn caret) — Source: `…/features/composer/` (`card.css`, `inline.css`, `composer.ts`); measured `docs/research/08-dsh-live-observation.md:427-507`; this client `…/Chat/ClaudeChatView.swift:352-452`
+- [ ] Feature: `composer` — composer restyle (hero card on home / flat 14 px conversation bar; radius, focus halo, bottom gap preference, placeholder "Type / for commands", two-tier footer tray on the classic layout) — Status: `done` (our composer is restyled but drifts: 27 pt capsule, filled orange circle send, no drawn caret; placeholder is "Type / for commands" when the agent reports commands) — Source: `…/features/composer/` (`card.css`, `inline.css`, `composer.ts`); measured `docs/research/08-dsh-live-observation.md:427-507`; this client `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: `context-stats` — context meter (pie or ring, ramped green→red) + session stats line (cost, total time) in the composer footer; billing table editor — Status: `missing` — Source: `…/features/context-stats/` (`meter-ring.ts`, `session-cost.ts`, `context-stats.ts`); we show no context usage anywhere
 - [ ] Feature: `conversation-width` — conversation column width factor (75 % / 50 % / 100 % of the window) — Status: `not applicable (single-column iPhone layout; no width handle to drag)` — Source: `…/features/conversation-width/` (`conversation-width.ts`)
 - [ ] Feature: `date-groups` — date section headers in the sidebar list (Today / Yesterday / weekday names / Earlier) — Status: `missing` — Source: `…/features/date-groups/` (`date-groups.ts`, `date-groups.copy.json`)
@@ -531,17 +531,18 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 85 | 20 % |
-| `missing` | 219 | 52 % |
+| `done` | 91 | 22 % |
+| `missing` | 215 | 51 % |
 | `desktop-only (flag)` | 46 | 11 % |
-| `store only (no UI)` | 33 | 8 % |
+| `store only (no UI)` | 31 | 7 % |
 | `in flight` (M3a 1 · M3b 5 · M3c 8 · M3d 5) | 19 | 5 % |
 | `not applicable` | 18 | 4 % |
 | **Total** | **420** | 100 % |
 
 What the numbers say: the client reaches parity almost exactly in the *conversation* area
 (turn layout, DSH live-observation turn UX, permissions, markdown, markdown code blocks) and in
-*connection/discovery/store plumbing* (T1–T13 all merged, fixtures-tested, never rendered), and is
+*connection/discovery/store plumbing* (T1–T13 all merged, fixtures-tested; a growing number are
+now wired into the UI — presence, slash commands, the mascot, rich content), and is
 almost entirely absent everywhere else. Roughly a fifth of the not-done rows already have their
 store or their ticket landed — those need screens, not backend work.
 

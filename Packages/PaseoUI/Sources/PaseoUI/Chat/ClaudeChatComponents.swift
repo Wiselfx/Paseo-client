@@ -125,10 +125,22 @@ struct ClaudeRollingNumber: View {
 }
 
 /// What you said: the ClaudeUI bubble, trailing, with a pending state while the daemon confirms it.
+/// A message sent this session grows into place (scale 0.96 + fade, DSH chat-send);
+/// Reduce Motion fades. History bubbles never animate.
 struct ClaudeUserBubble: View {
     var text: String
     var isPending: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Captured at insertion: true only for a message that was pending when it appeared
+    /// (i.e. sent this session). History rows are never pending, so they never animate.
+    @State private var entered: Bool
+
+    init(text: String, isPending: Bool) {
+        self.text = text
+        self.isPending = isPending
+        self._entered = State(initialValue: !isPending)
+    }
 
     var body: some View {
         HStack {
@@ -145,6 +157,28 @@ struct ClaudeUserBubble: View {
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isPending)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
+        .scaleEffect(shownScale, anchor: .bottomTrailing)
+        .opacity(shownOpacity)
+        .animation(
+            reduceMotion
+                ? .easeOut(duration: 0.2)
+                : .timingCurve(0.22, 1, 0.36, 1, duration: 0.2),
+            value: entered)
+        .onAppear { entered = true }
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc") {
+                UIPasteboard.general.string = text
+                Haptics.selection()
+            }
+        }
+    }
+
+    private var shownScale: CGFloat {
+        entered || reduceMotion ? 1 : 0.96
+    }
+
+    private var shownOpacity: Double {
+        entered ? 1 : 0
     }
 }
 
