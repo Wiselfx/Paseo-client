@@ -43,9 +43,7 @@ final class DictationController: NSObject {
         let speechAuthorized = await withCheckedContinuation { cont in
             SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0 == .authorized) }
         }
-        let recordAuthorized = await withCheckedContinuation { cont in
-            AVAudioSession.sharedInstance().requestRecordPermission { cont.resume(returning: $0) }
-        }
+        let recordAuthorized = await AVAudioApplication.requestRecordPermission()
         guard speechAuthorized, recordAuthorized else {
             isDenied = true
             return
@@ -72,7 +70,7 @@ final class DictationController: NSObject {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(
-                .playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetooth])
+                .playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             isDenied = true

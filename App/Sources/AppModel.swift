@@ -208,6 +208,7 @@ final class AppModel {
         "That pairing link doesn't look right."
     }
 
+    @discardableResult
     private func performConnect(
         endpoint: DaemonEndpoint, defaultLabel: String, existingSavedID: UUID?,
         relayOffer: ConnectionOffer? = nil, passwordToSave: String? = nil

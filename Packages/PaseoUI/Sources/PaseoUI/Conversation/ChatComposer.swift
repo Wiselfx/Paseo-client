@@ -141,27 +141,7 @@ extension ClaudeChatView {
                 Spacer(minLength: 0)
                 contextMeter
                 voiceModeButton
-                Button {
-                    if dictation.isListening {
-                        dictation.stop(keepingDraft: true)
-                    } else {
-                        Task { await dictation.toggle(currentDraft: store.draft) }
-                    }
-                } label: {
-                    Image(systemName: dictation.isListening ? "mic.fill" : "mic")
-                        .font(.system(size: 17, weight: .medium))
-                        .frame(width: 36, height: 36)
-                        .foregroundStyle(dictation.isListening ? .white : ClaudePalette.ink)
-                        .background(
-                            dictation.isListening ? ClaudePalette.orange : ClaudePalette.chip,
-                            in: .circle)
-                        .scaleEffect(
-                            dictation.isListening && !reduceMotion
-                                ? 1 + CGFloat(dictation.level) * 0.18 : 1)
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: dictation.level)
-                }
-                .accessibilityLabel(dictation.isListening ? "Stop dictation" : "Dictate")
-                .accessibilityIdentifier("composer.dictate")
+                dictateButton
                 if store.isRunning && trimmedDraft.isEmpty {
                     roundButton("stop.fill", label: "Stop response", color: ClaudePalette.ink, ink: ClaudePalette.background) {
                         Task { await store.cancel() }
@@ -198,8 +178,8 @@ extension ClaudeChatView {
             FullScreenComposer(draft: $store.draft, isRunning: store.isRunning) { send() }
         }
         .fileImporter(
-            isPresented: $showFileImporter, allowsMultipleSelection: true,
-            allowedContentTypes: [.item]
+            isPresented: $showFileImporter, allowedContentTypes: [.item],
+            allowsMultipleSelection: true
         ) { result in
             switch result {
             case .success(let urls): attachFileURLs(urls)
@@ -632,6 +612,34 @@ extension ClaudeChatView {
             try? await Task.sleep(for: .seconds(2.5))
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = nil }
         }
+    }
+}
+extension ClaudeChatView {
+    /// The dictation mic, split out of the composer row so the type checker sees one small
+    /// expression at a time.
+    var dictateButton: some View {
+        let listening = dictation.isListening
+        let ink: Color = listening ? .white : ClaudePalette.ink
+        let fill: Color = listening ? ClaudePalette.orange : ClaudePalette.chip
+        let scale: CGFloat = listening && !reduceMotion ? 1 + CGFloat(dictation.level) * 0.18 : 1
+        let pulse: Animation? = reduceMotion ? nil : .easeOut(duration: 0.12)
+        return Button {
+            if listening {
+                dictation.stop(keepingDraft: true)
+            } else {
+                Task { await dictation.toggle(currentDraft: store.draft) }
+            }
+        } label: {
+            Image(systemName: listening ? "mic.fill" : "mic")
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 36, height: 36)
+                .foregroundStyle(ink)
+                .background(fill, in: .circle)
+                .scaleEffect(scale)
+                .animation(pulse, value: dictation.level)
+        }
+        .accessibilityLabel(listening ? "Stop dictation" : "Dictate")
+        .accessibilityIdentifier("composer.dictate")
     }
 }
 #endif
