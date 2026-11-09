@@ -2,6 +2,19 @@
 import PaseoStore
 import SwiftUI
 
+/// One-shot signal from the shell into the composer to take keyboard focus. A Binding so the
+/// composer can reset it after consuming. Internal so the composer can see it.
+struct ComposerFocusKey: EnvironmentKey {
+    static let defaultValue: Binding<Bool> = .constant(false)
+}
+
+extension EnvironmentValues {
+    var composerFocusRequested: Binding<Bool> {
+        get { self[ComposerFocusKey.self] }
+        set { self[ComposerFocusKey.self] = newValue }
+    }
+}
+
 /// The app after connecting: a drawer of workspaces and their agents on the left, the selected
 /// agent's conversation in the middle, and the workspace panel sliding in from the right edge.
 /// Both edges share the `EdgeDrawer` physics; the main surface tracks the finger, settles by
@@ -17,6 +30,7 @@ public struct PaseoShellView: View {
     @State private var drawerProgress: CGFloat = 0
     @State private var isPanelOpen = false
     @State private var panelProgress: CGFloat = 0
+    @State private var composerFocusRequested = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let drawerFraction: CGFloat = 0.82
@@ -49,6 +63,7 @@ public struct PaseoShellView: View {
                 main
                     .frame(width: width, height: geometry.size.height)
                     .background(ClaudePalette.background.ignoresSafeArea())
+                    .environment(\.composerFocusRequested, $composerFocusRequested)
                     .clipShape(
                         .rect(cornerRadius: corner * drawerProgress, style: .continuous)
                     )
@@ -82,7 +97,8 @@ public struct PaseoShellView: View {
                         onNewAgent: { workspace in
                             openNewAgent(workspace: workspace)
                             settlePanel(open: false)
-                        }
+                        },
+                        onMentionInChat: mentionInChat
                     )
                     .frame(width: panelWidth)
                     .frame(maxHeight: .infinity, alignment: .top)
@@ -214,6 +230,28 @@ public struct PaseoShellView: View {
             panelProgress = open ? 1 : 0
         }
         if changed { Haptics.selection() }
+    }
+
+    // MARK: Mention in chat
+
+    /// Appends `@relative/path ` to the open conversation's draft (space-separated), closes the
+    /// panel and focuses the composer. Light haptic.
+    private func mentionInChat(_ relPath: String) {
+        guard let store = conversation else {
+            settlePanel(open: false)
+            return
+        }
+        let mention = "@\(relPath) "
+        if store.draft.isEmpty {
+            store.draft = mention
+        } else if store.draft.hasSuffix(" ") || store.draft.hasSuffix("\n") {
+            store.draft += mention
+        } else {
+            store.draft += " " + mention
+        }
+        settlePanel(open: false)
+        composerFocusRequested = true
+        Haptics.selection()
     }
 
     // MARK: Selection

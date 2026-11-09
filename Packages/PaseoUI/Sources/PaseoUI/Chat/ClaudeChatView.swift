@@ -27,6 +27,8 @@ public struct ClaudeChatView: View {
     @State private var sheet: ClaudeChatSheet?
     @State private var toast: String?
     @FocusState private var focused: Bool
+    /// One-shot "focus the composer" signal from the shell (e.g. after "Mention in chat").
+    @Environment(\.composerFocusRequested) private var composerFocusRequested
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -398,6 +400,11 @@ public struct ClaudeChatView: View {
         }
         .padding(.horizontal, focused ? 8 : 16)
         .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: focused)
+        .onChange(of: composerFocusRequested.wrappedValue) { _, requested in
+            guard requested else { return }
+            focused = true
+            composerFocusRequested.wrappedValue = false
+        }
     }
 
     private var trimmedDraft: String {
