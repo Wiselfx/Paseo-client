@@ -50,6 +50,7 @@ extension ConversationStore {
     /// Called once per `server_info` and when a conversation opens.
     internal func update(serverInfo info: ServerInfo?) {
         subagents.update(serverInfo: info)
+        backgroundWork.update(serverInfo: info)
     }
 
     /// Routes one unsolicited message; ignores types and parents that are not ours.

@@ -108,7 +108,9 @@ public struct ProviderSubagentUpdate: Decodable, Sendable {
 }
 
 /// Paged provider timeline. The list is the deliverable for T12; this type pins the wire shape so
-/// a timeline screen does not need to touch PaseoKit.
+/// the timeline screen does not need to touch PaseoKit. The daemon answers with projected rows
+/// (`rows`); the provider shape is narrower than the main timeline's `entries`: no `provider`,
+/// `turnId` or `collapsed`, and `seq` stands alone.
 public struct ProviderSubagentTimelineRequest: PaseoRequest {
     public static let type = "agent.provider_subagents.timeline.get.request"
     public static let responseType = "agent.provider_subagents.timeline.get.response"
@@ -132,21 +134,70 @@ public struct ProviderSubagentTimelineRequest: PaseoRequest {
         self.limit = limit
     }
 
-    /// Same page shape as the main timeline (`FetchAgentTimelineRequest.Response`), kept as its own
-    /// type because the daemon's provider page may evolve independently.
     public struct Response: Decodable, Sendable {
         public var requestId: String
         public var parentAgentId: String
         public var subagentId: String
         public var provider: String?
+        public var direction: String?
         public var epoch: String
-        public var reset: Bool?
-        public var gap: Bool?
-        public var entries: [TimelineEntry]
+        public var reset: Bool
+        public var staleCursor: Bool
+        public var gap: Bool
+        public var window: Window
         public var hasOlder: Bool?
         public var hasNewer: Bool?
         public var startCursor: TimelineCursor?
         public var endCursor: TimelineCursor?
+        public var rows: [Row]
         public var error: String?
+
+        public struct Row: Sendable, Hashable, Decodable {
+            public var item: TimelineItem
+            public var timestamp: String
+            public var seq: Int
+            public var seqStart: Int?
+            public var seqEnd: Int?
+            public var sourceSeqRanges: [SeqRange]?
+
+            public struct SeqRange: Sendable, Hashable, Decodable {
+                public var startSeq: Int
+                public var endSeq: Int
+            }
+        }
+
+        public struct Window: Sendable, Hashable, Decodable {
+            public var minSeq: Int
+            public var maxSeq: Int
+            public var nextSeq: Int
+        }
+
+        private enum K: String, CodingKey {
+            case requestId, parentAgentId, subagentId, provider, direction, epoch
+            case reset, staleCursor, gap, window
+            case hasOlder, hasNewer, startCursor, endCursor, rows, error
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: K.self)
+            requestId = try c.decodeIfPresent(String.self, forKey: .requestId) ?? ""
+            parentAgentId = try c.decodeIfPresent(String.self, forKey: .parentAgentId) ?? ""
+            subagentId = try c.decodeIfPresent(String.self, forKey: .subagentId) ?? ""
+            provider = try c.decodeIfPresent(String.self, forKey: .provider)
+            direction = try c.decodeIfPresent(String.self, forKey: .direction)
+            epoch = try c.decodeIfPresent(String.self, forKey: .epoch) ?? ""
+            reset = try c.decodeIfPresent(Bool.self, forKey: .reset) ?? false
+            staleCursor = try c.decodeIfPresent(Bool.self, forKey: .staleCursor) ?? false
+            gap = try c.decodeIfPresent(Bool.self, forKey: .gap) ?? false
+            window =
+                try c.decodeIfPresent(Window.self, forKey: .window)
+                ?? Window(minSeq: 0, maxSeq: 0, nextSeq: 0)
+            hasOlder = try c.decodeIfPresent(Bool.self, forKey: .hasOlder)
+            hasNewer = try c.decodeIfPresent(Bool.self, forKey: .hasNewer)
+            startCursor = try c.decodeIfPresent(TimelineCursor.self, forKey: .startCursor)
+            endCursor = try c.decodeIfPresent(TimelineCursor.self, forKey: .endCursor)
+            rows = try c.decodeIfPresent([Row].self, forKey: .rows) ?? []
+            error = try c.decodeIfPresent(String.self, forKey: .error)
+        }
     }
 }

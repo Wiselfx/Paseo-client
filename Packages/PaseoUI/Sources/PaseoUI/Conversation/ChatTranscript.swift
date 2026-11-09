@@ -28,7 +28,10 @@ extension ClaudeChatView {
         }
         // Opening the conversation is deliberate focus: refresh the track list now (list events
         // aren't replayed), exactly like a reconnect does.
-        .task { await store.subagents.load() }
+        .task {
+            await store.subagents.load()
+            await store.backgroundWork.load()
+        }
     }
 
     /// A quiet pill under the header while the agent has provider subagents. Nil when the
@@ -106,6 +109,12 @@ extension ClaudeChatView {
                                 }
                             }
                             .transition(.opacity)
+                        }
+                        if store.backgroundWork.hasRunningItems {
+                            BackgroundWorkRow(items: store.backgroundWork.items) {
+                                Haptics.selection()
+                                sheet = .backgroundWork
+                            }
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
@@ -203,6 +212,30 @@ extension ClaudeChatView {
     var rewindMenuScopes: [RewindScope] {
         guard session.isRewindSupportedByHost else { return [] }
         return store.rewindCapabilities.menu
+    }
+
+    /// The intercepted openURL action: paseo-file links open the workspace file viewer (absolute
+    /// paths made workspace-relative), everything else falls through to the host's action.
+    var fileLinkAction: OpenURLAction {
+        let hostOpenURL = openURL
+        return OpenURLAction { url in
+            if let path = FilePathLinks.path(from: url) {
+                openFileViewer(at: fileLinkDisplayPath(path))
+                return .handled
+            }
+            return hostOpenURL(url)
+        }
+    }
+
+    /// A paseo-file target as the viewer wants it: leading `@` stripped; absolute paths under the
+    /// agent's workspace become workspace-relative.
+    func fileLinkDisplayPath(_ raw: String) -> String {
+        let stripped = raw.hasPrefix("@") ? String(raw.dropFirst()) : raw
+        guard stripped.hasPrefix("/"),
+            let workspaceId = store.agent?.workspaceId,
+            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+        else { return stripped }
+        return WorkspaceFileFormat.relativePath(stripped, cwd: workspace.cwd)
     }
 
     /// Pins the pending send to the top of the viewport (M7d chat-anchor). Only while a row is

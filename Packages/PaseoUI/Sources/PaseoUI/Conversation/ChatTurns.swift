@@ -82,6 +82,15 @@ struct ClaudeTurnView: View {
         return false
     }
 
+    /// `@relative/path` tokens in your bubble, as tappable `paseo-file:` links (M7g).
+    var bubbleAttributed: (String) -> AttributedString {
+        { text in
+            FilePathLinks.attributed(
+                text, font: typography.sans(14), foreground: ClaudePalette.primaryInk,
+                linkColor: ClaudePalette.proseLink)
+        }
+    }
+
     var showShowLess: Bool {
         chatDisplayMode == .collapseTurns && turn.phase == .completed && !isLatestTurn
             && userExpandedTurn == true
@@ -103,14 +112,15 @@ struct ClaudeTurnView: View {
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
-                    onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil
+                    onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
+                    attributed: bubbleAttributed(message.text)
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ZStack(alignment: .bottom) {
-                    ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
+                    ClaudeProse(markdown: FilePathLinks.linkified(markdown: message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
                         .frame(maxHeight: 6 * 23, alignment: .top)
                         .clipped()
                     LinearGradient(
@@ -160,7 +170,8 @@ struct ClaudeTurnView: View {
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
-                    onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil
+                    onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
+                    attributed: bubbleAttributed(message.text)
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -179,7 +190,7 @@ struct ClaudeTurnView: View {
                 .transition(.opacity.combined(with: .offset(y: -2)))
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: isRunning)
+                ClaudeProse(markdown: FilePathLinks.linkified(markdown: message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: isRunning)
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
             }
@@ -289,7 +300,7 @@ struct ClaudeSegmentView: View {
                 highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: turnIsRunning)
+                ClaudeProse(markdown: FilePathLinks.linkified(markdown: message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: turnIsRunning)
                     .id("row:\(row.seqEnd)")
                     .background {
                         RoundedRectangle(cornerRadius: 14)

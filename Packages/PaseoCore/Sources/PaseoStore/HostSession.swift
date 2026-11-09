@@ -192,6 +192,7 @@ public final class HostSession {
         for store in stores {
             await store.catchUp()
             await store.reloadSubagents()
+            await store.reloadBackgroundWork()
         }
         workspaceDirectory.prepareForReconnect()
         await workspaceDirectory.reload()
@@ -223,6 +224,7 @@ public final class HostSession {
             hostSettings.handle(messageType: messageType, raw: raw)
             setupObservation.handle(messageType: messageType, raw: raw)
             for store in conversations.values { store.handleSubagentUpdate(messageType: messageType, raw: raw) }
+            for store in conversations.values { store.handleBackgroundWorkUpdate(messageType: messageType, raw: raw) }
             await handleUnhandled(messageType: messageType, raw: raw)
 
         case .binaryFrame(let data):
@@ -357,6 +359,7 @@ public final class ConversationStore: Identifiable {
     public let search: ConversationSearch
     /// Provider-managed subagents for this agent's track.
     public let subagents: ConversationSubagents
+    public let backgroundWork: BackgroundWorkStore
     /// File uploads for this conversation (`file.upload.request` + binary frames).
     public let uploads: ConversationUpload
 
@@ -371,6 +374,7 @@ public final class ConversationStore: Identifiable {
         self.client = nil
         self.search = ConversationSearch(agentId: agentId, client: nil)
         self.subagents = ConversationSubagents(agentId: agentId, client: nil)
+        self.backgroundWork = BackgroundWorkStore(agentId: agentId, client: nil)
         self.uploads = ConversationUpload(client: nil)
     }
 
@@ -379,6 +383,7 @@ public final class ConversationStore: Identifiable {
         self.client = client
         self.search = ConversationSearch(agentId: agentId, client: client)
         self.subagents = ConversationSubagents(agentId: agentId, client: client)
+        self.backgroundWork = BackgroundWorkStore(agentId: agentId, client: client)
         self.uploads = ConversationUpload(client: client)
     }
 

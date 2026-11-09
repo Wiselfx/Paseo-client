@@ -5,6 +5,7 @@ import SwiftUI
 enum ClaudeChatSheet: String, Identifiable {
     case controls
     case subagents
+    case backgroundWork
     var id: String { rawValue }
 }
 
