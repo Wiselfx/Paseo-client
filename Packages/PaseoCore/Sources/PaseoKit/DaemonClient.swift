@@ -7,19 +7,65 @@ import PaseoProtocol
 
 /// Where a daemon lives and how to prove who we are.
 public struct DaemonEndpoint: Sendable, Hashable {
-    /// e.g. `ws://192.168.1.20:6767/ws`.
+    /// e.g. `ws://192.168.1.20:6767/ws`, or the relay's `wss://…/ws?serverId=…&role=client&v=2`.
     public var url: URL
     public var credential: Credential?
+    /// Non-nil when `url` is the relay: the socket is wrapped in a Noise channel and nothing —
+    /// credentials included — is readable on the wire before that channel opens.
+    public var relay: RelayLink?
 
-    public init(url: URL, credential: Credential?) {
+    public init(url: URL, credential: Credential?, relay: RelayLink? = nil) {
         self.url = url
         self.credential = credential
+        self.relay = relay
     }
 
     /// `host` may be a LAN IP, a Tailscale name, or `localhost`. Path is always `/ws`.
     public init?(host: String, port: Int = 6767, useTLS: Bool = false, credential: Credential?) {
         guard let url = URL(string: "\(useTLS ? "wss" : "ws")://\(host):\(port)/ws") else { return nil }
         self.init(url: url, credential: credential)
+    }
+
+    /// Everything a relay socket needs that a direct socket does not.
+    ///
+    /// The daemon public key is the trust anchor: it authenticated the pairing offer and it
+    /// authenticates the Noise handshake, so it must travel with the endpoint, not with a global.
+    public struct RelayLink: Sendable, Hashable {
+        /// Stable daemon identity and relay session id, e.g. `srv_…`.
+        public var serverID: String
+        public var daemonPublicKeyB64: String
+        /// 32-byte X25519 key decoded from `daemonPublicKeyB64`.
+        public var daemonPublicKey: [UInt8]
+        /// Floor this connection must meet. Only `protected` exists, so this is a constant with
+        /// a name: the store may raise it, nothing can lower it.
+        public var minimumSecurityMode: ConnectionOffer.Security
+
+        public init(
+            serverID: String, daemonPublicKeyB64: String, daemonPublicKey: [UInt8],
+            minimumSecurityMode: ConnectionOffer.Security = .protected
+        ) {
+            self.serverID = serverID
+            self.daemonPublicKeyB64 = daemonPublicKeyB64
+            self.daemonPublicKey = daemonPublicKey
+            self.minimumSecurityMode = minimumSecurityMode
+        }
+
+        /// The relay link described by a validated pairing offer.
+        public init(offer: ConnectionOffer, minimumSecurityMode: ConnectionOffer.Security? = nil) {
+            self.init(
+                serverID: offer.serverID,
+                daemonPublicKeyB64: offer.daemonPublicKeyB64,
+                daemonPublicKey: offer.daemonPublicKey,
+                minimumSecurityMode: minimumSecurityMode ?? offer.minimumSecurityMode ?? .protected)
+        }
+    }
+
+    /// A relay endpoint for this offer. `url` is the relay WebSocket, so `credential` must be the
+    /// offer's daemon password — it rides inside the encrypted hello.
+    public init(offer: ConnectionOffer, credential: Credential?) throws {
+        self.init(
+            url: try offer.relayWebSocketURL(), credential: credential,
+            relay: RelayLink(offer: offer))
     }
 }
 
@@ -107,6 +153,16 @@ public struct InitiatedResponse<R: PaseoRequest>: Sendable {
     }
 }
 
+/// A transport that can say which endpoint security it actually established.
+///
+/// `DaemonConnection` uses this after `server_info` to refuse a relay session that was somehow not
+/// protected. A direct socket has nothing to report and does not conform.
+public protocol RelaySecurityReporting: Sendable {
+    /// `.protected` once the Noise channel is open; nil while handshaking, on a direct socket, or
+    /// after the channel closed.
+    var negotiatedRelaySecurity: ConnectionOffer.Security? { get }
+}
+
 /// A text/binary WebSocket. `URLSessionWebSocketTransport` is the real one.
 public protocol WebSocketTransport: Sendable {
     func send(text: String) async throws
@@ -130,4 +186,6 @@ public struct WebSocketClosed: Error, Sendable, Equatable {
     public init(code: Int, reason: String) { self.code = code; self.reason = reason }
 }
 
-public typealias WebSocketTransportFactory = @Sendable (URL) -> any WebSocketTransport
+/// Builds the socket for one endpoint. A relay endpoint needs the offer material, so the factory
+/// takes the whole endpoint rather than a bare URL.
+public typealias WebSocketTransportFactory = @Sendable (DaemonEndpoint) -> any WebSocketTransport

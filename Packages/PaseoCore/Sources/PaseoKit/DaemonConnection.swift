@@ -64,7 +64,7 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         clientId: String,
         appVersion: String?,
         configuration: Configuration = Configuration(),
-        transportFactory: @escaping WebSocketTransportFactory = { URLSessionWebSocketTransport(url: $0) }
+        transportFactory: @escaping WebSocketTransportFactory = DaemonConnection.defaultTransportFactory
     ) {
         self.endpoint = endpoint
         self.clientId = clientId
@@ -84,6 +84,57 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
 
         // Every state change, starting with the current state.
         stateContinuation.yield(.idle)
+    }
+
+    /// The default socket for an endpoint: a plain URLSession socket, or one wrapped in the
+    /// protected relay channel when the endpoint carries a relay link.
+    public static func defaultTransportFactory(_ endpoint: DaemonEndpoint) -> any WebSocketTransport {
+        let base = URLSessionWebSocketTransport(url: endpoint.url)
+        guard let relay = endpoint.relay else { return base }
+        do {
+            return try RelayWebSocketTransport(base: base, link: relay)
+        } catch {
+            // Only reachable from a hand-made endpoint with a bad key length: fail the session
+            // with a close code instead of a crash or a hang.
+            return ClosedTransport(
+                closed: WebSocketClosed(
+                    code: RelayCloseCode.protectedHandshakeFailed,
+                    reason: "invalid relay link"))
+        }
+    }
+
+    /// A relay session is admitted only on a protected channel.
+    ///
+    /// The transport negotiated the mode before `server_info` arrived, so this is the last point
+    /// where a downgrade can be caught: never admit credentials or events on a channel that only
+    /// looks encrypted. `relayProtectedSecurity` is the daemon's own statement that it supports
+    /// protected mode, so a session that is not protected against such a daemon was downgraded in
+    /// transit.
+    private func relaySecurityViolation(_ info: ServerInfo, transport: any WebSocketTransport)
+        -> ConnectionError?
+    {
+        guard let relay = endpoint.relay else { return nil }
+        let negotiated = (transport as? any RelaySecurityReporting)?.negotiatedRelaySecurity
+        guard negotiated != relay.minimumSecurityMode else { return nil }
+        let reason =
+            info.hasFeature("relayProtectedSecurity")
+            ? "daemon requires protected endpoint security but the relay channel is not protected"
+            : "relay channel is not protected"
+        return .closed(code: RelayCloseCode.protectedHandshakeFailed, reason: reason)
+    }
+
+    /// A close that retrying cannot fix: the daemon refused us, or endpoint security failed.
+    /// Everything else (a closed socket, a timeout, a relay flap) reconnects.
+    private static func isTerminal(_ error: ConnectionError) -> Bool {
+        switch error {
+        case .rejected:
+            return true
+        case .closed(let code, _):
+            return code == 4401 || code == RelayCloseCode.protectedHandshakeFailed
+                || code == RelayCloseCode.recordFailed
+        default:
+            return false
+        }
     }
 
     /// Opens the socket, sends `Hello`, and returns once `server_info` arrives.
@@ -286,7 +337,7 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
     /// Creates a transport, starts its receive loop, sends hello and waits for `server_info`.
     /// On success the transport is installed and the receive loop keeps running.
     private func performHandshake(generation: Int) async throws -> (ServerInfo, Int) {
-        let transport = transportFactory(endpoint.url)
+        let transport = transportFactory(endpoint)
         let hello = HelloWaiter()
 
         let transportID = mutex.withLock { core -> Int in
@@ -331,6 +382,12 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
 
         do {
             let info = try await hello.wait(timeout: configuration.helloTimeout)
+            if let violation = relaySecurityViolation(info, transport: transport) {
+                // Close with the code the failure deserves, and drop the socket so the caller
+                // cannot keep using a channel that was never admitted.
+                closeTransport(id: transportID, code: RelayCloseCode.protectedHandshakeFailed)
+                throw violation
+            }
             let stillCurrent = mutex.withLock { core -> Bool in
                 guard core.generation == generation, core.transportID == transportID,
                     core.transport != nil
@@ -616,8 +673,9 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
             if case .connected = core.state {
                 core.transport = nil
                 core.transportID += 1
-                // Auth rejection is terminal whether it happens during hello or later.
-                if case .closed(let code, _) = error, code == 4401 {
+                // Auth rejection and endpoint-security failures are terminal whether they happen
+                // during hello or later: retrying would only loop.
+                if Self.isTerminal(error) {
                     return .reject(Self.rejectionOr(error))
                 }
                 return .reconnect(error)
@@ -694,7 +752,7 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
                 return
             } catch {
                 let connectionError = error as? ConnectionError ?? .transport(String(describing: error))
-                if case .rejected = connectionError {
+                if Self.isTerminal(connectionError) {
                     mutex.withLock { core in core.reconnectTask = nil }
                     transition(generation: generation, to: .failed(connectionError))
                     return
