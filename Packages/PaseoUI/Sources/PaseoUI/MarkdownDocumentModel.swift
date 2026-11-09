@@ -13,6 +13,32 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
         self.source = source
         self.blocks = blocks
     }
+
+    /// The document for `source`, reusing the last parse of the same text (P3).
+    ///
+    /// Parsing is pure and deterministic but not free: an 8 k-char answer costs ~0.4 ms to parse
+    /// and turn into blocks. SwiftUI re-evaluates a view body far more often than its text
+    /// changes — any store change, a keystroke somewhere else, a streamed token elsewhere — and
+    /// every one of those used to re-parse every visible message. Main actor only, called from
+    /// view bodies, like `RichContentCache`.
+    @MainActor public static func cached(_ source: String) -> MarkdownDocumentModel {
+        MarkdownDocumentCache.document(for: source)
+    }
+}
+
+/// Small in-memory memo for the prose parse: same shape as `RichContentCache` (evict-all when the
+/// table fills). Keys share storage with the strings the views already hold.
+@MainActor
+enum MarkdownDocumentCache {
+    private static var table: [String: MarkdownDocumentModel] = [:]
+
+    static func document(for source: String) -> MarkdownDocumentModel {
+        if let cached = table[source] { return cached }
+        let document = MarkdownDocumentModel(source: source)
+        if table.count >= 64 { table.removeAll(keepingCapacity: true) }
+        table[source] = document
+        return document
+    }
 }
 public enum MarkdownUnsupportedKind: String, Equatable, Sendable { case html, math, footnote, other }
 public struct MarkdownImage: Equatable, Sendable {
