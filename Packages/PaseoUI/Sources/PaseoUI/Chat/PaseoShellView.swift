@@ -31,6 +31,7 @@ public struct PaseoShellView: View {
     @State private var isPanelOpen = false
     @State private var panelProgress: CGFloat = 0
     @State private var composerFocusRequested = false
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let drawerFraction: CGFloat = 0.82
@@ -136,7 +137,18 @@ public struct PaseoShellView: View {
             }
         }
         .onAppear {
+            session.hostSettings.startPresence(
+                focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
             if selectedAgentId == nil, let first = session.agents.first { select(first.id, closeDrawer: false) }
+        }
+        .onDisappear {
+            session.hostSettings.stopPresence()
+        }
+        .onChange(of: selectedAgentId) { _, id in
+            session.hostSettings.updateFocus(id)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            session.hostSettings.updateVisibility(phase == .active)
         }
         .onChange(of: session.agents) { _, agents in
             if let selectedAgentId {
