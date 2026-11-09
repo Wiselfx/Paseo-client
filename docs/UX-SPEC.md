@@ -79,9 +79,9 @@ They must feel like one object: same canvas color family, same corner radius, sa
   - This fixes the "transparent bottom corner": today the card is clipped to the safe-area frame while its background bleeds under the home indicator.
 - **No bezels (seen on device):** the shell currently stops at the safe area, so plain white bands sit above it (behind the status bar) and below it (behind the home indicator), and the drawer cards float inside them. The sidebar canvas, the conversation canvas and the panel canvas must each run under the status bar and the home indicator: no band of any other color, anywhere, at any drawer position.
 - **No bezels:** no outer padding, inset frame, border or card-inside-the-screen around any surface's content when it is at rest. At rest the conversation is edge to edge, exactly like a system app. The audit lists the inherited frames; remove them all.
-- **Shadow:** while displaced, a covering surface casts `shadow(color: .black.opacity(0.18), radius: 24, x: 0, y: 0)`, faded in with progress. No hairline borders.
-- **Dim:** the covered surface gets a scrim of `black.opacity(0.18 * progress)` in light and `0.35 * progress` in dark. Tapping the scrim closes.
-- **Canvas:** the sidebar uses `ClaudePalette.sidebarBackground`, which must be the same hue family as `background` (DSH: the sidebar is a hair darker in light, a hair lighter in dark). If the two read as different materials side by side, adjust `sidebarBackground` toward `background` until it reads as one material with a subtle step.
+- **Edge, not shadow** (matches the Claude iOS app; screenshots reviewed 2026-11-09): a displaced surface shows a 0.5 pt hairline along its rounded edge (`ink.opacity(0.10)`), faded in with progress. No drop shadow.
+- **Dim:** the covered surface gets a scrim of `black.opacity(0.25 * progress)` in light and `0.55 * progress` in dark. In Claude the pushed-aside chat is dimmed almost to the canvas. The scrim lives **inside** the surface's clip shape, so its corners match. Tapping the scrim closes.
+- **Canvas:** the sidebar canvas **equals** the conversation canvas (`background`), as in Claude. The hairline edge and the dim separate the two; no color step.
 
 ### 1.2 Left sidebar (reveal)
 
@@ -118,7 +118,7 @@ The two drawers share `EdgeDrawerDrag` and `settleAnimation`. While one is open,
 From top to bottom:
 
 1. The "Paseo" title row, with the display-options menu.
-2. A **"New session"** pill: `plus` symbol + "New session" (upstream fallback title `en.ts:292`; the user chose this wording). Full width or hugging the label, but never truncated.
+2. *(The pill lives in the footer; see 5.)* A **"New session"** pill: `plus` symbol + "New session" (upstream fallback title `en.ts:292`; the user chose this wording). Full width or hugging the label, but never truncated.
    - It opens a **new draft session in the current workspace** (§3): the workspace of the conversation on screen.
    - With no conversation on screen, it uses the most recently used workspace.
    - With no workspaces at all, the draft shows the hero with an "Add project" call to action instead of a composer.
@@ -126,7 +126,11 @@ From top to bottom:
 4. The projects and workspaces directory.
    - Each workspace row's `+` opens a draft session in that workspace.
    - There is **no** "Add project" row inside the projects list.
-5. The footer (settings and so on), with the usage section if enabled.
+5. The footer, as in Claude:
+   - the settings avatar circle leading;
+   - the **"New session"** pill trailing: an inverted capsule (`ink` fill, `background` text, `plus` + "New session"), sized to its label, never truncated;
+   - the host chip is removed from the footer;
+   - the usage section, if enabled, sits above the footer.
 
 **Removed from the sidebar:**
 
@@ -181,6 +185,8 @@ Delete the slider (`EffortLadder`) path and its fallback condition.
 
 - **History loads itself.** When the top of the transcript comes within ~1 screen of the viewport, older history is fetched automatically, and the scroll position stays anchored on what the user is reading (no jump). While loading, a small spinner sits at the top; there is no "Load earlier" button. Stop when `hasOlder` is false.
 - **Every message is shown in full.** No "Show more" or "Show less" collapse on agent or user messages. (Collapsed *tool-call groups* and the "collapse turns" display mode are separate features and stay.)
+- **The turn rail never covers text.** The right-side prompt rail (good feature, keep it) is currently solid and eats message text. It must be a thin, translucent strip in the trailing margin. The transcript's trailing padding reserves its width, so no message text ever sits under it. Expanded or hover-labels float over a translucent material, never an opaque block.
+- **Subagents are visible.** Running and finished subagents show as a pill in the chat, as upstream does. Port upstream's placement and wording, and cite it. Tapping the pill opens the subagents sheet. If the pill code exists but never shows, find out why (the store never fills `subagents`? a gate?) and fix it.
 - **Turn navigation knows every prompt:**
   - The "Jump to message" sheet lists every user prompt of the conversation. When opened while older history is unloaded, it loads the remaining history first: rows appear as they arrive, with a spinner row at the end until `hasOlder` is false.
   - Choosing a prompt scrolls to it.
