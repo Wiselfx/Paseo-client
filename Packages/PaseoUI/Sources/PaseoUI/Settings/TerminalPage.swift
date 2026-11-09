@@ -5,6 +5,8 @@ import SwiftUI
 struct TerminalPage: View {
     /// Shared with `Workspace/PaseoTerminalView.swift`. Default 2,000 lines.
     @AppStorage("paseo.terminal.scrollback") private var scrollback = 2_000
+    /// Shared with `Workspace/WorkspaceTerminalsView.swift`. Default `ask` (upstream).
+    @AppStorage(ServiceUrlBehavior.storageKey) private var serviceUrlBehavior = ServiceUrlBehavior.ask.rawValue
 
     private let typography = ClaudeTypography()
     private let options: [(label: String, value: Int)] = [
@@ -16,6 +18,10 @@ struct TerminalPage: View {
 
     private var selectedLabel: String {
         options.first { $0.value == scrollback }?.label ?? "2,000 lines"
+    }
+
+    private var currentBehavior: ServiceUrlBehavior {
+        ServiceUrlBehavior(rawValue: serviceUrlBehavior) ?? .ask
     }
 
     var body: some View {
@@ -56,6 +62,38 @@ struct TerminalPage: View {
                         }
                         .accessibilityLabel("Terminal scrollback, currently \(selectedLabel)")
                         .accessibilityIdentifier("settings.terminal.scrollback")
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    RowDivider()
+                    HStack(spacing: 12) {
+                        Text("Clicking a script's service URL")
+                            .font(.system(size: 17))
+                        Spacer(minLength: 8)
+                        Menu {
+                            ForEach(ServiceUrlBehavior.allCases, id: \.self) { option in
+                                Button {
+                                    Haptics.selection()
+                                    serviceUrlBehavior = option.rawValue
+                                } label: {
+                                    Label(
+                                        option.label,
+                                        systemImage: currentBehavior == option
+                                            ? "checkmark" : "circle")
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(currentBehavior.label)
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                            }
+                        }
+                        .accessibilityLabel("Clicking a script's service URL, currently \(currentBehavior.label)")
+                        .accessibilityIdentifier("settings.terminal.serviceUrls")
                     }
                     .padding(.horizontal, 16)
                     .frame(height: 52)

@@ -28,6 +28,9 @@ struct WorkspaceTerminalsView: View {
     @State private var lastViewed: [String: Double] = [:]
     @State private var linkedFile: TerminalLinkedFile?
     @State private var serviceURLSheet: URL?
+    /// The service URL waiting on the `ask` confirmation (Settings → Terminal).
+    @State private var pendingServiceURL: URL?
+    @AppStorage(ServiceUrlBehavior.storageKey) private var serviceUrlBehavior = ServiceUrlBehavior.ask.rawValue
     @State private var renameTarget: TerminalInfo?
     @State private var renameText = ""
     @State private var closeCandidate: TerminalInfo?
@@ -131,6 +134,24 @@ struct WorkspaceTerminalsView: View {
         } message: {
             Text("Any running process in this terminal will be stopped immediately.")
         }
+        .confirmationDialog(
+            "Open service URL",
+            isPresented: Binding(
+                get: { pendingServiceURL != nil },
+                set: { if !$0 { pendingServiceURL = nil } }),
+            titleVisibility: .visible) {
+            Button("In Paseo") {
+                if let url = pendingServiceURL { serviceURLSheet = url }
+                pendingServiceURL = nil
+            }
+            Button("External browser") {
+                if let url = pendingServiceURL { openURL(url) }
+                pendingServiceURL = nil
+            }
+            Button("Cancel", role: .cancel) { pendingServiceURL = nil }
+        } message: {
+            Text(pendingServiceURL.map { "Open \($0.absoluteString)?" } ?? "")
+        }
         .sheet(item: $linkedFile) { target in
             WorkspaceTerminalFileSheet(checkout: checkout, target: target)
                 .presentationDetents([.large])
@@ -141,6 +162,17 @@ struct WorkspaceTerminalsView: View {
             if let url = serviceURLSheet {
                 SafariView(url: url).ignoresSafeArea()
             }
+        }
+    }
+
+    /// Follows Settings → Terminal → Clicking a script's service URL: in-app
+    /// (SafariView), external (`openURL`), or ask (confirmationDialog above).
+    /// Wording is upstream's (`serviceUrl.title/message/inPaseo/externalBrowser`, en.ts:2019-2022).
+    private func openServiceURL(_ url: URL) {
+        switch ServiceUrlBehavior(rawValue: serviceUrlBehavior) ?? .ask {
+        case .inApp: serviceURLSheet = url
+        case .external: openURL(url)
+        case .ask: pendingServiceURL = url
         }
     }
 
@@ -569,7 +601,7 @@ struct WorkspaceTerminalsView: View {
             if let serviceURL {
                 Button {
                     Haptics.selection()
-                    serviceURLSheet = serviceURL
+                    openServiceURL(serviceURL)
                 } label: {
                     Image(systemName: "arrow.up.right.square")
                         .font(.system(size: 16, weight: .regular))
@@ -581,7 +613,7 @@ struct WorkspaceTerminalsView: View {
                 .accessibilityLabel("View service \(script.scriptName)")
                 .contextMenu {
                     Button("View service", systemImage: "arrow.up.right.square") {
-                        serviceURLSheet = serviceURL
+                        openServiceURL(serviceURL)
                     }
                     Button("Copy URL", systemImage: "doc.on.doc") {
                         UIPasteboard.general.string = serviceURL.absoluteString

@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import PaseoStore
+import PaseoUI
 import UserNotifications
 
 /// Posts local notifications for `AttentionCenter` intents and turns a notification tap back into
@@ -52,6 +53,29 @@ final class NotificationCoordinator {
                 return false
             }
         default:
+            return false
+        }
+    }
+
+    /// Posts the upstream test notification (Settings → Notifications → Test notification).
+    /// Unlike `deliver`, this never prompts: it returns false unless permission is already
+    /// granted, so the settings row can report the failure.
+    func sendTestNotification() async -> Bool {
+        guard isEnabled else { return false }
+        switch await authorizationStatus() {
+        case .authorized, .provisional, .ephemeral: break
+        default: return false
+        }
+        let content = UNMutableNotificationContent()
+        content.title = NotificationTestContent.title
+        content.body = NotificationTestContent.body
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "paseo.test-notification", content: content, trigger: nil)
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+            return true
+        } catch {
             return false
         }
     }
