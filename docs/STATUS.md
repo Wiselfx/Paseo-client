@@ -100,7 +100,13 @@ file into terminal, gh callout, side-by-side diff, M3i PR section now mounted, M
 (rewind-based), Fork from here (agent.fork_context + chat_history attachment), images in prose
 (PaseoCore 473/139/17 = 629 green; PARITY 272 done / 77 missing of 421). M4f Pure black +
 content/code size (font changes rebuild the tree via RootView `.id`: polish pass should move
-typography into the environment; terminal font size not yet scaled). M2.13 sidebar: Active first (running float up), Group by Project/Date (Today/Yesterday/Earlier, not collapsible), worktree-setup callout via `ProjectSetupProbe` (PaseoCore 481/139/17 = 637 green; PARITY 277 done / 72 missing of 421). Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+typography into the environment; terminal font size not yet scaled). M2.13 sidebar: Active first (running float up), Group by Project/Date (Today/Yesterday/Earlier, not collapsible), worktree-setup callout via `ProjectSetupProbe` (PaseoCore 481/139/17 = 637 green; PARITY 277 done / 72 missing of 421). M2.14 manual unread + DSH date sections (collapsible;
+Active/Archived switch dropped: the daemon hides archived workspaces and has no listing RPC), M3k diff
+review comments + Send feedback (persisted drafts, review attachment), M7i turn rail (while scrolling) +
+"Jump to message…", Faster↔Smarter effort ladder, hero workspace/profile seats, M4g welcome screen (no
+saved host), Help & support page, Always expand reasoning (General → Chat), R14 API audit
+(`Tools/api-audit/README.md`: run before merges; current findings are generic-parameter false
+positives). PaseoCore 637 green; PARITY 288 done / 60 missing of 422. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running: none. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
