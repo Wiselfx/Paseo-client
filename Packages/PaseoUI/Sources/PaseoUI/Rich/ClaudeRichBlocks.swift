@@ -150,7 +150,7 @@ struct RichMapCard: View {
 
     /// One static render of a 300×180 region around the point. Calm, and cached.
     private static func snapshot(lat: Double, lng: Double) async -> UIImage? {
-        let options = MKMapSnapshotOptions()
+        let options = MKMapSnapshotter.Options()
         options.region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: lat, longitude: lng),
             span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04))
