@@ -156,6 +156,7 @@ import Testing
         let closed = await Self.closedError { try await transport.receive() }
         #expect(closed?.code == 4002)
         #expect(closed?.reason == "protected handshake timed out")
+        try await Self.waitForClientClose(socket)
         #expect(socket.clientCloseCode == 4002)
     }
 
@@ -181,6 +182,7 @@ import Testing
 
         let closed = await Self.closedError { try await transport.receive() }
         #expect(closed?.code == 4002)
+        try await Self.waitForClientClose(socket)
         #expect(socket.clientCloseCode == 4002)
         #expect(transport.negotiatedRelaySecurity == nil)
     }
@@ -224,6 +226,7 @@ import Testing
 
         let closed = await Self.closedError { try await transport.receive() }
         #expect(closed?.code == 4003)
+        try await Self.waitForClientClose(socket)
         #expect(socket.clientCloseCode == 4003)
     }
 
@@ -330,6 +333,14 @@ import Testing
     }
 
     // MARK: Helpers
+
+    /// Awaits the base socket's close code. `finish` wakes `receive()` and then closes the base
+    /// socket from one task, but the woken reader runs on another: it can resume and read the code
+    /// before `base.close` has run. So an awaited close error does not imply the socket is closed
+    /// yet — the code has to be awaited, not read.
+    static func waitForClientClose(_ socket: FakeRelaySocket) async throws {
+        try await waitUntil { socket.clientCloseCode != nil }
+    }
 
     static func closedError<T>(_ operation: () async throws -> T) async -> WebSocketClosed? {
         (await error(operation)) as? WebSocketClosed
