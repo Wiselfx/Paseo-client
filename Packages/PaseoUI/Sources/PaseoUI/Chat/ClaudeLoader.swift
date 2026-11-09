@@ -36,7 +36,9 @@ struct ClaudeLoader: View {
             Color.clear
                 .frame(width: 18, height: 14)
                 .overlay {
-                    TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                    // No interval: the schedule follows the display (120 Hz on ProMotion), so
+                    // the dots are as smooth as the rest of the app (P3).
+                    TimelineView(.animation) { context in
                         Canvas { canvas, _ in
                             draw(canvas, time: max(0, context.date.timeIntervalSince(start)))
                         }

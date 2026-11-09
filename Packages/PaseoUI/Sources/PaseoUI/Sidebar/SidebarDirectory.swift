@@ -220,29 +220,49 @@ extension PaseoSidebar {
         return agents(in: workspace).contains { $0.status == .running }
     }
 
+    /// Workspaces per the sidebar sort, keys computed once each.
+    ///
+    /// `activityDate` walks the workspace's agents and parses up to five ISO-8601 timestamps; run
+    /// from inside a comparator that is thousands of parses per sidebar evaluation (a sort calls
+    /// the comparator O(n log n) times), and the sidebar evaluates on every store change (P3).
     func sortedWorkspaces(_ workspaces: [WorkspaceDescriptor]) -> [WorkspaceDescriptor] {
         let sorted: [WorkspaceDescriptor]
         switch sidebarSort {
         case .activity:
-            sorted = workspaces.sorted {
-                (activityDate(for: $0) ?? .distantPast) > (activityDate(for: $1) ?? .distantPast)
-            }
+            sorted = workspaces
+                .map { (workspace: $0, date: activityDate(for: $0)) }
+                .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+                .map { $0.workspace }
         case .created:
-            sorted = workspaces.sorted {
-                let l = createdDate($0) ?? .distantPast
-                let r = createdDate($1) ?? .distantPast
-                if l == r { return $0.id > $1.id }
-                return l > r
-            }
+            sorted = workspaces
+                .map { (workspace: $0, date: createdDate($0)) }
+                .sorted { left, right in
+                    let l = left.date ?? .distantPast
+                    let r = right.date ?? .distantPast
+                    if l == r { return left.workspace.id > right.workspace.id }
+                    return l > r
+                }
+                .map { $0.workspace }
         case .name:
-            sorted = workspaces.sorted {
-                workspaceTitle($0).localizedCaseInsensitiveCompare(workspaceTitle($1))
-                    == .orderedAscending
-            }
+            sorted = workspaces
+                .map { (workspace: $0, title: workspaceTitle($0)) }
+                .sorted {
+                    $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                }
+                .map { $0.workspace }
         }
         // Active first: running workspaces float to the head, stable otherwise.
         guard activeFirst else { return sorted }
-        return sorted.filter(isRunningWorkspace) + sorted.filter { !isRunningWorkspace($0) }
+        var running: [WorkspaceDescriptor] = []
+        var rest: [WorkspaceDescriptor] = []
+        for workspace in sorted {
+            if isRunningWorkspace(workspace) {
+                running.append(workspace)
+            } else {
+                rest.append(workspace)
+            }
+        }
+        return running + rest
     }
 
     func createdDate(_ workspace: WorkspaceDescriptor) -> Date? {
@@ -350,27 +370,33 @@ extension PaseoSidebar {
     /// Workspaces within a project per the sidebar sort; projects ordered by their newest
     /// workspace (max of the sidebar sort key), name-sorted in "Name" mode. Pinned workspaces
     /// live in their own section and are excluded here, as are hidden rows.
+    ///
+    /// The group's sort date is computed once per group, not once per comparison (P3 — see
+    /// `sortedWorkspaces`).
     func sortedGroups(_ groups: [WorkspaceGroup]) -> [WorkspaceGroup] {
         groups
             .map { group in
-                WorkspaceGroup(
-                    project: group.project,
-                    workspaces: sortedWorkspaces(
-                        group.workspaces.filter {
-                            !$0.isPinned && isVisible($0) && matchesLabelFilter($0)
-                        }))
+                let workspaces = sortedWorkspaces(
+                    group.workspaces.filter {
+                        !$0.isPinned && isVisible($0) && matchesLabelFilter($0)
+                    })
+                return (
+                    group: WorkspaceGroup(project: group.project, workspaces: workspaces),
+                    date: workspaces.compactMap(groupSortDate).max()
+                )
             }
             .sorted { left, right in
                 if sidebarSort == .name {
-                    return left.project.projectDisplayName.localizedCaseInsensitiveCompare(
-                        right.project.projectDisplayName) == .orderedAscending
+                    return left.group.project.projectDisplayName.localizedCaseInsensitiveCompare(
+                        right.group.project.projectDisplayName) == .orderedAscending
                 }
-                let leftDate = left.workspaces.compactMap(groupSortDate).max() ?? .distantPast
-                let rightDate = right.workspaces.compactMap(groupSortDate).max() ?? .distantPast
+                let leftDate = left.date ?? .distantPast
+                let rightDate = right.date ?? .distantPast
                 if leftDate != rightDate { return leftDate > rightDate }
-                return left.project.projectDisplayName.localizedCaseInsensitiveCompare(
-                    right.project.projectDisplayName) == .orderedAscending
+                return left.group.project.projectDisplayName.localizedCaseInsensitiveCompare(
+                    right.group.project.projectDisplayName) == .orderedAscending
             }
+            .map { $0.group }
     }
 
     func groupSortDate(_ workspace: WorkspaceDescriptor) -> Date? {

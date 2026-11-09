@@ -87,7 +87,7 @@ struct ClaudeRevealProse: View {
                     let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         ClaudeMarkdownView(
-                            document: MarkdownDocumentModel(source: trimmed), theme: theme,
+                            document: .cached(trimmed), theme: theme,
                             imageContent: imageContent, onAction: onAction)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .mask(sweepMask(active: ref.isTailMarkdown))

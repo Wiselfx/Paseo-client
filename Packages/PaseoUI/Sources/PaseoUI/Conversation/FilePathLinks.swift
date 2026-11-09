@@ -84,6 +84,23 @@ enum FilePathLinks {
         return output
     }
 
+    /// `linkified` memoized by source, for prose rendering (P3).
+    ///
+    /// Linkifying is pure: four regex passes over the whole answer, ~0.7 ms per 8 k-char message,
+    /// and SwiftUI asks for it on every body evaluation — not only when the text changed. The
+    /// table is small and evicts wholesale, like `RichContentCache`, so streamed text (a new
+    /// string per token) only ever costs the parse it must cost anyway.
+    @MainActor static func linkifiedForProse(_ markdown: String) -> String {
+        if let cached = linkifiedCache[markdown] { return cached }
+        let result = linkified(markdown: markdown)
+        if linkifiedCache.count >= 64 { linkifiedCache.removeAll(keepingCapacity: true) }
+        linkifiedCache[markdown] = result
+        return result
+    }
+
+    /// Main-actor only, reached through `linkifiedForProse`.
+    @MainActor private static var linkifiedCache: [String: String] = [:]
+
     /// Fenced code blocks, inline code spans and authored links — path candidates never linkify
     /// inside them.
     private static func protectedRanges(of text: String) -> [NSRange] {

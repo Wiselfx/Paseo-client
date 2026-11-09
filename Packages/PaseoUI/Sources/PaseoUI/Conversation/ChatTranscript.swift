@@ -143,11 +143,11 @@ extension ClaudeChatView {
                             turnView(turn, index: index)
                             .id(turn.id)
                             .onAppear {
-                                lastTrackedTurn = turn.id
-                                visibleTurnIds.insert(turn.id)
+                                scrollTrack.lastTrackedTurn = turn.id
+                                scrollTrack.visibleTurnIds.insert(turn.id)
                                 reportReadingPosition()
                             }
-                            .onDisappear { visibleTurnIds.remove(turn.id) }
+                            .onDisappear { scrollTrack.visibleTurnIds.remove(turn.id) }
                         }
                         if !store.pendingPermissions.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -669,7 +669,7 @@ extension ClaudeChatView {
     /// lazy stack has mounted. Turns appear as they approach the viewport, so the earliest mounted
     /// turn is the one the reader is inside or just below.
     func reportReadingPosition() {
-        var seq = store.turns.first(where: { visibleTurnIds.contains($0.id) })?.firstRowSeq
+        var seq = store.turns.first(where: { scrollTrack.visibleTurnIds.contains($0.id) })?.firstRowSeq
         if seq == nil, isFollowing { seq = outlineItems.last?.seq }
         store.promptOutline.reportReadingPosition(anchorSeq: seq)
     }
@@ -720,6 +720,15 @@ extension ClaudeChatView {
         .accessibilityLabel(text)
     }
 }
+/// Scroll bookkeeping for the transcript: which turns the lazy stack has mounted, and the last
+/// one it mounted. Nothing observes these values, so they must not be `@State` — a `@State` write
+/// invalidates its whole view, and these change every time a turn enters or leaves the viewport
+/// while the reader scrolls (P3).
+final class TranscriptScrollTrack {
+    var visibleTurnIds: Set<String> = []
+    var lastTrackedTurn: String?
+}
+
 /// The timeline position of a turn's first row, for the outline's reading-position report. A turn
 /// without a leading user message (rewinds, streamed tails) starts at its first segment row.
 private extension Turn {
