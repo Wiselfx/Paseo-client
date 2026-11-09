@@ -1,6 +1,8 @@
 // swift-tools-version: 6.2
-// PaseoCore: everything below the UI. Foundation-only, so it builds and tests on Linux.
+// PaseoCore: everything below the UI. Builds and tests on Linux.
 // Layering (enforced by target dependencies): PaseoProtocol <- PaseoKit <- PaseoStore.
+// PaseoKit may use swift-crypto (the CryptoKit API, Apple's own Linux implementation) for relay
+// end-to-end encryption; nothing else may add a dependency.
 import PackageDescription
 
 let package = Package(
@@ -11,9 +13,15 @@ let package = Package(
         .library(name: "PaseoKit", targets: ["PaseoKit"]),
         .library(name: "PaseoStore", targets: ["PaseoStore"]),
     ],
+    dependencies: [
+        // CryptoKit's API, so the same relay crypto code builds on iOS and runs under test here.
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+    ],
     targets: [
         .target(name: "PaseoProtocol"),
-        .target(name: "PaseoKit", dependencies: ["PaseoProtocol"]),
+        .target(
+            name: "PaseoKit",
+            dependencies: ["PaseoProtocol", .product(name: "Crypto", package: "swift-crypto")]),
         .target(name: "PaseoStore", dependencies: ["PaseoKit", "PaseoProtocol"]),
         // Live smoke test against a running daemon: `swift run paseo-probe --help`.
         .executableTarget(name: "paseo-probe", dependencies: ["PaseoStore", "PaseoKit", "PaseoProtocol"]),
