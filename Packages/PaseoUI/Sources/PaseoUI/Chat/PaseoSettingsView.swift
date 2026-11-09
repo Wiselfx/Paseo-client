@@ -23,6 +23,7 @@ struct PaseoSettingsView: View {
     /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
     @State private var page: Page?
+    @State private var providerSheetID: String?
     @State private var confirmDisconnect = false
     @State private var confirmRemoveProject: WorkspaceProjectDescriptor?
     @State private var appendPromptDraft: String?
@@ -91,6 +92,13 @@ struct PaseoSettingsView: View {
         .presentationDetents([.large])
         .presentationCornerRadius(40)
         .presentationDragIndicator(.hidden)
+        .sheet(isPresented: Binding(
+            get: { providerSheetID != nil },
+            set: { if !$0 { providerSheetID = nil } })) {
+                if let providerSheetID {
+                    ProviderDetailSheet(session: session, providerID: providerSheetID)
+                }
+            }
         .confirmationDialog(
             "Disconnect from this host?",
             isPresented: $confirmDisconnect,
@@ -598,11 +606,6 @@ struct PaseoSettingsView: View {
                         .frame(minHeight: 52)
                     }
                 }
-                if session.hostSettings.supportsProfiles {
-                    RowGroup {
-                        valueRow("Agent profiles", value: "\(session.hostSettings.profiles.count)")
-                    }
-                }
                 sectionLabel("Restart recovery")
                 RowGroup {
                     configToggleRow(
@@ -633,6 +636,7 @@ struct PaseoSettingsView: View {
                             get: { $0.idleRuntimeCleanup ?? false },
                             set: { $0.idleRuntimeCleanup = $1 }))
                 }
+                AgentProfilesSection(session: session)
                 if let error = session.hostSettings.error {
                     Text(error)
                         .font(.system(size: 13))
@@ -1153,16 +1157,28 @@ struct PaseoSettingsView: View {
         let countLine = "\(modelCount) \(modelCount == 1 ? "model" : "models")"
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 12) {
-                PaseoStatusDot(kind: dotKind(provider))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(provider.label ?? provider.provider)
-                        .font(.system(size: 17))
-                        .lineLimit(1)
-                    Text(providerDetailLine(provider, countLine: countLine))
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
-                        .lineLimit(1)
+                Button {
+                    Haptics.selection()
+                    providerSheetID = provider.provider
+                } label: {
+                    HStack(spacing: 12) {
+                        PaseoStatusDot(kind: dotKind(provider))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(provider.label ?? provider.provider)
+                                .font(.system(size: 17))
+                                .lineLimit(1)
+                            Text(providerDetailLine(provider, countLine: countLine))
+                                .font(.system(size: 13))
+                                .foregroundStyle(ClaudePalette.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .contentShape(.rect)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    "\(provider.label ?? provider.provider), \(providerDetailLine(provider, countLine: countLine)), opens provider settings")
+                .accessibilityIdentifier("settings.providers.open.\(provider.provider)")
                 Spacer(minLength: 8)
                 if session.hostSettings.config != nil {
                     Toggle(
