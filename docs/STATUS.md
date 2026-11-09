@@ -53,25 +53,30 @@ Tickets: `docs/tickets/`. Worktrees: `/home/paseo/.paseo/worktrees/0264elgj/<bra
    build once produced a fake failure.
 4. After merging, `swift test` must be fully green.
 
-## In flight (2026-11-09, late morning; user away from the Mac)
+## In flight (2026-11-09, ~07:30 UTC; user away from the Mac)
 
 Merged on `foundation` and pushed, NOT yet built in Xcode by the user: M3a–e (right-edge
 workspace panel: Agents/Files/Changes/Terminal via SwiftTerm, mention-in-chat, live file
 updates), M4a settings, M4b schedules, M5a crab (+ Settings "Show mascot"), M5b rich content,
+M8a (slash menu, presence, copy, bubble grow-in), M7 (title menu, find bar, History, bottom on
+agent switch), M2.7 (add project/clone, full new-workspace, diff stats, Pinned section),
 R9 `docs/PARITY.md` (the roadmap). Last user-built commit: dbad49b (M2.6b + underline fix).
 When the user is back: pull, Reset Package Caches (SwiftTerm is new), build, paste errors.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
-- M7 `m7-search-history` on worker 0778f3b0: agent menu from the title, in-conversation search,
-  History screen, scroll-to-bottom on agent switch. Owns the chat header + transcript.
 - T14 `t14-file-upload` on worker 918fee9a: binary upload frames (backend, live-probed).
-- M8a `m8a-composer` on worker 04d2d898: slash command menu, presence heartbeat, per-message copy,
-  bubble enter animation. Owns the composer section.
-- M2.7 `m27-projects` on worker 79dd09d6: add project + GitHub clone, full new-workspace flow,
-  diff stats + pinned section in sidebar rows.
-- Idle: worker ffaacc65 (did M3d terminal, M5b rich).
-Next candidates: composer attachments UI after T14 (M6), notifications/push research (DeepSeek),
-chat-follow button + fade band (after M7), sidebar Archive with undo.
+- T15 `t15-git-files-ops` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: pull/merge/PR/commits
+  list, fs entry ops, text write (backend).
+- M8b `m8b-queue-drafts` on worker 04d2d898: queue (long-press send), saved drafts, full-screen
+  composer. Owns the composer section.
+- M7b `m7b-follow-perms` on worker 0778f3b0: chat-follow button + fade band, question/plan
+  permission cards, resolved state. Owns the transcript section.
+- M2.8 `m28-pin-rename` on worker 79dd09d6: pin/unpin, project rename, base branch, archive
+  with undo (store + sidebar).
+Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
+commands cache never invalidated; GitHub search has no star count.
+Next candidates: composer attachments UI after T14 (M6), panel git toolbar + file context menu
+after T15, notifications/push research (DeepSeek after 10:00 UTC).
 Roadmap order: see PARITY.md suggested milestones, renumbered below.
 
 UX decisions so far: left drawer = navigation (projects → workspaces), right panel = inside the
