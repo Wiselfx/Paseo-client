@@ -166,7 +166,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: In-flight turn shows an elapsed clock + loader — Status: `done` — Source: this client `…/Chat/ClaudeStatusLine.swift` (turn clock); `docs/research/01-app-features.md:45`
 - [ ] Feature: Fork chat from here ("Fork in a new tab" / "Fork in a new workspace", hidden on provider-subagent panes) — Status: `missing` — Source: `docs/research/01-app-features.md:44`
 - [ ] Feature: Rewind to this message (conversation / files / both, with can't-undo warning) — Status: `missing` — Source: `docs/research/01-app-features.md:58`; docs/research/04-protocol-agents-permissions-settings.md:468
-- [ ] Feature: Queue message (client-side queue until the turn ends; queued rows: Edit / Send now) — Status: `missing` (sending while running steers instead) — Source: `docs/research/01-app-features.md:46`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:406-434` (`activeTurnBehavior: "steer"`)
+- [ ] Feature: Queue message (client-side queue until the turn ends; queued rows: Edit / Send now) — Status: `done` (per-agent `MessageQueue` in PaseoStore, turn-end edge sends one message; long-press the send button to queue (medium haptic); quiet stack above the composer, max 3 + "+N more"; lost on relaunch by design) — Source: `docs/research/01-app-features.md:46`; this client `Packages/PaseoCore/Sources/PaseoStore/MessageQueue.swift`, `…/Chat/ComposerQueue.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Send and interrupt (follow-up admitted by interrupting the turn) — Status: `missing` — Source: `docs/research/01-app-features.md:47`
 - [ ] Feature: Interrupt the running turn (square stop button / Escape) — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.stop`, `store.cancel()`); `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:434-453`
 - [ ] Feature: Slash commands (`/exit`, `/clear` + provider commands and skills in the composer `/` menu) — Status: `done` (menu above the composer card: name in Mono, argument hint, description, skill sparkle, filter as you type, max ~6 rows with scroll; spinner row while loading; hidden when the agent has none; placeholder "Type / for commands" then) — Source: `docs/research/01-app-features.md:62-63`; this client `…/Chat/ClaudeChatView.swift` (`slashMenu`); `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:128-160`
@@ -190,10 +190,10 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Text input with placeholder ("Message the agent…") — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift:358-380`; `docs/research/01-app-features.md:74`
 - [ ] Feature: Send button (Enter / tap), disabled while empty — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.send`); `docs/research/01-app-features.md:75`
 - [ ] Feature: Send and steer when the agent is running (auto behavior) — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (send while running steers; label "Send and steer"); `docs/research/01-app-features.md:47,75`
-- [ ] Feature: Long-press to queue / queue lane with Edit and Send now — Status: `missing` — Source: `docs/research/01-app-features.md:46,75,88-89`
+- [ ] Feature: Long-press to queue / queue lane with Edit and Send now — Status: `done` — Source: `docs/research/01-app-features.md:46,75,88-89`; this client `Packages/PaseoCore/Sources/PaseoStore/MessageQueue.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Interrupt (stop) control — See Conversation & turns — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.stop`, `store.cancel()`); `docs/research/01-app-features.md:48`
 - [ ] Feature: Keyboard behavior setting (Enter vs ⌘/Ctrl+Enter; Default send: Interrupt/Steer/Queue) — Status: `missing` — Source: `docs/research/01-app-features.md:75,272`
-- [ ] Feature: Fullscreen input expansion — Status: `missing` — Source: `docs/research/01-app-features.md:77`
+- [ ] Feature: Fullscreen input expansion — Status: `done` (expand control at the card's top-right when the draft runs ~5 lines; full-height editor, Sans 17, Done/Send; same draft binding) — Source: `docs/research/01-app-features.md:77`; this client `…/Chat/FullScreenComposer.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Attachment tray (pills above the input) — Status: `missing` — Source: `docs/research/01-app-features.md:78`
 - [ ] Feature: Add attachment menu (image / file upload / issue-or-PR; paste; drag-and-drop; large pasted text becomes a file) — Status: `missing` — Source: `docs/research/01-app-features.md:79-83`; docs/research/04-protocol-agents-permissions-settings.md:918
 - [ ] Feature: Send message with attachments (image inline base64; file upload via `file.upload.request`) — Status: `store only (no UI)` (binary upload itself needs a PaseoKit binary-send that does not exist yet — T12 gap) — Source: this client `Packages/PaseoCore/Sources/PaseoStore/ConversationExtras.swift:14-68`; `docs/STATUS.md:29`; docs/research/04-protocol-agents-permissions-settings.md:957
@@ -205,7 +205,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Fast mode toggle in composer/command center — Status: `missing` — Source: `docs/research/01-app-features.md:325`
 - [ ] Feature: Dictation mic button — Status: `missing` (the mic button exists but only focuses the field — it is not dictation) — Source: this client `…/Chat/ClaudeChatView.swift` (`roundButton("mic"…)`), `docs/research/01-app-features.md:86`
 - [ ] Feature: Voice mode button — See Voice — Status: `missing` — Source: `docs/research/01-app-features.md:349`
-- [ ] Feature: Drafts (persisted, restorable; forked into new agent) — Status: `missing` (in-memory `draft` per `ConversationStore`; lost on relaunch) — Source: `docs/research/01-app-features.md:87`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:338`
+- [ ] Feature: Drafts (persisted, restorable; forked into new agent) — Status: `done` (persisted per agent in UserDefaults `paseo.draft.<id>`, ~500 ms debounce, cleared on send, restored on open; not forked into new agents) — Source: `docs/research/01-app-features.md:87`; this client `…/Chat/SavedDraftStore.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: @-files and /commands autocomplete popovers — Status: `missing` — Source: `docs/research/01-app-features.md:89`
 - [ ] Feature: Composer visual parity — DSH conversation bar (14 px radius bar, hairline, shadow, flat toolbar; not the 18 px hero card) — Status: `missing` (ours is a 27 pt capsule, filled circle send, no drawn caret) — Source: `docs/research/08-dsh-live-observation.md:427-507`; this client `…/Chat/ClaudeChatView.swift:352-452`
 - [ ] Feature: Caret animation (2 px accent caret, 80 ms glide) — See Conversation & turns / DSH turn UX — Status: `missing` — Source: `docs/research/08-dsh-live-observation.md:468-507`
@@ -531,8 +531,8 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 91 | 22 % |
-| `missing` | 215 | 51 % |
+| `done` | 95 | 23 % |
+| `missing` | 211 | 50 % |
 | `desktop-only (flag)` | 46 | 11 % |
 | `store only (no UI)` | 31 | 7 % |
 | `in flight` (M3a 1 · M3b 5 · M3c 8 · M3d 5) | 19 | 5 % |
