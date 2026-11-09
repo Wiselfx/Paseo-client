@@ -56,7 +56,7 @@ struct PaseoSidebar: View {
         .sheet(item: $sheet) { selection in
             switch selection {
             case .settings:
-                ClaudeSidebarSettingsSheet(session: session, onDisconnect: onDisconnect)
+                PaseoSettingsView(session: session, onDisconnect: onDisconnect)
             case .comingSoon(let title):
                 ClaudeSidebarComingSoonSheet(title: title)
             case .newWorkspace:
@@ -607,154 +607,6 @@ private struct ClaudeSidebarComingSoonSheet: View {
     }
 }
 
-/// Appearance and the optional name the home greeting uses. The rest of Settings is still to come.
-private struct ClaudeSidebarSettingsSheet: View {
-    let session: HostSession
-    let onDisconnect: () -> Void
-    @Environment(\.dismiss) private var dismiss
-    @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
-    @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
-    @State private var confirmDisconnect = false
-    private let typography = ClaudeTypography()
-
-    var body: some View {
-        VStack(spacing: 18) {
-            SheetHeader(title: "Settings", close: { dismiss() })
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    sectionTitle("Appearance")
-                    RowGroup {
-                        HStack {
-                            Text("Theme")
-                                .font(typography.sans(17))
-                            Spacer(minLength: 8)
-                            Picker("Theme", selection: $appearance) {
-                                ForEach(ClaudeAppearance.allCases, id: \.self) { choice in
-                                    Text(choice.rawValue).tag(choice.rawValue)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .font(typography.sans(16))
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 52)
-                    }
-                    sectionTitle("Your name")
-                    RowGroup {
-                        HStack {
-                            Text("Name")
-                                .font(typography.sans(17))
-                            Spacer(minLength: 8)
-                            TextField("Your name", text: $name)
-                                .font(typography.sans(17))
-                                .multilineTextAlignment(.trailing)
-                                .textInputAutocapitalization(.words)
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 52)
-                    }
-                    Text("Used in the greeting on the home screen.")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.captionInk)
-                    Text("Scheduled and Workspaces settings are coming soon.")
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .padding(.top, 8)
-                    hostSection
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
-            }
-        }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
-        .confirmationDialog(
-            "Disconnect from this host?",
-            isPresented: $confirmDisconnect,
-            titleVisibility: .visible
-        ) {
-            Button("Disconnect", role: .destructive) {
-                onDisconnect()
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The connection to the daemon will be closed. Your settings are kept.")
-        }
-    }
-
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(typography.sans(13, weight: .medium))
-            .foregroundStyle(ClaudePalette.secondaryInk)
-            .padding(.horizontal, 4)
-            .padding(.top, 8)
-    }
-
-    /// The host this app is talking to: server id and a connection dot, plus a destructive
-    /// Disconnect.
-    @ViewBuilder private var hostSection: some View {
-        sectionTitle("Host")
-        RowGroup {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Connection")
-                        .font(typography.sans(17))
-                    Text(session.serverInfo?.hostname ?? "Paseo daemon")
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                HStack(spacing: 6) {
-                    PaseoStatusDot(kind: connectionKind(session.connection))
-                    Text(connectionLabel(session.connection))
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 60)
-            RowDivider()
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Server ID")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                Text(session.serverInfo?.serverId ?? "Not connected")
-                    .font(typography.mono(13, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.ink)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-        }
-        RowGroup {
-            Button {
-                confirmDisconnect = true
-            } label: {
-                HStack {
-                    Text("Disconnect")
-                        .font(typography.sans(17))
-                        .foregroundStyle(ClaudePalette.failureInk)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 52)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Disconnect")
-        }
-    }
-}
-
 /// The minimal new-workspace sheet in ClaudeUI's sheet chrome: pick a project (defaulting to the
 /// selected workspace's project), an optional name, and create a worktree off the project's current
 /// branch.
@@ -921,26 +773,6 @@ private struct ClaudeNewWorkspaceSheet: View {
         slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-."))
         if slug.isEmpty { return nil }
         return String(slug.prefix(40))
-    }
-}
-
-/// Connection state as a status dot and a short label, shared by the Settings sheet's Host section.
-private func connectionKind(_ state: ConnectionState) -> PaseoStatusDot.Kind {
-    switch state {
-    case .connected: .done
-    case .reconnecting, .connecting: .running
-    case .failed: .failed
-    case .idle: .idle
-    }
-}
-
-private func connectionLabel(_ state: ConnectionState) -> String {
-    switch state {
-    case .connected: "Connected"
-    case .connecting: "Connecting…"
-    case .reconnecting(let attempt, _): "Reconnecting (attempt \(attempt))"
-    case .failed: "Disconnected"
-    case .idle: "Not connected"
     }
 }
 
