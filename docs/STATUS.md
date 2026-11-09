@@ -69,7 +69,10 @@ archive undo (confirmation kept when the host lacks archiveUndo), M4c host setti
 file ops, M2.9 sidebar badges/display options/hide, M8c provider features (Features page, Fast chip,
 Settings default send steer/queue/interrupt), M3g terminal key bar, tab unread/rename/close, script
 restart/view service, local links, 2k scrollback, M3h file sort/share/Markdown+image preview,
-diff options (hunk-level whitespace hide, wrap, collapse) and jump-to-file (PaseoCore 354/126/17 = 497 green; one-off
+diff options (hunk-level whitespace hide, wrap, collapse) and jump-to-file, M8d @-file mention
+popover (scratch WorkspaceFiles walk) + on-device dictation (Info.plist mic/speech keys), R10 split:
+`Sidebar/` and `Schedules/` folders; restored a missing `sectionHeader` the Pinned section called
+(swiftc -parse can't catch missing symbols: Xcode will) (PaseoCore 355/126/17; PaseoCore 354/126/17 = 497 green; one-off
 DaemonConnectionTests flake â†’ T16). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
@@ -77,8 +80,6 @@ Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01â€
 - M7d `m7d-anchor-reveal` on worker 0778f3b0: chat-anchor, reveal, rewind (transcript).
 - T16 `t16-flake-usage` on worker 918fee9a: connection-test flake, context/usage store.
 - M3i `m3i-pr-pane` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: PR checks/timeline, base branch picker.
-- M8d `m8d-mentions-dictation` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: @-file popover, dictation.
-- R10 `r10-split` on worker 79dd09d6: split PaseoSidebar + ClaudeSchedulesView into files (pure move).
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
 Next candidates: split ClaudeChatView (2.1k lines) once M7d lands; notifications/push research (DeepSeek after 10:00 UTC).
