@@ -75,7 +75,7 @@ popover (scratch WorkspaceFiles walk) + on-device dictation (Info.plist mic/spee
 (swiftc -parse can't catch missing symbols: Xcode will) T16 flake fixed (test-side race) + context/usage store
 (`contextUsage`, `session.hostUsage`; no UI yet) M3i PR pane (checks, review/comment timeline
 from hand-written fixtures, Add to chat) + base-branch picker M8e context ring + sheet in the
-composer, opt-in sidebar usage row + reports sheet M7d chat anchor on send, per-chunk prose reveal,
+composer, opt-in sidebar usage row + reports sheet, M7d chat anchor on send, per-chunk prose reveal,
 Rewind to here (opencode: `both` only; the sandbox agent's tail was truncated at seq 36 by a rewind)
 (PaseoCore 385/133/17 = 535 green). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
