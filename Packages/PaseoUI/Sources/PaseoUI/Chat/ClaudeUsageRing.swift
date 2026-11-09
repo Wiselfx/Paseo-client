@@ -21,7 +21,7 @@ struct ClaudeMeterRing: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(ClaudePalette.tertiaryInk, lineWidth: lineWidth)
+                .stroke(ClaudePalette.tertiaryInk.opacity(0.35), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: CGFloat(clamped / 100))
                 .stroke(
@@ -48,7 +48,7 @@ struct ClaudeUsageBar: View {
 
     var body: some View {
         Capsule()
-            .fill(ClaudePalette.tertiaryInk)
+            .fill(ClaudePalette.tertiaryInk.opacity(0.35))
             .frame(width: width, height: 3)
             .overlay(alignment: .leading) {
                 Capsule()
