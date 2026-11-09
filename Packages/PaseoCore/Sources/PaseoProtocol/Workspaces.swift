@@ -526,6 +526,17 @@ public struct WorkspaceTitleSetRequest: PaseoRequest {
         self.title = title
     }
 
+    private enum CodingKeys: String, CodingKey { case requestId, workspaceId, title }
+
+    // `title: null` must be present on the wire to clear the override (the schema field is
+    // nullable but required); a synthesized encoder would omit the key and the daemon rejects it.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(requestId, forKey: .requestId)
+        try c.encode(workspaceId, forKey: .workspaceId)
+        try c.encode(title, forKey: .title)
+    }
+
     public struct Response: Decodable, Sendable {
         public var requestId: String
         public var workspaceId: String
