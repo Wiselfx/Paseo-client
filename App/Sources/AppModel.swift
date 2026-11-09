@@ -289,6 +289,10 @@ final class AppModel {
         Task { await connectToSaved(id) }
     }
 
+    /// The saved-host id this session is connected to (nil before the first successful
+    /// connect). M20's deep links use it to decide whether a link can route immediately.
+    var connectedHostID: UUID? { currentHostID }
+
     // MARK: Saved hosts
 
     func forgetSavedHost(_ id: UUID) {

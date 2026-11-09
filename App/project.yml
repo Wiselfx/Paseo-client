@@ -42,6 +42,12 @@ targets:
         NSMicrophoneUsageDescription: Paseo uses the microphone to dictate into the composer.
         # Upstream wording (en.ts pairing.scan.cameraPermissionBody).
         NSCameraUsageDescription: Allow camera access to scan the pairing QR code from your daemon.
+        # M20: `paseo://` deep links (agent / workspace / open-project routes). Pairing links
+        # carry their offer in a fragment and never require a custom scheme, but upstream also
+        # accepts `paseo://...#offer=`.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.wiselfx.paseoclient
+            CFBundleURLSchemes: [paseo]
         # The daemon is reached by IP or Tailscale name over plain ws:// on a private network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

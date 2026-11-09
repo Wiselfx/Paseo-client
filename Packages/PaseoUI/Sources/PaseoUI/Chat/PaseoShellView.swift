@@ -25,6 +25,9 @@ public struct PaseoShellView: View {
     /// A notification tap waiting to be routed. The app owns the value; the shell consumes it
     /// once the conversation selection exists (including after a cold launch).
     @Binding private var notificationTarget: AttentionTarget?
+    /// A `paseo://` navigation link waiting to be routed (M20). Same one-shot contract as
+    /// `notificationTarget`: `RootView` hands it over, the shell routes it and clears it.
+    @Binding private var deepLinkTarget: DeepLink?
 
     @State private var selectedAgentId: String?
     @State private var conversation: ConversationStore?
@@ -35,6 +38,8 @@ public struct PaseoShellView: View {
     @State private var panelProgress: CGFloat = 0
     /// A terminal to open the panel on, from a notification tap; cleared when the panel closes.
     @State private var panelTerminalId: String?
+    /// Set by a deep link's `open-project` route; the sidebar presents its Add project sheet.
+    @State private var addProjectRequested = false
     @State private var composerFocusRequested = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -44,11 +49,13 @@ public struct PaseoShellView: View {
 
     public init(
         session: HostSession, onDisconnect: @escaping () -> Void,
-        notificationTarget: Binding<AttentionTarget?> = .constant(nil)
+        notificationTarget: Binding<AttentionTarget?> = .constant(nil),
+        deepLinkTarget: Binding<DeepLink?> = .constant(nil)
     ) {
         self.session = session
         self.onDisconnect = onDisconnect
         _notificationTarget = notificationTarget
+        _deepLinkTarget = deepLinkTarget
         ClaudeFontResources.register()
     }
 
@@ -66,7 +73,8 @@ public struct PaseoShellView: View {
                     onSelectAgent: { select($0) },
                     onNewAgent: { openNewAgent(workspace: $0) },
                     onDisconnect: onDisconnect,
-                    onTogglePanel: { settlePanel(open: !isPanelOpen) }
+                    onTogglePanel: { settlePanel(open: !isPanelOpen) },
+                    addProjectRequest: $addProjectRequested
                 )
                 .frame(width: drawerWidth)
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -153,6 +161,7 @@ public struct PaseoShellView: View {
             session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
             if selectedAgentId == nil, let first = session.agents.first { select(first.id, closeDrawer: false) }
             handleNotificationTarget()
+            handleDeepLinkTarget()
         }
         .onDisappear {
             session.hostSettings.stopPresence()
@@ -168,6 +177,9 @@ public struct PaseoShellView: View {
         }
         .onChange(of: notificationTarget) { _, _ in
             handleNotificationTarget()
+        }
+        .onChange(of: deepLinkTarget) { _, _ in
+            handleDeepLinkTarget()
         }
         .onChange(of: session.agents) { _, agents in
             if let selectedAgentId {
@@ -360,6 +372,47 @@ public struct PaseoShellView: View {
             panelTerminalId = target.terminalId
             select(agent.id)
             settlePanel(open: true)
+        }
+    }
+
+    /// Routes one `paseo://` navigation link through the same selection path the sidebar uses.
+    /// Agent links select the agent (its conversation loads the snapshot, so a stale list entry
+    /// is not required). Workspace links pick the workspace's newest agent; a terminal intent
+    /// also opens the workspace panel on that terminal, exactly like a terminal notification tap.
+    /// `open-project` opens the sidebar's Add project sheet; host root keeps the current agent.
+    private func handleDeepLinkTarget() {
+        guard let link = deepLinkTarget else { return }
+        deepLinkTarget = nil
+
+        switch link {
+        case .agent(_, let agentId):
+            settleDrawer(open: false)
+            select(agentId)
+        case .workspace(_, let workspaceId, let open):
+            settleDrawer(open: false)
+            if case .agent(let agentId) = open {
+                select(agentId)
+                return
+            }
+            guard let agent = session.agents.first(where: { $0.workspaceId == workspaceId }) else {
+                // No agent to show yet: the workspace still exists in the sidebar.
+                settleDrawer(open: true)
+                return
+            }
+            select(agent.id, closeDrawer: false)
+            if case .terminal(let terminalId) = open {
+                panelTerminalId = terminalId
+                settlePanel(open: true)
+            }
+        case .host:
+            settleDrawer(open: false)
+            if selectedAgentId == nil, let first = session.agents.first { select(first.id) }
+        case .openProject:
+            settleDrawer(open: true)
+            addProjectRequested = true
+        case .offer, .unsupported:
+            // Offers go through RootView's pairing sheet; unsupported routes get a message there.
+            break
         }
     }
 
