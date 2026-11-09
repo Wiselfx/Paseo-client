@@ -176,7 +176,8 @@ public struct ClaudeChatView: View {
                     composerHeight = height
                 }
         }
-        .background(ClaudePalette.background.ignoresSafeArea())
+        // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so the
+        // corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
         // File links in prose and in your bubbles (`paseo-file://…`) open the file viewer;

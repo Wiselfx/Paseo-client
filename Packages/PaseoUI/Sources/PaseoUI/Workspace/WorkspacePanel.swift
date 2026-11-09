@@ -114,7 +114,7 @@ struct WorkspacePanel: View {
             ClaudeDivider()
             dismissableContent
         }
-        .background(ClaudePalette.background)
+        // Canvas comes from the shell's rounded, full-bleed card (UX-SPEC §1.1).
         .environment(\.mentionInChat, onMentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
         .onChange(of: initialTerminalId) { _, terminalId in
