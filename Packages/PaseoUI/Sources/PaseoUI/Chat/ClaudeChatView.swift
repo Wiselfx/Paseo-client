@@ -40,6 +40,12 @@ public struct ClaudeChatView: View {
     /// The last turn row that appeared; the find restore anchors to it.
     @State private var lastTrackedTurn: String?
     @FocusState private var findFocused: Bool
+    // Chat-follow (M7b §1).
+    @State private var isFollowing = true
+    @State private var composerHeight: CGFloat = 0
+    /// One quiet line per permission answer made this session; the store drops resolved
+    /// requests without remembering the answer, so the client keeps the record.
+    @State private var permissionResolvedLines: [AnsweredPermission] = []
     // Header title menu (M7 §1).
     @State private var renamingAgent = false
     @State private var renameText = ""
@@ -90,13 +96,21 @@ public struct ClaudeChatView: View {
             }
             content
             composer
+                .onGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.size.height
+                } action: { height in
+                    composerHeight = height
+                }
         }
         .background(ClaudePalette.background.ignoresSafeArea())
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
+        .overlay(alignment: .bottom) { backToEnd }
         .sheet(item: $sheet) { _ in
             ClaudeAgentControlsSheet(session: session, store: store)
         }
+        .animation(.easeInOut(duration: 0.15), value: isFollowing)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: findOpen)
         .overlay(alignment: .top) {
             if let toast {
                 Text(toast)
@@ -507,12 +521,24 @@ public struct ClaudeChatView: View {
                         if !store.pendingPermissions.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 ForEach(store.pendingPermissions) { request in
-                                    ClaudePermissionCard(request: request, store: store)
+                                    ClaudePermissionCard(
+                                        request: request, store: store,
+                                        onAnswered: { answered in
+                                            permissionResolvedLines.append(answered)
+                                        })
                                 }
                             }
                             .animation(
                                 reduceMotion ? nil : .easeOut(duration: 0.22),
                                 value: store.pendingPermissions.count)
+                        }
+                        if !permissionResolvedLines.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(permissionResolvedLines) { item in
+                                    resolvedPermissionLine(item.line)
+                                }
+                            }
+                            .transition(.opacity)
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
@@ -520,13 +546,21 @@ public struct ClaudeChatView: View {
                     .padding(.vertical, 20)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .overlay(alignment: .bottom) { transcriptFade }
                 // Follows the tail as it streams; loading older pages at the top does not jump.
-                .onChange(of: store.turns.last) { _, _ in scrollToBottom(proxy) }
+                .onChange(of: store.turns.last) { _, _ in
+                    guard !findOpen, isFollowing else { return }
+                    scrollToBottom(proxy)
+                }
                 .onChange(of: store.pendingPermissions) { _, _ in
+                    guard !findOpen, isFollowing else { return }
                     withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { scrollToBottom(proxy) }
                 }
                 .onChange(of: focused) { _, isFocused in
-                    if isFocused { scrollToBottom(proxy) }
+                    if isFocused {
+                        isFollowing = true
+                        scrollToBottom(proxy)
+                    }
                 }
                 // Switching the open agent lands the transcript at the bottom, without animation —
                 // unless a find session is active; a session belongs to its agent, so it closes.
@@ -535,10 +569,12 @@ public struct ClaudeChatView: View {
                         closeFind()
                         return
                     }
+                    isFollowing = true
                     scrollToBottom(proxy, animated: false)
                 }
                 .onAppear {
                     scrollProxy = proxy
+                    isFollowing = true
                     if !findOpen { scrollToBottom(proxy, animated: false) }
                 }
                 .onChange(of: findOpen) { _, isOpen in
@@ -547,6 +583,18 @@ public struct ClaudeChatView: View {
                 .onChange(of: findQuery) { _, query in
                     findIndex = 0
                     scheduleSearch(query)
+                }
+                .onScrollGeometryChange(for: ScrollFollowMetrics.self) { geometry in
+                    ScrollFollowMetrics(
+                        distanceFromBottom: geometry.contentSize.height - geometry.contentOffset.y
+                            - geometry.bounds.height,
+                        viewportHeight: geometry.bounds.height)
+                } action: { _, metrics in
+                    if metrics.distanceFromBottom <= 16 {
+                        if !isFollowing { isFollowing = true }
+                    } else if metrics.distanceFromBottom > metrics.viewportHeight / 3 {
+                        if isFollowing { isFollowing = false }
+                    }
                 }
                 .environment(\.claudeProcessCap, min(400, geometry.size.height * 0.5))
             }
@@ -561,6 +609,70 @@ public struct ClaudeChatView: View {
         } else {
             proxy.scrollTo("bottom", anchor: .bottom)
         }
+    }
+
+    private struct ScrollFollowMetrics: Equatable {
+        var distanceFromBottom: CGFloat
+        var viewportHeight: CGFloat
+    }
+
+    /// The 40 pt fade band: the transcript melts into the canvas just above the composer.
+    private var transcriptFade: some View {
+        LinearGradient(
+            stops: [
+                .init(color: ClaudePalette.background.opacity(0), location: 0),
+                .init(color: ClaudePalette.background, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 40)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// "Back to the end": visible only while the reader has scrolled up more than a screen-third.
+    @ViewBuilder private var backToEnd: some View {
+        if !findOpen && !isFollowing {
+            Button {
+                Haptics.selection()
+                isFollowing = true
+                if let scrollProxy {
+                    if reduceMotion {
+                        scrollProxy.scrollTo("bottom", anchor: .bottom)
+                    } else {
+                        withAnimation(.easeOut(duration: 0.3)) { scrollProxy.scrollTo("bottom", anchor: .bottom) }
+                    }
+                }
+            } label: {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .frame(width: 34, height: 34)
+                    .background(ClaudePalette.panel, in: .circle)
+                    .overlay {
+                        Circle().strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, composerHeight + 12)
+            .transition(.opacity)
+            .accessibilityIdentifier("transcript.backToEnd")
+            .accessibilityLabel("Back to the end")
+        }
+    }
+
+    private func resolvedPermissionLine(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 11))
+            Text(text)
+                .font(typography.sans(12))
+        }
+        .foregroundStyle(ClaudePalette.tertiaryInk)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel(text)
     }
 
     private var olderHistoryRow: some View {
