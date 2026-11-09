@@ -16,8 +16,8 @@ struct PaseoSettingsView: View {
     @Environment(\.hostSwitch) private var hostSwitch
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
-    /// Shared with the sidebar usage footer row; hidden by default.
-    @AppStorage("paseo.usage.showInSidebar") private var showUsageInSidebar = false
+    /// Shared with the terminal view (Settings → Terminal).
+    @AppStorage("paseo.terminal.scrollback") private var terminalScrollback = 2_000
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
     @AppStorage(PaseoSettingsKeys.haptics) private var haptics = true
     @AppStorage(PaseoSettingsKeys.mascot) private var mascot = true
@@ -50,6 +50,9 @@ struct PaseoSettingsView: View {
         case projects
         case providers
         case about
+        case sidebar
+        case terminal
+        case diagnostics
 
         var id: String { rawValue }
 
@@ -65,6 +68,9 @@ struct PaseoSettingsView: View {
             case .projects: "Projects"
             case .providers: "Providers"
             case .about: "About"
+            case .sidebar: "Sidebar"
+            case .terminal: "Terminal"
+            case .diagnostics: "Diagnostics"
             }
         }
 
@@ -80,6 +86,9 @@ struct PaseoSettingsView: View {
             case .projects: "folder"
             case .providers: "cpu"
             case .about: "info.circle"
+            case .sidebar: "sidebar.left"
+            case .terminal: "terminal"
+            case .diagnostics: "stethoscope"
             }
         }
     }
@@ -195,6 +204,10 @@ struct PaseoSettingsView: View {
                 sectionLabel("App")
                 RowGroup {
                     settingsRow(.general, symbol: Page.general.symbol, value: appearance)
+                    rowDivider
+                    settingsRow(.sidebar, symbol: Page.sidebar.symbol)
+                    rowDivider
+                    settingsRow(.terminal, symbol: Page.terminal.symbol, value: scrollbackSummary)
                 }
                 sectionLabel("Host")
                 RowGroup {
@@ -227,6 +240,8 @@ struct PaseoSettingsView: View {
                 sectionLabel("About")
                 RowGroup {
                     settingsRow(.about, symbol: Page.about.symbol, value: versionLine)
+                    rowDivider
+                    settingsRow(.diagnostics, symbol: Page.diagnostics.symbol)
                 }
             }
             .padding(.horizontal, 16)
@@ -250,6 +265,9 @@ struct PaseoSettingsView: View {
         case .projects: projectsPage
         case .providers: providersPage
         case .about: aboutPage
+        case .sidebar: SidebarPage()
+        case .terminal: TerminalPage()
+        case .diagnostics: DiagnosticsPage(session: session)
         }
     }
 
@@ -406,21 +424,6 @@ struct PaseoSettingsView: View {
                     .frame(height: 52)
                 }
                 Text("Applies when you tap send while a turn is running. Long-press on send does the opposite between Steer and Queue.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
-                    .padding(.leading, 16)
-                sectionLabel("Usage")
-                RowGroup {
-                    Toggle(isOn: $showUsageInSidebar) {
-                        Label("Show usage in sidebar", systemImage: "chart.bar")
-                            .font(.system(size: 17))
-                    }
-                    .tint(.blue)
-                    .padding(.horizontal, 16)
-                    .frame(height: 52)
-                    .accessibilityIdentifier("settings.showUsageInSidebar")
-                }
-                Text("One line per account the host reports usage for, with its pinned-window meters. Hidden by default.")
                     .font(.system(size: 13))
                     .foregroundStyle(ClaudePalette.secondary)
                     .padding(.leading, 16)
@@ -1319,6 +1322,12 @@ struct PaseoSettingsView: View {
                         .foregroundStyle(ClaudePalette.secondary)
                 }
                 .padding(.top, 8)
+                sectionLabel("This host")
+                RowGroup {
+                    valueRow("Host", value: session.serverInfo?.hostname ?? "Not connected")
+                    rowDivider
+                    valueRow("Daemon version", value: session.serverInfo?.version ?? "Unknown")
+                }
                 sectionLabel("Links")
                 RowGroup {
                     linkRow(
@@ -1427,6 +1436,15 @@ struct PaseoSettingsView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 51)
+    }
+
+    private var scrollbackSummary: String {
+        switch terminalScrollback {
+        case 1_000: "1k lines"
+        case 5_000: "5k lines"
+        case 10_000: "10k lines"
+        default: "2k lines"
+        }
     }
 
     private var hostsSummary: String {

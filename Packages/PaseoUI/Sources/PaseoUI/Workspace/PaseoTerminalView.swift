@@ -49,7 +49,9 @@ struct PaseoTerminalView: UIViewRepresentable {
             ?? UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         let view = TerminalView(frame: .zero, font: font)
         view.terminalDelegate = context.coordinator
-        view.changeScrollback(2000)
+        let scrollback = PaseoTerminalScrollback.current()
+        view.changeScrollback(scrollback)
+        context.coordinator.appliedScrollback = scrollback
         // ClaudePalette's #141413 in dark mode; used in light mode too so the terminal always
         // reads as a terminal.
         view.nativeForegroundColor = UIColor(red: 0.949, green: 0.937, blue: 0.914, alpha: 1)
@@ -73,10 +75,25 @@ struct PaseoTerminalView: UIViewRepresentable {
     }
 }
 
+/// The user's scrollback preference (Settings → Terminal): how many lines SwiftTerm keeps.
+/// `UserDefaults` has no typed integer present when never set — `integer(forKey:)` returns 0,
+/// which maps to the 2,000-line default.
+enum PaseoTerminalScrollback {
+    static let storageKey = "paseo.terminal.scrollback"
+    static let defaultValue = 2_000
+
+    static func current(_ defaults: UserDefaults = .standard) -> Int {
+        let value = defaults.integer(forKey: storageKey)
+        return value > 0 ? value : defaultValue
+    }
+}
+
 @MainActor
 final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     weak var store: TerminalsStore?
     weak var view: TerminalView?
+    /// The scrollback the view was last configured with — live re-application on change.
+    var appliedScrollback = PaseoTerminalScrollback.defaultValue
 
     private var terminalId: String?
     private var lastSize: TerminalSize?
@@ -106,6 +123,11 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         self.onExit = onExit
         self.onAttach = onAttach
         self.onCancelUpload = onCancelUpload
+        let target = PaseoTerminalScrollback.current()
+        if target != appliedScrollback {
+            appliedScrollback = target
+            view?.changeScrollback(target)
+        }
         applyToKeyBar()
     }
 

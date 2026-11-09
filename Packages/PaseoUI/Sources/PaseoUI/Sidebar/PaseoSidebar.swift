@@ -42,6 +42,10 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.labelFilter") var labelFilter = ""
     /// Shared with the Settings → General toggle, which owns this row. Hidden by default.
     @AppStorage("paseo.usage.showInSidebar") var showUsageInSidebar = false
+    /// Shared with Settings → Sidebar; default shown.
+    @AppStorage("paseo.sidebar.showHistory") var showHistory = true
+    /// Shared with Settings → Sidebar; default shown.
+    @AppStorage("paseo.sidebar.showSchedules") var showSchedules = true
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.hostSwitch) var hostSwitch
 
@@ -291,8 +295,12 @@ struct PaseoSidebar: View {
 
     private var navigation: some View {
         VStack(spacing: 0) {
-            navigationRow("Scheduled", symbol: "clock") { sheet = .schedules }
-            navigationRow("History", symbol: "clock.arrow.2.circlepath") { sheet = .history }
+            if showSchedules {
+                navigationRow("Scheduled", symbol: "clock") { sheet = .schedules }
+            }
+            if showHistory {
+                navigationRow("History", symbol: "clock.arrow.2.circlepath") { sheet = .history }
+            }
             navigationRow("Search", symbol: "magnifyingglass") { sheet = .search }
         }
         .padding(.top, 4)
