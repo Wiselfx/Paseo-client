@@ -316,7 +316,8 @@ public enum DeepLink: Sendable, Equatable {
 public struct DeepLinkHost: Identifiable, Sendable, Equatable {
     public let id: UUID
     public let label: String
-    /// Relay hosts carry the daemon identity; direct hosts saved before R18 may not.
+    /// The daemon identity: relay `serverID`, or the `directServerID` a direct host learned
+    /// on its first connect (M20b). Nil only for a saved host that has never connected.
     public let serverID: String?
     /// The saved endpoint, shown when there is no server id.
     public let url: String
@@ -339,9 +340,12 @@ public struct DeepLinkHost: Identifiable, Sendable, Equatable {
         self.isLocal = isLocal
     }
 
+    /// `liveServerID` remains a last-resort override for a host connected before this build
+    /// persisted the id; M20b learns and stores it, so the app no longer needs to pass one.
     public init(saved: SavedHost, isCurrent: Bool, liveServerID: String? = nil) {
         self.init(
-            id: saved.id, label: saved.label, serverID: saved.serverID ?? liveServerID,
+            id: saved.id, label: saved.label,
+            serverID: saved.serverID ?? saved.directServerID ?? liveServerID,
             url: saved.url, isRelay: saved.isRelay, isCurrent: isCurrent,
             isLocal: DeepLinkHost.isLocal(saved))
     }
@@ -350,7 +354,7 @@ public struct DeepLinkHost: Identifiable, Sendable, Equatable {
     public var detail: String { serverID ?? url }
 
     private static func isLocal(_ saved: SavedHost) -> Bool {
-        if let serverID = saved.serverID, serverID.hasPrefix("local:") { return true }
+        if let serverID = saved.daemonServerID, serverID.hasPrefix("local:") { return true }
         guard let host = URL(string: saved.url)?.host?.lowercased() else { return false }
         return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
     }

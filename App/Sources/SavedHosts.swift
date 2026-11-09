@@ -8,8 +8,8 @@ import PaseoUI
 ///
 /// Relay hosts key on `serverID` (+ daemon key) via `SavedHost.identityKey` (PaseoKit), so
 /// re-pairing finds the same host. Blobs written by the pre-relay client decode with nil
-/// relay fields — id, URL and Keychain password survive untouched (migration-tested in
-/// `SavedHostIdentityTests`).
+/// relay fields, and pre-M20b blobs with nil `directServerID` — id, URL and Keychain password
+/// survive untouched (migration-tested in `DirectHostServerIDTests`).
 @MainActor
 final class SavedHosts {
     private(set) var hosts: [SavedHost] = []
@@ -38,7 +38,14 @@ final class SavedHosts {
     }
 
     func host(serverID: String) -> SavedHost? {
-        hosts.first { $0.serverID == serverID }
+        hosts.first { $0.daemonServerID == serverID }
+    }
+
+    /// Daemon ids that currently have more than one saved row (typically the same machine as
+    /// a direct entry and a relay entry). Detection only: merging needs a UX decision (which
+    /// row wins, which Keychain account keeps the password), so both rows still render.
+    var duplicateDaemonServerIDs: [String] {
+        SavedHostDuplicates.serverIDs(hosts)
     }
 
     /// Most recent first, ready for the picker entries. Relay rows show the relay endpoint
@@ -62,24 +69,35 @@ final class SavedHosts {
 
     // MARK: Mutating
 
-    /// A successful connection: upsert by URL (or `id`, when re-connecting a saved host) and
-    /// mark it connected now. Returns the saved host's id.
+    /// A successful direct connection: upsert by URL (or `id`, when re-connecting a saved
+    /// host), mark it connected now, and learn the daemon's `serverId` from `server_info`
+    /// (M20b) so deep links can find this host before it is the live one. Returns the saved
+    /// host's id.
     @discardableResult
-    func markConnected(url: URL, preferredLabel: String, id: UUID? = nil) -> UUID {
+    func markConnected(
+        url: URL, preferredLabel: String, id: UUID? = nil, daemonServerID: String? = nil
+    ) -> UUID {
         let urlString = url.absoluteString
         let now = Date()
+        func learn(_ index: Int) {
+            hosts[index].learnDirectServerID(daemonServerID)
+        }
         if let id, hosts.contains(where: { $0.id == id }) {
             guard let index = hosts.firstIndex(where: { $0.id == id }) else { return id }
             hosts[index].lastConnectedAt = now
+            learn(index)
             persist()
             return id
         }
         if let index = hosts.firstIndex(where: { $0.url == urlString }) {
             hosts[index].lastConnectedAt = now
+            learn(index)
             persist()
             return hosts[index].id
         }
-        let saved = SavedHost(id: UUID(), label: preferredLabel, url: urlString, lastConnectedAt: now)
+        var saved = SavedHost(
+            id: UUID(), label: preferredLabel, url: urlString, lastConnectedAt: now)
+        saved.learnDirectServerID(daemonServerID)
         hosts.append(saved)
         persist()
         return saved.id

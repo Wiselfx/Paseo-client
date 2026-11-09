@@ -244,17 +244,10 @@ struct RootView: View {
     }
 
     private var savedDeepLinkHosts: [DeepLinkHost] {
-        // A direct host only learns its daemon identity from the live handshake (SavedHost keeps
-        // `serverID` for relay hosts only), so give the current host the connected daemon's id.
-        var liveServerID: String?
-        if case .connected(let session) = model.phase {
-            liveServerID = session.serverInfo?.serverId
-        }
-        return model.savedHosts.allHosts.map { saved in
-            let isCurrent = saved.id == model.connectedHostID
-            return DeepLinkHost(
-                saved: saved, isCurrent: isCurrent,
-                liveServerID: isCurrent ? liveServerID : nil)
+        // M20b: a direct host stores the daemon id it learned on its first connect, so the
+        // live session's `server_info` is no longer needed as a special case here.
+        model.savedHosts.allHosts.map { saved in
+            DeepLinkHost(saved: saved, isCurrent: saved.id == model.connectedHostID)
         }
     }
 
