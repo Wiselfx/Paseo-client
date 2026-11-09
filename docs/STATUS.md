@@ -45,7 +45,7 @@ Tests: PaseoCore 683/200/145 green (1028).
 
 **V-round (parity, from `/tmp/reviews/parity-sweep-2026-11-09.md`):** V1 chat actions (fork tab/workspace, in-flight fork, DSH Retract/Delete turn, compaction marker), V2 detach subagent + managed-subagents section + branch switcher, V3 test notification + service-URL setting + PR check Add to chat. All merged, Mac build green. Not ticketed (drop unless asked): DSH bar/caret, language, split settings, DSH mascots/ripple, plugins/catalog, config.apply bundle. Blocked: APNs push (needs server). V4 (host idle/restart cards, dictation overlay + AVAudioSession off main, provider SVG glyphs) and V5 (17 pt chat text, tap-to-dismiss keyboard, composer height cap 40%, always-card composer in conversations; UX-SPEC §4.1 updated) merged at d78a2d9, Mac build green.
 
-**In flight:** P3 performance pass, fresh DeepSeek 71e60c03, own worktree `/home/paseo/.paseo/worktrees/0264elgj/p3-performance`, branch `p3-performance` (audit to `/tmp/reviews/perf-audit.md`; drawers/shell/scroll handlers). On finish: review, Mac-build, merge, ipa.
+**Merged:** P3 performance pass (275aee1, Mac build green): drawer progress isolated from the shell body, draft observer, prose markdown/linkify memo, scroll-track box, decorated sorts, mascot stops when asleep, cached NumberFormatters, TimelineView(.animation) uncapped. Audit `/tmp/reviews/perf-audit.md`. Left: streaming incremental parse, TurnBuilder full rebuild per delta, panel kept mounted (SwiftTerm alive). Needs a device feel check.
 
 **Gate `ipa <ref>` verb** added (65ec8de) → `/Users/Shared/Paseo-ipas/`; works once the user re-copies the gate (asked 2026-11-09). After each merged batch, run it so the user can test.
 
