@@ -244,7 +244,7 @@ public struct ClaudeChatView: View {
                         ForEach(store.turns) { turn in
                             ClaudeTurnView(
                                 turn: turn, typography: typography,
-                                onMarkdown: handleMarkdown
+                                onMarkdown: handleMarkdown, localImageLoader: localImageLoader
                             )
                             .id(turn.id)
                         }
@@ -440,6 +440,29 @@ public struct ClaudeChatView: View {
         .accessibilityLabel(label)
     }
 
+    /// Reads a workspace image through its checkout store (the same instance the panel shares),
+    /// for bare absolute/`~` image paths in assistant prose. Returns nil when the workspace of
+    /// this conversation isn't open in the directory — those render as path chips.
+    private var localImageLoader: ((String) async -> UIImage?)? {
+        guard let workspaceId = store.agent?.workspaceId else { return nil }
+        let session = self.session
+        return { path in
+            guard let descriptor = session.workspaceDirectory.workspace(id: workspaceId) else {
+                return nil
+            }
+            let checkout = session.checkout(for: descriptor)
+            await checkout.files.read(path, maxBytes: 8 * 1024 * 1024)
+            guard checkout.files.phase == .ready,
+                let file = checkout.files.file,
+                file.kind == .image,
+                let content = file.content,
+                let data = Data(base64Encoded: content),
+                let image = UIImage(data: data)
+            else { return nil }
+            return image
+        }
+    }
+
     private func handleMarkdown(_ action: MarkdownAction) {
         switch action {
         case .openLink(let url):
@@ -472,6 +495,8 @@ struct ClaudeTurnView: View {
     let turn: Turn
     let typography: ClaudeTypography
     let onMarkdown: (MarkdownAction) -> Void
+    /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
+    var localImageLoader: ((String) async -> UIImage?)? = nil
 
     /// Nil until the reader taps, so the default can follow the turn's phase.
     @State private var userExpanded: Bool?
@@ -503,13 +528,13 @@ struct ClaudeTurnView: View {
                     ForEach(bodySegments) { segment in
                         ClaudeSegmentView(
                             segment: segment, turnIsRunning: isRunning, typography: typography,
-                            onMarkdown: onMarkdown)
+                            onMarkdown: onMarkdown, localImageLoader: localImageLoader)
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: -2)))
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown)
+                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
             }
             if !isRunning, !copyText.isEmpty {
                 HStack(spacing: 17) {
@@ -574,6 +599,8 @@ struct ClaudeSegmentView: View {
     let turnIsRunning: Bool
     let typography: ClaudeTypography
     let onMarkdown: (MarkdownAction) -> Void
+    /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
+    var localImageLoader: ((String) async -> UIImage?)? = nil
 
     var body: some View {
         switch segment {
@@ -581,7 +608,7 @@ struct ClaudeSegmentView: View {
             ClaudeWorkGroupCell(group: group, turnIsRunning: turnIsRunning, typography: typography)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown)
+                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
             }
         case .todo(let row):
             if case .todo(let list) = row.item { ClaudeTodoCard(list: list) }
