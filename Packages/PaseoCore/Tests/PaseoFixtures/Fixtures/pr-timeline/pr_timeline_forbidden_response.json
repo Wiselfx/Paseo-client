@@ -1,0 +1,20 @@
+{
+  "_comment": "Hand-written fixture, NOT captured traffic: the sandbox has no GitHub PR. Matches the PullRequestTimelineErrorSchema at packages/protocol/src/messages.ts:6074-6099. Do not regenerate from the daemon.",
+  "type": "session",
+  "message": {
+    "type": "pull_request_timeline_response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "prNumber": 12,
+      "items": [],
+      "truncated": false,
+      "error": {
+        "kind": "forbidden",
+        "message": "Resource not accessible by integration"
+      },
+      "requestId": "t17-fixture-error",
+      "githubFeaturesEnabled": true,
+      "authState": "authenticated"
+    }
+  }
+}

@@ -26,6 +26,7 @@ public final class GitExtrasStore {
     private let client: any DaemonClient
     private var workspaces: [String: WorkspaceGitExtras] = [:]
     private var gitActions: [String: WorkspaceGitActions] = [:]
+    private var timelines: [String: PullRequestTimelineStore] = [:]
 
     public init(client: any DaemonClient) {
         self.client = client
@@ -39,6 +40,15 @@ public final class GitExtrasStore {
         actions.update(capabilities: gitActionCapabilities)
         gitActions[checkout.workspaceId] = actions
         return actions
+    }
+
+    /// The PR timeline for one open workspace. Same instance for the same id while it is open.
+    public func timeline(for checkout: CheckoutStore) -> PullRequestTimelineStore {
+        if let existing = timelines[checkout.workspaceId] { return existing }
+        let timeline = PullRequestTimelineStore(
+            workspaceId: checkout.workspaceId, cwd: checkout.cwd, client: client)
+        timelines[checkout.workspaceId] = timeline
+        return timeline
     }
 
     /// The extras for one open workspace. Same instance for the same id while it is open.
@@ -104,6 +114,7 @@ public final class GitExtrasStore {
     /// Releases the extras for one workspace. Called by `HostSession.closeCheckout`.
     internal func close(_ workspaceId: String) async {
         gitActions.removeValue(forKey: workspaceId)
+        timelines.removeValue(forKey: workspaceId)
         guard let extras = workspaces.removeValue(forKey: workspaceId) else { return }
         await extras.close()
     }
