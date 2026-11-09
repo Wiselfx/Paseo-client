@@ -33,3 +33,31 @@ public struct ProviderDiagnosticRequest: PaseoRequest {
         }
     }
 }
+
+// Source: messages.ts `DiagnosticsRequestMessageSchema`, `DiagnosticsResponseMessageSchema`
+// (messages.ts:1522, messages.ts:5463).
+
+// Source: messages.ts `DiagnosticsRequestMessageSchema`
+
+/// The whole-daemon diagnostic bundle ("support bundle material", opaque string — render it
+/// verbatim, do not parse it). Correlated by `requestId`.
+///
+/// Gated on `features.daemonDiagnostics` (`messages.ts:3941`); daemons that don't advertise it
+/// never answer this request.
+public struct DaemonDiagnosticsRequest: PaseoRequest {
+    public static let type = "diagnostics.request"
+    public static let responseType = "diagnostics.response"
+    public var requestId = ""
+    public init() {}
+
+    // Source: messages.ts `DiagnosticsResponseSchema`
+    public struct Response: Decodable, Sendable {
+        public var requestId: String
+        public var diagnostic: String
+
+        public init(requestId: String, diagnostic: String) {
+            self.requestId = requestId
+            self.diagnostic = diagnostic
+        }
+    }
+}
