@@ -80,6 +80,8 @@ bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - M7d `m7d-anchor-reveal` on worker 0778f3b0: chat-anchor, reveal, rewind (transcript).
+- M4d `m4d-providers` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: providers page/diagnostics/custom model, agent profiles.
+- M7e `m7e-agent-lifecycle` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: archived agents in History, unarchive, delete.
 - M2.10 `m210-setup-archive` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: setup observation/rerun, worktree archive warning.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
