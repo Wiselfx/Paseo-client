@@ -359,7 +359,12 @@ final class ClaudeNewAgentForm {
         let catalog = session.agentControl
         // Retry after a failure or an empty catalogue (an old build advertised an app version the
         // daemon answered with only the legacy providers).
-        if catalog.phase == .idle || catalog.phase == .failed || catalog.providers.isEmpty {
+        let needsLoad: Bool
+        switch catalog.phase {
+        case .idle, .failed: needsLoad = true
+        case .loading, .ready: needsLoad = catalog.providers.isEmpty
+        }
+        if needsLoad {
             await catalog.loadCatalog(cwd: cwd)
         }
         if providerId == nil { providerId = catalog.readyProviders.first?.provider }

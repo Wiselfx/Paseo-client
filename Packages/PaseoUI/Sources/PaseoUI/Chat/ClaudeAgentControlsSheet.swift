@@ -72,7 +72,7 @@ struct ClaudeAgentControlsSheet: View {
         .presentationCornerRadius(38)
         .onAppear {
             let catalog = session.agentControl
-            let providerMissing = store.agent?.provider.map { catalog.provider($0) == nil } ?? true
+            let providerMissing = store.agent.map { catalog.provider($0.provider) == nil } ?? true
             switch catalog.phase {
             case .idle, .failed:
                 let cwd = store.agent?.cwd
