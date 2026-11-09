@@ -46,12 +46,23 @@ enum PaseoFormat {
         integer(Int(value.rounded())) + "%"
     }
 
-    /// File sizes from a byte count: `842 B`, `1.2 MB` (SI, `.file` style).
+    /// File sizes from a byte count: `842 bytes`, `12 KB`, `1.2 MB` (SI, like Finder).
+    /// Hand-rolled because `ByteCountFormatter` always follows the device region (no `locale`),
+    /// which would bring back `1'234 KB`.
     static func bytes(_ value: Int) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.locale = displayLocale
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: Int64(max(0, value)))
+        let count = max(0, value)
+        if count < 1_000 { return count == 1 ? "1 byte" : "\(count) bytes" }
+        let units = ["KB", "MB", "GB", "TB", "PB"]
+        var scaled = Double(count) / 1_000
+        var unit = 0
+        while scaled >= 999.95, unit < units.count - 1 {
+            scaled /= 1_000
+            unit += 1
+        }
+        let digits = scaled < 10 && unit > 0 ? 1 : 0
+        let text = decimalFormatter(maximumFractionDigits: digits).string(from: NSNumber(value: scaled))
+            ?? String(Int(scaled.rounded()))
+        return text + " " + units[unit]
     }
 }
 #endif
