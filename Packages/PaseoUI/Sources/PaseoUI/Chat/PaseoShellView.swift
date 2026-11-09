@@ -22,6 +22,9 @@ extension EnvironmentValues {
 public struct PaseoShellView: View {
     let session: HostSession
     var onDisconnect: () -> Void
+    /// A notification tap waiting to be routed. The app owns the value; the shell consumes it
+    /// once the conversation selection exists (including after a cold launch).
+    @Binding private var notificationTarget: AttentionTarget?
 
     @State private var selectedAgentId: String?
     @State private var conversation: ConversationStore?
@@ -37,9 +40,13 @@ public struct PaseoShellView: View {
     private let drawerFraction: CGFloat = 0.82
     private let panelFraction: CGFloat = 0.88
 
-    public init(session: HostSession, onDisconnect: @escaping () -> Void) {
+    public init(
+        session: HostSession, onDisconnect: @escaping () -> Void,
+        notificationTarget: Binding<AttentionTarget?> = .constant(nil)
+    ) {
         self.session = session
         self.onDisconnect = onDisconnect
+        _notificationTarget = notificationTarget
         ClaudeFontResources.register()
     }
 
@@ -140,16 +147,24 @@ public struct PaseoShellView: View {
         .onAppear {
             session.hostSettings.startPresence(
                 focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
+            session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
             if selectedAgentId == nil, let first = session.agents.first { select(first.id, closeDrawer: false) }
+            handleNotificationTarget()
         }
         .onDisappear {
             session.hostSettings.stopPresence()
+            session.attention.setFocusedAgent(nil)
         }
         .onChange(of: selectedAgentId) { _, id in
             session.hostSettings.updateFocus(id)
+            session.attention.setFocusedAgent(scenePhase == .active ? id : nil)
         }
         .onChange(of: scenePhase) { _, phase in
             session.hostSettings.updateVisibility(phase == .active)
+            session.attention.setFocusedAgent(phase == .active ? selectedAgentId : nil)
+        }
+        .onChange(of: notificationTarget) { _, _ in
+            handleNotificationTarget()
         }
         .onChange(of: session.agents) { _, agents in
             if let selectedAgentId {
@@ -270,6 +285,30 @@ public struct PaseoShellView: View {
     }
 
     // MARK: Selection
+
+    /// Routes a notification tap through the same selection path the sidebar uses. Agent targets
+    /// ignore their workspace hint (the agent can move); terminal targets pick the newest agent
+    /// in the terminal's workspace and open the workspace panel.
+    private func handleNotificationTarget() {
+        guard let target = notificationTarget else { return }
+        notificationTarget = nil
+        settleDrawer(open: false)
+        switch target.kind {
+        case .agent:
+            guard let agentId = target.agentId else { return }
+            select(agentId)
+        case .terminal:
+            settlePanel(open: false)
+            let workspaceId =
+                target.workspaceId
+                ?? target.terminalId.flatMap { session.terminals.workspaceId(forTerminal: $0) }
+            guard let workspaceId,
+                let agent = session.agents.first(where: { $0.workspaceId == workspaceId })
+            else { return }
+            select(agent.id)
+            settlePanel(open: true)
+        }
+    }
 
     private func select(_ agentId: String, closeDrawer: Bool = true) {
         if selectedAgentId != agentId {

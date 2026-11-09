@@ -373,14 +373,14 @@ Status counts are in `## Counts` at the very bottom.
 
 - [ ] Feature: Attention badge on workspace rows / unread dot — Status: `done` — Source: this client `…/Sidebar/SidebarWorkspaceRow.swift` (`PaseoStatusDot(kind: .unread)`)
 - [ ] Feature: Opening an agent clears its attention flag (daemon-side) and refreshes the list — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoShellView.swift:197-210`; `HostSession.refreshAgents`
-- [ ] Feature: OS notification when an agent turn finishes needing input — Status: `missing` (no `UNUserNotificationCenter` anywhere; daemon `agent_attention_required` is decoded but nothing raises a notification) — Source: `docs/research/01-app-features.md:337`; `rg -il "UNUserNotificationCenter" App Packages` → nothing
-- [ ] Feature: Attention notifications for terminals — Status: `missing` — Source: `docs/research/01-app-features.md:338`
-- [ ] Feature: Notification tap → route to the agent/workspace (pinned, navigation-ready, deduped) — Status: `missing` — Source: `docs/research/01-app-features.md:339`
-- [ ] Feature: Attention OS notifications are suppressed while viewing that agent / pure errors skipped — Status: `missing` — Source: `docs/research/01-app-features.md:337`
+- [ ] Feature: OS notification when an agent turn finishes needing input — Status: `done` (**local notifications only**: `UNUserNotificationCenter` fires while the app is foreground or recently backgrounded and the socket is alive; permission is requested on the first attention event or from Settings, never at launch; true push while the app is closed is `missing` — no relay/APNs) — Source: this client `App/Sources/NotificationCoordinator.swift`, `Packages/PaseoCore/Sources/PaseoStore/AttentionCenter.swift`, `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift`; research `docs/research/10-notifications.md`; `docs/research/01-app-features.md:337`
+- [ ] Feature: Attention notifications for terminals — Status: `done` (the daemon's `terminal_attention_required` title/body/shouldNotify feed the same `AttentionCenter` path; a tap selects the workspace and opens the panel) — Source: this client `Packages/PaseoCore/Sources/PaseoStore/TerminalsStore.swift`, `…/HostSession.swift`, `App/Sources/NotificationCoordinator.swift`; `docs/research/10-notifications.md`
+- [ ] Feature: Notification tap → route to the agent/workspace (pinned, navigation-ready, deduped) — Status: `done` (flat `userInfo` → `AttentionTarget`; agent taps re-select the agent through the sidebar's `select` path and ignore a stale workspace hint; terminal taps select the newest agent in the terminal's workspace and open the panel; a cold-launch tap waits in the app until the shell exists; one queued intent per destination) — Source: this client `Packages/PaseoCore/Sources/PaseoStore/AttentionCenter.swift` (`AttentionTarget.userInfo`), `App/Sources/NotificationCoordinator.swift`, `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoShellView.swift` (`handleNotificationTarget`); `docs/research/01-app-features.md:339`
+- [ ] Feature: Attention OS notifications are suppressed while viewing that agent / pure errors skipped — Status: `done` (the store drops `error` attention, honours the daemon's `shouldNotify`, suppresses the agent the shell says is focused, and dedupes by a per-agent timestamp watermark; the daemon's presence policy remains the first gate) — Source: this client `Packages/PaseoCore/Sources/PaseoStore/AttentionCenter.swift`, `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoShellView.swift`; `docs/research/10-notifications.md`
 - [ ] Feature: Desktop dock/taskbar badge count of attention-tagged workspaces — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:337`
-- [ ] Feature: Notification permission + sound + test-notification settings — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:340`
-- [ ] Feature: Expo push token registration per host (native; cached; refetch on reconnect; Android channel) — Status: `store only (no UI)` (register/unregister wired; never called from the app) — Source: this client `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:226-250`; `docs/research/01-app-features.md:341`
-- [ ] Feature: Terminal-attention pipeline feeds the same notification path — Status: `missing` — Source: `docs/research/01-app-features.md:338`
+- [ ] Feature: Notification permission + sound + test-notification settings — Status: `desktop-only (flag)` (M10 adds the permission request and an Agent notifications toggle in Settings → General; no Play sound or Test notification rows) — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoSettingsView.swift` (`generalPage`), `App/Sources/NotificationCoordinator.swift`; `docs/research/01-app-features.md:340`
+- [ ] Feature: Expo push token registration per host (native; cached; refetch on reconnect; Android channel) — Status: `store only (no UI)` (register/unregister wired; never called from the app; this client has no Expo project or APNs path) — Source: this client `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:226-250`; `docs/research/01-app-features.md:341`; `docs/research/10-notifications.md`
+- [ ] Feature: Terminal-attention pipeline feeds the same notification path — Status: `done` (`HostSession` decodes `terminal_attention_required`, resolves the workspace from the watched terminal list when the daemon omits it, and queues one intent) — Source: this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift`, `…/AttentionCenter.swift`; `docs/research/10-notifications.md`
 - [ ] Feature: In-app toast surface for notices (e.g. "Workspace archived", action errors) — Status: `done` — Source: this client `…/Chat/PaseoShellView.swift` (toast overlay), `…/Sidebar/SidebarToasts.swift`
 
 ## Rich content
@@ -530,8 +530,8 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 288 | 68.2 % |
-| `missing` | 60 | 14.2 % |
+| `done` | 293 | 69.4 % |
+| `missing` | 55 | 13.0 % |
 | `desktop-only (flag)` | 48 | 11.4 % |
 | `store only (no UI)` | 6 | 1.4 % |
 | `in flight` | 0 | 0.0 % |
@@ -543,7 +543,7 @@ live-observation turn UX, permissions, markdown, markdown code blocks) and in th
 *connection/discovery/store plumbing* — T1–T13 are merged, fixtures-tested, and wired into the UI
 (presence, slash commands, attachments, search, the Schedules screen, rich content, the mascot).
 The remaining `missing` rows concentrate in desktop-only and host-side surfaces
-(notifications/push, voice, relay pairing), turn and composer parity leftovers
+(remote push, voice, relay pairing), turn and composer parity leftovers
 (collapse levels, question-card restyle, message actions, fork, editing) and providers/profiles
 (cards are M4d in flight). The remaining `store only (no UI)` rows are provider/profile/subagent
 and push registration — logic that exists without a screen. No rows are `in flight`: the M3
@@ -566,7 +566,8 @@ changes / terminal) merged; these milestones group what remains.
    stops being a chat toy and becomes a console.
 2. **M5 — Schedules & attention.** Wire the merged-but-invisible T9 store into a Schedules screen
    (list, form, heartbeats, pause/resume/run-now) and finish the attention loop the daemon already
-   speaks (OS notifications + push registration + deep-link routing), because an agent that needs
+   speaks (local OS notifications and tap routing landed in M10; push registration while the
+   app is closed still needs a relay/APNs path), because an agent that needs
    you on a phone is the product promise.
 3. **M6 — Rich content & attachments.** Land the merged-but-invisible T13 detector end to end
    (images in prose, YouTube, link cards, SVG, file cards) plus the composer attachment pipeline

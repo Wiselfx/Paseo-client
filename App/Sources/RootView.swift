@@ -6,6 +6,8 @@ import SwiftUI
 /// Features never know about each other; they're wired together only here.
 struct RootView: View {
     @Bindable var model: AppModel
+    @Bindable var notifications: NotificationCoordinator
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
     @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
@@ -46,11 +48,34 @@ struct RootView: View {
                     connectForm(status: status)
                 }
             case .connected(let session):
-                PaseoShellView(session: session, onDisconnect: { model.disconnect() })
+                PaseoShellView(
+                    session: session, onDisconnect: { model.disconnect() },
+                    notificationTarget: $notifications.pendingTarget
+                )
+                .environment(
+                    \.notificationPermissionAction,
+                    { @Sendable in
+                        Task { @MainActor in _ = await notifications.requestAuthorization() }
+                    })
+                .onAppear { deliverNotifications(session) }
+                .onChange(of: session.attention.pending) { _, _ in
+                    deliverNotifications(session)
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { deliverNotifications(session) }
+                }
             }
         }
         .id(rebuildKey)
         .preferredColorScheme(colorScheme)
         .environment(\.hostSwitch, model.hostContext)
+    }
+
+    /// Drains queued attention intents and hands them to the notification coordinator. Runs on
+    /// every change, on appear, and when the app returns to the foreground.
+    private func deliverNotifications(_ session: HostSession) {
+        let intents = session.attention.drain()
+        guard !intents.isEmpty else { return }
+        Task { await notifications.deliver(intents) }
     }
 }

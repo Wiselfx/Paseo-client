@@ -43,6 +43,8 @@ public final class HostSession {
     public let gitExtras: GitExtrasStore
     /// History and lifecycle: archived agents, archive/unarchive/delete.
     public let agentLifecycle: AgentLifecycleStore
+    /// Deduped notification intents from agent and terminal attention events (M10).
+    public let attention: AttentionCenter
     /// The label catalog for this host (name + color). Assignments live on the workspace rows.
     public let labels: WorkspaceLabelsStore
     /// M2.13: lazy worktree-setup probe powering the sidebar's "Set up worktree scripts" callout.
@@ -72,6 +74,7 @@ public final class HostSession {
         self.projectConfig = ProjectConfigStore(client: client)
         self.projectIcons = ProjectIconStore(client: client)
         self.agentLifecycle = AgentLifecycleStore(client: client)
+        self.attention = AttentionCenter()
         self.labels = WorkspaceLabelsStore(client: client)
         self.fileUploader = ConversationUpload(client: client)
         self.projectSetupProbe = ProjectSetupProbe(client: client)
@@ -225,6 +228,14 @@ public final class HostSession {
     private func handle(event: DaemonEvent) async {
         switch event {
         case .agentStream(let payload):
+            // Legacy daemons deliver attention as an `attention_required` stream event, with the
+            // per-client notification plan attached to the event. Capture it even when no
+            // conversation for this agent is open — that is the whole point of a notification.
+            if let attention = payload.attention {
+                let workspaceId = agents.first { $0.id == payload.agentId }?.workspaceId
+                self.attention.receive(
+                    agentId: payload.agentId, workspaceId: workspaceId, attention: attention)
+            }
             guard let store = conversations[payload.agentId] else { return }
             await store.handleStream(payload)
 
@@ -282,6 +293,15 @@ public final class HostSession {
         case "checkout_diff_update":
             if let update = try? decoder.decode(SessionPayloadEnvelope<CheckoutDiff>.self, from: raw).payload {
                 for store in checkouts.values { store.handle(update) }
+            }
+        case "terminal_attention_required":
+            if let payload = try? decoder.decode(
+                SessionPayloadEnvelope<TerminalAttentionRequired>.self, from: raw
+            ).payload {
+                attention.receive(
+                    terminal: payload,
+                    workspaceId: payload.workspaceId
+                        ?? terminals.workspaceId(forTerminal: payload.terminalId))
             }
         default:
             break
