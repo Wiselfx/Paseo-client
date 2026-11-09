@@ -3,8 +3,11 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// The drawer: ClaudeUI's sidebar layout on `WorkspaceDirectory`'s project → workspace → agent
-/// groups. Workspaces collapse, rows carry context menus, and the footer avatar opens Settings.
+/// The drawer: ClaudeUI's sidebar layout on `WorkspaceDirectory`'s project → workspace groups.
+/// Agents are not listed here; they are the tabs inside a workspace. Projects are the collapsible
+/// level (collapsed state persisted per project); workspace rows aggregate their agents' status and
+/// open the most recently active agent. The footer holds the Settings avatar and the New workspace
+/// capsule.
 struct PaseoSidebar: View {
     let session: HostSession
     var selectedAgentId: String?
@@ -13,11 +16,13 @@ struct PaseoSidebar: View {
     var onDisconnect: () -> Void
 
     @State private var sheet: PaseoSidebarSheet?
-    @State private var renamingAgent: AgentSnapshot?
+    @State private var renamingWorkspace: WorkspaceDescriptor?
+    @State private var workspacePendingArchive: WorkspaceDescriptor?
+    @State private var projectPendingRemoval: WorkspaceProjectDescriptor?
     @State private var renameText = ""
     @State private var toast: String?
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
-    @AppStorage("paseo.sidebar.collapsedWorkspaces") private var collapsedWorkspaces = ""
+    @AppStorage("paseo.sidebar.collapsedProjects") private var collapsedProjects = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let typography = ClaudeTypography()
@@ -36,7 +41,6 @@ struct PaseoSidebar: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     navigation
-                    sectionHeader("Recents")
                     directory
                 }
                 .padding(.horizontal, 20)
@@ -52,28 +56,88 @@ struct PaseoSidebar: View {
         .sheet(item: $sheet) { selection in
             switch selection {
             case .settings:
-                ClaudeSidebarSettingsSheet()
+                ClaudeSidebarSettingsSheet(session: session, onDisconnect: onDisconnect)
             case .comingSoon(let title):
                 ClaudeSidebarComingSoonSheet(title: title)
+            case .newWorkspace:
+                ClaudeNewWorkspaceSheet(
+                    session: session, defaultProjectId: selectedWorkspaceProjectId
+                ) {
+                    showToast("Workspace created")
+                }
             }
         }
         .alert(
-            "Rename agent",
+            "Rename workspace",
             isPresented: Binding(
-                get: { renamingAgent != nil },
-                set: { if !$0 { renamingAgent = nil } })
+                get: { renamingWorkspace != nil },
+                set: { if !$0 { renamingWorkspace = nil } })
         ) {
             TextField("Name", text: $renameText)
-            Button("Cancel", role: .cancel) { renamingAgent = nil }
+            Button("Cancel", role: .cancel) { renamingWorkspace = nil }
             Button("Rename") {
-                let target = renamingAgent
-                let title = renameText
-                renamingAgent = nil
-                guard let target else { return }
-                Task { await session.conversation(for: target.id).rename(to: title) }
+                let target = renamingWorkspace
+                let title = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                renamingWorkspace = nil
+                guard let target, !title.isEmpty else { return }
+                Task {
+                    let renamed = await session.workspaceDirectory.renameWorkspace(
+                        target.id, title: title)
+                    if !renamed {
+                        showToast(
+                            session.workspaceDirectory.actionError ?? "Couldn't rename the workspace.")
+                    }
+                }
             }
         } message: {
-            Text("Choose a short name for this agent.")
+            Text("Choose a short name for this workspace.")
+        }
+        .confirmationDialog(
+            "Archive workspace?",
+            isPresented: Binding(
+                get: { workspacePendingArchive != nil },
+                set: { if !$0 { workspacePendingArchive = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Archive", role: .destructive) {
+                guard let workspace = workspacePendingArchive else { return }
+                workspacePendingArchive = nil
+                Task {
+                    let archived = await session.workspaceDirectory.archiveWorkspace(workspace.id)
+                    if !archived {
+                        showToast(
+                            session.workspaceDirectory.actionError
+                                ?? "Couldn't archive the workspace.")
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { workspacePendingArchive = nil }
+        } message: {
+            Text(archiveMessage(for: workspacePendingArchive))
+        }
+        .confirmationDialog(
+            "Remove project?",
+            isPresented: Binding(
+                get: { projectPendingRemoval != nil },
+                set: { if !$0 { projectPendingRemoval = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                guard let project = projectPendingRemoval else { return }
+                projectPendingRemoval = nil
+                Task {
+                    let removed = await session.workspaceDirectory.removeProject(project.projectId)
+                    showToast(
+                        removed
+                            ? "Project removed"
+                            : (session.workspaceDirectory.actionError ?? "Couldn't remove the project."))
+                }
+            }
+            Button("Cancel", role: .cancel) { projectPendingRemoval = nil }
+        } message: {
+            Text(
+                "The project and its workspaces will be unregistered on this host. Files on disk will not be changed."
+            )
         }
         .overlay(alignment: .top) {
             if let toast {
@@ -97,9 +161,7 @@ struct PaseoSidebar: View {
 
     private var navigation: some View {
         VStack(spacing: 0) {
-            navigationRow("Workspaces", symbol: "rectangle.stack") { sheet = .comingSoon("Workspaces") }
             navigationRow("Scheduled", symbol: "clock") { sheet = .comingSoon("Scheduled") }
-            navigationRow("Settings", symbol: "gearshape") { sheet = .settings }
         }
         .padding(.top, 4)
     }
@@ -122,165 +184,243 @@ struct PaseoSidebar: View {
     // MARK: Directory
 
     @ViewBuilder private var directory: some View {
-        let groups = session.workspaceDirectory.groups
+        let groups = sortedGroups(session.workspaceDirectory.groups)
         if groups.isEmpty {
-            if session.agents.isEmpty {
-                Text(
-                    session.workspaceDirectory.isLoading
-                        ? "Loading workspaces…" : "No workspaces on this host yet."
-                )
-                .font(typography.sans(14))
-                .foregroundStyle(ClaudePalette.secondaryInk)
-                .padding(.vertical, 24)
-            } else {
-                sectionHeader("Agents")
-                ForEach(session.agents) { agent in agentRow(agent) }
-            }
+            let error = session.workspaceDirectory.error
+            Text(
+                session.workspaceDirectory.isLoading
+                    ? "Loading workspaces…"
+                    : (error ?? "No workspaces on this host yet.")
+            )
+            .font(typography.sans(14))
+            .foregroundStyle(error == nil ? ClaudePalette.secondaryInk : ClaudePalette.failureInk)
+            .padding(.vertical, 24)
         } else {
             ForEach(groups) { group in
-                sectionHeader(group.project.projectCustomName ?? group.project.projectDisplayName)
-                ForEach(group.workspaces) { workspace in
-                    workspaceRow(workspace)
-                    SidebarAgentsRoll(expanded: isExpanded(workspace)) {
-                        ForEach(agents(in: workspace)) { agent in agentRow(agent) }
+                projectRow(group)
+                SidebarRoll(expanded: !isCollapsed(group.id)) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(group.workspaces) { workspace in
+                            workspaceRow(workspace)
+                        }
                     }
                 }
             }
         }
-        if !unplacedAgents.isEmpty {
-            sectionHeader("Other agents")
-            ForEach(unplacedAgents) { agent in agentRow(agent) }
+    }
+
+    /// Workspaces within a project, newest activity first; projects ordered by their newest
+    /// workspace. Activity is the max of the workspace's agents' `updatedAt`/`lastUserMessageAt`,
+    /// falling back to the workspace's own `activityAt` → `lastUserMessageAt` → `createdAt`.
+    private func sortedGroups(_ groups: [WorkspaceGroup]) -> [WorkspaceGroup] {
+        groups
+            .map { group in
+                WorkspaceGroup(
+                    project: group.project,
+                    workspaces: group.workspaces.sorted {
+                        (activityDate(for: $0) ?? .distantPast) > (activityDate(for: $1) ?? .distantPast)
+                    })
+            }
+            .sorted { left, right in
+                let leftDate = left.workspaces.compactMap { activityDate(for: $0) }.max() ?? .distantPast
+                let rightDate = right.workspaces.compactMap { activityDate(for: $0) }.max() ?? .distantPast
+                if leftDate != rightDate { return leftDate > rightDate }
+                return left.project.projectDisplayName.localizedCaseInsensitiveCompare(
+                    right.project.projectDisplayName) == .orderedAscending
+            }
+    }
+
+    private func activityDate(for workspace: WorkspaceDescriptor) -> Date? {
+        var best: Date?
+        for agent in session.agents where agent.workspaceId == workspace.id {
+            for stamp in [agent.updatedAt, agent.lastUserMessageAt] {
+                guard let stamp, let date = PaseoDate.parse(stamp) else { continue }
+                best = max(best ?? date, date)
+            }
+        }
+        if let best { return best }
+        for stamp in [workspace.activityAt, workspace.lastUserMessageAt, workspace.createdAt] {
+            if let stamp, let date = PaseoDate.parse(stamp) { return date }
+        }
+        return nil
+    }
+
+    private func projectRow(_ group: WorkspaceGroup) -> some View {
+        let collapsed = isCollapsed(group.id)
+        let title = projectTitle(group.project)
+        return HStack(spacing: 0) {
+            Button {
+                Haptics.selection()
+                withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+                    toggleCollapsed(group.id)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    ClaudeChevron(expanded: !collapsed)
+                    Text(title)
+                        .font(typography.sans(15))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(title)
+            .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
+            Button {
+                newAgent(in: group)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(width: 30, height: 30)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("New agent in \(title)")
+        }
+        .padding(.top, 18)
+        .padding(.bottom, 6)
+        .contextMenu {
+            Button("New agent", systemImage: "plus") { newAgent(in: group) }
+            Button("Copy path", systemImage: "doc.on.doc") {
+                UIPasteboard.general.string = group.project.projectRootPath
+                showToast("Path copied")
+            }
+            if session.workspaceDirectory.supportsProjectRemove {
+                Button("Remove project", systemImage: "trash", role: .destructive) {
+                    projectPendingRemoval = group.project
+                }
+            }
         }
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(typography.sans(15))
-            .foregroundStyle(ClaudePalette.secondaryInk)
-            .lineLimit(1)
-            .padding(.top, 18)
-            .padding(.bottom, 6)
+    private func projectTitle(_ project: WorkspaceProjectDescriptor) -> String {
+        project.projectCustomName ?? project.projectDisplayName
+    }
+
+    /// The group's workspaces are already ordered by activity, so the head is the most recent one.
+    private func newAgent(in group: WorkspaceGroup) {
+        guard let workspace = group.workspaces.first else {
+            showToast("No workspace in this project yet — create one first.")
+            return
+        }
+        Haptics.selection()
+        onNewAgent(workspace)
     }
 
     private func workspaceRow(_ workspace: WorkspaceDescriptor) -> some View {
-        let expanded = isExpanded(workspace)
+        let rowAgents = agents(in: workspace)
+        let selected = rowAgents.contains { $0.id == selectedAgentId }
+        let attention = rowAgents.contains { $0.requiresAttention == true }
         return Button {
-            Haptics.selection()
-            withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
-                toggle(workspace)
-            }
+            openWorkspace(workspace)
         } label: {
             HStack(spacing: 8) {
-                PaseoStatusDot(kind: statusKind(workspace.status))
+                PaseoStatusDot(kind: workspaceStatusKind(workspace, agents: rowAgents))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(workspace.name)
+                    Text(workspaceTitle(workspace))
                         .font(typography.sans(16, weight: .medium))
                         .lineLimit(1)
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.triangle.branch").font(.system(size: 9))
-                        Text(workspace.gitRuntime?.currentBranch ?? workspaceKindLabel(workspace))
-                            .font(typography.sans(12))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    Text(metaLine(workspace))
+                        .font(typography.sans(12))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                ClaudeChevron(expanded: expanded)
+                if attention {
+                    PaseoStatusDot(kind: .unread)
+                }
             }
+            .padding(.horizontal, 8)
             .padding(.vertical, 7)
             .contentShape(.rect)
+            .background(selected ? ClaudePalette.chip : Color.clear, in: .rect(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+        .accessibilityValue(attention ? "Needs attention" : "")
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
             Button("New agent here", systemImage: "plus") { onNewAgent(workspace) }
+            Button("Rename workspace", systemImage: "pencil") {
+                renameText = workspace.title ?? workspace.name
+                renamingWorkspace = workspace
+            }
             Button("Copy path", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = workspace.cwd
                 showToast("Path copied")
             }
-            Button("Archive", systemImage: "archivebox", role: .destructive) {
-                Task { await session.workspaceDirectory.archiveWorkspace(workspace.id) }
+            if let branch = workspace.branch {
+                Button("Copy branch name", systemImage: "doc.on.doc") {
+                    UIPasteboard.general.string = branch
+                    showToast("Branch name copied")
+                }
+            }
+            Button("Archive workspace", systemImage: "archivebox", role: .destructive) {
+                workspacePendingArchive = workspace
             }
         }
+    }
+
+    /// Tapping a workspace opens its most recently active agent; the other agents are the header's
+    /// tab chips.
+    private func openWorkspace(_ workspace: WorkspaceDescriptor) {
+        Haptics.selection()
+        guard let target = agents(in: workspace).first else {
+            showToast("No agents in this workspace yet — long-press to create one.")
+            return
+        }
+        onSelectAgent(target.id)
     }
 
     private func agents(in workspace: WorkspaceDescriptor) -> [AgentSnapshot] {
         session.agents.filter { $0.workspaceId == workspace.id }
     }
 
-    private var unplacedAgents: [AgentSnapshot] {
-        let known = Set(session.workspaceDirectory.workspaces.map(\.id))
-        return session.agents.filter { agent in
-            guard let workspaceId = agent.workspaceId else { return true }
-            return !known.contains(workspaceId)
+    /// One line: the workspace title, or the branch when there is no title.
+    private func workspaceTitle(_ workspace: WorkspaceDescriptor) -> String {
+        if let title = workspace.title,
+            !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return title
         }
+        return workspace.branch ?? workspace.name
     }
 
-    // MARK: Collapse state
-
-    private var collapsedSet: Set<String> {
-        Set(collapsedWorkspaces.split(separator: ",").map(String.init))
+    private func metaLine(_ workspace: WorkspaceDescriptor) -> String {
+        let branch = workspace.branch ?? workspaceKindLabel(workspace)
+        guard let stamp = activityDate(for: workspace) else { return branch }
+        return "\(branch) · \(relativeAge(stamp))"
     }
 
-    private func isExpanded(_ workspace: WorkspaceDescriptor) -> Bool {
-        !collapsedSet.contains(workspace.id)
+    /// "now", "5m", "3h", "2d", "4mo" — compact ages for the meta line.
+    private func relativeAge(_ date: Date, now: Date = Date()) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "now" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours)h" }
+        let days = hours / 24
+        if days < 30 { return "\(days)d" }
+        return "\(days / 30)mo"
     }
 
-    private func toggle(_ workspace: WorkspaceDescriptor) {
-        var collapsed = collapsedSet
-        if collapsed.contains(workspace.id) {
-            collapsed.remove(workspace.id)
-        } else {
-            collapsed.insert(workspace.id)
-        }
-        collapsedWorkspaces = collapsed.sorted().joined(separator: ",")
-    }
+    // MARK: Status
 
-    // MARK: Agents
-
-    private func agentRow(_ agent: AgentSnapshot) -> some View {
-        let selected = agent.id == selectedAgentId
-        return Button {
-            Haptics.selection()
-            onSelectAgent(agent.id)
-        } label: {
-            HStack(spacing: 8) {
-                PaseoStatusDot(kind: agentStatusKind(agent))
-                Text(agent.title ?? "New agent")
-                    .font(typography.sans(15, weight: selected ? .medium : .regular))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if agent.status == .running, agent.requiresAttention != true {
-                    PaseoStatusDot(kind: .running)
-                }
-            }
-            .padding(.leading, 12)
-            .padding(.trailing, 8)
-            .frame(height: 38)
-            .foregroundStyle(ClaudePalette.ink)
-            .contentShape(.rect)
-            .background(selected ? ClaudePalette.chip : Color.clear, in: .rect(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(agent.title ?? "New agent")
-        .accessibilityValue(agent.requiresAttention == true ? "Needs attention" : "")
-        .contextMenu {
-            Button("Rename", systemImage: "pencil") {
-                renameText = agent.title ?? ""
-                renamingAgent = agent
-            }
-            Button("Copy agent ID", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = agent.id
-                showToast("Agent ID copied")
-            }
-            Button("Archive", systemImage: "archivebox", role: .destructive) {
-                Task {
-                    await session.conversation(for: agent.id).archive()
-                    await session.refreshAgents()
-                }
-            }
-        }
+    /// Leading dot aggregated from the workspace's agents: permission → needs input, error →
+    /// failed, running → working, finished-but-unseen → unread. Falls back to the workspace's own
+    /// status bucket when no agent outranks it.
+    private func workspaceStatusKind(
+        _ workspace: WorkspaceDescriptor, agents: [AgentSnapshot]
+    ) -> PaseoStatusDot.Kind {
+        if agents.contains(where: { $0.attention == .permission }) { return .needsInput }
+        if agents.contains(where: { $0.attention == .error || $0.status == .error }) { return .failed }
+        if agents.contains(where: { $0.status == .running }) { return .running }
+        if agents.contains(where: { $0.attention == .finished }) { return .unread }
+        return statusKind(workspace.status)
     }
 
     private func statusKind(_ status: WorkspaceStatusBucket) -> PaseoStatusDot.Kind {
@@ -293,20 +433,6 @@ struct PaseoSidebar: View {
         }
     }
 
-    private func agentStatusKind(_ agent: AgentSnapshot) -> PaseoStatusDot.Kind {
-        switch agent.attention {
-        case .permission: return .needsInput
-        case .error: return .failed
-        case .finished: return .unread
-        case .unknown, nil: break
-        }
-        switch agent.status {
-        case .running: return .running
-        case .error: return .failed
-        case .initializing, .idle, .closed, .unknown: return .idle
-        }
-    }
-
     private func workspaceKindLabel(_ workspace: WorkspaceDescriptor) -> String {
         switch workspace.workspaceKind {
         case .worktree: "Worktree"
@@ -316,40 +442,63 @@ struct PaseoSidebar: View {
         }
     }
 
+    // MARK: Collapse state
+
+    private var collapsedProjectsSet: Set<String> {
+        Set(collapsedProjects.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+    }
+
+    private func isCollapsed(_ projectId: String) -> Bool {
+        collapsedProjectsSet.contains(projectId)
+    }
+
+    private func toggleCollapsed(_ projectId: String) {
+        var collapsed = collapsedProjectsSet
+        if collapsed.contains(projectId) {
+            collapsed.remove(projectId)
+        } else {
+            collapsed.insert(projectId)
+        }
+        collapsedProjects = collapsed.sorted().joined(separator: ",")
+    }
+
     // MARK: Footer
 
     private var footer: some View {
         HStack(spacing: 12) {
             Button {
+                Haptics.selection()
                 sheet = .settings
             } label: {
-                ZStack {
-                    Circle().fill(ClaudePalette.chip)
-                    Text(initial)
-                        .font(typography.serif(18, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
-                }
-                .frame(width: 44, height: 44)
+                Text(initial)
+                    .font(typography.serif(18, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(in: .circle)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
 
-            HStack(spacing: 6) {
-                PaseoStatusDot(kind: connectionKind)
-                Text(session.serverInfo?.hostname ?? "Paseo daemon")
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            Menu {
-                Button("Disconnect", systemImage: "bolt.horizontal.circle", role: .destructive) { onDisconnect() }
+            Button {
+                Haptics.selection()
+                if session.workspaceDirectory.supportsWorkspaceCreate {
+                    sheet = .newWorkspace
+                } else {
+                    showToast("This daemon cannot create workspaces.")
+                }
             } label: {
-                Image(systemName: "ellipsis").font(.system(size: 16))
-                    .frame(width: 36, height: 36)
-                    .contentShape(.rect)
+                Label("New workspace", systemImage: "plus")
+                    .font(typography.sans(16, weight: .medium))
+                    .foregroundStyle(ClaudePalette.background)
+                    .padding(.horizontal, 17)
+                    .frame(height: 44)
+                    .background(ClaudePalette.ink, in: .capsule)
+                    .opacity(session.workspaceDirectory.supportsWorkspaceCreate ? 1 : 0.4)
             }
-            .accessibilityLabel("Host options")
+            .buttonStyle(.plain)
+            .accessibilityLabel("New workspace")
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 6)
@@ -361,13 +510,23 @@ struct PaseoSidebar: View {
         return String(first).uppercased()
     }
 
-    private var connectionKind: PaseoStatusDot.Kind {
-        switch session.connection {
-        case .connected: .done
-        case .reconnecting, .connecting: .running
-        case .failed: .failed
-        case .idle: .idle
+    /// The project whose workspace is showing the selected agent, for the new-workspace sheet's
+    /// default picker selection.
+    private var selectedWorkspaceProjectId: String? {
+        guard
+            let selectedAgentId,
+            let agent = session.agents.first(where: { $0.id == selectedAgentId }),
+            let workspaceId = agent.workspaceId
+        else { return nil }
+        return session.workspaceDirectory.workspace(id: workspaceId)?.projectId
+    }
+
+    private func archiveMessage(for workspace: WorkspaceDescriptor?) -> String {
+        guard let workspace else { return "" }
+        if agents(in: workspace).contains(where: { $0.status == .running }) {
+            return "This agent is still running. Archiving it will stop the agent."
         }
+        return "The workspace and its agents will be archived."
     }
 
     private func showToast(_ text: String) {
@@ -379,8 +538,8 @@ struct PaseoSidebar: View {
     }
 }
 
-/// The DSH height roll for a workspace's agent rows: 200 ms, ease-out, measured naturally.
-private struct SidebarAgentsRoll<Content: View>: View {
+/// The height roll for a project's workspace rows: 200 ms, ease-out, measured naturally.
+private struct SidebarRoll<Content: View>: View {
     let expanded: Bool
     @ViewBuilder var content: () -> Content
 
@@ -391,10 +550,10 @@ private struct SidebarAgentsRoll<Content: View>: View {
         content()
             .background {
                 GeometryReader { proxy in
-                    Color.clear.preference(key: SidebarAgentsHeightKey.self, value: proxy.size.height)
+                    Color.clear.preference(key: SidebarRollHeightKey.self, value: proxy.size.height)
                 }
             }
-            .onPreferenceChange(SidebarAgentsHeightKey.self) { contentHeight = $0 }
+            .onPreferenceChange(SidebarRollHeightKey.self) { contentHeight = $0 }
             .frame(height: expanded ? contentHeight : 0, alignment: .top)
             .clipped()
             .opacity(expanded ? 1 : 0)
@@ -402,7 +561,7 @@ private struct SidebarAgentsRoll<Content: View>: View {
     }
 }
 
-private struct SidebarAgentsHeightKey: PreferenceKey {
+private struct SidebarRollHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
@@ -412,11 +571,13 @@ private struct SidebarAgentsHeightKey: PreferenceKey {
 private enum PaseoSidebarSheet: Identifiable {
     case settings
     case comingSoon(String)
+    case newWorkspace
 
     var id: String {
         switch self {
         case .settings: "settings"
         case .comingSoon(let title): "coming.\(title)"
+        case .newWorkspace: "newWorkspace"
         }
     }
 }
@@ -448,9 +609,12 @@ private struct ClaudeSidebarComingSoonSheet: View {
 
 /// Appearance and the optional name the home greeting uses. The rest of Settings is still to come.
 private struct ClaudeSidebarSettingsSheet: View {
+    let session: HostSession
+    let onDisconnect: () -> Void
     @Environment(\.dismiss) private var dismiss
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
+    @State private var confirmDisconnect = false
     private let typography = ClaudeTypography()
 
     var body: some View {
@@ -496,8 +660,206 @@ private struct ClaudeSidebarSettingsSheet: View {
                         .font(typography.sans(13))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                         .padding(.top, 8)
+                    hostSection
                 }
                 .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+            }
+        }
+        .background(ClaudePalette.background)
+        .foregroundStyle(ClaudePalette.ink)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(38)
+        .confirmationDialog(
+            "Disconnect from this host?",
+            isPresented: $confirmDisconnect,
+            titleVisibility: .visible
+        ) {
+            Button("Disconnect", role: .destructive) {
+                onDisconnect()
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The connection to the daemon will be closed. Your settings are kept.")
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(typography.sans(13, weight: .medium))
+            .foregroundStyle(ClaudePalette.secondaryInk)
+            .padding(.horizontal, 4)
+            .padding(.top, 8)
+    }
+
+    /// The host this app is talking to: server id and a connection dot, plus a destructive
+    /// Disconnect.
+    @ViewBuilder private var hostSection: some View {
+        sectionTitle("Host")
+        RowGroup {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Connection")
+                        .font(typography.sans(17))
+                    Text(session.serverInfo?.hostname ?? "Paseo daemon")
+                        .font(typography.sans(13))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 6) {
+                    PaseoStatusDot(kind: connectionKind(session.connection))
+                    Text(connectionLabel(session.connection))
+                        .font(typography.sans(13))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 60)
+            RowDivider()
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Server ID")
+                    .font(typography.sans(13, weight: .medium))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                Text(session.serverInfo?.serverId ?? "Not connected")
+                    .font(typography.mono(13, relativeTo: .footnote))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+        }
+        RowGroup {
+            Button {
+                confirmDisconnect = true
+            } label: {
+                HStack {
+                    Text("Disconnect")
+                        .font(typography.sans(17))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Disconnect")
+        }
+    }
+}
+
+/// The minimal new-workspace sheet in ClaudeUI's sheet chrome: pick a project (defaulting to the
+/// selected workspace's project), an optional name, and create a worktree off the project's current
+/// branch.
+private struct ClaudeNewWorkspaceSheet: View {
+    let session: HostSession
+    let defaultProjectId: String?
+    var onCreated: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var projectId: String?
+    @State private var name = ""
+    private let typography = ClaudeTypography()
+
+    private var directory: WorkspaceDirectory { session.workspaceDirectory }
+    private var projects: [WorkspaceProjectDescriptor] { directory.projects }
+
+    private var selectedProjectId: String {
+        projectId ?? defaultProjectId ?? projects.first?.projectId ?? ""
+    }
+
+    private var selectedProject: WorkspaceProjectDescriptor? {
+        projects.first { $0.projectId == selectedProjectId }
+    }
+
+    /// The branch the new worktree forks from: the project's local (non-worktree) checkout branch,
+    /// else any branch in the project, else "main".
+    private var baseBranch: String {
+        let projectId = selectedProject?.projectId
+        let workspaces = directory.workspaces.filter { $0.projectId == projectId }
+        if let branch = workspaces.first(where: { $0.workspaceKind != .worktree && $0.branch != nil })?
+            .branch
+        {
+            return branch
+        }
+        return workspaces.compactMap(\.branch).first ?? "main"
+    }
+
+    private var canCreate: Bool {
+        directory.supportsWorkspaceCreate && !directory.isCreatingWorkspace && selectedProject != nil
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            SheetHeader(title: "New workspace", close: { dismiss() })
+            ScrollView {
+                VStack(spacing: 12) {
+                    RowGroup {
+                        HStack(spacing: 12) {
+                            Text("Project")
+                                .font(typography.sans(17))
+                            Spacer(minLength: 8)
+                            Picker(
+                                "Project",
+                                selection: Binding(
+                                    get: { selectedProjectId },
+                                    set: { projectId = $0 })
+                            ) {
+                                ForEach(projects) { project in
+                                    Text(
+                                        project.projectCustomName ?? project.projectDisplayName
+                                    )
+                                    .tag(project.projectId)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .font(typography.sans(16))
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 52)
+                        RowDivider()
+                        HStack(spacing: 12) {
+                            Text("Name")
+                                .font(typography.sans(17))
+                            Spacer(minLength: 8)
+                            TextField("Optional", text: $name)
+                                .font(typography.sans(17))
+                                .multilineTextAlignment(.trailing)
+                                .textInputAutocapitalization(.words)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 52)
+                    }
+                    if directory.supportsWorkspaceCreate {
+                        Text("Creates a git worktree off \(baseBranch).")
+                            .font(typography.sans(12))
+                            .foregroundStyle(ClaudePalette.captionInk)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                    } else {
+                        Text("This daemon cannot create workspaces.")
+                            .font(typography.sans(13))
+                            .foregroundStyle(ClaudePalette.failureInk)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                    }
+                    if let error = directory.actionError {
+                        Text(error)
+                            .font(typography.sans(12))
+                            .foregroundStyle(ClaudePalette.failureInk)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                    }
+                    createButton
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
             }
         }
         .background(ClaudePalette.background)
@@ -507,12 +869,78 @@ private struct ClaudeSidebarSettingsSheet: View {
         .presentationCornerRadius(38)
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(typography.sans(13, weight: .medium))
-            .foregroundStyle(ClaudePalette.secondaryInk)
-            .padding(.horizontal, 4)
-            .padding(.top, 8)
+    private var createButton: some View {
+        Button {
+            create()
+        } label: {
+            HStack(spacing: 8) {
+                if directory.isCreatingWorkspace {
+                    ProgressView().controlSize(.small).tint(ClaudePalette.background)
+                }
+                Text(directory.isCreatingWorkspace ? "Creating…" : "Create workspace")
+                    .font(typography.sans(16, weight: .medium))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .foregroundStyle(ClaudePalette.background)
+            .background(ClaudePalette.ink, in: .capsule)
+            .opacity(canCreate ? 1 : 0.4)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canCreate)
+        .accessibilityIdentifier("newWorkspace.create")
+    }
+
+    private func create() {
+        guard let project = selectedProject else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let branchName = branchSlug(trimmed) ?? "workspace-\(Int(Date().timeIntervalSince1970))"
+        let baseRef = baseBranch.hasPrefix("refs/") ? baseBranch : "refs/heads/\(baseBranch)"
+        let title = trimmed.isEmpty ? nil : trimmed
+        Task {
+            let created = await directory.createWorkspace(
+                in: project,
+                source: .branchOff(baseRef: baseRef, branchName: branchName, worktreeSlug: branchName),
+                title: title)
+            if created != nil {
+                onCreated()
+                dismiss()
+            }
+        }
+    }
+
+    /// Lowercase, non-alphanumerics collapsed to single dashes, trimmed; nil when nothing is left.
+    private func branchSlug(_ raw: String) -> String? {
+        let mapped = raw.lowercased().map { character -> Character in
+            character.isLetter || character.isNumber ? character : "-"
+        }
+        var slug = String(mapped)
+        while slug.contains("--") {
+            slug = slug.replacingOccurrences(of: "--", with: "-")
+        }
+        slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-."))
+        if slug.isEmpty { return nil }
+        return String(slug.prefix(40))
+    }
+}
+
+/// Connection state as a status dot and a short label, shared by the Settings sheet's Host section.
+private func connectionKind(_ state: ConnectionState) -> PaseoStatusDot.Kind {
+    switch state {
+    case .connected: .done
+    case .reconnecting, .connecting: .running
+    case .failed: .failed
+    case .idle: .idle
+    }
+}
+
+private func connectionLabel(_ state: ConnectionState) -> String {
+    switch state {
+    case .connected: "Connected"
+    case .connecting: "Connecting…"
+    case .reconnecting(let attempt, _): "Reconnecting (attempt \(attempt))"
+    case .failed: "Disconnected"
+    case .idle: "Not connected"
     }
 }
 

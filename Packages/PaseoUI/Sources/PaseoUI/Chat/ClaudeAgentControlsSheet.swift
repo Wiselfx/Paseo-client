@@ -110,16 +110,16 @@ struct ClaudeAgentControlsSheet: View {
         VStack(spacing: 12) {
             RowGroup {
                 SheetRow(
-                    title: "Model", symbol: "cpu", detail: providerDetail,
+                    title: "Model", detail: providerDetail,
                     value: modelLabel(store.agent?.model), chevron: true
                 ) { page = .models }
                 RowDivider()
                 SheetRow(
-                    title: "Thinking", symbol: "brain", value: thinkingLabel, chevron: true
+                    title: "Thinking", value: thinkingLabel, chevron: true
                 ) { page = .thinking }
                 RowDivider()
                 SheetRow(
-                    title: "Mode", symbol: "slider.horizontal.3", value: modeLabel, chevron: true
+                    title: "Mode", value: modeLabel, chevron: true
                 ) { page = .modes }
             }
             .padding(.horizontal, 16)
