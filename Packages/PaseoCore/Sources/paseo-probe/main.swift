@@ -268,7 +268,7 @@ func shortText(_ item: TimelineItem) -> String {
     case .todo(let list): text = "\(list.items.count) todos"
     case .error(let message): text = message
     case .notification(let level, let message): text = "\(level): \(message)"
-    case .compaction(let status): text = status
+    case .compaction(let status, _, _): text = status
     case .unknown(let type, _): text = type
     }
     let singleLine = text.replacingOccurrences(of: "\n", with: " ")

@@ -95,9 +95,16 @@ extension ClaudeChatView {
 
     /// One turn row, split out of `transcript` so the type checker sees it on its own.
     func turnView(_ turn: Turn, index: Int) -> some View {
-        let fork: ((TimelineRow) -> Void)? =
-            session.isForkContextSupportedByHost && onForkAgent != nil
-            ? { row in performFork(from: row) } : nil
+        let canFork = session.isForkContextSupportedByHost && onForkAgent != nil
+        // The turn's own prompt, and the row above it — where DSH cuts for Retract and for
+        // Delete this turn (`message-cut.ts`: the host has no in-place truncate).
+        let userRow = turn.userMessage
+        let cutRow = userRow.flatMap(boundaryBefore)
+        let canCut = canFork && cutRow != nil
+        let fork: ((ClaudeForkTarget, TimelineRow) async -> Void)? =
+            canFork ? { target, row in await forkInto(target, boundary: row.seqEnd) } : nil
+        let forkInFlight: ((ClaudeForkTarget) async -> Void)? =
+            canFork ? { target in await forkInto(target, boundary: nil) } : nil
         return ClaudeTurnView(
             turn: turn, typography: typography,
             onMarkdown: handleMarkdown, localImageLoader: localImageLoader,
@@ -116,6 +123,9 @@ extension ClaudeChatView {
                 pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .rerun)
             },
             onFork: fork,
+            onForkInFlight: forkInFlight,
+            onDeleteTurn: canCut ? { row in deleteTurn(userRow: row) } : nil,
+            onRetract: canCut ? { row in retractMessage(userRow: row) } : nil,
             isLatestTurn: index == store.turns.count - 1
         )
     }
@@ -374,19 +384,116 @@ extension ClaudeChatView {
         }
     }
 
-    /// Creates the forked agent and hands its id to the shell (which navigates to it).
-    func performFork(from row: TimelineRow) {
-        Task {
-            let result = await store.forkConversation(fromBoundarySeq: row.seqEnd)
-            if let failure = result.error {
-                showToast(failure)
-                return
-            }
-            guard let newId = result.agentId else { return }
-            await session.refreshAgents()
-            showToast("Forked")
-            onForkAgent?(newId)
+    /// Forks the conversation into the chosen target and opens the new agent.
+    ///
+    /// `boundary` nil is the in-flight fork: the daemon then projects the whole timeline, the
+    /// partially streamed answer included (upstream `turn-footer.tsx:38-46`).
+    func forkInto(_ target: ClaudeForkTarget, boundary: Int?) async {
+        switch target {
+        case .tab:
+            await openForkedAgent(
+                await store.forkConversation(fromBoundarySeq: boundary), toast: "Forked")
+        case .workspace:
+            guard let workspaceId = await createForkWorkspace() else { return }
+            await openForkedAgent(
+                await store.forkConversation(fromBoundarySeq: boundary, into: workspaceId),
+                toast: "Forked")
         }
+    }
+
+    /// Retract: fork before the message, then hand the text back in the new session's composer
+    /// (DSH `message-actions.ts:197-207`).
+    func retractMessage(userRow: TimelineRow) {
+        guard let boundary = boundaryBefore(userRow), case .userMessage(let message) = userRow.item
+        else { return }
+        Task {
+            await openForkedAgent(
+                await store.forkConversation(fromBoundarySeq: boundary),
+                toast: "The message is back in the composer", draft: message.text)
+        }
+    }
+
+    /// Delete this turn: fork before the turn's prompt and keep the prefix only (DSH
+    /// `message-actions.ts:231-236`).
+    func deleteTurn(userRow: TimelineRow) {
+        guard let boundary = boundaryBefore(userRow) else { return }
+        Task {
+            await openForkedAgent(
+                await store.forkConversation(fromBoundarySeq: boundary),
+                toast: "The turn is absent from the new session")
+        }
+    }
+
+    /// The projected row directly above `row` — the fork boundary for a cut "before this
+    /// message". Nil when the row is the first in the timeline (nothing to keep).
+    func boundaryBefore(_ row: TimelineRow) -> Int? {
+        let rows = store.timeline.rows
+        guard let index = rows.firstIndex(where: { $0.id == row.id }), index > 0 else { return nil }
+        return rows[index - 1].seqEnd
+    }
+
+    /// Creates the workspace "Fork in a new workspace" lands in, through the sidebar's create
+    /// path (`WorkspaceDirectory.createWorkspace`) with the values the new-workspace sheet
+    /// prefills: a worktree cut off the project's checkout branch. Upstream opens its
+    /// new-workspace form here and hands the fork's history to it as a draft
+    /// (`use-fork-agent.ts:181-196`); our sheet seeds an agent with a plain prompt, so the fork
+    /// creates the workspace and then the agent itself.
+    func createForkWorkspace() async -> String? {
+        let directory = session.workspaceDirectory
+        guard let agent = store.agent, let workspaceId = agent.workspaceId,
+            let workspace = directory.workspace(id: workspaceId),
+            let project = directory.projects.first(where: { $0.projectId == workspace.projectId })
+        else {
+            // Upstream `message.actions.forkMissingWorkspace` (en.ts:338).
+            showToast("This agent is not in a workspace.")
+            return nil
+        }
+        if !directory.supportsWorkspaceCreate {
+            showToast("This daemon cannot create worktree workspaces.")
+            return nil
+        }
+        let base = forkBaseBranch(in: project)
+        let branch = "workspace-\(Int(Date().timeIntervalSince1970))"
+        let created = await directory.createWorkspace(
+            in: project,
+            source: .branchOff(
+                baseRef: base.hasPrefix("refs/") ? base : "refs/heads/\(base)",
+                branchName: branch, worktreeSlug: branch))
+        guard let created else {
+            if let failure = directory.actionError { showToast(failure) }
+            return nil
+        }
+        return created.id
+    }
+
+    /// The branch a fork's worktree cuts from: the project's local (non-worktree) checkout, else
+    /// any branch the directory carries, else "main". Same rule as `ClaudeNewWorkspaceSheet`.
+    func forkBaseBranch(in project: WorkspaceProjectDescriptor) -> String {
+        let workspaces = session.workspaceDirectory.workspaces.filter {
+            $0.projectId == project.projectId
+        }
+        if let branch = workspaces.first(where: { $0.workspaceKind != .worktree && $0.branch != nil })?
+            .branch
+        {
+            return branch
+        }
+        return workspaces.compactMap(\.branch).first ?? "main"
+    }
+
+    /// One place for the tail every fork shares: surface the failure, refresh the sidebar, say
+    /// what happened, open the new agent. An optional `draft` seeds its composer.
+    func openForkedAgent(
+        _ result: (agentId: String?, error: String?), toast: String, draft: String? = nil
+    ) async {
+        if let failure = result.error {
+            showToast(failure)
+            return
+        }
+        guard let newId = result.agentId else { return }
+        await session.refreshAgents()
+        if let draft { session.conversation(for: newId).draft = draft }
+        showToast(toast)
+        onForkAgent?(newId)
     }
 
     /// Runs the confirmed rewind and toasts the outcome. One confirm in flight at a time.

@@ -31,8 +31,18 @@ struct ClaudeTurnView: View {
     var onEdit: ((String, String) -> Void)? = nil
     /// Called with (messageId, text) when Rerun is chosen; the transcript rewinds and resends.
     var onRerun: ((String, String) -> Void)? = nil
-    /// M7h fork: called with the final assistant row when Fork is chosen. Nil hides the button.
-    var onFork: ((TimelineRow) -> Void)? = nil
+    /// Fork, with the target menu (V1): called with the chosen target and the row to pin the
+    /// boundary at. Nil hides the menu — no host support, or nothing to fork from.
+    var onFork: ((ClaudeForkTarget, TimelineRow) async -> Void)? = nil
+    /// The running turn's fork. No boundary: the whole timeline as it stands, partially streamed
+    /// answer included (upstream `turn-footer.tsx:38-46`). Nil hides it.
+    var onForkInFlight: ((ClaudeForkTarget) async -> Void)? = nil
+    /// DSH "Delete this turn": called with the turn's own prompt row; the transcript forks at the
+    /// row before it. Nil hides the control.
+    var onDeleteTurn: ((TimelineRow) -> Void)? = nil
+    /// DSH "Retract this message": called with the turn's prompt row (same cut as Delete) — the
+    /// transcript puts the text back in the new session's composer.
+    var onRetract: ((TimelineRow) -> Void)? = nil
     /// False for every turn except the most recent one; only that turn never collapses.
     var isLatestTurn: Bool = true
 
@@ -128,6 +138,9 @@ struct ClaudeTurnView: View {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
                 if let sender = message.sender { sentByLine(sender) }
                 let rewindable = message.messageId != nil && !rewindChoices.isEmpty
+                // Retract forks the same cut as Edit, so it needs a message the daemon
+                // acknowledged — and never while the turn is still producing (DSH hides it).
+                let retractible = rewindable && !row.isPending && !isRunning
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
@@ -135,7 +148,8 @@ struct ClaudeTurnView: View {
                     attributed: bubbleAttributed(message.text),
                     canRewrite: canRewrite,
                     onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
-                    onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil
+                    onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
+                    onRetract: retractible ? { onRetract?(row) } : nil
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -177,6 +191,9 @@ struct ClaudeTurnView: View {
                 // The provider has to acknowledge the prompt before it can be rewound to.
                 if let sender = message.sender { sentByLine(sender) }
                 let rewindable = message.messageId != nil && !rewindChoices.isEmpty
+                // Retract forks the same cut as Edit, so it needs a message the daemon
+                // acknowledged — and never while the turn is still producing (DSH hides it).
+                let retractible = rewindable && !row.isPending && !isRunning
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
@@ -184,7 +201,8 @@ struct ClaudeTurnView: View {
                     attributed: bubbleAttributed(message.text),
                     canRewrite: canRewrite,
                     onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
-                    onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil
+                    onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
+                    onRetract: retractible ? { onRetract?(row) } : nil
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -207,25 +225,18 @@ struct ClaudeTurnView: View {
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
             }
-            if !isRunning, let forkTarget = finalProse, (!copyText.isEmpty || onFork != nil) {
+            if !isRunning, showsAnswerFooter {
                 HStack(spacing: 17) {
                     if !copyText.isEmpty {
                         ClaudeCopyButton(text: copyText, label: "Copy response")
                     }
-                    if let onFork {
-                        // Fork chat from here: seed a new agent with the history up to this answer.
-                        Button {
-                            Haptics.selection()
-                            onFork(forkTarget)
-                        } label: {
-                            Image(systemName: "arrow.branch")
-                                .font(.system(size: 15, weight: .light))
-                                .foregroundStyle(ClaudePalette.tertiaryInk)
-                                .frame(width: 28, height: 28)
-                                .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Fork from here")
+                    if let onFork, let forkTarget = finalProse {
+                        ClaudeForkMenu { target in await onFork(target, forkTarget) }
+                    }
+                    if let onDeleteTurn, let userRow = turn.userMessage {
+                        ClaudeTurnActionButton(
+                            systemImage: "trash", accessibilityLabel: "Delete this turn"
+                        ) { onDeleteTurn(userRow) }
                     }
                 }
                 .padding(.top, 2)
@@ -256,35 +267,65 @@ struct ClaudeTurnView: View {
         return parts.joined(separator: "\n\n")
     }
 
-    var header: some View {
-        Button {
-            Haptics.selection()
-            withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
-                userExpanded = !isExpanded
-            }
-        } label: {
+    /// The work header. A running turn gets the fork menu inline (`turn-footer.tsx:139-166`);
+    /// the fold toggle shrinks to the status line so the menu's own taps never reach it.
+    @ViewBuilder var header: some View {
+        if isRunning {
             HStack(spacing: 8) {
-                switch turn.phase {
-                case .running:
-                    ClaudeLiveStatusLine(turn: turn, typography: typography)
-                case .completed:
-                    Text(turn.duration.map(DurationText.completed) ?? "Completed")
-                        .font(typography.sans(14))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                    Spacer(minLength: 0)
-                case .failed(let message):
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(typography.sans(14))
-                        .foregroundStyle(ClaudePalette.failureInk)
-                        .lineLimit(2)
-                    Spacer(minLength: 0)
+                Button { toggleWork() } label: {
+                    HStack(spacing: 8) {
+                        ClaudeLiveStatusLine(turn: turn, typography: typography)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(
+                    isExpanded ? "Collapses the work in this turn" : "Shows the work in this turn")
+                if let onForkInFlight {
+                    ClaudeForkMenu { target in await onForkInFlight(target) }
                 }
                 ClaudeChevron(expanded: isExpanded)
             }
-            .contentShape(.rect)
+        } else {
+            Button { toggleWork() } label: {
+                HStack(spacing: 8) {
+                    switch turn.phase {
+                    case .running:
+                        ClaudeLiveStatusLine(turn: turn, typography: typography)
+                    case .completed:
+                        Text(turn.duration.map(DurationText.completed) ?? "Completed")
+                            .font(typography.sans(14))
+                            .foregroundStyle(ClaudePalette.secondaryInk)
+                        Spacer(minLength: 0)
+                    case .failed(let message):
+                        Label(message, systemImage: "exclamationmark.triangle.fill")
+                            .font(typography.sans(14))
+                            .foregroundStyle(ClaudePalette.failureInk)
+                            .lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
+                    ClaudeChevron(expanded: isExpanded)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(
+                isExpanded ? "Collapses the work in this turn" : "Shows the work in this turn")
         }
-        .buttonStyle(.plain)
-        .accessibilityHint(isExpanded ? "Collapses the work in this turn" : "Shows the work in this turn")
+    }
+
+    /// True when the answer footer has anything to show: copy, the fork menu (needs a boundary
+    /// row), or the turn's Delete control.
+    var showsAnswerFooter: Bool {
+        !copyText.isEmpty || (onFork != nil && finalProse != nil) || onDeleteTurn != nil
+    }
+
+    func toggleWork() {
+        Haptics.selection()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+            userExpanded = !isExpanded
+        }
     }
 }
 
@@ -326,6 +367,89 @@ struct ClaudeSegmentView: View {
     }
 }
 
+/// Where a fork goes. Upstream's `AssistantForkTarget` (`assistant-fork-menu.tsx:14-15`).
+enum ClaudeForkTarget: Sendable {
+    case tab
+    case workspace
+}
+
+/// The answer footer's fork control: one button opening the target menu (upstream
+/// `assistant-fork-menu.tsx:100-121`). Labels are `en.ts:334-336`, verbatim.
+///
+/// While a target is in flight the trigger turns into a spinner and is disabled, so neither item
+/// can start a second fork. Upstream puts the spinner **inside** the pending item and keeps it
+/// enabled; a SwiftUI menu item cannot host a `ProgressView`, so the spinner lives on the trigger.
+struct ClaudeForkMenu: View {
+    var onFork: (ClaudeForkTarget) async -> Void
+    @State private var pending: ClaudeForkTarget?
+
+    var body: some View {
+        Menu {
+            Button("Fork in a new tab", systemImage: "arrow.branch") { run(.tab) }
+                .disabled(pending != nil)
+            Button("Fork in a new workspace", systemImage: "square.on.square.dashed") {
+                run(.workspace)
+            }
+            .disabled(pending != nil)
+        } label: {
+            ClaudeTurnActionGlyph(systemImage: "arrow.branch", busy: pending != nil)
+        }
+        .buttonStyle(.plain)
+        .disabled(pending != nil)
+        .accessibilityLabel("Fork chat from here")
+    }
+
+    /// Starts one fork at a time and holds the button down until it lands.
+    private func run(_ target: ClaudeForkTarget) {
+        guard pending == nil else { return }
+        Haptics.selection()
+        pending = target
+        Task {
+            await onFork(target)
+            pending = nil
+        }
+    }
+}
+
+/// A 28 pt footer control: the glyph, or a small spinner where the glyph was while work runs.
+struct ClaudeTurnActionGlyph: View {
+    var systemImage: String
+    var busy: Bool
+
+    var body: some View {
+        Group {
+            if busy {
+                ProgressView().controlSize(.mini)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .light))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+            }
+        }
+        .frame(width: 28, height: 28)
+        .contentShape(.rect)
+    }
+}
+
+/// A plain 28 pt footer action (no menu), e.g. "Delete this turn".
+struct ClaudeTurnActionButton: View {
+    var systemImage: String
+    var accessibilityLabel: String
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            ClaudeTurnActionGlyph(systemImage: systemImage, busy: false)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
 /// "2 thoughts, 1 tool call": the counted header, then a transparent card of rows, each opening on
 /// its own. The card is capped at `min(400 pt, 50% of height)` and scrolls inside.
+
 #endif
