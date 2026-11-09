@@ -123,7 +123,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Workspace setup observation (setup status/subscribe, setup tab, "Run setup" rerun) — Status: `missing` — Source: `docs/research/01-app-features.md:125`; docs/research/02-protocol-workspaces-git-files.md:169
 - [ ] Feature: Workspace setup dialog / callout ("Set up worktree scripts") — Status: `missing` — Source: `docs/research/01-app-features.md:132`
 - [ ] Feature: Local (non-worktree) isolation for new workspaces — Status: `done` — Source: `docs/research/01-app-features.md:131`; this client `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoSidebar.swift` (full New workspace sheet)
-- [ ] Feature: Sessions / History screen (all sessions across workspaces/hosts, date groups, search, Load more, archived badge) — Status: `missing` — Source: `docs/research/01-app-features.md:135-137`
+- [ ] Feature: Sessions / History screen (all sessions across workspaces/hosts, date groups, search, Load more, archived badge) — Status: `done` (live + archived mixed, day groups, title filter, archived badge, unarchive-on-tap, Load more paging, swipe + context-menu row actions) — Source: `docs/research/01-app-features.md:135-137`; this client `Chat/ClaudeHistoryView.swift`
 - [ ] Feature: Per-agent import from another tool ("Import session") — Status: `missing` — Source: `docs/research/01-app-features.md:126,412`
 - [ ] Feature: Projects list per host (Settings → host → Projects) — Status: `missing` — Source: `docs/research/01-app-features.md:139,296`
 - [ ] Feature: Project settings (Name, Icon; Worktree Setup/Teardown hooks; Scripts; Metadata generation prompts; stale paseo.json reload) — Status: `missing` — Source: `docs/research/01-app-features.md:141`; protocol `docs/research/04-protocol-agents-permissions-settings.md:1142`
@@ -180,7 +180,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Find in pane (Cmd/Ctrl+F, previous/next match, replace for files) — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:57`
 - [ ] Feature: Context window meter + details sheet ({{percentage}}% used, tokens, session cost) — Status: `done` (ring in the composer toolbar, green→amber→red by percent; tap → details sheet with used/max, tokens, cache rates, cost, cost by model; hidden when the host reports no window) — Source: this client `Chat/ClaudeMeterRing` via `Chat/ClaudeUsageRing.swift`, `Chat/ClaudeContextSheet.swift`, `Chat/ClaudeChatView.swift` (`contextMeter`); `docs/research/01-app-features.md:59`; folder `context-stats/`
 - [ ] Feature: Empty state ("Start chatting with this agent…") — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (empty content + `ClaudeHomeHero`); `docs/research/01-app-features.md:60`
-- [ ] Feature: Archived agent callout with Unarchive — Status: `store only (no UI)` (agent archive RPC wired; no unarchive/callout) — Source: `docs/research/01-app-features.md:61,65`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:489-501`
+- [ ] Feature: Archived agent callout with Unarchive — Status: `done` (unarchive in History rows: tap or swipe → `refresh_agent_request`, then the agent opens live) — Source: `docs/research/01-app-features.md:61,65`; this client `Chat/ClaudeHistoryView.swift`; `PaseoProtocol/AgentLifecycle.swift`
 - [ ] Feature: Agent stream resilience ("Couldn't load agent history", "This message was capped", load-older, archived callouts) — Status: `done` (Load-older row + inline errors; no archived callout) — Source: this client `…/Chat/ClaudeChatView.swift` (`olderHistoryRow`, error paths); `docs/research/01-app-features.md:61`
 - [ ] Feature: Background work surface (background shells/monitors reported by provider) — Status: `missing` — Source: `docs/research/01-app-features.md:64`; docs/research/04-protocol-agents-permissions-settings.md:1033
 - [ ] Feature: Live Markdown rendering of streamed assistant prose (lists, tables, blockquotes, headings, HR) — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/ClaudeMarkdownView.swift`, `MarkdownDocumentModel.swift`, `MarkdownTableMetrics.swift`; `docs/research/08-dsh-live-observation.md:564-606`
@@ -229,15 +229,15 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Add-provider catalog with Install buttons — Status: `missing` — Source: `docs/research/01-app-features.md:317`
 - [ ] Feature: Metadata generation model setting — See Connection & hosts (host settings) — Status: `missing` — Source: `docs/research/01-app-features.md:300`
 - [ ] Feature: Agent profiles (list/add/edit/reorder/delete; applied once at creation) — Status: `store only (no UI)` (list/profiles read from daemon config; creation consumes them nowhere yet) — Source: `docs/research/01-app-features.md:320-321`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:118-127`
-- [ ] Feature: Agent archive (with running-agent confirmation copy) — Status: `store only (no UI)` (archive wired; confirmation is sidebar-only for workspaces) — Source: `docs/research/01-app-features.md:65`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:489-501`
-- [ ] Feature: Unarchive agent — Status: `missing` — Source: `docs/research/01-app-features.md:61`
+- [ ] Feature: Agent archive (with running-agent confirmation copy) — Status: `done` (History rows: swipe/context menu; running agents get the upstream confirmation "This agent is still running. Archiving it will stop the agent."; sidebar-only before) — Source: `docs/research/01-app-features.md:65`; this client `Chat/ClaudeHistoryView.swift`; `PaseoProtocol/AgentLifecycle.swift`
+- [ ] Feature: Unarchive agent — Status: `done` (`refresh_agent_request` → `agent_refreshed`; History row tap/swipe; local list flips to live, `session.refreshAgents()` resyncs the sidebar) — Source: `docs/research/01-app-features.md:61`; this client `Chat/ClaudeHistoryView.swift`; `PaseoProtocol/AgentLifecycle.swift`
 - [ ] Feature: Agent rename — Status: `store only (no UI)` — Source: this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:481-488`; `docs/research/01-app-features.md:116`
 - [ ] Feature: Agent hard delete — Status: `missing` — Source: docs/research/04-protocol-agents-permissions-settings.md:361
 - [ ] Feature: Detach provider subagent from parent's track — Status: `store only (no UI)` (detach RPC mapped) — Source: docs/research/04-protocol-agents-permissions-settings.md:451; this client `Packages/PaseoProtocol/Agents.swift`; no UI
 - [ ] Feature: Provider subagent list/timeline (background tasks the provider reports) — Status: `store only (no UI)` — Source: this client `Packages/PaseoProtocol/Subagents.swift`, `Packages/PaseoStore/ConversationSubagents.swift`
 - [ ] Feature: Fast mode (per-provider, composer + command center) — Status: `done` (composer chip + Features group in the agent-controls sheet; provider advertises it as toggle `fast_mode`; no command center) — Source: `docs/research/01-app-features.md:325`; this client `…/Chat/ClaudeChatView.swift`, `…/Chat/ClaudeAgentControlsSheet.swift`
 - [ ] Feature: Model switch no-op bug fix (M2.5a) — Status: `done` — Source: `docs/STATUS.md:58`, `git log` `325b984`
-- [x] Feature: Agent list / history surface — See Search & history — Status: `done` (History screen, active agents only; archived hidden: `HostSession` discards them at ingest, no unarchive RPC) — Source: this client `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:66`
+- [x] Feature: Agent list / history surface — See Search & history — Status: `done` (History screen: live + archived agents, day groups, title search, Load more, archived badge, swipe/context-menu actions incl. permanent delete) — Source: this client `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:66`
 - [ ] Feature: Attention flags on agents (permission/error/finished) — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoSidebar.swift:321-360`; `docs/research/04-protocol-agents-permissions-settings.md:642`
 - [ ] Feature: Agent snapshot cards re-render on `agent_update` (live title/model/status) — Status: `done` — Source: this client `Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:124-180`; fixtures `Packages/PaseoCore/Tests/PaseoFixtures/Fixtures/agents/`
 
@@ -510,7 +510,7 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 - [ ] Feature: `rightbar-fit` — right panel's box in page pixels under web zoom (panel vs track mismatch) — Status: `not applicable (web host zoom plumbing)` — Source: `…/features/rightbar-fit/` (`rightbar-fit.ts`)
 - [ ] Feature: `row-skip` — `content-visibility: auto` skip-marking of settled transcript rows (paint/layout perf) — Status: `not applicable (SwiftUI LazyVStack; web layout engine)` — Source: `…/features/row-skip/` (`row-skip.ts`, `row-skip.css`)
 - [ ] Feature: `search` — Ctrl+K command palette takeover of the host sidebar search (Recents / Actions / Sessions / Projects / Plugins / Skills / Shortcuts, filters, keyboard-driven) — Status: `missing` — Source: `…/features/search/` (`search.ts`, `sources.ts`, `search-host-takeover.ts`)
-- [ ] Feature: `session-actions` — session-row context menu (right-click → the host menu's commands: rename/archive/…) — Status: `missing` (workspace rows have a long-press menu; agent rows and their actions are missing — See Sidebar & navigation) — Source: `…/features/session-actions/` (`session-actions.ts`, `context-menu.ts`); this client `…/Chat/PaseoSidebar.swift` (workspace context menu only)
+- [ ] Feature: `session-actions` — session-row context menu (right-click → the host menu's commands: rename/archive/…) — Status: `done` (History rows: Rename, Archive/Unarchive, Copy agent ID, Delete permanently; sidebar workspace rows unchanged) — Source: `…/features/session-actions/` (`session-actions.ts`, `context-menu.ts`); this client `…/Chat/ClaudeHistoryView.swift`
 - [ ] Feature: `session-title` — header session title is the session's own name; press to edit inline, rename via host `session.rename` — Status: `missing` (no agent rename UI — See Agents & models) — Source: `…/features/session-title/` (`session-title.ts`)
 - [ ] Feature: `settings` — the plugin's seven settings tabs (general/appearance/sidebar/icons/main-window/zoom/motion) incl. theme style, auto-popover, quick providers, page zoom, reasoning display — Status: `missing` (our sheet has theme + your name + host + Disconnect) — Source: `…/features/settings/` (`settings.ts`, `settings-tab-*.ts`); this client `…/Chat/PaseoSidebar.swift` (`ClaudeSidebarSettingsSheet`)
 - [ ] Feature: `sidebar-entries` — edit which panel entries appear in the sidebar ("Edit sidebar…") — Status: `not applicable (DSH entry editor; our sidebar content is fixed — Paseo's own sidebar customization is a separate row, `missing`)` — Source: `…/features/sidebar-entries/` (`sidebar-entries.ts`, `more-placement.ts`)
@@ -531,8 +531,8 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 107 | 25 % |
-| `missing` | 199 | 47 % |
+| `done` | 113 | 27 % |
+| `missing` | 193 | 46 % |
 | `desktop-only (flag)` | 46 | 11 % |
 | `store only (no UI)` | 31 | 7 % |
 | `in flight` (M3a 1 · M3b 5 · M3c 8 · M3d 5) | 19 | 5 % |

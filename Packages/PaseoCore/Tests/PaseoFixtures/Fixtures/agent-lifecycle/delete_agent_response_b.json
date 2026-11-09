@@ -1,0 +1,10 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_deleted",
+    "payload": {
+      "agentId": "00000000-0000-0000-0000-000000000002",
+      "requestId": "m7e-16"
+    }
+  }
+}
