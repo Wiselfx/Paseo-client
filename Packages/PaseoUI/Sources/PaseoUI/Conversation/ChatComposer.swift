@@ -12,7 +12,7 @@ extension ClaudeChatView {
     /// other composer control keys off this one value so the shape never half-changes.
     var composerExpanded: Bool {
         focused || !trimmedDraft.isEmpty || !trayItems.isEmpty || store.actionError != nil
-            || voiceActiveForAgent || voice.phase == .starting
+            || voiceActiveForAgent || voice.phase == .starting || dictation.isListening
     }
 
     var composer: some View {
@@ -32,20 +32,24 @@ extension ClaudeChatView {
 
     var composerCard: some View {
         let card = VStack(alignment: .leading, spacing: composerExpanded ? 8 : 0) {
-            if composerExpanded { attachmentTray }
-            if composerExpanded { dictationDeniedBanner }
-            if composerExpanded, let error = store.actionError {
-                Text(error)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
-                    .padding(.horizontal, 8)
-                    .transition(.opacity)
+            if dictation.isListening {
+                dictationOverlay
+            } else {
+                if composerExpanded { attachmentTray }
+                if composerExpanded { dictationDeniedBanner }
+                if composerExpanded, let error = store.actionError {
+                    Text(error)
+                        .font(typography.sans(13))
+                        .foregroundStyle(ClaudePalette.failureInk)
+                        .padding(.horizontal, 8)
+                        .transition(.opacity)
+                }
+                composerFieldRow
+                if composerExpanded, voiceActiveForAgent || voice.phase == .starting {
+                    voiceBar
+                }
+                if composerExpanded { composerControlRow }
             }
-            composerFieldRow
-            if composerExpanded, voiceActiveForAgent || voice.phase == .starting {
-                voiceBar
-            }
-            if composerExpanded { composerControlRow }
         }
         let framed = card
         .composerCardChrome(expanded: composerExpanded)
@@ -440,7 +444,7 @@ extension ClaudeChatView {
         guard voice.isVoiceMode else { return }
         do {
             try await voiceEngine.requestMicPermission()
-            try voiceEngine.startCapture()
+            try await voiceEngine.startCapture()
             UIApplication.shared.isIdleTimerDisabled = true
         } catch {
             showToast(error.localizedDescription)
@@ -669,6 +673,20 @@ extension ClaudeChatView {
             }
         }
     }
+
+    /// While the mic is live the row is the dictation overlay: cancel, meter, timer, insert,
+    /// insert-and-send (upstream `dictation-controls.tsx`).
+    var dictationOverlay: some View {
+        DictationOverlay(
+            level: Double(dictation.level),
+            duration: dictation.duration,
+            onCancel: { dictation.cancel() },
+            onAccept: { dictation.stop(keepingDraft: true) },
+            onAcceptAndSend: {
+                dictation.stop(keepingDraft: true)
+                send()
+            })
+    }
 }
 
 // MARK: - Shared composer pieces
@@ -708,6 +726,8 @@ struct ComposerModelChip: View {
     var thinkingLabel: String?
     /// Draft only: draws the provider's glyph in front of the model.
     var providerLabel: String?
+    /// Draft only: the provider's `iconSvg`, so the glyph is the real mark.
+    var providerIconSvg: String?
     var action: () -> Void
 
     private let typography = ClaudeTypography()
@@ -716,7 +736,7 @@ struct ComposerModelChip: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 if let providerLabel {
-                    ProviderGlyph(label: providerLabel)
+                    ProviderGlyph(label: providerLabel, iconSvg: providerIconSvg)
                 }
                 Text(modelLabel)
                 if let thinkingLabel {
@@ -736,14 +756,36 @@ struct ComposerModelChip: View {
     }
 }
 
-/// The provider's mark in the model chip's leading edge. Host catalogues carry per-provider brand
-/// SVGs (`ProviderSnapshotEntry.iconSvg`), which this app does not render; the glyph is a two-
-/// letter monogram on a small tile instead, so it reads the same for every provider and stays
-/// monochrome (§0.1).
+/// The provider's mark in the model chip's leading edge. The host catalogue carries per-provider
+/// brand SVGs (`ProviderSnapshotEntry.iconSvg`); `ProviderIcon` parses the ones this renderer
+/// understands and the shape fills them in ink (§0.1). Anything unparseable — a stroke-only icon,
+/// an arc, a `text` glyph — keeps the two-letter monogram, so the chip never shows a hole and
+/// still reads the same for every provider.
 struct ProviderGlyph: View {
     let label: String
+    /// The provider's `iconSvg`, when the catalogue entry carries one.
+    var iconSvg: String?
+
+    private let icon: ProviderIcon?
+
+    init(label: String, iconSvg: String? = nil) {
+        self.label = label
+        self.iconSvg = iconSvg
+        self.icon = iconSvg.flatMap(ProviderIcon.parse)
+    }
 
     var body: some View {
+        if let icon {
+            ProviderIconShape(icon: icon)
+                .fill(ClaudePalette.secondaryInk)
+                .frame(width: 16, height: 16)
+                .accessibilityHidden(true)
+        } else {
+            monogramTile
+        }
+    }
+
+    private var monogramTile: some View {
         Text(monogram)
             .font(.system(size: 9, weight: .semibold))
             .foregroundStyle(ClaudePalette.secondaryInk)
@@ -761,8 +803,8 @@ struct ProviderGlyph: View {
     }
 }
 
-/// The dictation mic: ink on `chip`, accented and pulsing while it listens. The draft and the live
-/// conversation draw the same control.
+/// The dictation mic: ink on `chip`, and a filled ink circle while it listens (no accent on a
+/// control, §0.1). The draft and the live conversation draw the same control.
 struct ComposerMicButton: View {
     let isListening: Bool
     /// 0…1 input level while listening.
@@ -776,8 +818,8 @@ struct ComposerMicButton: View {
             Image(systemName: isListening ? "mic.fill" : "mic")
                 .font(.system(size: 17, weight: .medium))
                 .frame(width: 36, height: 36)
-                .foregroundStyle(isListening ? Color.white : ClaudePalette.ink)
-                .background(isListening ? ClaudePalette.orange : ClaudePalette.chip, in: .circle)
+                .foregroundStyle(isListening ? ClaudePalette.background : ClaudePalette.ink)
+                .background(isListening ? ClaudePalette.ink : ClaudePalette.chip, in: .circle)
                 .scaleEffect(scale)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: level)
         }
@@ -788,6 +830,89 @@ struct ComposerMicButton: View {
     private var scale: CGFloat {
         guard isListening, !reduceMotion else { return 1 }
         return 1 + CGFloat(level) * 0.18
+    }
+}
+
+/// Upstream's dictation overlay (`dictation-controls.tsx`, `DictationOverlay`), monochrome: while
+/// the mic is live the composer row becomes cancel · input meter · elapsed timer · insert ·
+/// insert-and-send. It replaces the field rather than sitting beside it, the way upstream swaps
+/// the whole input surface. Wording is en.ts `message.dictation` (:362-371).
+struct DictationOverlay: View {
+    /// 0…1 input level.
+    let level: Double
+    /// Seconds since recording started.
+    let duration: TimeInterval
+    let onCancel: () -> Void
+    let onAccept: () -> Void
+    let onAcceptAndSend: () -> Void
+
+    private let typography = ClaudeTypography()
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onCancel) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(ClaudePalette.ink)
+                    .background(ClaudePalette.chip, in: .circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel dictation")
+            .accessibilityIdentifier("composer.dictation.cancel")
+
+            meter
+            Text(formattedDuration)
+                .font(typography.sans(15, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(ClaudePalette.ink)
+                .accessibilityIdentifier("composer.dictation.timer")
+
+            Spacer(minLength: 0)
+
+            actionButton(
+                "pencil", label: "Insert transcription",
+                identifier: "composer.dictation.insert", action: onAccept)
+            actionButton(
+                "arrow.up", label: "Insert transcription and send",
+                identifier: "composer.dictation.insertAndSend", action: onAcceptAndSend)
+        }
+        .frame(height: 52)
+    }
+
+    /// Ink bars on the card; the same meter the voice bar draws.
+    private var meter: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<5, id: \.self) { index in
+                let height = [8.0, 13.0, 18.0, 13.0, 8.0][index]
+                Capsule()
+                    .fill(ClaudePalette.ink.opacity(0.85))
+                    .frame(width: 4, height: height * CGFloat(max(0.15, level) + 0.05))
+            }
+        }
+        .frame(width: 52, height: 20)
+        .accessibilityHidden(true)
+    }
+
+    private func actionButton(
+        _ symbol: String, label: String, identifier: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 36, height: 36)
+                .foregroundStyle(ClaudePalette.background)
+                .background(ClaudePalette.ink, in: .circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
+    }
+
+    /// Upstream `formatDuration`: zero-padded minutes and seconds.
+    private var formattedDuration: String {
+        let total = max(0, Int(duration))
+        return String(format: "%02d:%02d", total / 60, total % 60)
     }
 }
 #endif

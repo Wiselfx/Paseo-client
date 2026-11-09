@@ -244,6 +244,7 @@ struct DraftChatView: View {
     /// attachment or an error.
     private var composerExpanded: Bool {
         focused || !trimmedText.isEmpty || !tray.isEmpty || errorText != nil
+            || dictation.isListening
     }
 
     /// No workspaces at all: nothing can be created yet, so the hero asks for a project instead
@@ -271,14 +272,32 @@ struct DraftChatView: View {
 
     private var composerCard: some View {
         VStack(alignment: .leading, spacing: composerExpanded ? 8 : 0) {
-            if composerExpanded { attachmentTray }
-            if composerExpanded { dictationDeniedNote }
-            if composerExpanded, let message = errorText { errorNote(message) }
-            fieldRow
-            if composerExpanded { controlRow }
+            if dictation.isListening {
+                dictationOverlay
+            } else {
+                if composerExpanded { attachmentTray }
+                if composerExpanded { dictationDeniedNote }
+                if composerExpanded, let message = errorText { errorNote(message) }
+                fieldRow
+                if composerExpanded { controlRow }
+            }
         }
         .composerCardChrome(expanded: composerExpanded)
         .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: composerExpanded)
+    }
+
+    /// While the mic is live the row is the dictation overlay: cancel, meter, timer, insert,
+    /// insert-and-send (upstream `dictation-controls.tsx`).
+    private var dictationOverlay: some View {
+        DictationOverlay(
+            level: Double(dictation.level),
+            duration: dictation.duration,
+            onCancel: { dictation.cancel() },
+            onAccept: { dictation.stop(keepingDraft: true) },
+            onAcceptAndSend: {
+                dictation.stop(keepingDraft: true)
+                send()
+            })
     }
 
     /// The add button overlays the field's leading edge at rest instead of being its sibling, so
@@ -300,7 +319,8 @@ struct DraftChatView: View {
             ComposerModelChip(
                 modelLabel: modelLabel,
                 thinkingLabel: thinkingLabel,
-                providerLabel: draft.providerId == nil ? nil : providerLabel
+                providerLabel: draft.providerId == nil ? nil : providerLabel,
+                providerIconSvg: draft.providerId == nil ? nil : providerIconSvg
             ) {
                 focused = false
                 showControls = true
@@ -426,6 +446,12 @@ struct DraftChatView: View {
     private var providerLabel: String {
         guard let providerId = draft.providerId else { return "" }
         return session.agentControl.provider(providerId)?.label ?? providerId
+    }
+
+    /// The provider's brand mark, straight from its catalogue entry (`iconSvg`).
+    private var providerIconSvg: String? {
+        guard let providerId = draft.providerId else { return nil }
+        return session.agentControl.provider(providerId)?.iconSvg
     }
 
     private var thinkingLabel: String? {

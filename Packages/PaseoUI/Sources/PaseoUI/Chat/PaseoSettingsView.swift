@@ -47,6 +47,7 @@ struct PaseoSettingsView: View {
     @State private var appendPromptSaving = false
     @State private var resumePromptDraft: String?
     @State private var resumePromptSaving = false
+    @State private var showResumePromptSheet = false
     @FocusState private var appendPromptFocused: Bool
     @FocusState private var resumePromptFocused: Bool
 
@@ -919,35 +920,27 @@ struct PaseoSettingsView: View {
                         .frame(minHeight: 52)
                     }
                 }
-                sectionLabel("Restart recovery")
-                RowGroup {
-                    configToggleRow(
-                        "Resume agents after restart",
-                        subtitle: "Agents found mid-task are resumed with this prompt appended",
-                        isOn: configBinding(
-                            get: { $0.resumeOnStartup ?? false },
-                            set: { $0.resumeOnStartup = $1 }))
-                    if session.hostSettings.config?.resumeOnStartup == true {
-                        rowDivider
-                        promptCard(
-                            title: "Appended to the resume prompt",
-                            placeholder: "What a resumed agent should know…",
-                            draft: resumePromptBinding,
-                            focused: $resumePromptFocused,
-                            saving: resumePromptSaving,
-                            dirty: resumePromptDirty) {
-                                saveResumePrompt()
-                            }
+                // COMPAT(restartRecovery): the card needs the host's `resumeOnStartupSetting`
+                // feature (messages.ts:240-271, daemon v0.14.0); an old host drops the patch.
+                if session.hostSettings.supportsResumeOnStartup {
+                    sectionLabel("Restart recovery")
+                    RowGroup {
+                        resumeOnStartupRow
                     }
                 }
-                sectionLabel("Idle agents")
-                RowGroup {
-                    configToggleRow(
-                        "Release idle agents",
-                        subtitle: "Free up memory after an hour of inactivity",
-                        isOn: configBinding(
-                            get: { $0.idleRuntimeCleanup ?? false },
-                            set: { $0.idleRuntimeCleanup = $1 }))
+                // COMPAT(idleRuntimeCleanup): `idleRuntimeCleanupSetting`, daemon v0.13.0.
+                if session.hostSettings.supportsIdleRuntimeCleanup {
+                    sectionLabel("Idle agents")
+                    RowGroup {
+                        labeledToggleRow(
+                            "Release idle agents",
+                            hint: "Free up memory after an hour of inactivity.",
+                            info:
+                                "Stops the agent's process while keeping its conversation. Send a message to resume.\n\nActive work, pending notifications, and provider safety checks prevent cleanup.",
+                            isOn: configBinding(
+                                get: { $0.idleRuntimeCleanup != false },
+                                set: { $0.idleRuntimeCleanup = $1 }))
+                    }
                 }
                 AgentProfilesSection(session: session)
                 if let error = session.hostSettings.error {
@@ -962,6 +955,7 @@ struct PaseoSettingsView: View {
             .padding(.bottom, 20)
         }
         .scrollIndicators(.hidden)
+        .sheet(isPresented: $showResumePromptSheet) { resumePromptSheet }
         .toolbar {
             ToolbarItem(placement: .keyboard) {
                 HStack {
@@ -1024,7 +1018,166 @@ struct PaseoSettingsView: View {
             resumePromptSaving = false
             if ok { resumePromptDraft = nil }
             resumePromptFocused = false
+            if ok { showResumePromptSheet = false }
         }
+    }
+
+    private func closeResumePromptSheet() {
+        resumePromptDraft = nil
+        resumePromptFocused = false
+        showResumePromptSheet = false
+    }
+
+    /// Upstream's restart-recovery card (`restart-recovery-card.tsx`): title with an info tip,
+    /// the hint, then Edit and the switch. Edit is only useful once the switch is on, and it
+    /// edits the prompt the daemon appends to a resumed agent's message.
+    private var resumeOnStartupRow: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text("Resume agents after restart")
+                        .font(.system(size: 17))
+                    SettingsInfoButton(
+                        title: "Resume agents after restart",
+                        info:
+                            "Reopen agents that were working when the host stopped and send the resume prompt. Applies after graceful restarts and crashes."
+                    )
+                }
+                Text("Continue interrupted work automatically.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button("Edit") { showResumePromptSheet = true }
+                .font(.system(size: 15))
+                .disabled(!resumeOnStartupEnabled || configControlsDisabled)
+                .accessibilityLabel("Edit prompt")
+            Toggle(
+                "",
+                isOn: configBinding(
+                    get: { $0.resumeOnStartup == true },
+                    set: { $0.resumeOnStartup = $1 })
+            )
+            .labelsHidden()
+            .tint(.blue)
+            .disabled(configControlsDisabled)
+            .accessibilityLabel("Resume agents after restart")
+            .accessibilityIdentifier("settings.config.Resume agents after restart")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 52)
+    }
+
+    private var resumeOnStartupEnabled: Bool {
+        session.hostSettings.config?.resumeOnStartup == true
+    }
+
+    private var configControlsDisabled: Bool {
+        session.hostSettings.isSaving || session.hostSettings.config == nil
+    }
+
+    /// Upstream's idle-cleanup card (`idle-runtime-cleanup-card.tsx`): title with an info tip,
+    /// the hint, then the switch. The switch defaults on — the daemon only reports it as off.
+    private func labeledToggleRow(
+        _ title: String, hint: String, info: String, isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 17))
+                    SettingsInfoButton(title: title, info: info)
+                }
+                Text(hint)
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(.blue)
+                .disabled(configControlsDisabled)
+                .accessibilityLabel(title)
+                .accessibilityIdentifier("settings.config." + title)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 52)
+    }
+
+    /// Upstream's `SettingsInfoTip`: an info icon in the title that opens the explanation. A
+    /// popover, not a paragraph under the row, so the row stays one line (§0.3).
+    private struct SettingsInfoButton: View {
+        let title: String
+        let info: String
+
+        @State private var isPresented = false
+
+        var body: some View {
+            Button {
+                isPresented = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("About \(title)")
+            .popover(isPresented: $isPresented) {
+                Text(info)
+                    .font(.system(size: 15))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(20)
+                    .frame(maxWidth: 320)
+                    .presentationCompactAdaptation(.popover)
+            }
+        }
+    }
+
+    /// Upstream's `ResumePromptSheet`: the saved prompt (or the default), Cancel and Save. Save
+    /// needs a change and a non-blank prompt.
+    private var resumePromptSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SheetHeader(title: "Resume prompt", close: { closeResumePromptSheet() })
+            TextField("Resume working.", text: resumePromptBinding, axis: .vertical)
+                .font(typography.mono(12.5, relativeTo: .footnote))
+                .lineLimit(4...12)
+                .padding(12)
+                .background(ClaudePalette.background.opacity(0.55), in: .rect(cornerRadius: 12))
+                .focused($resumePromptFocused)
+                .accessibilityLabel("Resume prompt")
+            if let error = session.hostSettings.error {
+                Text(error)
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.failureInk)
+            }
+            HStack(spacing: 12) {
+                Spacer(minLength: 0)
+                Button("Cancel") { closeResumePromptSheet() }
+                    .disabled(resumePromptSaving)
+                Button(resumePromptSaving ? "Saving…" : "Save") { saveResumePrompt() }
+                    .fontWeight(.semibold)
+                    .disabled(!canSaveResumePrompt)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 24)
+        .presentationDetents([.medium])
+        .presentationCornerRadius(38)
+    }
+
+    private var canSaveResumePrompt: Bool {
+        guard let draft = resumePromptDraft, resumePromptDirty, !resumePromptSaving else {
+            return false
+        }
+        return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     @ViewBuilder private func promptCard(

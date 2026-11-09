@@ -41,6 +41,11 @@ public final class HostSettingsStore {
     public private(set) var supportsPairingOffer = false
     /// `features.relayConfig`: only capable daemons accept relay config patches.
     public private(set) var supportsRelayConfig = false
+    /// `features.idleRuntimeCleanupSetting`: the host reports `idleRuntimeCleanup` and accepts the
+    /// patch (COMPAT, daemon v0.13.0). Older hosts hide the card.
+    public private(set) var supportsIdleRuntimeCleanup = false
+    /// `features.resumeOnStartupSetting`: same for `resumeOnStartup`/`resumePrompt` (v0.14.0).
+    public private(set) var supportsResumeOnStartup = false
 
     // Presence state. The app drives this from focus and visibility changes.
     public private(set) var isPresenting = false
@@ -442,6 +447,8 @@ public final class HostSettingsStore {
         supportsDaemonDiagnostics = info?.hasFeature("daemonDiagnostics") ?? false
         supportsPairingOffer = info?.hasFeature("daemonStatusRpc") ?? false
         supportsRelayConfig = info?.hasFeature("relayConfig") ?? false
+        supportsIdleRuntimeCleanup = info?.hasFeature("idleRuntimeCleanupSetting") ?? false
+        supportsResumeOnStartup = info?.hasFeature("resumeOnStartupSetting") ?? false
         if !supportsDaemonDiagnostics, diagnosticsState != .loading {
             diagnosticsState = .unsupported
         }
