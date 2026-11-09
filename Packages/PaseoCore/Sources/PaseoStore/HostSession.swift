@@ -191,10 +191,7 @@ public final class HostSession {
             }
             let entries = response.entries
 
-            agents = entries
-                .filter { $0.agent.archivedAt == nil }
-                .map(\.agent)
-                .sorted { isNewer($0, than: $1) }
+            agents = sortedAgents(entries.filter { $0.agent.archivedAt == nil }.map(\.agent))
 
             var placements: [String: ProjectPlacement] = [:]
             for entry in entries {
@@ -420,7 +417,7 @@ public final class HostSession {
             } else {
                 agents.append(agent)
             }
-            agents.sort { isNewer($0, than: $1) }
+            agents = sortedAgents(agents)
             if let project { projects[agent.id] = project }
             conversations[agent.id]?.applyAgent(agent)
 
@@ -455,9 +452,19 @@ public final class HostSession {
         }
     }
 
-    private func isNewer(_ lhs: AgentSnapshot, than rhs: AgentSnapshot) -> Bool {
-        let left = PaseoDate.parse(lhs.updatedAt)
-        let right = PaseoDate.parse(rhs.updatedAt)
+    /// Newest `updatedAt` first, ties by id. Each timestamp is parsed once, before the sort:
+    /// inside the comparator it ran twice per comparison, i.e. ~1,400 parses per update at a
+    /// hundred agents (P3). Same order and same tie-break as before.
+    private func sortedAgents(_ agents: [AgentSnapshot]) -> [AgentSnapshot] {
+        agents
+            .map { (agent: $0, date: PaseoDate.parse($0.updatedAt)) }
+            .sorted { isNewer($0.agent, $0.date, than: $1.agent, $1.date) }
+            .map { $0.agent }
+    }
+
+    private func isNewer(
+        _ lhs: AgentSnapshot, _ left: Date?, than rhs: AgentSnapshot, _ right: Date?
+    ) -> Bool {
         switch (left, right) {
         case let (left?, right?) where left != right:
             return left > right
