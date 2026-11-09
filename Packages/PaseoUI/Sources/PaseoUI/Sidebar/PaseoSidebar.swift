@@ -34,6 +34,8 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.showPRBadge") var showPRBadge = true
     @AppStorage("paseo.sidebar.groupByProject") var groupByProject = true
     @AppStorage("paseo.sidebar.hiddenWorkspaces") var hiddenWorkspaces = ""
+    /// Shared with the Settings → General toggle, which owns this row. Hidden by default.
+    @AppStorage("paseo.usage.showInSidebar") var showUsageInSidebar = false
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     let typography = ClaudeTypography()
@@ -60,11 +62,17 @@ struct PaseoSidebar: View {
             }
             .scrollIndicators(.hidden)
 
+            usageSection
             footer
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .background(ClaudePalette.sidebarBackground)
         .foregroundStyle(ClaudePalette.ink)
+        .onAppear {
+            if showUsageInSidebar && session.hostUsage.isSupported {
+                Task { _ = await session.hostUsage.load(forceRefresh: false) }
+            }
+        }
         .sheet(item: $sheet) { selection in
             switch selection {
             case .settings:
@@ -93,6 +101,8 @@ struct PaseoSidebar: View {
                 AddProjectSheet(session: session) { message in
                     showToast(message)
                 }
+            case .usage:
+                ClaudeUsageReportsSheet(session: session)
             }
         }
         .alert(
@@ -258,6 +268,70 @@ struct PaseoSidebar: View {
         .buttonStyle(.plain)
     }
 
+        // MARK: Usage
+
+    /// One compact line per available provider report, with its pinned (or first) window:
+    /// "62% · resets 3h". Hidden entirely unless enabled in Settings → General.
+    @ViewBuilder private var usageSection: some View {
+        if showsUsageFooter {
+            VStack(spacing: 4) {
+                ForEach(session.hostUsage.reports) { report in
+                    if case .available(let available) = report.report {
+                        ForEach(summaryWindows(available)) { window in
+                            if let used = window.usedPct {
+                                usageFooterLine(source: report.sourceLabel, window: window, used: used)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private var showsUsageFooter: Bool {
+        showUsageInSidebar
+            && session.hostUsage.isSupported
+            && session.hostUsage.usageEnabled
+            && !session.hostUsage.reports.isEmpty
+    }
+
+    private func summaryWindows(_ available: AvailableUsageReport) -> [ProviderUsageWindow] {
+        let flagged = available.windows.filter { $0.summary == true }
+        if flagged.isEmpty { return Array(available.windows.prefix(1)) }
+        return Array(flagged.prefix(2))
+    }
+
+    private func usageFooterLine(
+        source: String, window: ProviderUsageWindow, used: Double
+    ) -> some View {
+        let resets = ClaudeUsageResets.short(afterISO: window.resetsAt)
+        let percent = Int(min(max(used, 0), 100).rounded())
+        return Button {
+            Haptics.selection()
+            sheet = .usage
+        } label: {
+            HStack(spacing: 8) {
+                Text("\(source) · \(window.label)")
+                    .font(typography.sans(12))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .lineLimit(1)
+                ClaudeUsageBar(percent: used, width: 44)
+                Text(resets.map { "\(percent)% · \($0)" } ?? "\(percent)%")
+                    .font(typography.sans(11))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .fixedSize()
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            "\(source), \(window.label), \(percent) percent used"
+                + (resets.map { ", \($0)" } ?? ""))
+        .accessibilityIdentifier("sidebar.usage.\(source).\(window.id)")
+    }
+
         // MARK: Footer
 
     private var footer: some View {
@@ -325,6 +399,7 @@ private enum PaseoSidebarSheet: Identifiable {
     case history
     case newWorkspace
     case addProject
+    case usage
 
     var id: String {
         switch self {
@@ -333,6 +408,7 @@ private enum PaseoSidebarSheet: Identifiable {
         case .history: "history"
         case .newWorkspace: "newWorkspace"
         case .addProject: "addProject"
+        case .usage: "usage"
         }
     }
 }
