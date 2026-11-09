@@ -34,12 +34,14 @@ U-round: the first on-device fix round (2026-11-09). Spec: `docs/UX-SPEC.md`. Au
 
 | Ticket | Branch | Worker | What |
 | --- | --- | --- | --- |
-| U1 | `u1-shell` | DeepSeek 27f1fa81 | Full-bleed shell, drawers, full-screen panel, sidebar footer/nav, badge removal |
-| U2 | `u2-new-session` | DeepSeek 165363ff | Draft session replaces New Agent sheet, dynamic composer, DSH mark |
-| U3 | `u3-chat` | DeepSeek aa2f0c45 | Auto history, turn nav/rail, full messages, bubble menu, mascot, subagents pill, thinking list, SVG/HTML |
-| U4 | `u4-polish` | Crouton 56f70cd0 | PaseoFormat, cron describer, monochrome chips/ring, toggle tint, file sizes, search header |
+| U1 | merged | DeepSeek | Full-bleed shell (the clip cut backgrounds to the safe area), constant 55 pt corners, hairline edge + dim, one `.smooth` settle, full-width panel push, sidebar footer pill, badge removal |
+| U2 | merged | DeepSeek | `DraftSession` (PaseoStore, 12 tests), `DraftChatView`, `DraftControlsSheet`; New Agent sheet deleted; dynamic composer; DSH mark |
+| U3 | merged | DeepSeek | Auto history with an anchored prepend (lead fix: re-apply only on growth), full turn nav, translucent rail, full messages, bubble menu, mascot seeding, subagents capability wire fix (`provider_subagents`), thinking list, SVG/HTML |
+| U4 | merged | Crouton | PaseoFormat, CronDescription (11 tests), monochrome, toggle tint, file sizes, search header. Lead fixes: bytes hand-rolled (ByteCountFormatter has no locale); identifiers ungrouped |
 
-Open: voice-mode crash (needs the Xcode crash line), the terminal "link" icon (which button?), Add provider (needs a protocol patch shape; later ticket).
+Tests: PaseoCore 661/177/145 green (983).
+
+Open: voice mode no longer crashes on the simulator (fresh pull); dictation on a device untested; AVAudioSession setActive on main (hang-risk fault); the terminal "link" icon (which button?), Add provider (needs a protocol patch shape; later ticket).
 
 Tickets: `docs/tickets/`. Worktrees: `/home/paseo/.paseo/worktrees/0264elgj/<branch>`.
 
