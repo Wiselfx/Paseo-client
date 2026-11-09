@@ -68,8 +68,8 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Host settings → Plugins (enable/disable, install from source, screens, logs, reload) — Status: `desktop-only (flag)` (host plugins manage untrusted host code and desktop-side flows; not built for this client per M4c) — Source: `docs/research/01-app-features.md:306`
 - [ ] Feature: Host settings → Pair device page (QR/link + Enable-relay upsell) — Status: `missing` (no UI per M4c; needs the relay pairing flow — `relay.enabled` / `requireProtectedSecurity` toggles were also dropped from this client — relay pairing is a later milestone) — Source: `docs/research/01-app-features.md:298`
 - [ ] Feature: Host settings → Projects page (per-host project list) — Status: `done` (read-only list: name, path, workspace count; per-project Remove with confirmation when `supportsProjectRemove`) — Source: this client `PaseoSettingsView.swift` (`projectsPage`, `projectRow`); `Packages/PaseoCore/Sources/PaseoStore/WorkspaceDirectory.swift:225-247`; `docs/research/01-app-features.md:296`
-- [ ] Feature: Welcome screen (first run: connection method tiles) — Status: `missing` — Source: `docs/research/01-app-features.md:367`
-- [ ] Feature: Onboarding flow (Appearance / Providers / Projects / Orchestration / Mobile steps, "Show setup again") — Status: `missing` — Source: `docs/research/01-app-features.md:368`
+- [ ] Feature: Welcome screen (first run: connection method tiles) — Status: `done` (first run only: no saved host, connect status idle, `paseo.welcome.completed` unset; Paseo wordmark, "Welcome to Paseo" / "Connect your computer to get started", paseo.sh link, Direct connection tile → M1b's direct form; a pre-connect Settings sheet (appearance + text sizes); version label; Scan QR / Paste pairing link / Remote SSH omitted — they need a relay or SSH this client lacks; the flag flips on the first successful connection; the welcome appears again only with no saved hosts and idle status) — Source: this client `Packages/PaseoUI/Sources/PaseoUI/WelcomeView.swift`, `App/Sources/RootView.swift`, `App/Sources/AppModel.swift`; `docs/research/01-app-features.md:367`
+- [ ] Feature: Onboarding flow (Appearance / Providers / Projects / Orchestration / Mobile steps, "Show setup again") — Status: `desktop-only (flag)` (the onboarding modal never opens on phones upstream; the phone flow is the welcome screen — see the Welcome screen row; "Show setup again" not exposed in Settings → General yet — needs a Settings navigator edit, outside this ticket's file list) — Source: `docs/research/01-app-features.md:368`; this client `WelcomeView.swift`
 - [ ] Feature: Startup splash + managed-daemon failure/retry states — Status: `missing` — Source: `docs/research/01-app-features.md:415`
 - [ ] Feature: Built-in daemon management (desktop: manage/keep-running/logs/restart, quitting overlay) — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:366`
 - [ ] Feature: Remote SSH connection method — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:360`
@@ -350,14 +350,15 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Appearance — full theme list (Light/Dark/Zinc/Midnight/Claude/Ghostty/Pure black/System) + live preview — Status: `done` (System/Light/Dark/Pure black shipped with live preview tiles; not built: Zinc/Midnight/Claude/Ghostty clones (need their own palette definitions, out of scope)) — Source: this client `…/Chat/PaseoSettingsView.swift` (`generalPage`), `ClaudeAppearance.swift`; `docs/research/01-app-features.md:273`
 - [ ] Feature: Appearance — fonts (interface font/size, content size, code font/size) — Status: `done` (Content size S/M/L/XL and Code size S/M/L/XL relative steps (0.875/1.0/1.15/1.3) applied inside `ClaudeTypography.serif` (content roles: prose/headings/greeting) and `ClaudeTypography.mono` (code/diffs/tool output); applied live via a RootView `.id()` rebuild on the two keys; settings live in Settings → General → Fonts; sans untouched; no interface font/size picker; terminal mono size stays 13 as set in `PaseoTerminalView.swift` (outside this ticket's file list) — Source: this client `ClaudeAppearance.swift` (`ClaudeTextScale`), `Chat/ClaudeStyle.swift`, `App/Sources/RootView.swift`, `…/Chat/PaseoSettingsView.swift`; `docs/research/01-app-features.md:273`
 - [ ] Feature: Appearance — content width (px, reset), syntax highlight theme — Status: `desktop-only (flag)` (web/desktop) — Source: `docs/research/01-app-features.md:273`
-- [ ] Feature: Chat settings (always expand reasoning; chat display mode Full/Collapse tool calls/Collapse turns; chat outline toggle) — Status: `partial` (chat display mode Full/Collapse tool calls/Collapse turns shipped (M7f, `paseo.chatDisplay`); always-expand reasoning and a chat outline toggle still missing) — Source: `docs/research/01-app-features.md:275`; this client `…/Chat/ChatDisplay.swift`, `…/Chat/PaseoSettingsView.swift`
+- [ ] Feature: Chat settings (always expand reasoning; chat display mode Full/Collapse tool calls/Collapse turns; chat outline toggle) — Status: `done` (Chat display lives in Settings → General → Chat (M7f, `paseo.chatDisplay` — reused, not forked); a Chat page is staged (`Settings/ChatPage.swift`): complete but NOT wired into the settings navigator (needs the PaseoSettingsView edit, outside this ticket's file list); "Always expand reasoning" is stored (`paseo.reasoning.alwaysExpand`) but NOT applied to the transcript yet — the reasoning rows read `isLive` in `Conversation/ChatWorkGroup.swift` (outside this ticket); chat outline toggle omitted — M7i's turn rail hasn't landed) — Source: this client `Settings/ChatPage.swift`, `Chat/ChatDisplay.swift`, `…/Chat/PaseoSettingsView.swift` (General → Chat); `docs/research/01-app-features.md:275`
 - [ ] Feature: Terminal settings (scrollback lines; terminal profiles are host-scoped) — Status: `done` (scrollback row shipped; terminal profiles intentionally none — host-side/desktop per M4c) — Source: this client `Settings/TerminalPage.swift`, `PaseoTerminalView.swift`; `docs/research/01-app-features.md:276`
 - [ ] Feature: General — Language dropdown (10 locales) — Status: `missing` — Source: `docs/research/01-app-features.md:272`
 - [ ] Feature: General — Sending card (Send shortcut Enter vs ⌘/Ctrl+Enter; Default send Interrupt/Steer/Queue) — Status: `done` (Default send row in Settings → General → Chat, persisted `paseo.defaultSend`; Enter vs ⌘/Ctrl+Enter shortcut not built) — Source: `docs/research/01-app-features.md:272`; this client `…/Chat/PaseoSettingsView.swift`, `…/Chat/DefaultSend.swift`
-- [ ] Feature: General — "Show setup again" — Status: `missing` — Source: `docs/research/01-app-features.md:272`
+- [ ] Feature: General — "Show setup again" — Status: `missing` (the gate exists — `paseo.welcome.completed` is set on the first successful connection and RootView reads it, so a one-line toggle in Settings → General re-opens the welcome; the General row itself is pending a Settings navigator edit, outside this ticket's file list) — Source: this client `App/Sources/RootView.swift`, `App/Sources/AppModel.swift`; `docs/research/01-app-features.md:272`
 - [ ] Feature: Sidebar settings — Sidebar view picker + Header/Footer rows (reorder up/down, visibility switches, shortcut badges, usage row hidden by default) — Status: `done` (Settings → Sidebar page: visibility switches for the History / Schedules header rows and the usage footer row (moved out of General), hidden by default, applied live; no Sidebar view picker (no plugin views on this platform), no reorder, no shortcut badges) — Source: this client `Settings/SidebarPage.swift`, `Sidebar/PaseoSidebar.swift`, `Chat/PaseoSettingsView.swift`; `docs/research/01-app-features.md:274`
 - [ ] Feature: Shortcuts settings (capture/rebind/clear/reset; sections General/Projects/Tabs/Layout/Agent Input; "Reset all") — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:280`
 - [ ] Feature: Diagnostics — App diagnostic report (copyable) + "Test audio" Play/Playing… — Status: `done` (app report: app version/build, iOS version, device model, connection state, host (scrubbed `host-…` FNV-1a digest, never the name), daemon/protocol version, server id, enabled features, last connection error (machine codes only — no addresses or free text); mono, copyable; Report carries nothing else; Test audio not built; host diagnostics (`diagnostics.request`) NOT wired — this build's client layer has no diagnostics fetch seam reachable from a Settings page without wiring a store through `HostSession` (outside this ticket's file list); the `DaemonDiagnosticsRequest` protocol type + wire test landed so the seam is one store away) — Source: this client `Settings/DiagnosticsPage.swift`, `PaseoCore/Sources/PaseoProtocol/Diagnostics.swift`; `docs/research/01-app-features.md:284`
+- [ ] Feature: Help & support menu (Run diagnostics, What's new, Report an issue / GitHub issue / Discord, community links) — Status: `staged` (complete, reviewed view in `Settings/HelpMenu.swift`, matching the upstream menu's items and URLs — Run diagnostics (M4e page), What's new (raw CHANGELOG.md), Discord, GitHub issue, Star / Sponsor / Community; NOT wired: both candidate hosts (Settings navigator / sidebar footer) are outside this ticket's file list; shows with `onRunDiagnostics = nil` pre-connect) — Source: `docs/research/01-app-features.md:101` (upstream `sidebar-help-menu.tsx`); this client `Settings/HelpMenu.swift`
 - [ ] Feature: About — App version, What's new (changelog), Release channel (Stable/Beta), App updates (Check/Update), Connected hosts (daemon versions, mismatch hint), community links — Status: `done` (app version/build (Bundle), This host section (hostname + daemon version), community GitHub links; What's new omitted — nothing exposes a changelog to clients; release channel / app updates / Check deliberately omitted — App Store/TestFlight handles updates on iOS; no mismatch hint) — Source: this client `Chat/PaseoSettingsView.swift` (`aboutPage`); `docs/research/01-app-features.md:285`
 - [ ] Feature: Files settings — contended file-type selector (default panel per extension, "Ask every time", Ask again) — Status: `missing` — Source: `docs/research/01-app-features.md:279`
 - [ ] Feature: Integrations — install/uninstall `paseo` CLI — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:281`
@@ -525,25 +526,25 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 ## Counts
 
-421 feature rows. Status counts (normalized; parenthetical qualifiers ignored):
+422 feature rows. Status counts (normalized; parenthetical qualifiers ignored):
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 285 | 67.7 % |
-| `missing` | 63 | 15.0 % |
-| `desktop-only (flag)` | 47 | 11.2 % |
+| `done` | 287 | 68.0 % |
+| `missing` | 61 | 14.5 % |
+| `desktop-only (flag)` | 48 | 11.4 % |
 | `store only (no UI)` | 6 | 1.4 % |
 | `in flight` | 0 | 0.0 % |
 | `not applicable` | 19 | 4.5 % |
 | other | 1 | 0.2 % |
-| **Total** | **421** | 100 % |
+| **Total** | **422** | 100 % |
 
 What the numbers say: the client is at parity in the *conversation* area (turn layout, DSH
 live-observation turn UX, permissions, markdown, markdown code blocks) and in the
 *connection/discovery/store plumbing* — T1–T13 are merged, fixtures-tested, and wired into the UI
 (presence, slash commands, attachments, search, the Schedules screen, rich content, the mascot).
 The remaining `missing` rows concentrate in desktop-only and host-side surfaces
-(notifications/push, voice, relay pairing, onboarding/welcome), turn and composer parity leftovers
+(notifications/push, voice, relay pairing), turn and composer parity leftovers
 (collapse levels, question-card restyle, message actions, fork, editing) and providers/profiles
 (cards are M4d in flight). The remaining `store only (no UI)` rows are provider/profile/subagent
 and push registration — logic that exists without a screen. No rows are `in flight`: the M3
