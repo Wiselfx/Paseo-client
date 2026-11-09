@@ -16,6 +16,7 @@ struct PaseoSettingsView: View {
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
     @AppStorage(PaseoSettingsKeys.haptics) private var haptics = true
+    @AppStorage(PaseoSettingsKeys.mascot) private var mascot = true
     @State private var page: Page?
     @State private var confirmDisconnect = false
 
@@ -248,6 +249,15 @@ struct PaseoSettingsView: View {
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.haptics")
+                    Divider().padding(.leading, 16)
+                    Toggle(isOn: $mascot) {
+                        Label("Show mascot", systemImage: "sparkles")
+                            .font(.system(size: 17))
+                    }
+                    .tint(.blue)
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .accessibilityIdentifier("settings.mascot")
                 }
             }
             .padding(.horizontal, 16)
