@@ -235,7 +235,7 @@ struct WorkspaceChangesView: View {
             let method = mergeCandidate ?? .squash
             let number = extras.prBadge?.number.map { "#\($0)" } ?? ""
             let base = extras.prStatus?.baseRefName ?? checkout.prStatus?.baseRefName ?? baseRef ?? "base"
-            Text("This merges pull request \(PaseoFormat.integer(number)) into \(base) using \(method.rawValue). This cannot be undone.")
+            Text("This merges pull request \(number) into \(base) using \(method.rawValue). This cannot be undone.")
         }
         .confirmationDialog(
             "Discard changes?",
