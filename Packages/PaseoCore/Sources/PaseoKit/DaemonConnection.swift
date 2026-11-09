@@ -559,7 +559,7 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
     /// `create_agent_request` answers with `status`, permission answers with
     /// `agent_permission_resolved`, and archive answers with the `agent_archived` broadcast.
     private static let correlatedResponseTypes: Set<String> = [
-        "status", "agent_archived", "agent_permission_resolved",
+        "status", "agent_archived", "agent_deleted", "agent_permission_resolved",
     ]
 
     /// A message type that may settle a pending request or is a late response we should drop.

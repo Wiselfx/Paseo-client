@@ -69,6 +69,8 @@ let usage = """
                                full stack: search the conversation, list provider subagents and
                                send a message with a structured text attachment (default query
                                "ready")
+      lifecycle                  create two throwaway agents in /tmp/fixture-sandbox, archive,
+                               unarchive, rename and delete them, and list the history
       usage                        provider plan usage reports and the context meter: prints
                                report summaries plus the sandbox agent's context window usage
       rewind <agentId> [messageId scope]
@@ -450,6 +452,8 @@ do {
         } else {
             try await runRewind(connection, agentId: agentId, messageId: nil, scope: nil)
         }
+    case "lifecycle":
+        try await runLifecycle(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -458,6 +462,85 @@ do {
 } catch {
     FileHandle.standardError.write(Data("paseo-probe: \(error)\n".utf8))
     exit(1)
+}
+
+/// Agent history incl. archived, rename/archive/unarchive/delete — only agents created here, in the sandbox.
+@MainActor
+func runLifecycle(_ connection: DaemonConnection, cwd: String) async throws {
+    let sandbox = "/tmp/fixture-sandbox"
+    guard cwd == sandbox else {
+        throw ProbeError("lifecycle only runs in \(sandbox); refusing to create agents in \(cwd)")
+    }
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    await session.agentControl.loadCatalog(cwd: sandbox)
+    guard session.agentControl.phase == .ready else {
+        throw ProbeError("provider catalogue failed: \(session.agentControl.phase)")
+    }
+    let provider = "omp"
+    let models = session.agentControl.models(forProvider: provider)
+    guard let model = models.first?.id else { throw ProbeError("\(provider) reports no models") }
+
+    var created: [String] = []
+    do {
+        for title in ["M7e fixture A", "M7e fixture B"] {
+            guard
+                let agentId = await session.agentControl.createAgent(
+                    cwd: sandbox, provider: provider, model: model, modeId: "full",
+                    prompt: "Reply with the single word: ready", title: title)
+            else {
+                throw ProbeError("create failed: \(session.agentControl.actionError ?? "unknown error")")
+            }
+            created.append(agentId)
+            print("created \(String(agentId.prefix(8))) (\(title))")
+        }
+
+        // Wait for both first turns to finish, so refresh can resume the provider session.
+        for agentId in created {
+            let store = session.conversation(for: agentId)
+            try await waitUntil("first turn for \(agentId)", timeout: 120) { !store.isRunning }
+            print("settled: \(String(agentId.prefix(8)))")
+        }
+
+        let lifecycle = session.agentLifecycle
+        await lifecycle.load()
+        let ownAfterCreate = lifecycle.entries.filter { created.contains($0.id) }
+        print("history entries (own): \(ownAfterCreate.count) phase=\(lifecycle.phase)")
+
+        for agentId in created {
+            let archived = await lifecycle.archive(agentId: agentId)
+            print("archive \(String(agentId.prefix(8))) -> \(archived)")
+        }
+        let archivedA = lifecycle.entries.first { $0.id == created[0] }?.archivedAt
+        print("archivedAt set on A: \(archivedA != nil)")
+
+        let unarchived = await lifecycle.unarchive(agentId: created[0])
+        print("unarchive \(String(created[0].prefix(8))) -> \(unarchived)")
+        let clearedA = lifecycle.entries.first { $0.id == created[0] }?.archivedAt == nil
+        print("archivedAt cleared on A: \(clearedA)")
+
+        for agentId in created {
+            let renamed = await lifecycle.rename(agentId: agentId, to: "M7e fixture renamed")
+            print("rename \(String(agentId.prefix(8))) -> \(renamed)")
+        }
+
+        for agentId in created {
+            let deleted = await lifecycle.delete(agentId: agentId)
+            print("delete \(String(agentId.prefix(8))) -> \(deleted)")
+        }
+
+        await lifecycle.load()
+        let remaining = lifecycle.entries.filter { created.contains($0.id) }
+        print("own entries remaining after cleanup: \(remaining.count)")
+        guard remaining.isEmpty, lifecycle.phase == .ready else {
+            throw ProbeError("cleanup failed or history not ready")
+        }
+        print("OK")
+    } catch {
+        for agentId in created { _ = await session.agentLifecycle.delete(agentId: agentId) }
+        throw error
+    }
 }
 
 /// End-to-end check of the layers the app uses: connection → HostSession → ConversationStore → turns.

@@ -35,6 +35,8 @@ public final class HostSession {
     public let setupObservation: WorkspaceSetupObservationStore
     /// Git extras for open workspaces: modern diffs, discard, branches, PR badge, live files.
     public let gitExtras: GitExtrasStore
+    /// History and lifecycle: archived agents, archive/unarchive/delete.
+    public let agentLifecycle: AgentLifecycleStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -57,6 +59,7 @@ public final class HostSession {
         self.workspaceDirectory = WorkspaceDirectory(client: client)
         self.gitExtras = GitExtrasStore(client: client)
         self.setupObservation = WorkspaceSetupObservationStore(client: client)
+        self.agentLifecycle = AgentLifecycleStore(client: client)
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
