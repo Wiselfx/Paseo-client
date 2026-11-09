@@ -119,7 +119,12 @@ tap opens that terminal, stale review drafts Clear line. PaseoCore 532/149/20 = 
 done / 53 missing of 422. M12 (Crouton): Add issue or PR picker (forge.search, legacy fallback,
 forge_issue/forge_change_request attachments), DSH sound cues (Off/Soft/Clear, synthesized, ambient
 session), PARITY sweep. Lead fix: forge label uses `existingCheckout` (no store creation in body).
-PaseoCore 536/155/20 = 711 green; PARITY 300 done / 48 missing. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+PaseoCore 536/155/20 = 711 green; PARITY 300 done / 48 missing. M14 (Crouton): usage overview in the
+usage sheet (Swift Charts, DSH figures/books from agents' lastUsage: no token-history RPC) and a
+reconnecting / can't-reach banner in the shell (lead: plain wording). M13 (Crouton): Settings → Host
+→ Voice (dictation/voice-mode providers, OpenAI key write-only, local speech models with polled
+download progress). Realtime voice mode not built (needs `voice` hello cap, PCM streaming, playback).
+PaseoCore 548/166/20 = 734 green; PARITY 306 done / 43 missing of 422. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
@@ -127,8 +132,6 @@ in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for 
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
 - P1 `p1-polish-audit` on DeepSeek 85844e34-6c29-4638-ae82-0b781364abc7: UI/UX audit doc + low-risk fixes (frontend-design skill as a lens at /tmp/polish-skill, outside the repo; pinned ClaudeUI/DSH style wins).
-- M14 `m14-usage-home` on Crouton c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: usage overview charts, connection states.
-- M13 `m13-voice-settings` on Crouton 6705fee4-a9d1-4be4-9962-4524eff8f59c: host Voice page, speech provider sheets, local models.
 - R16 `r16-relay-crypto` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: Noise NK, record codec, offer parsing (swift-crypto approved by the user). Plan: R17 transport, R18 pairing UI, R19 Pair device (`docs/research/11` §10).
 - Idle: DeepSeek 8872f024 (T17; deep protocol/subscription context).
 Known store gaps: fork can't carry provider feature values.
