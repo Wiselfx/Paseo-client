@@ -44,7 +44,7 @@ public struct ClaudeChatView: View {
         ClaudeFontResources.register()
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             header
             agentTabs
