@@ -33,6 +33,7 @@ struct WorkspaceChangesView: View {
     @State private var createPRFailure: String?
     @State private var mergeCandidate: PullRequestMergeMethod?
     @State private var showBaseBranchPicker = false
+    @State private var showBranchSwitcher = false
     @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
     @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
     @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
@@ -74,7 +75,13 @@ struct WorkspaceChangesView: View {
     }
 
     private var branchLabel: String {
-        extras.currentBranch ?? checkout.branch ?? "Detached HEAD"
+        currentBranch ?? "Detached HEAD"
+    }
+
+    /// The branch the workspace is on, or nil for a detached HEAD. Upstream's switcher has no
+    /// trigger without a branch name (`branch-switcher.tsx`).
+    private var currentBranch: String? {
+        extras.currentBranch ?? checkout.branch
     }
 
     private var visibleError: String? {
@@ -199,6 +206,11 @@ struct WorkspaceChangesView: View {
             WorkspaceChangesCommitSheet(checkout: checkout) {
                 Task { await reload() }
             }
+        }
+        .sheet(isPresented: $showBranchSwitcher) {
+            WorkspaceBranchSwitcherSheet(
+                extras: extras, currentBranch: currentBranch,
+                onSwitched: { Task { await reload() } })
         }
         .sheet(isPresented: $showBaseBranchPicker) {
             WorkspaceBaseBranchSheet(
@@ -432,10 +444,7 @@ struct WorkspaceChangesView: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(ClaudePalette.secondaryInk)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(branchLabel)
-                        .font(typography.mono(13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
-                        .lineLimit(1)
+                    branchTitle
                     HStack(spacing: 8) {
                         aheadBehind
                         pullRequestChip
@@ -461,6 +470,37 @@ struct WorkspaceChangesView: View {
         .padding(.horizontal, 20)
         .padding(.top, 14)
         .padding(.bottom, 12)
+    }
+
+    /// The branch name, tapping which opens the switcher (upstream `BranchSwitcher`'s trigger,
+    /// `branch-switcher.tsx`). Only the name is the button: the PR chip beside/below it is its own
+    /// button. A detached HEAD has no branch to switch to and stays a plain label.
+    @ViewBuilder private var branchTitle: some View {
+        if currentBranch != nil {
+            Button {
+                Haptics.selection()
+                showBranchSwitcher = true
+            } label: {
+                HStack(spacing: 6) {
+                    Text(branchLabel)
+                        .font(typography.mono(13, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Current branch: \(branchLabel). Press to switch branch.")
+            .accessibilityIdentifier("changes.branchSwitcher")
+        } else {
+            Text(branchLabel)
+                .font(typography.mono(13, weight: .medium))
+                .foregroundStyle(ClaudePalette.ink)
+                .lineLimit(1)
+        }
     }
 
     @ViewBuilder private var aheadBehind: some View {

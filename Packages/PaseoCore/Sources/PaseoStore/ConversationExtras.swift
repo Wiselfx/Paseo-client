@@ -70,6 +70,6 @@ extension HostSession {
     /// Provider-managed children are `ConversationStore.subagents.items` instead; they have no
     /// agent rows and no lifecycle actions.
     public func subagents(of parentAgentId: String) -> [AgentSnapshot] {
-        agents.filter { $0.labels?["paseo.parent-agent-id"] == parentAgentId }
+        agents.filter { AgentParentLabel.parent(of: $0.labels) == parentAgentId }
     }
 }

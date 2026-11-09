@@ -51,17 +51,24 @@ extension ClaudeChatView {
         }
     }
 
-    /// The provider subagents track: one quiet pill in the strip directly above the composer,
-    /// where upstream puts its `ComposerTrackBar` pills (`app/src/panels/agent-tracks.tsx:127`,
-    /// `SubagentsTrack`). Nil when the feature is off, nothing is tracked, or every row was
-    /// hidden this session.
+    /// The subagents track: one quiet pill in the strip directly above the composer, where
+    /// upstream puts its `ComposerTrackBar` pills (`app/src/panels/agent-tracks.tsx:127`,
+    /// `SubagentsTrack` over both row kinds). Nil when nothing is tracked, or every provider row
+    /// was hidden this session.
     @ViewBuilder var subagentPill: some View {
-        if store.subagents.isSupported, !visibleSubagents.isEmpty {
-            SubagentTrackPill(items: visibleSubagents) { sheet = .subagents }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        if !visibleSubagents.isEmpty || !managedSubagents.isEmpty {
+            SubagentTrackPill(items: visibleSubagents, managed: managedSubagents) {
+                sheet = .subagents
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Paseo-managed children of the open agent: ordinary agents labelled with its id.
+    var managedSubagents: [AgentSnapshot] {
+        session.subagents(of: store.agentId)
     }
 
     /// Rows the pill and sheet show; "Archive finished" hides every non-running row this session.
