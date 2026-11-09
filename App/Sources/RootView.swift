@@ -9,9 +9,23 @@ struct RootView: View {
     @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
     @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
+    /// First-run welcome: shown before the first successful host connection, and only while
+    /// no saved host exists and nothing has been attempted.
+    @AppStorage("paseo.welcome.completed") private var welcomeCompleted = false
 
     private var colorScheme: ColorScheme? {
         (ClaudeAppearance(rawValue: appearance) ?? .system).colorScheme
+    }
+
+    @ViewBuilder private func connectForm(status: ConnectView.Status) -> some View {
+        ConnectView(
+            host: $model.host, port: $model.port, password: $model.password,
+            useTLS: $model.useTLS, connectionURI: $model.connectionURI,
+            status: status, hosts: model.savedHostsSnapshot,
+            onConnect: { Task { await model.connect() } },
+            onConnectSaved: { id in Task { await model.connectToSaved(id) } },
+            onForgetSaved: { id in model.forgetSavedHost(id) },
+            onRenameSaved: { id, label in model.renameSavedHost(id, label: label) })
     }
 
     /// Fonts and the Pure black palette are read when views are built, so changing them rebuilds
@@ -26,14 +40,11 @@ struct RootView: View {
         Group {
             switch model.phase {
             case .setup(let status):
-                ConnectView(
-                    host: $model.host, port: $model.port, password: $model.password,
-                    useTLS: $model.useTLS, connectionURI: $model.connectionURI,
-                    status: status, hosts: model.savedHostsSnapshot,
-                    onConnect: { Task { await model.connect() } },
-                    onConnectSaved: { id in Task { await model.connectToSaved(id) } },
-                    onForgetSaved: { id in model.forgetSavedHost(id) },
-                    onRenameSaved: { id, label in model.renameSavedHost(id, label: label) })
+                if !welcomeCompleted, model.savedHostsSnapshot.isEmpty, case .idle = status {
+                    WelcomeView { connectForm(status: status) }
+                } else {
+                    connectForm(status: status)
+                }
             case .connected(let session):
                 PaseoShellView(session: session, onDisconnect: { model.disconnect() })
             }

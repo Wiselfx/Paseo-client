@@ -41,6 +41,8 @@ final class AppModel {
         static let connectionURI = "daemon.connectionURI"
         static let clientId = "client.id"
         static let passwordAccount = "daemon-password"
+        /// Set on the first successful connection; gates the first-run welcome screen.
+        static let welcomeCompleted = "paseo.welcome.completed"
     }
 
     init() {
@@ -136,6 +138,8 @@ final class AppModel {
             SavedHosts.savePassword(password, for: savedID)
             currentHostID = savedID
             refreshHostContext()
+            // First successful connection completes the first-run welcome.
+            defaults.set(true, forKey: Keys.welcomeCompleted)
             let session = HostSession(client: connection)
             phase = .connected(session)
             await session.start()
