@@ -63,8 +63,14 @@ Now running (inkling; DeepSeek is off on weekdays 01–04 and 06–10 UTC):
   panel's pages, against contract stubs in `PaseoUI/Workspace/`.
 - R9 `r9-parity`: `docs/PARITY.md`, a parity checklist vs Paseo's app and the DSH plugin, plus
   suggested milestones. It becomes the roadmap.
-Merged: M3a panel + clean header, M3b files. M4a settings and M4b schedules are running on the
-reused M3a/M3b workers. Backlog: "Mention in chat" from Files (publish the draft through the
+Merged: M3a–d (panel, files, changes, terminal via SwiftTerm), R9 `docs/PARITY.md`.
+Running: M4a settings, M4b schedules, M5a crab, M5b rich content, T14 file upload.
+
+Roadmap (from PARITY.md, renumbered to what is already running):
+M4 settings + schedules · M5 rich content + crab · M6 attention (notifications, push, deep links)
++ composer attachments (T14 upload) · M7 search, history/sessions, command center · M8 composer
+and turn parity (queue/steer, @-files and slash autocomplete, drafts, context meter, fork/rewind,
+question forms) · M9 voice (dictation, voice mode). Later: relay pairing, iPad. Backlog: "Mention in chat" from Files (publish the draft through the
 environment) and live file updates (pass `session.gitExtras` to the files page, use `watchFile`).
 UX decisions so far: left drawer = navigation (projects → workspaces), right panel = inside the
 workspace, the chat stays clean. Composer keeps the Claude iOS shape; turn UI follows DSH.
