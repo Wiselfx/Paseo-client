@@ -681,6 +681,7 @@ struct WorkspaceChangesView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .contentShape(.rect)
+            .draggable(file.path)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(style.word) \(file.path), plus \(file.additions), minus \(file.deletions)")

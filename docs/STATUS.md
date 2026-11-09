@@ -124,7 +124,16 @@ usage sheet (Swift Charts, DSH figures/books from agents' lastUsage: no token-hi
 reconnecting / can't-reach banner in the shell (lead: plain wording). M13 (Crouton): Settings → Host
 → Voice (dictation/voice-mode providers, OpenAI key write-only, local speech models with polled
 download progress). Realtime voice mode not built (needs `voice` hello cap, PCM streaming, playback).
-PaseoCore 548/166/20 = 734 green; PARITY 306 done / 43 missing of 422. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+PaseoCore 548/166/20 = 734 green; PARITY 306 done / 43 missing of 422. M16 (Crouton): host badge
+(>1 host, upstream identity colors), Connections page (the app's saved endpoints: no daemon RPC),
+Danger zone Remove host (also fixes forgetting the current host). No provider install RPC exists.
+PARITY 310 done / 39 missing. R16 (DeepSeek): relay crypto core in PaseoKit/Relay (Noise NK passes the
+public cacophony vectors byte for byte, record codec with all rejection rules, offer/relay:// parsing,
+protected mode only); swift-crypto added to PaseoKit (user-approved). PaseoCore 548/166/86 = 800 green.
+M17 (Crouton): map cards (strict standalone coordinates / geo: / Maps URLs, MapKit snapshot), drag
+Files/Changes rows into the composer (@path mention), cost bubble on long-press of the crab.
+PaseoCore 559/166/86 = 811 green; PARITY 313 done / 36 missing.
+Xcode: the new package needs File → Packages → Resolve/Reset Package Caches. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
@@ -132,10 +141,9 @@ in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for 
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
 - P1 `p1-polish-audit` on DeepSeek 85844e34-6c29-4638-ae82-0b781364abc7: UI/UX audit doc + low-risk fixes (frontend-design skill as a lens at /tmp/polish-skill, outside the repo; pinned ClaudeUI/DSH style wins).
-- M15 `m15-voice-mode` on Crouton 6705fee4-a9d1-4be4-9962-4524eff8f59c: realtime voice mode.
-- M16 `m16-multi-host` on Crouton c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: host badge, Connections, Danger zone.
-- R16 `r16-relay-crypto` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: Noise NK, record codec, offer parsing (swift-crypto approved by the user). Plan: R17 transport, R18 pairing UI, R19 Pair device (`docs/research/11` §10).
-- Idle: DeepSeek 8872f024 (T17; deep protocol/subscription context).
+- R17 `r17-relay-transport` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: relay transport, reconnect, pinning.
+- M15 `m15-voice-mode` (Crouton 6705fee4, done): DeepSeek 8872f024 reviewing before merge (rule: risky Crouton work gets a DeepSeek review pass).
+- Idle: Crouton c2f9fb62 (M17).
 Known store gaps: fork can't carry provider feature values.
 
 Roadmap order: see PARITY.md suggested milestones, renumbered below.

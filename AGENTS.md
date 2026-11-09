@@ -22,7 +22,7 @@ There is no Xcode here. `Packages/PaseoUI` and `App/` cannot be compiled on this
    ticket author. You may add `private`/`internal` helpers.
 3. **Tests are the spec.** Never edit, delete, skip or weaken an existing test. Add your own tests
    in new files.
-4. **No new dependencies.** Foundation, Observation and Swift Testing only in PaseoCore.
+4. **No new dependencies.** Foundation, Observation and Swift Testing only in PaseoCore, plus `swift-crypto` in PaseoKit (relay encryption only; approved by the user).
 5. **No force unwraps or `fatalError`** in your implementation, except where the ticket says so.
 6. **No untested platform branches.** Code under `#if os(...)` / `#if canImport(...)` that only
    compiles on Apple platforms is never built here. Avoid such branches; if one is unavoidable,

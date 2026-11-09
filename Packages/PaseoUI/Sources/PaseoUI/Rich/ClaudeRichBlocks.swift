@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import LinkPresentation
+import MapKit
 import PaseoStore
 import SwiftUI
 import UIKit
@@ -45,6 +46,121 @@ struct ClaudeRichBlockView: View {
             RichWebCard(kind: .svg, code: source)
         case .visualize(let code, _):
             RichWebCard(kind: .visualize, code: code)
+        case .mapCard(let reference, _):
+            RichMapCard(reference: reference)
+        }
+    }
+}
+
+// MARK: - Map card (M17)
+
+/// Snapshot cache, keyed by coordinate. Snapshots are single-pass renders; re-snapshot
+/// on every scroll would flicker, so the card never refetches what it already drew.
+@MainActor
+enum RichMapSnapshotCache {
+    private static var table: [String: UIImage] = [:]
+
+    static func image(for reference: MapReference) -> UIImage? {
+        guard let lat = reference.latitude, let lng = reference.longitude else { return nil }
+        return table["\(lat),\(lng)"]
+    }
+
+    static func store(_ image: UIImage, for reference: MapReference) {
+        guard let lat = reference.latitude, let lng = reference.longitude else { return }
+        if table.count >= 32 { table.removeAll(keepingCapacity: true) }
+        table["\(lat),\(lng)"] = image
+    }
+}
+
+/// A calm MapKit snapshot (no live map in the transcript) that opens Apple Maps on tap.
+struct RichMapCard: View {
+    let reference: MapReference
+
+    @Environment(\.openURL) private var openURL
+    @State private var snapshot: UIImage?
+
+    private let typography = ClaudeTypography()
+
+    private var targetURL: URL? {
+        if let lat = reference.latitude, let lng = reference.longitude {
+            return URL(string: "https://maps.apple.com/?ll=\(lat),\(lng)")
+        }
+        return URL(string: reference.url)
+    }
+
+    var body: some View {
+        RichCard {
+            Button {
+                if let targetURL { openURL(targetURL) }
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    ZStack {
+                        if let snapshot {
+                            Image(uiImage: snapshot)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } else {
+                            Rectangle().fill(ClaudePalette.codeSurface)
+                                .overlay {
+                                    Image(systemName: "map")
+                                        .font(.system(size: 24, weight: .light))
+                                        .foregroundStyle(ClaudePalette.secondaryInk)
+                                }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 150)
+                    .clipped()
+                    .clipShape(.rect(cornerRadius: 12))
+                    HStack(spacing: 6) {
+                        Image(systemName: "mappin")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(ClaudePalette.secondaryInk)
+                        Text(caption)
+                            .font(typography.sans(12))
+                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 4)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open in Maps")
+        }
+        .task(id: "\(reference.latitude ?? 0),\(reference.longitude ?? 0)") {
+            guard snapshot == nil, let lat = reference.latitude, let lng = reference.longitude else { return }
+            if let cached = RichMapSnapshotCache.image(for: reference) {
+                snapshot = cached
+                return
+            }
+            snapshot = await Self.snapshot(lat: lat, lng: lng)
+            if let snapshot {
+                RichMapSnapshotCache.store(snapshot, for: reference)
+            }
+        }
+    }
+
+    private var caption: String {
+        if let lat = reference.latitude, let lng = reference.longitude {
+            return "\(lat), \(lng)"
+        }
+        return RichContentDetector.displayURL(reference.url)
+    }
+
+    /// One static render of a 300×180 region around the point. Calm, and cached.
+    private static func snapshot(lat: Double, lng: Double) async -> UIImage? {
+        let options = MKMapSnapshotOptions()
+        options.region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+            span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04))
+        options.size = CGSize(width: 600, height: 360)
+        options.showsBuildings = false
+        do {
+            let snapshot = try await MKMapSnapshotter(options: options).start()
+            return snapshot.image
+        } catch {
+            return nil
         }
     }
 }

@@ -81,6 +81,8 @@ public struct ClaudeChatView: View {
     /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
     @AppStorage(DefaultSendBehavior.storageKey) var defaultSend = DefaultSendBehavior.steer.rawValue
     @State var mascot = MascotStateMachine()
+    /// M17: the crab's cost bubble (tap/long-press the crab).
+    @State var showCostBubble = false
     /// Failed tool calls we've already told the mascot about, by `callId`.
     @State var signalledToolFailureIds: Set<String> = []
     /// Whether the machine has been told a compaction is open (edge detection for rows).

@@ -272,6 +272,13 @@ extension ClaudeChatView {
             voiceEngine.stopCapture()
             UIApplication.shared.isIdleTimerDisabled = false
         }
+        // M17: drop a file row (Files tree / Changes list) onto the composer to attach it
+        // as a workspace-file mention. The long-press "Add to chat" path stays.
+        .dropDestination(for: String.self) { items, _ in
+            guard let path = items.first else { return false }
+            insertFileMention(path)
+            return true
+        }
     }
 
     // MARK: Voice mode (M15)
