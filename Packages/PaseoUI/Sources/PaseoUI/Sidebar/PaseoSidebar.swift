@@ -16,6 +16,8 @@ struct PaseoSidebar: View {
     var onDisconnect: () -> Void
     /// Toggles the right-side workspace panel; nil hides the Toggle panel action in Search.
     var onTogglePanel: (() -> Void)? = nil
+    /// Set by a deep link's `open-project` route (M20): present the Add project sheet once.
+    @Binding var addProjectRequest: Bool
 
     @State var sheet: PaseoSidebarSheet?
     @State var showHidden = false
@@ -92,6 +94,10 @@ struct PaseoSidebar: View {
             if showUsageInSidebar && session.hostUsage.isSupported {
                 Task { _ = await session.hostUsage.load(forceRefresh: false) }
             }
+            consumeAddProjectRequest()
+        }
+        .onChange(of: addProjectRequest) { _, _ in
+            consumeAddProjectRequest()
         }
         .sheet(item: $sheet) { selection in
             switch selection {
@@ -531,6 +537,14 @@ struct PaseoSidebar: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = trimmed.first else { return "P" }
         return String(first).uppercased()
+    }
+
+    /// A deep-link `open-project` request is one-shot: clear it before presenting, so a later
+    /// sheet change or a re-render cannot re-open Add project.
+    private func consumeAddProjectRequest() {
+        guard addProjectRequest else { return }
+        addProjectRequest = false
+        sheet = .addProject
     }
 
     /// The project whose workspace is showing the selected agent, for the new-workspace sheet's

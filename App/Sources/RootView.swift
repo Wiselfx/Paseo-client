@@ -20,6 +20,20 @@ struct RootView: View {
     /// The in-flight pairing attempt (S1): Connect is disabled and its completion is the
     /// only one that may touch sheet state.
     @State private var pairingAttempt: UUID?
+    /// M20: a navigation link waiting for the shell (agent / workspace / host / open project).
+    /// Set only after its host is the connected one, so a cold launch and a host switch both
+    /// land in the same place.
+    @State private var deepLinkTarget: DeepLink?
+    /// A plain message for a link we cannot route (unsupported route, unknown host, no hosts).
+    @State private var deepLinkMessage: String?
+
+    /// One deep-link host question. `id` is fresh per request so re-opening the chooser for a
+    /// second link always presents.
+    struct HostChoice: Identifiable {
+        let id = UUID()
+        let link: DeepLink
+        let hosts: [DeepLinkHost]
+    }
 
     /// One pairing question or prompt. `id` is fresh per instance: a new attempt must
     /// re-present the password sheet (S2), not reuse the identity of the old one.
@@ -34,6 +48,7 @@ struct RootView: View {
         case paste(error: String?)
         case confirm(PendingPairing)
         case password(PendingPairing, error: String?)
+        case chooseHost(HostChoice)
 
         var id: String {
             switch self {
@@ -41,6 +56,7 @@ struct RootView: View {
             case .paste(let error): "paste.\(error ?? "")"
             case .confirm(let pending): "confirm.\(pending.id)"
             case .password(let pending, let error): "password.\(pending.id).\(error ?? "")"
+            case .chooseHost(let choice): "chooseHost.\(choice.id)"
             }
         }
     }
@@ -83,7 +99,8 @@ struct RootView: View {
             case .connected(let session):
                 PaseoShellView(
                     session: session, onDisconnect: { model.disconnect() },
-                    notificationTarget: $notifications.pendingTarget
+                    notificationTarget: $notifications.pendingTarget,
+                    deepLinkTarget: $deepLinkTarget
                 )
                 .environment(
                     \.notificationPermissionAction,
@@ -133,7 +150,23 @@ struct RootView: View {
                     isAttempting: pairingAttempt != nil) { entered in
                         attemptPairing(pending, password: entered, fromPassword: true)
                     }
+            case .chooseHost(let choice):
+                HostChooserSheet(hosts: choice.hosts) { host in
+                    pairingSheet = nil
+                    openDeepLink(choice.link, on: host)
+                }
             }
+        }
+        .onOpenURL { url in
+            handleDeepLink(url)
+        }
+        .alert(
+            deepLinkMessage ?? "",
+            isPresented: Binding(
+                get: { deepLinkMessage != nil },
+                set: { if !$0 { deepLinkMessage = nil } })
+        ) {
+            Button("OK", role: .cancel) { deepLinkMessage = nil }
         }
         .onChange(of: model.relayPasswordRequest) { _, request in
             guard let request else { return }
@@ -154,18 +187,91 @@ struct RootView: View {
     /// matches a saved host exactly (upstream: resolve true without asking).
     private func stagePairing(_ payload: String) {
         do {
-            let offer = try ConnectionOffer(link: payload)
-            if let kind = HostConfirmation.confirmationKind(
-                offer: offer, savedHosts: model.savedHosts.allHosts)
-            {
-                // Swap the sheet's content (same sheet, no dismiss/present race).
-                pairingSheet = .confirm(PendingPairing(offer: offer, kind: kind))
-            } else {
-                attemptPairing(
-                    PendingPairing(offer: offer, kind: .newHost), password: nil, fromPassword: false)
-            }
+            stagePairing(try ConnectionOffer(link: payload))
         } catch {
             pairingSheet = .paste(error: "That link doesn't look right.")
+        }
+    }
+
+    /// The same path for an offer that arrived as a `paseo://` URL (M20): a pairing link is a
+    /// credential, so it goes through R18's confirmation sheet and pins logic unchanged.
+    private func stagePairing(_ offer: ConnectionOffer) {
+        if let kind = HostConfirmation.confirmationKind(
+            offer: offer, savedHosts: model.savedHosts.allHosts)
+        {
+            // Swap the sheet's content (same sheet, no dismiss/present race).
+            pairingSheet = .confirm(PendingPairing(offer: offer, kind: kind))
+        } else {
+            attemptPairing(
+                PendingPairing(offer: offer, kind: .newHost), password: nil, fromPassword: false)
+        }
+    }
+
+    // MARK: Deep links (M20)
+
+    /// One link from the system. Malformed and unknown links are ignored; credential links go
+    /// to the pairing flow; navigation links resolve a saved host (asking when the link names
+    /// none and several are saved); known-but-unsupported routes get a plain message.
+    private func handleDeepLink(_ url: URL) {
+        guard let link = DeepLink(url: url) else { return }
+        switch link {
+        case .offer(let offer):
+            stagePairing(offer)
+        case .unsupported:
+            deepLinkMessage = "This link isn't supported on this device."
+        case .agent, .workspace, .host, .openProject:
+            routeDeepLink(link)
+        }
+    }
+
+    private func routeDeepLink(_ link: DeepLink) {
+        guard let resolution = DeepLinkRouter.resolveHost(
+            for: link, savedHosts: savedDeepLinkHosts)
+        else { return }
+        switch resolution {
+        case .target(let host):
+            openDeepLink(link, on: host)
+        case .chooseHost(let hosts):
+            pairingSheet = .chooseHost(HostChoice(link: link, hosts: hosts))
+        case .unknownHost:
+            // Upstream `host.daemon.picker.notFound` (en.ts:2899).
+            deepLinkMessage = "Host not found"
+        case .noHosts:
+            // Upstream `agentPanel.unavailable.addHost` (en.ts:268).
+            deepLinkMessage =
+                "Add the host in Settings or open an agent on a configured server to continue."
+        }
+    }
+
+    private var savedDeepLinkHosts: [DeepLinkHost] {
+        // A direct host only learns its daemon identity from the live handshake (SavedHost keeps
+        // `serverID` for relay hosts only), so give the current host the connected daemon's id.
+        var liveServerID: String?
+        if case .connected(let session) = model.phase {
+            liveServerID = session.serverInfo?.serverId
+        }
+        return model.savedHosts.allHosts.map { saved in
+            let isCurrent = saved.id == model.connectedHostID
+            return DeepLinkHost(
+                saved: saved, isCurrent: isCurrent,
+                liveServerID: isCurrent ? liveServerID : nil)
+        }
+    }
+
+    /// Hand the link to the shell once its host is the connected one. A different saved host
+    /// is connected first (one host at a time), then the link routes; a failed connect leaves
+    /// the connect screen with its own inline error.
+    private func openDeepLink(_ link: DeepLink, on host: DeepLinkHost) {
+        if model.connectedHostID == host.id {
+            deepLinkTarget = link
+            return
+        }
+        Task {
+            await model.connectToSaved(host.id)
+            // A cold launch may still be connecting to the previous host; never route a link
+            // into a shell that belongs to a different daemon.
+            guard model.connectedHostID == host.id, case .connected = model.phase else { return }
+            deepLinkTarget = link
         }
     }
 
