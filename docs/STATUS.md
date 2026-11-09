@@ -23,8 +23,10 @@ wording and assets; don't invent quips. Never reuse `~/workspace/claude-ios-ui` 
 - M1: ClaudeUI became `Packages/PaseoUI`, Claude-only screens deleted. The app builds in Xcode
   (user confirmed) but still shows the old generic screens until M2.
 - M2 merged (816a491): ClaudeUI chat + shell on live data (`Chat/`), old generic screens deleted.
-  Waiting on the user's Xcode build. T9–T13 all finished; `integration-phase3` (DeepSeek) is
-  merging them (worktree `/home/paseo/.paseo/worktrees/0264elgj/integration-phase3`).
+  Waiting on the user's Xcode build.
+- Phase 3 backend merged (T9 schedules, T10 host settings/presence/slash commands, T11 git
+  extras, T12 attachments/search/subagents, T13 rich detection + mascot state machine).
+  386 tests green. Gap: T12 file byte upload needs binary send in PaseoKit.
 
 ## In flight (Paseo agents, each in its own worktree; branch = ticket)
 
