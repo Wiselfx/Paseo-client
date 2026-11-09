@@ -138,6 +138,9 @@ grays, 0.5 pt dividers, a11y labels/traits, 44 pt composer targets, Reduce Motio
 `#-1`). Its blue→orange/system→ClaudeTypography swaps in Settings were reverted (ClaudeUI pinned).
 Proposals (header, ToastHost, 44 pt pass, Files toolbar) wait for the polish pass with the user.
 Platform priority: iPhone first, then Mac; no iPad-only work (M18 dropped).
+R17 (DeepSeek): relay transport (`RelayWebSocketTransport` wraps any socket; queued sends, stable hello
+retries, 32 MiB wire bound, 4001 retry / 4002-4003 terminal, protected-only admission after
+`server_info`), `RelayPinning` (pins + secret store protocols). PaseoCore 559/166/127 = 852 green.
 Xcode: the new package needs File → Packages → Resolve/Reset Package Caches. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
@@ -145,9 +148,9 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
-- R17 `r17-relay-transport` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: relay transport, reconnect, pinning.
+- R18 `r18-pairing-ui` on Crouton c2f9fb62: scan/paste/confirm + SavedHosts identity; DeepSeek 6db40c26 (R17 author) reviews before merge.
 - M15 `m15-voice-mode` (Crouton 6705fee4, done): DeepSeek 8872f024 reviewing before merge (rule: risky Crouton work gets a DeepSeek review pass).
-- Idle: Crouton c2f9fb62 (M17; next R18 pairing UI after R17), DeepSeek 85844e34 (P1 polish context).
+- Idle: DeepSeek 85844e34 (P1 polish context), DeepSeek 6db40c26 (R17; reviewer for R18).
 Known store gaps: fork can't carry provider feature values.
 
 Roadmap order: see PARITY.md suggested milestones, renumbered below.
