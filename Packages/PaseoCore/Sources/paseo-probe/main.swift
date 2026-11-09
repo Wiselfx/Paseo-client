@@ -432,6 +432,8 @@ do {
         try await runFsOps(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     case "setup":
         try await runSetupObservation(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
+    case "project-config":
+        try await runProjectConfig(connection, repoRoot: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     case "usage":
         try await runUsage(connection)
     case "attachments-search":
@@ -1596,4 +1598,42 @@ func runSetupObservation(_ connection: DaemonConnection, cwd: String) async thro
         print("status=none (the workspace has no setup snapshot)")
     }
     await store.stopObserving(workspace.id)
+}
+
+// MARK: - Project config (M2.11)
+
+@MainActor
+func runProjectConfig(_ connection: DaemonConnection, repoRoot: String) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    _ = await waitForDirectory(session)
+    await session.projectConfig.load(repoRoot: repoRoot)
+    let store = session.projectConfig
+    if let error = store.error {
+        print("error=\(error.userMessage)")
+        return
+    }
+    if let sendError = store.sendError {
+        print("sendError=\(sendError)")
+        return
+    }
+    print("phase=\(store.phase)")
+    if let revision = store.revision {
+        print("revision mtimeMs=\(revision.mtimeMs) size=\(revision.size)")
+    } else {
+        print("revision=none (no paseo.json)")
+    }
+    let (setup, teardown) = ProjectConfigEditor.worktreeCommands(store.config)
+    print("setup=\(setup.joined(separator: "; "))")
+    print("teardown=\(teardown.joined(separator: "; "))")
+    for script in ProjectConfigEditor.scripts(store.config) {
+        print("script \(script.name): \(script.command)")
+    }
+    if let project = session.workspaceDirectory.projects.first(where: { $0.projectRootPath == repoRoot }) {
+        await session.projectIcons.load(projectId: project.projectId)
+        print("icon bytes=\(session.projectIcons.iconData?.count ?? 0) mime=\(session.projectIcons.mimeType ?? "-")")
+    } else {
+        print("icon skipped (project not found for \(repoRoot))")
+    }
 }
