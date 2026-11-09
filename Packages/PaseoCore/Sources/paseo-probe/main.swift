@@ -69,6 +69,11 @@ let usage = """
                                full stack: search the conversation, list provider subagents and
                                send a message with a structured text attachment (default query
                                "ready")
+      rewind <agentId> [messageId scope]
+                               rewind probe: prints server_info.features.rewind, the snapshot's
+                               supportsRewind* flags and the rewindable user messages. Passing
+                               <messageId scope> performs the rewind through the store
+                               (conversation | files | both)
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -428,6 +433,16 @@ do {
         }
         let query = arguments.commandArguments.dropFirst().first ?? "ready"
         try await runAttachmentsSearch(connection, agentId: agentId, query: query)
+    case "rewind":
+        guard let agentId = arguments.commandArguments.first else {
+            throw ProbeError("rewind needs an <agentId>")
+        }
+        let rest = Array(arguments.commandArguments.dropFirst())
+        if rest.count == 2 {
+            try await runRewind(connection, agentId: agentId, messageId: rest[0], scope: rest[1])
+        } else {
+            try await runRewind(connection, agentId: agentId, messageId: nil, scope: nil)
+        }
     default:
         throw ProbeError("unknown command \(arguments.command)\n\n\(usage)")
     }
@@ -1251,6 +1266,45 @@ func eventuallyProbe(timeout: TimeInterval, _ condition: @MainActor () -> Bool) 
         try? await Task.sleep(for: .milliseconds(100))
     }
     return condition()
+}
+
+/// Read-only readout of the rewind capability and the rows an operator could rewind to;
+/// with an explicit messageId and scope, performs one rewind through the conversation store.
+@MainActor
+func runRewind(_ connection: DaemonConnection, agentId: String, messageId: String?, scope: String?) async throws {
+    try await connection.connect()
+    let session = HostSession(client: connection)
+    await session.start()
+    let store = session.conversation(for: agentId)
+    try await waitUntil("the conversation to load", timeout: 30) { store.phase == .ready }
+
+    print("server features.rewind=\(session.isRewindSupportedByHost)")
+    let caps = store.rewindCapabilities
+    print("snapshot capabilities: conversation=\(caps.conversation) files=\(caps.files) both=\(caps.both) menu=\(caps.menu)")
+
+    for row in store.timeline.rows {
+        if case .userMessage(let message) = row.item {
+            print("  seq=\(row.seqStart) role=user messageId=\(message.messageId ?? "-") clientMessageId=\(message.clientMessageId ?? "-")")
+        }
+    }
+
+    if let messageId, let scope {
+        let parsed: RewindScope
+        switch scope {
+        case "conversation": parsed = .conversation
+        case "files": parsed = .files
+        case "both": parsed = .both
+        default:
+            throw ProbeError("scope must be one of conversation, files or both")
+        }
+        print("rewinding to messageId=\(messageId) scope=\(scope)...")
+        if let failure = await store.rewind(toMessageId: messageId, scope: parsed) {
+            print("rewind refused: \(failure)")
+        } else {
+            print("rewind ok")
+        }
+    }
+    session.closeConversation(agentId)
 }
 
 // MARK: - T12: attachments, search and subagents

@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent.rewind.response",
+    "payload": {
+      "requestId": "rewind-request",
+      "agentId": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+      "ok": false,
+      "error": "Provider does not support rewinding conversation"
+    }
+  }
+}

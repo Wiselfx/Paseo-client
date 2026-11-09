@@ -84,6 +84,16 @@ struct ClaudeStatusDot: View {
     }
 }
 
+/// The label for a rewind scope in the menu and the confirm dialog (upstream copy, en.ts).
+func rewindScopeTitle(_ scope: RewindScope) -> String {
+    switch scope {
+    case .conversation: "Rewind conversation"
+    case .files: "Rewind files"
+    case .both: "Rewind conversation and files"
+    case .unknown: "Rewind to here"
+    }
+}
+
 /// 28 × 28 copy affordance, the size DSH uses for its own row buttons.
 struct ClaudeCopyButton: View {
     var text: String
@@ -111,34 +121,33 @@ struct ClaudeCopyButton: View {
     }
 }
 
-/// A digit that rolls in place, holding its width. Reduced motion sets it at once.
-struct ClaudeRollingNumber: View {
-    var value: Int
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Text("\(value)")
-            .contentTransition(reduceMotion ? .identity : .numericText())
-            .animation(
-                reduceMotion ? nil : .timingCurve(0.4, 0, 0.2, 1, duration: ClaudeMotion.roll), value: value)
-    }
-}
-
 /// What you said: the ClaudeUI bubble, trailing, with a pending state while the daemon confirms it.
 /// A message sent this session grows into place (scale 0.96 + fade, DSH chat-send);
 /// Reduce Motion fades. History bubbles never animate.
+///
+/// Long-press → "Rewind to here" appears only once the provider acknowledged the message
+/// (`rewindChoices` non-empty). The actual rewind confirm lives in the transcript.
 struct ClaudeUserBubble: View {
     var text: String
     var isPending: Bool
+    /// The scopes the provider supports, in menu order; empty hides the rewind item.
+    var rewindChoices: [RewindScope] = []
+    /// Called with the chosen scope; the parent presents the confirmation dialog.
+    var onRewind: ((RewindScope) -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Captured at insertion: true only for a message that was pending when it appeared
     /// (i.e. sent this session). History rows are never pending, so they never animate.
     @State private var entered: Bool
 
-    init(text: String, isPending: Bool) {
+    init(
+        text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
+        onRewind: ((RewindScope) -> Void)? = nil
+    ) {
         self.text = text
         self.isPending = isPending
+        self.rewindChoices = rewindChoices
+        self.onRewind = onRewind
         self._entered = State(initialValue: !isPending)
     }
 
@@ -170,6 +179,18 @@ struct ClaudeUserBubble: View {
                 UIPasteboard.general.string = text
                 Haptics.selection()
             }
+            if let onRewind, !rewindChoices.isEmpty {
+                Divider()
+                if rewindChoices.count == 1, let scope = rewindChoices.first {
+                    Button("Rewind to here", systemImage: "arrow.uturn.left") { onRewind(scope) }
+                } else {
+                    Menu("Rewind to here", systemImage: "arrow.uturn.left") {
+                        ForEach(rewindChoices, id: \.self) { scope in
+                            Button(rewindScopeTitle(scope)) { onRewind(scope) }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -183,17 +204,20 @@ struct ClaudeUserBubble: View {
 }
 
 /// Assistant prose: the serif Markdown renderer, one place for the theme.
+/// `isStreaming` lets DSH's new-text reveal fade in only what actually arrives while you watch.
 struct ClaudeProse: View {
     var markdown: String
     var typography: ClaudeTypography
     var onAction: (MarkdownAction) -> Void
     /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
     var localImageLoader: ((String) async -> UIImage?)? = nil
+    /// True while the producing turn is running — assistant prose arriving live fades in.
+    var isStreaming: Bool = false
 
     var body: some View {
-        ClaudeRichDocument(
+        ClaudeRevealProse(
             markdown: markdown, theme: Self.theme(typography), onAction: onAction,
-            localImageLoader: localImageLoader)
+            isStreaming: isStreaming, localImageLoader: localImageLoader)
     }
 
     static func theme(_ typography: ClaudeTypography) -> ClaudeMarkdownTheme {

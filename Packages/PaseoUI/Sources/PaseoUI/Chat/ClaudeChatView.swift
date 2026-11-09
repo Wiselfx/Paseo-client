@@ -44,12 +44,19 @@ public struct ClaudeChatView: View {
     @FocusState private var findFocused: Bool
     // Chat-follow (M7b §1).
     @State private var isFollowing = true
+    /// M7d chat-anchor: armed when a message is sent; the transcript pins it to the top until
+    /// the answer grows past the bottom, when tail-follow takes over again.
+    @State private var anchoringToAnswer = false
     @State private var composerHeight: CGFloat = 0
     /// One quiet line per permission answer made this session; the store drops resolved
     /// requests without remembering the answer, so the client keeps the record.
     @State private var permissionResolvedLines: [AnsweredPermission] = []
     /// A file tapped from a Read/Edit/Write row; presented as the existing Files viewer in a sheet.
     @State private var openFilePath: String?
+    /// M7d rewind: a scope awaiting the can't-undo confirmation dialog (messageId + chosen scope).
+    @State private var pendingRewind: PendingRewind?
+    /// True while a confirmed rewind RPC is in flight; double-taps on the confirm button no-op.
+    @State private var rewindInFlight = false
     // Header title menu (M7 §1).
     @State private var renamingAgent = false
     @State private var renameText = ""
@@ -187,6 +194,12 @@ public struct ClaudeChatView: View {
         .task { await loadSlashCommands() }
         .onChange(of: store.activeTurnId) { oldId, newId in
             if newId == nil, oldId != nil { flushQueuedMessage() }
+            if newId == nil {
+                // The turn ended: the anchor's job (hold your message at the top while the
+                // answer arrives) is done; hand back to the normal follow rules.
+                anchoringToAnswer = false
+                isFollowing = true
+            }
         }
         .onChange(of: store.draft) { _, newValue in
             scheduleDraftSave(newValue)
@@ -453,6 +466,22 @@ public struct ClaudeChatView: View {
                     ? "This agent is still running. Archiving it will stop the agent."
                     : "The agent will disappear from your list.")
         }
+        .confirmationDialog(
+            "Rewind to this message?",
+            isPresented: Binding(
+                get: { pendingRewind != nil },
+                set: { if !$0 { pendingRewind = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingRewind
+        ) { rewind in
+            Button(rewindScopeTitle(rewind.scope), role: .destructive) {
+                performPendingRewind(rewind)
+                pendingRewind = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRewind = nil }
+        } message: { _ in
+            Text("This action cannot be undone.")
+        }
     }
 
     /// `workspace · branch`, small and secondary under the agent title.
@@ -581,7 +610,11 @@ public struct ClaudeChatView: View {
                                 onMarkdown: handleMarkdown, localImageLoader: localImageLoader,
                                 highlightedSeq: findFlash,
                                 findTarget: findSeq,
-                                onOpenFile: { path in openFileViewer(at: path) }
+                                onOpenFile: { path in openFileViewer(at: path) },
+                                rewindChoices: rewindMenuScopes,
+                                onRewind: { scope, messageId in
+                                    pendingRewind = PendingRewind(messageId: messageId, scope: scope)
+                                }
                             )
                             .id(turn.id)
                             .onAppear { lastTrackedTurn = turn.id }
@@ -633,12 +666,19 @@ public struct ClaudeChatView: View {
                 // Switching the open agent lands the transcript at the bottom, without animation —
                 // unless a find session is active; a session belongs to its agent, so it closes.
                 .onChange(of: store.agentId) { _, _ in
+                    anchoringToAnswer = false
                     if findOpen {
                         closeFind()
                         return
                     }
                     isFollowing = true
                     scrollToBottom(proxy, animated: false)
+                }
+                // Chat-anchor (M7d): when your message appears (pending send), pin it to the top
+                // of the viewport and let the answer grow below it — instead of the tail-follow
+                // pushing it off the top.
+                .onChange(of: pendingRowSignature) { _, _ in
+                    anchorToSentMessage(proxy)
                 }
                 .onAppear {
                     scrollProxy = proxy
@@ -658,6 +698,15 @@ public struct ClaudeChatView: View {
                             - geometry.bounds.height,
                         viewportHeight: geometry.bounds.height)
                 } action: { _, metrics in
+                    if anchoringToAnswer {
+                        // While anchored, the message stays pinned to the top; only once the
+                        // growing content overflows the viewport does tail-follow take over.
+                        if metrics.distanceFromBottom > 16 {
+                            anchoringToAnswer = false
+                            isFollowing = true
+                        }
+                        return
+                    }
                     if metrics.distanceFromBottom <= 16 {
                         if !isFollowing { isFollowing = true }
                     } else if metrics.distanceFromBottom > metrics.viewportHeight / 3 {
@@ -676,6 +725,55 @@ public struct ClaudeChatView: View {
             }
         } else {
             proxy.scrollTo("bottom", anchor: .bottom)
+        }
+    }
+
+    /// Ids of the pending user-message rows, for the anchor's send detection.
+    private var pendingRowSignature: String {
+        store.timeline.rows.lazy.filter(\.isPending).map(\.id).joined(separator: "|")
+    }
+
+    /// Scopes the rewind menu shows: host feature gate + the provider's advertised flags, verbatim.
+    private var rewindMenuScopes: [RewindScope] {
+        guard session.isRewindSupportedByHost else { return [] }
+        return store.rewindCapabilities.menu
+    }
+
+    /// Pins the pending send to the top of the viewport (M7d chat-anchor). Only while a row is
+    /// still pending; once the daemon confirms it (or drops a failed send) the anchor holds the
+    /// position by itself and stops re-pinning.
+    private func anchorToSentMessage(_ proxy: ScrollViewProxy) {
+        guard anchoringToAnswer, !pendingRowSignature.isEmpty else { return }
+        let newest = store.timeline.rows.last(where: {
+            if case .userMessage = $0.item { return true } else { return false }
+        })
+        guard let newest else {
+            anchoringToAnswer = false
+            return
+        }
+        let target = "row:\(newest.seqEnd)"
+        if reduceMotion {
+            proxy.scrollTo(target, anchor: .top)
+        } else {
+            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .top) }
+        }
+    }
+
+    /// Runs the confirmed rewind and toasts the outcome. One confirm in flight at a time.
+    private func performPendingRewind(_ rewind: PendingRewind) {
+        guard !rewindInFlight else { return }
+        rewindInFlight = true
+        Task {
+            let failure = await store.rewind(toMessageId: rewind.messageId, scope: rewind.scope)
+            rewindInFlight = false
+            if let failure {
+                showToast(failure)
+            } else {
+                // The timeline is truncated away from the rewound point; resume tail-follow.
+                anchoringToAnswer = false
+                isFollowing = true
+                showToast("Rewound")
+            }
         }
     }
 
@@ -704,6 +802,7 @@ public struct ClaudeChatView: View {
         if !findOpen && !isFollowing {
             Button {
                 Haptics.selection()
+                anchoringToAnswer = false
                 isFollowing = true
                 if let scrollProxy {
                     if reduceMotion {
@@ -1075,6 +1174,9 @@ public struct ClaudeChatView: View {
         var next: MessageQueue.QueuedMessage?
         composerQueue.mutate(store.agentId) { next = $0.dequeueNext(isIdle: true) }
         guard let next else { return }
+        // The dequeued message is sent now: same anchor contract as a manual send.
+        anchoringToAnswer = true
+        isFollowing = false
         Task {
             await store.send(next.text)
             composerQueue.mutate(store.agentId) { $0.finishSending() }
@@ -1100,6 +1202,8 @@ public struct ClaudeChatView: View {
         composerQueue.mutate(store.agentId) { taken = $0.take(message.id) }
         guard let text = taken else { return }
         Haptics.send()
+        anchoringToAnswer = true
+        isFollowing = false
         Task { await store.send(text) }
     }
 
@@ -1457,6 +1561,10 @@ public struct ClaudeChatView: View {
         guard !hasUploadingAttachment else { return }
         SavedDraftStore.clear(store.agentId)
         focused = false
+        // M7d chat-anchor: your message pins to the top; tail-follow takes over once the
+        // answer grows past the bottom.
+        anchoringToAnswer = true
+        isFollowing = false
         Haptics.send()
         Task {
             await store.sendWithAttachments(text, attachments: readyAttachments)
@@ -1531,6 +1639,13 @@ enum ClaudeChatSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
+/// A rewind awaiting the can't-undo confirmation (M7d).
+private struct PendingRewind: Identifiable {
+    let messageId: String
+    let scope: RewindScope
+    var id: String { "\(messageId)/\(scope)" }
+}
+
 /// One turn: your bubble, the process header, the process body, the answer.
 struct ClaudeTurnView: View {
     let turn: Turn
@@ -1544,6 +1659,10 @@ struct ClaudeTurnView: View {
     var findTarget: Int?
     /// Called with an absolute path when the reader taps a filename in a Read/Edit/Write row.
     var onOpenFile: ((String) -> Void)?
+    /// The scopes the rewind menu offers on your bubbles; empty hides it (M7d).
+    var rewindChoices: [RewindScope] = []
+    /// Called with (scope, messageId); the transcript presents the confirmation dialog.
+    var onRewind: ((RewindScope, String) -> Void)? = nil
 
     /// Nil until the reader taps, so the default can follow the turn's phase.
     @State private var userExpanded: Bool?
@@ -1567,9 +1686,15 @@ struct ClaudeTurnView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
-                ClaudeUserBubble(text: message.text, isPending: row.isPending)
-                    .id("row:\(row.seqEnd)")
-                    .background(findHighlight(row.seqEnd))
+                // The provider has to acknowledge the prompt before it can be rewound to.
+                let rewindable = message.messageId != nil && !rewindChoices.isEmpty
+                ClaudeUserBubble(
+                    text: message.text, isPending: row.isPending,
+                    rewindChoices: rewindable ? rewindChoices : [],
+                    onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil
+                )
+                .id("row:\(row.seqEnd)")
+                .background(findHighlight(row.seqEnd))
             }
             if showsHeader { header }
             if isExpanded {
@@ -1585,7 +1710,7 @@ struct ClaudeTurnView: View {
                 .transition(.opacity.combined(with: .offset(y: -2)))
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
+                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: isRunning)
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
             }
@@ -1674,7 +1799,7 @@ struct ClaudeSegmentView: View {
                 highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
+                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: turnIsRunning)
                     .id("row:\(row.seqEnd)")
                     .background {
                         RoundedRectangle(cornerRadius: 14)
@@ -1902,7 +2027,7 @@ private struct ClaudeGroupHeightKey: PreferenceKey {
     }
 }
 
-/// One thought or tool call inside the process card: one line — 36 pt for thought and file rows,
+/// One thought or tool call inside the process card: one line — 36 pt for thought rows,
 /// 24 pt for shell/tool rows — a trailing chevron on the disclosure rows, detail below when open.
 struct ClaudeStepRow: View {
     let row: TimelineRow
@@ -1913,18 +2038,12 @@ struct ClaudeStepRow: View {
     @State private var userExpanded: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private enum RowKind { case thought, file, tool }
+    // File calls never reach this row: they merge into `ClaudeMergedFileRow` (see ClaudeFileCalls).
+    private enum RowKind { case thought, tool }
 
     private var kind: RowKind {
-        switch row.item {
-        case .reasoning: return .thought
-        case .toolCall(let call):
-            switch call.detail {
-            case .read, .edit, .write: return .file
-            default: return .tool
-            }
-        default: return .tool
-        }
+        if case .reasoning = row.item { return .thought }
+        return .tool
     }
 
     private var isExpanded: Bool { userExpanded ?? isLive }
@@ -1972,36 +2091,18 @@ struct ClaudeStepRow: View {
             }
         case .toolCall(let call):
             let presentation = ToolCallPresentation(call)
-            if kind == .file {
-                HStack(spacing: 0) {
-                    Text(presentation.title)
+            HStack(spacing: 6) {
+                ClaudeToolSeat(call: call, symbol: presentation.symbol)
+                Text(presentation.title)
+                    .font(typography.serif(13, weight: .medium))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                if let subtitle = presentation.subtitle {
+                    Circle().fill(ClaudePalette.captionInk).frame(width: 2, height: 2)
+                    Text(subtitle)
                         .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                    if let subtitle = presentation.subtitle {
-                        Circle().fill(ClaudePalette.captionInk).frame(width: 2, height: 2)
-                            .padding(.horizontal, 8)
-                        Text(subtitle)
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
-                            .underline(true, pattern: .dot, color: ClaudePalette.tertiaryInk)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
-            } else {
-                HStack(spacing: 6) {
-                    ClaudeToolSeat(call: call, symbol: presentation.symbol)
-                    Text(presentation.title)
-                        .font(typography.serif(13, weight: .medium))
                         .foregroundStyle(ClaudePalette.tertiaryInk)
-                    if let subtitle = presentation.subtitle {
-                        Circle().fill(ClaudePalette.captionInk).frame(width: 2, height: 2)
-                        Text(subtitle)
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
         default:

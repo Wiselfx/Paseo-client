@@ -41,6 +41,9 @@ public struct AgentSnapshot: Sendable, Hashable, Decodable, Identifiable {
     public var createdAt: String
     public var updatedAt: String
     public var lastUserMessageAt: String?
+    /// Provider capability flags carried on the wire (`capabilities`, messages.ts:417-433). Nil
+    /// when the daemon doesn't send them.
+    public var capabilities: AgentCapabilities?
     public var activeTurn: ActiveTurn?
     public var currentModeId: String?
     public var availableModes: [AgentMode]
