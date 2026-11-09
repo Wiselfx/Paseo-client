@@ -19,6 +19,8 @@ struct PaseoSidebar: View {
     @State private var renamingWorkspace: WorkspaceDescriptor?
     @State private var renamingProject: WorkspaceProjectDescriptor?
     @State private var projectPendingRemoval: WorkspaceProjectDescriptor?
+    /// Set only when the daemon can't undo an archive: then a confirmation guards it instead.
+    @State private var workspacePendingArchive: WorkspaceDescriptor?
     @State private var undoToast: (id: String, name: String)?
     @State private var undoToastToken = UUID()
     @State private var renameText = ""
@@ -135,6 +137,22 @@ struct PaseoSidebar: View {
             }
         } message: {
             Text("Empty restores the folder name.")
+        }
+        .confirmationDialog(
+            "Archive workspace?",
+            isPresented: Binding(
+                get: { workspacePendingArchive != nil },
+                set: { if !$0 { workspacePendingArchive = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Archive", role: .destructive) {
+                guard let workspace = workspacePendingArchive else { return }
+                workspacePendingArchive = nil
+                archiveWorkspace(workspace)
+            }
+            Button("Cancel", role: .cancel) { workspacePendingArchive = nil }
+        } message: {
+            Text("Its agents and terminals stop. This host can't undo an archive.")
         }
         .confirmationDialog(
             "Remove project?",
@@ -473,7 +491,11 @@ struct PaseoSidebar: View {
                 }
             }
             Button("Archive workspace", systemImage: "archivebox", role: .destructive) {
-                Task { await archiveWorkspace(workspace) }
+                if session.workspaceDirectory.supportsWorkspaceArchiveUndo {
+                    archiveWorkspace(workspace)
+                } else {
+                    workspacePendingArchive = workspace
+                }
             }
         }
     }
@@ -654,8 +676,8 @@ struct PaseoSidebar: View {
         return session.workspaceDirectory.workspace(id: workspaceId)?.projectId
     }
 
-    /// Archives a workspace right away (no confirmation: the undo toast is the safety net), and
-    /// surfaces the outcome as a bottom toast with an Undo for ~5 s.
+    /// Archives a workspace (confirmed first when the host can't undo; else the undo toast is the
+    /// safety net) and surfaces the outcome as a bottom toast with an Undo for ~5 s.
     private func archiveWorkspace(_ workspace: WorkspaceDescriptor) {
         let supportsUndo = session.workspaceDirectory.supportsWorkspaceArchiveUndo
         Task {
