@@ -40,6 +40,27 @@ public enum RichContentBlock: Sendable, Equatable {
     /// §2 — a ` ```visualize ` fence with a non-blank body: a self-contained HTML
     /// fragment hosting the sandboxed stage. Unclosed (streaming) fences are detected.
     case visualize(code: String, range: Range<String.Index>)
+    /// M17 — a standalone line that is exactly a coordinate pair (`lat, lng`), a `geo:`
+    /// URI, or an Apple/Google Maps URL. Doc 05 specifies no map rule, so this is the
+    /// strict §1.1-shaped rule: standalone line only, never inside lists/headings, and
+    /// no address guessing — prose never becomes a map. The UI renders a MapKit
+    /// snapshot that opens Apple Maps.
+    case mapCard(MapReference, range: Range<String.Index>)
+}
+
+/// A map reference from a standalone coordinate line or maps URL. `latitude`/`longitude`
+/// are nil only for query-only maps URLs whose coordinates cannot be read; the UI then
+/// renders a calm placeholder card that still opens the URL.
+public struct MapReference: Sendable, Equatable {
+    /// The matched source text (or URL).
+    public var url: String
+    public var latitude: Double?
+    public var longitude: Double?
+    public init(url: String, latitude: Double?, longitude: Double?) {
+        self.url = url
+        self.latitude = latitude
+        self.longitude = longitude
+    }
 }
 
 /// The source range of the block, for document ordering and splicing.
@@ -53,7 +74,8 @@ public extension RichContentBlock {
              .localImage(_, _, let range),
              .localFileLink(_, let range),
              .rawSVG(_, let range),
-             .visualize(_, let range):
+             .visualize(_, let range),
+             .mapCard(_, let range):
             range
         }
     }
@@ -268,6 +290,85 @@ public enum RichContentDetector {
     /// `youtubeWatchUrl` (youtube/urls.ts).
     public static func youTubeWatchURL(id: String) -> String {
         "https://www.youtube.com/watch?v=\(id)"
+    }
+
+    /// M17 — a strict standalone map reference (the whole trimmed line): a `lat, lng`
+    /// coordinate pair (decimal point required, latitude −90…90, longitude −180…180),
+    /// a `geo:` URI, or an Apple/Google Maps URL. Anything looser — street addresses,
+    /// coordinates in prose — is deliberately not a map: no fuzzy guessing.
+    public static func mapReference(forLine line: String) -> MapReference? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.lowercased().hasPrefix("geo:") {
+            guard let (lat, lng) = parseCoordinatePair(String(trimmed.dropFirst(4))) else { return nil }
+            return MapReference(url: trimmed, latitude: lat, longitude: lng)
+        }
+        if let pair = parseCoordinatePair(trimmed) {
+            return MapReference(url: trimmed, latitude: pair.0, longitude: pair.1)
+        }
+        guard isBareURLLineLike(trimmed) else { return nil }
+        return mapReference(forURL: trimmed)
+    }
+
+    private static func isBareURLLineLike(_ line: String) -> Bool {
+        let lower = line.lowercased()
+        return (lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("maps:"))
+            && !line.contains(where: { $0.isWhitespace })
+    }
+
+    /// `lat, lng` — both parts must be plain decimals (a decimal point is required so
+    /// year pairs and fractions never match) and in range.
+    private static func parseCoordinatePair(_ text: String) -> (Double, Double)? {
+        let semicolonHead = text.split(separator: ";", omittingEmptySubsequences: true).first.map(String.init) ?? text
+        let head = semicolonHead.split(separator: "&", omittingEmptySubsequences: false).first.map(String.init) ?? semicolonHead
+        let parts = head.split(separator: ",", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+        guard let lat = parseDecimal(parts[0]), let lng = parseDecimal(parts[1]) else { return nil }
+        guard (-90...90).contains(lat), (-180...180).contains(lng) else { return nil }
+        return (lat, lng)
+    }
+
+    private static func parseDecimal(_ part: Substring) -> Double? {
+        let trimmed = part.trimmingCharacters(in: .whitespaces)
+        guard trimmed.contains(".") else { return nil }
+        var body = trimmed[...]
+        if body.first == "-" || body.first == "+" { body = body.dropFirst() }
+        guard !body.isEmpty,
+            body.allSatisfy({ $0.isNumber || $0 == "." }),
+            body.filter({ $0 == "." }).count == 1
+        else { return nil }
+        return Double(trimmed)
+    }
+
+    /// Apple Maps (`maps.apple.com`, `maps:?`) and Google Maps (`google.com/maps`,
+    /// `maps.google.com`, `goo.gl/maps`) URLs; coordinates read from `ll=`, a numeric
+    /// `q=`/`query=`, or the `@lat,lng` path form, when present.
+    private static func mapReference(forURL url: String) -> MapReference? {
+        let lower = url.lowercased()
+        let apple = lower.contains("maps.apple.com") || lower.hasPrefix("maps:")
+        let google = lower.contains("google.com/maps") || lower.contains("maps.google.com")
+            || lower.contains("goo.gl/maps")
+        guard apple || google else { return nil }
+        var pair: (Double, Double)?
+        if let range = lower.range(of: "ll="), let found = parseCoordinatePair(String(url[range.upperBound...])) {
+            pair = found
+        } else if let at = lower.firstIndex(of: "@") {
+            // Google's @lat,lng,zoom form: only the first two numbers are coordinates.
+            let tail = String(url[url.index(after: at)...])
+            let firstTwo = tail.split(separator: ",", omittingEmptySubsequences: false)
+                .prefix(2).joined(separator: ",")
+            pair = parseCoordinatePair(firstTwo)
+        } else {
+            for key in ["q=", "query="] {
+                if let range = lower.range(of: key),
+                    let found = parseCoordinatePair(String(url[range.upperBound...]))
+                {
+                    pair = found
+                    break
+                }
+            }
+        }
+        return MapReference(url: url, latitude: pair?.0, longitude: pair?.1)
     }
 }
 
@@ -1182,6 +1283,11 @@ private func emitParagraph(
             for line in block.lines {
                 let (trimmed, trimmedRange) = trimmedSlice(line, in: source)
                 let text = String(trimmed)
+                // M17 — a standalone map reference hosts a map card instead of a link card.
+                if let map = RichContentDetector.mapReference(forLine: text) {
+                    out.append(.mapCard(map, range: trimmedRange))
+                    continue
+                }
                 guard isBareURLLine(trimmed),
                       !RichContentDetector.isRemoteImageURL(text),
                       RichContentDetector.youtubeID(for: text) == nil else { continue }

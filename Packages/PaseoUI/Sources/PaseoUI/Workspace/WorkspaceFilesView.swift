@@ -417,6 +417,7 @@ private struct WorkspaceFilesDirectoryList: View {
             .frame(height: 46)
             .contentShape(.rect)
             .background(revealedRow == relative(entry) ? ClaudePalette.chip.opacity(0.9) : Color.clear)
+            .draggable(entry.isDirectory ? nil : relative(entry))
         }
         .buttonStyle(.plain)
         .contextMenu {

@@ -87,11 +87,60 @@ extension ClaudeChatView {
 
     /// The crab, feet on the composer card's top edge, flush with its right edge, above the card.
     /// 104 × 72 pt of art; only the resting body takes touches.
+    /// Tap or long-press opens the cost bubble (M17): the conversation's cost/tokens from
+    /// the context-usage data, when the provider reports them. No balance line — Paseo
+    /// has no balance source.
     @ViewBuilder var mascotCrab: some View {
         if mascotEnabled {
-            ComposerCrab(state: mascot.state)
-                .offset(y: -72)
+            ZStack(alignment: .topTrailing) {
+                ComposerCrab(state: mascot.state)
+                    .offset(y: -72)
+                    .onTapGesture { showCostBubble.toggle() }
+                    .onLongPressGesture { showCostBubble = true }
+                if showCostBubble, let usage = store.contextUsage,
+                    usage.totalCostUsd != nil || usage.inputTokens != nil || usage.outputTokens != nil
+                {
+                    costBubble(usage: usage)
+                        .offset(y: -72)
+                        .padding(.trailing, 4)
+                }
+            }
         }
+    }
+
+    private func costBubble(usage: ContextUsage) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Session cost")
+                .font(.system(size: 11))
+                .foregroundStyle(ClaudePalette.secondary)
+            if let cost = usage.totalCostUsd {
+                Text(ClaudeContextSheet.cost(cost))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.ink)
+            }
+            if let input = usage.inputTokens, let output = usage.outputTokens {
+                Text("\(input + output) tokens")
+                    .font(.system(size: 12))
+                    .foregroundStyle(ClaudePalette.secondary)
+            } else if let input = usage.inputTokens {
+                Text("\(input) tokens")
+                    .font(.system(size: 12))
+                    .foregroundStyle(ClaudePalette.secondary)
+            } else if let output = usage.outputTokens {
+                Text("\(output) tokens")
+                    .font(.system(size: 12))
+                    .foregroundStyle(ClaudePalette.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(ClaudePalette.panel, in: .rect(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Session cost")
     }
 
 }
