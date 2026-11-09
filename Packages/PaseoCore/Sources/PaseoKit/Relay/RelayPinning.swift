@@ -150,13 +150,16 @@ public final class RelayHostPins: Sendable {
 // MARK: - Endpoint from an offer
 
 extension ConnectionOffer {
-    /// The endpoint for this offer. The credential is the offer's password, or the one already in
-    /// the secret store when the link was scanned without it (`relay://` links may omit it).
+    /// The endpoint for this offer. The credential is the offer's password, the typed
+    /// override, or the one already in the secret store (in that order). An explicitly
+    /// typed password wins over the stored one, so a password prompt can resume.
     public func makeEndpoint(
-        secrets: any RelaySecretStore, pins: RelayHostPins
+        secrets: any RelaySecretStore, pins: RelayHostPins, password: String? = nil
     ) throws -> DaemonEndpoint {
-        let password = password ?? secrets.password(serverID: serverID)
-        let credential = password.flatMap { $0.isEmpty ? nil : Credential.password($0) }
+        let resolved = password.flatMap { $0.isEmpty ? nil : $0 }
+            ?? self.password.flatMap { $0.isEmpty ? nil : $0 }
+            ?? secrets.password(serverID: serverID)
+        let credential = resolved.flatMap { $0.isEmpty ? nil : Credential.password($0) }
         return try DaemonEndpoint(
             url: relayWebSocketURL(), credential: credential,
             relay: DaemonEndpoint.RelayLink(

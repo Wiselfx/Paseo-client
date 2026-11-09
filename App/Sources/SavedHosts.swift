@@ -1,19 +1,15 @@
 import Foundation
+import PaseoStore
 import PaseoUI
 
-/// One daemon this device remembers. Non-secret only — the password lives in the Keychain,
-/// one account per host id. The URL never carries credentials.
-struct SavedHost: Codable, Identifiable, Equatable {
-    var id: UUID
-    /// User-editable label; defaults to the host part of the URL.
-    var label: String
-    /// Full `ws(s)://host:port/ws`, normalized, credential-free.
-    var url: String
-    var lastConnectedAt: Date?
-}
-
-/// The saved-hosts store. JSON in UserDefaults (labels and URLs are not secrets); passwords go
+/// The saved-hosts store. JSON in UserDefaults (labels and URLs are not secrets; relay hosts
+/// persist server id + public key, never key material beyond the public key); passwords go
 /// through `Keychain`. App-scoped: `AppModel` owns the only instance.
+///
+/// Relay hosts key on `serverID` (+ daemon key) via `SavedHost.identityKey` (PaseoKit), so
+/// re-pairing finds the same host. Blobs written by the pre-relay client decode with nil
+/// relay fields — id, URL and Keychain password survive untouched (migration-tested in
+/// `SavedHostIdentityTests`).
 @MainActor
 final class SavedHosts {
     private(set) var hosts: [SavedHost] = []
@@ -41,7 +37,12 @@ final class SavedHosts {
         hosts.first { $0.url == url }
     }
 
-    /// Most recent first, ready for the picker entries.
+    func host(serverID: String) -> SavedHost? {
+        hosts.first { $0.serverID == serverID }
+    }
+
+    /// Most recent first, ready for the picker entries. Relay rows show the relay endpoint
+    /// as their line (the WebSocket URL is routing detail).
     func entries(current: UUID?) -> [HostSwitchEntry] {
         hosts
             .sorted {
@@ -49,15 +50,20 @@ final class SavedHosts {
             }
             .map {
                 HostSwitchEntry(
-                    id: $0.id, label: $0.label, urlLine: $0.url,
-                    lastConnectedAt: $0.lastConnectedAt, isCurrent: $0.id == current)
+                    id: $0.id, label: $0.label,
+                    urlLine: $0.isRelay ? ($0.relayEndpoint ?? $0.url) : $0.url,
+                    lastConnectedAt: $0.lastConnectedAt, isCurrent: $0.id == current,
+                    isRelay: $0.isRelay)
             }
     }
 
+    /// Every saved host, for the host-confirmation exact-match check (PaseoKit logic).
+    var allHosts: [SavedHost] { hosts }
+
     // MARK: Mutating
 
-    /// A successful connection: upsert by URL (or `id`, when re-connecting a saved host) and mark
-    /// it connected now. Returns the saved host's id.
+    /// A successful connection: upsert by URL (or `id`, when re-connecting a saved host) and
+    /// mark it connected now. Returns the saved host's id.
     @discardableResult
     func markConnected(url: URL, preferredLabel: String, id: UUID? = nil) -> UUID {
         let urlString = url.absoluteString
@@ -74,6 +80,40 @@ final class SavedHosts {
             return hosts[index].id
         }
         let saved = SavedHost(id: UUID(), label: preferredLabel, url: urlString, lastConnectedAt: now)
+        hosts.append(saved)
+        persist()
+        return saved.id
+    }
+
+    /// A successful relay connection: upsert by daemon identity (`identityKey`), never by
+    /// URL, so re-pairing reuses the host and its Keychain password. Updates the pinned key,
+    /// relay endpoint and label once connected.
+    @discardableResult
+    func markConnected(offer: ConnectionOffer, preferredLabel: String, id: UUID? = nil) throws -> UUID {
+        let now = Date()
+        let relayURLString = try offer.relayWebSocketURL().absoluteString
+        func fill(_ host: inout SavedHost) {
+            host.serverID = offer.serverID
+            host.daemonPublicKeyB64 = offer.daemonPublicKeyB64
+            host.relayEndpoint = offer.relayEndpoint
+            host.relayUseTLS = offer.relayUseTLS
+            host.url = relayURLString
+            host.lastConnectedAt = now
+        }
+        if let id, hosts.contains(where: { $0.id == id }) {
+            guard let index = hosts.firstIndex(where: { $0.id == id }) else { return id }
+            fill(&hosts[index])
+            persist()
+            return id
+        }
+        if let index = hosts.firstIndex(where: { $0.identityKey == "relay:\(offer.serverID)" }) {
+            fill(&hosts[index])
+            persist()
+            return hosts[index].id
+        }
+        var saved = SavedHost(
+            id: UUID(), label: preferredLabel, url: relayURLString, lastConnectedAt: now)
+        fill(&saved)
         hosts.append(saved)
         persist()
         return saved.id
@@ -126,7 +166,62 @@ final class SavedHosts {
 
     private func load() {
         guard let data = defaults.data(forKey: storageKey) else { return }
-        // Tolerant: a corrupt file becomes an empty store rather than a crash.
+        // Tolerant: a corrupt file becomes an empty store rather than a crash. Pre-relay
+        // blobs decode because the relay fields are all optional (PaseoKit.SavedHost).
         hosts = (try? JSONDecoder().decode([SavedHost].self, from: data)) ?? []
+    }
+}
+
+/// Relay pins backed by one UserDefaults JSON array (R17 item 3).
+final class UserDefaultsRelayPinStore: RelayPinStore, @unchecked Sendable {
+    private let defaults = UserDefaults.standard
+    private let key = "relay.pins"
+
+    func pins() -> [RelayPinnedHost] {
+        guard let data = defaults.data(forKey: key),
+            let pins = try? JSONDecoder().decode([RelayPinnedHost].self, from: data)
+        else { return [] }
+        return pins
+    }
+
+    func pin(serverID: String) -> RelayPinnedHost? {
+        pins().first { $0.serverID == serverID }
+    }
+
+    func save(_ pin: RelayPinnedHost) {
+        var all = pins().filter { $0.serverID != pin.serverID }
+        all.append(pin)
+        if let data = try? JSONEncoder().encode(all) {
+            defaults.set(data, forKey: key)
+        }
+    }
+
+    func remove(serverID: String) {
+        let all = pins().filter { $0.serverID != serverID }
+        if let data = try? JSONEncoder().encode(all) {
+            defaults.set(data, forKey: key)
+        }
+    }
+}
+
+/// Relay secrets (S5 review fix): the password lives in the Keychain under its own
+/// `relay.<serverID>` account, keyed by daemon identity — genuinely `Sendable`, no
+/// indirection through the saved-host list, and existing direct accounts are untouched.
+/// (The pre-fix build stored relay passwords under `saved-host.<uuid>`; that branch never
+/// merged, so nothing is migrated here — affected dev pairing was simply re-done.)
+final class SavedHostRelaySecrets: RelaySecretStore, @unchecked Sendable {
+    /// The Keychain account for a relay host: verbatim daemon identity (N9 — base64url ids
+    /// are case-sensitive, so the account must be too).
+    static func account(_ serverID: String) -> String {
+        "relay.\(serverID)"
+    }
+
+    func password(serverID: String) -> String? {
+        let password = Keychain.read(account: Self.account(serverID)) ?? ""
+        return password.isEmpty ? nil : password
+    }
+
+    func savePassword(_ password: String, serverID: String) {
+        Keychain.save(password, account: Self.account(serverID))
     }
 }

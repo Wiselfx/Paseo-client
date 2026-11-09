@@ -1,14 +1,17 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// First run with no saved host (M1b): the Paseo mark, one line, and the only connection method
-/// this client can offer today — Direct (Scan QR, pairing links and Remote SSH need a relay or
-/// SSH this client lacks). "Settings" opens a pre-connect appearance sheet; the full Settings
+/// First run with no saved host (M1b): the Paseo mark, one line, and the connection methods.
+/// Direct (host/port form) plus the relay methods — Scan QR / Paste pairing link (R18).
+/// Remote SSH stays desktop-only. "Settings" opens a pre-connect appearance sheet; the full Settings
 /// screen needs a host. Shown once, before the first successful connection; the flag flips in
 /// `AppModel.performConnect`.
 struct WelcomeView<DirectForm: View>: View {
     /// The direct-connection form (M1b's `ConnectView`), revealed by the primary tile.
     let directForm: DirectForm
+    /// Scan QR / Paste pairing link tiles (R18); nil hides the tiles (previews).
+    var onScan: (() -> Void)?
+    var onPaste: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
     @State private var stage: Stage = .welcome
@@ -18,7 +21,12 @@ struct WelcomeView<DirectForm: View>: View {
 
     enum Stage { case welcome, directForm }
 
-    init(@ViewBuilder directForm: () -> DirectForm) {
+    init(
+        onScan: (() -> Void)? = nil, onPaste: (() -> Void)? = nil,
+        @ViewBuilder directForm: () -> DirectForm
+    ) {
+        self.onScan = onScan
+        self.onPaste = onPaste
         self.directForm = directForm()
     }
 
@@ -87,7 +95,17 @@ struct WelcomeView<DirectForm: View>: View {
                     .accessibilityIdentifier("welcome.site")
                 }
                 VStack(spacing: 10) {
+                    if let onScan {
+                        tile(
+                            title: "Scan QR code", description: "Encrypted relay connection.",
+                            symbol: "qrcode.viewfinder", id: "welcome.scan", action: onScan)
+                    }
                     directTile
+                    if let onPaste {
+                        tile(
+                            title: "Paste pairing link", description: "Encrypted relay connection.",
+                            symbol: "clipboard", id: "welcome.paste", action: onPaste)
+                    }
                 }
                 .padding(.top, 10)
                 Button {
@@ -117,32 +135,50 @@ struct WelcomeView<DirectForm: View>: View {
             Haptics.selection()
             stage = .directForm
         } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "link")
-                    .font(.system(size: 18, weight: .light))
-                    .foregroundStyle(ClaudePalette.background)
-                    .frame(width: 34, height: 34)
-                    .background(ClaudePalette.ink, in: .circle)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Direct connection")
-                        .font(typography.sans(17, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
-                    Text("Local network or VPN.")
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-            }
-            .padding(.horizontal, 18)
-            .frame(height: 68)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 20))
-            .contentShape(.rect)
+            tileContent(
+                title: "Direct connection", description: "Local network or VPN.", symbol: "link")
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("welcome.direct")
+    }
+
+    private func tile(
+        title: String, description: String, symbol: String, id: String, action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            tileContent(title: title, description: description, symbol: symbol)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+    }
+
+    private func tileContent(title: String, description: String, symbol: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .light))
+                .foregroundStyle(ClaudePalette.background)
+                .frame(width: 34, height: 34)
+                .background(ClaudePalette.ink, in: .circle)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(typography.sans(17, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                Text(description)
+                    .font(typography.sans(13))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 15))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 68)
+        .background(ClaudePalette.panel, in: .rect(cornerRadius: 20))
+        .contentShape(.rect)
     }
 
     private var versionLine: String {

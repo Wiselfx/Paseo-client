@@ -17,6 +17,16 @@ public final class ConversationUpload {
     public static let maxBytes = 50 * 1024 * 1024
     /// Client-side chunk size; upstream sends the same (`chunkSize ?? 128 * 1024`).
     static let chunkSize = 128 * 1024
+    /// R18 review NIT 2: relay chunks are 1 MiB — far under the ~25 MB relay plaintext
+    /// bound (32 MiB wire), so a 50 MB upload is ~50 frames, not ~800. Direct keeps
+    /// upstream's 128 KiB.
+    static func chunkSize(relay: Bool) -> Int {
+        relay ? 1 * 1024 * 1024 : chunkSize
+    }
+
+    /// True when this upload rides a protected relay channel (set by HostSession from the
+    /// endpoint; previews and tests leave it false).
+    var isRelayConnection = false
 
     public private(set) var isUploading = false
     /// Name of the file in flight (or of the last completed upload).
@@ -97,9 +107,10 @@ public final class ConversationUpload {
                         mime: mimeType, size: data.count, encoding: .binary,
                         modifiedAt: modifiedAt, fileName: name)))
             var offset = 0
+            let chunkBytes = Self.chunkSize(relay: isRelayConnection)
             while offset < data.count {
                 if cancelRequested { return abortUpload() }
-                let end = min(offset + Self.chunkSize, data.count)
+                let end = min(offset + chunkBytes, data.count)
                 try await send(
                     .chunk(requestId: requestId, payload: Data(data[offset ..< end])))
                 offset = end
