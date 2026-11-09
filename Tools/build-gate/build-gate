@@ -57,6 +57,7 @@ build)
         xcodebuild -project App/PaseoClient.xcodeproj -scheme PaseoClient \
         -configuration Debug -destination 'generic/platform=iOS Simulator' \
         -derivedDataPath "$DERIVED" \
+        -skipPackagePluginValidation -skipMacroValidation \
         CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
         build >"$out" 2>&1
     status=$?
