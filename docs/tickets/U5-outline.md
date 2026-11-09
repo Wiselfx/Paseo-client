@@ -29,7 +29,7 @@ Branch `u5-outline` from `foundation`. Read `_U-common.md`.
    - **No reserved width:** remove `reservedWidth` and the transcript's extra trailing padding.
    - **No background plate or material:** only tick marks. Each prompt is a 2 pt high pill, 10 pt wide; the active one is 18 pt wide and in `ink`; the others are in `tertiaryInk`. Port the constants from `rail.web.tsx:13-22`.
    - **Position:** an overlay hugging the trailing edge of the screen, vertically centered on the ticks.
-   - **Visibility:** shown while scrolling and for 1.5 s after, then fades out (`revealTurnRail` exists). Always hit-testable within a 24 pt strip only.
+   - **Visibility:** shown while scrolling and for 1.5 s after, then fades out (`revealTurnRail` exists). Hit-testable only while shown, within a 24 pt strip (lead change at merge: a hidden strip stole right-thumb scrolls).
    - **Touching or dragging along the rail** magnifies the slots near the finger (`promptTickMagnification`). A preview bubble shows the prompt text (`PREVIEW_WIDTH` / `HEIGHT` from upstream) on a translucent material, and releasing jumps there.
    - With more prompts than fit, follow upstream's slot math.
 

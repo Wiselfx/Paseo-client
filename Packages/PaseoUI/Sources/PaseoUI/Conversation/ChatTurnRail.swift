@@ -27,7 +27,7 @@ struct ChatOutlineRail: View {
     let activeSeq: Int?
     /// Height of the transcript viewport, for the slot math and the 80% column.
     let viewportHeight: CGFloat
-    /// Shown while scrolling and briefly after; the touch strip itself is always live.
+    /// Shown while scrolling and briefly after; the touch strip is live only while it shows.
     let isRevealed: Bool
     let onJump: (Int) -> Void
     let onReveal: () -> Void
@@ -86,6 +86,9 @@ struct ChatOutlineRail: View {
         .contentShape(.rect)
         .padding(.trailing, 8)
         .opacity(isRevealed || isTouching ? 1 : 0)
+        // Hidden, the strip gives the edge back to scrolling (a right thumb lives there); it is
+        // live whenever the ticks show, like grabbing the system scroll indicator.
+        .allowsHitTesting(isRevealed || isTouching)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isRevealed)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hoveredIndex)
         .gesture(scrub)

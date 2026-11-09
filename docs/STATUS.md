@@ -39,9 +39,9 @@ U-round: the first on-device fix round (2026-11-09). Spec: `docs/UX-SPEC.md`. Au
 | U3 | merged | DeepSeek | Auto history with an anchored prepend (lead fix: re-apply only on growth), full turn nav, translucent rail, full messages, bubble menu, mascot seeding, subagents capability wire fix (`provider_subagents`), thinking list, SVG/HTML |
 | U4 | merged | Crouton | PaseoFormat, CronDescription (11 tests), monochrome, toggle tint, file sizes, search header. Lead fixes: bytes hand-rolled (ByteCountFormatter has no locale); identifiers ungrouped |
 
-Tests: PaseoCore 661/177/145 green (983).
+Tests: PaseoCore 670/183/145 green (998).
 
-**In flight:** U5 prompt outline (`docs/tickets/U5-outline.md`). DeepSeek aa2f0c45 (the U3 worker), branch `u5-outline` in the u3-chat worktree.
+**Merged:** U5 prompt outline (`docs/tickets/U5-outline.md`): daemon prompt index (`agent.timeline.list_prompts`), window jump with `mergeWindow`, tick rail with no reserved margin, picker-wheel haptics. `loadAllOlder` removed. Lead change at merge: the hidden rail is not hit-testable. Known gap: in the loaded-turns fallback (no index) the active tick is not highlighted.
 - Covers: upstream prompt index RPC + jump fetch, `loadAllOlder` removed, tick-only rail with no reserved margin, picker-wheel haptics.
 - On finish: review, merge, then tell the user to pull.
 

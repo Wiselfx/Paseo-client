@@ -516,7 +516,7 @@ extension ClaudeChatView {
 
     /// U5: the prompt rail — every prompt of the conversation as a tick at the trailing edge,
     /// drawn over the transcript with no reserved margin. It appears while scrolling and for a
-    /// moment after; its 24 pt touch strip is live even while faded.
+    /// moment after; its 24 pt touch strip is live while it shows.
     @ViewBuilder var outlineRail: some View {
         let items = outlineItems
         if case .ready = store.phase, items.count >= ChatOutlineRail.minimumPrompts {
