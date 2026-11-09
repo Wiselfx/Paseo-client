@@ -21,6 +21,10 @@ final class VoiceAudioEngine {
 
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    /// The thinking tone gets its own node: it must never sit in the TTS queue or touch a
+    /// chunk's `audio_played` ack.
+    private let cuePlayer = AVAudioPlayerNode()
+    private var cueTask: Task<Void, Never>?
     private var isCapturing = false
     private var playerAttached = false
     private var interruptionObservers: [NSObjectProtocol] = []
@@ -103,7 +107,9 @@ final class VoiceAudioEngine {
         if playerAttached { return true }
         guard let format = playbackFormat else { return false }
         engine.attach(player)
+        engine.attach(cuePlayer)
         engine.connect(player, to: engine.mainMixerNode, format: format)
+        engine.connect(cuePlayer, to: engine.mainMixerNode, format: format)
         playerAttached = true
         return true
     }
@@ -254,6 +260,9 @@ final class VoiceAudioEngine {
 
     /// Stops the in-flight chunk and drops the queue (interrupt / stop voice mode).
     func stopPlayback() {
+        // The thinking tone is part of "playback" for interrupt/stop purposes: upstream
+        // stops the cue on an interrupt, on server speech and on every local stop.
+        stopThinkingTone()
         // Invalidate the in-flight completion: `player.stop()` fires it, and it must not
         // ack a chunk that was cut off or start the next one.
         nextNodeID += 1
@@ -298,23 +307,110 @@ final class VoiceAudioEngine {
         player.play()
     }
 
-    /// Settings → Diagnostics "Test audio": plays a quiet locally generated tone
-    /// (upstream plays the thinking-tone PCM blob here). Always returns: starts and
-    /// connects the engine, and a 3 s timeout releases the caller even if the render
-    /// completion never fires (stopped/unconnected engine).
+    /// Settings → Diagnostics "Test audio". Upstream plays the thinking-tone blob here
+    /// (`handlePlaybackTest` in `settings-screen.tsx`), so this is the same asset and the
+    /// same format, once. Always returns: starts and connects the engine, and a timeout
+    /// just past the tone's length releases the caller even if the render completion
+    /// never fires (stopped/unconnected engine).
     func playTestTone() async throws {
-        let buffer = try makeTestTone()
+        guard let tone = thinkingTone else {
+            throw Self.engineError("Could not load the audio test tone.")
+        }
+        // Upstream stops the engine before the test tone; do the same so it never queues
+        // behind TTS chunks or the cue.
+        stopPlayback()
         try ensureEngineRunning()
-        let tone = TestToneCompletion()
+        let finished = PlaybackCompletion()
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            tone.attach(cont)
-            Task { try? await Task.sleep(for: .seconds(3)); tone.finish() }
+            finished.attach(cont)
+            Task { try? await Task.sleep(for: .milliseconds(Int(tone.durationMs.rounded()) + 1_000)); finished.finish() }
             player.scheduleBuffer(
-                buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack
+                tone.buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack
             ) { @Sendable _ in
-                tone.finish()
+                finished.finish()
             }
             player.play()
+        }
+    }
+
+    // MARK: Thinking tone
+
+    /// Upstream `THINKING_TONE_MIN_SILENCE_MS`: a reply is spoken one TTS segment per
+    /// sentence, and those gaps are short; the cue is for a wait the user can't otherwise
+    /// explain, so it only starts once the silence has outlasted them.
+    private static let thinkingToneMinSilenceMs = 1_500
+    /// Upstream `THINKING_TONE_REPEAT_GAP_MS`.
+    private static let thinkingToneRepeatGapMs = 350
+    /// Upstream's `audio/pcm;rate=16000;bits=16` cue asset.
+    private static let thinkingToneSampleRate = 16_000.0
+
+    private struct ThinkingTone {
+        var buffer: AVAudioPCMBuffer
+        var durationMs: Double
+    }
+
+    /// Upstream's `thinking-tone.native-pcm.ts` blob verbatim (16 kHz mono PCM16, 2.98 s,
+    /// already attenuated to ≈ -22 dBFS — do not re-gain it), converted once into
+    /// `playbackFormat`. Bundled as `Resources/thinking-tone.pcm`.
+    private lazy var thinkingTone: ThinkingTone? = {
+        guard let format = playbackFormat,
+            let url = Bundle.module.url(forResource: "thinking-tone", withExtension: "pcm"),
+            let data = try? Data(contentsOf: url),
+            let sourceFormat = AVAudioFormat(
+                commonFormat: .pcmFormatInt16, sampleRate: Self.thinkingToneSampleRate,
+                channels: 1, interleaved: true),
+            let source = Self.pcm16Buffer(data: data, format: sourceFormat),
+            let buffer = playbackConverter.convert(source, to: format)
+        else { return nil }
+        return ThinkingTone(
+            buffer: buffer,
+            durationMs: Double(data.count / 2) / Self.thinkingToneSampleRate * 1000)
+    }()
+
+    /// Starts the looping thinking tone (`reconcileCue` upstream): first tone after 1.5 s,
+    /// then `duration + 350 ms` after each tone has finished playing. Idempotent while it
+    /// is already running. The caller drives this from `VoiceModeSession.isThinkingToneExpected`.
+    func startThinkingTone() {
+        guard cueTask == nil, thinkingTone != nil else { return }
+        cueTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(for: .milliseconds(Self.thinkingToneMinSilenceMs))
+                while true {
+                    await self.playThinkingToneOnce()
+                    guard let tone = self.thinkingTone else { return }
+                    try await Task.sleep(
+                        for: .milliseconds(
+                            Int((tone.durationMs + Double(Self.thinkingToneRepeatGapMs)).rounded())))
+                }
+            } catch {
+                // Cancelled by `stopThinkingTone()`, which also stopped the cue player.
+            }
+        }
+    }
+
+    /// Stops it now: the reply started, the phase left `.waiting`, the user spoke, voice
+    /// stopped or the connection went away.
+    func stopThinkingTone() {
+        cueTask?.cancel()
+        cueTask = nil
+        cuePlayer.stop()
+    }
+
+    /// One pass of the tone on the cue node, resolved when it finishes rendering (or the
+    /// node is stopped by `stopThinkingTone()`).
+    private func playThinkingToneOnce() async {
+        guard let tone = thinkingTone else { return }
+        guard (try? ensureEngineRunning()) != nil else { return }
+        let finished = PlaybackCompletion()
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            finished.attach(cont)
+            cuePlayer.scheduleBuffer(
+                tone.buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack
+            ) { @Sendable _ in
+                finished.finish()
+            }
+            cuePlayer.play()
         }
     }
 
@@ -402,24 +498,6 @@ final class VoiceAudioEngine {
         return buffer
     }
 
-    /// Half a second of soft 440 Hz sine in `playbackFormat`, gently faded at the edges.
-    private func makeTestTone() throws -> AVAudioPCMBuffer {
-        guard let format = playbackFormat,
-            let buffer = AVAudioPCMBuffer(
-                pcmFormat: format,
-                frameCapacity: AVAudioFrameCount(format.sampleRate * 0.5)),
-            let channel = buffer.floatChannelData?[0]
-        else { throw Self.engineError("Could not build the audio test tone.") }
-        let frames = Int(buffer.frameCapacity)
-        buffer.frameLength = buffer.frameCapacity
-        for index in 0..<frames {
-            let time = Double(index) / format.sampleRate
-            let envelope = sin(Double.pi * Double(index) / Double(frames))
-            let sample = sin(2 * Double.pi * 440 * time) * 0.3 * envelope
-            channel[index] = Float(sample)
-        }
-        return buffer
-    }
 }
 
 /// Capture DSP that must not run on the main actor: copies each tap buffer, computes the
@@ -566,9 +644,10 @@ private final class InputHandoff {
     }
 }
 
-/// Once-only continuation resume for the test tone: the render completion and the 3 s
-/// timeout race, and exactly one of them resumes the caller.
-final class TestToneCompletion: @unchecked Sendable {
+/// Once-only continuation resume for a scheduled buffer (thinking tone, test tone): the
+/// render completion and the safety timeout race, and exactly one of them resumes the
+/// caller.
+final class PlaybackCompletion: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Never>?
     private var finished = false

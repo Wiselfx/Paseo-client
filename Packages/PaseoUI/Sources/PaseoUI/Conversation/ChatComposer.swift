@@ -244,6 +244,9 @@ extension ClaudeChatView {
         // driven by the phase; voice mode itself is store state.
         .task {
             bindVoiceEngine()
+            // The composer can appear while the lane is already waiting; `.onChange`
+            // never fires for the initial value.
+            if voice.isThinkingToneExpected { voiceEngine.startThinkingTone() }
         }
         .onChange(of: voice.phase) { _, phase in
             switch phase {
@@ -267,8 +270,18 @@ extension ClaudeChatView {
         .onChange(of: voice.playbackStopRequested) { _, _ in
             voiceEngine.stopPlayback()
         }
+        // M15: the thinking tone (upstream `reconcileCue`): only while the lane is waiting
+        // for a reply and the daemon hears no speech. Timing lives in the engine.
+        .onChange(of: voice.isThinkingToneExpected) { _, expected in
+            if expected {
+                voiceEngine.startThinkingTone()
+            } else {
+                voiceEngine.stopThinkingTone()
+            }
+        }
         .onDisappear {
             Task { await voice.stop() }
+            voiceEngine.stopThinkingTone()
             voiceEngine.stopCapture()
             UIApplication.shared.isIdleTimerDisabled = false
         }
