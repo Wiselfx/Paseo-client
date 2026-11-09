@@ -75,7 +75,7 @@ struct PaseoSettingsView: View {
             case .general: "General"
             case .overview: "Overview"
             case .connections: "Connections"
-            case .pairDevice: "Pair device"
+            case .pairDevice: "Pair a device" // en.ts:2916 settings.host.pairDevices.rowTitle
             case .hosts: "Hosts"
             case .agents: "Agents"
             case .metadata: "Metadata"
