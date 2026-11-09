@@ -61,7 +61,7 @@
                     }
                     if checked {
                         Image(systemName: "checkmark").font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.orange)
+                            .foregroundStyle(.blue)
                             .accessibilityHidden(true)
                     }
                     if chevron {

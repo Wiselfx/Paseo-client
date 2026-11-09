@@ -9,6 +9,12 @@ The brief is pinned: cream, serif titles, the Claude accent, `ClaudePalette`/`Cl
 `ClaudeMotion`, 0.5 pt dividers, DSH Claude behavior. This audit does not propose a new palette,
 typeface or look. It asks one question: **where does the app stop feeling like one Claude app?**
 
+> **Lead note (2026-11-09):** the blue accents and system fonts in Settings/Welcome/sheet rows are
+> ClaudeUI's own (the import `188a168` uses `.tint(.blue)`, blue checkmarks and `.system(size:)`
+> throughout its settings: it mirrors the Claude iOS app). Pinned style wins, so the blue→orange
+> and system→ClaudeTypography swaps were reverted on merge. The gray (`secondary` → adaptive
+> `secondaryInk`) and the rest of the fixes stay. Finding 1's token pass is on hold for the user.
+
 ## Verdict
 
 The chat surface and the workspace panel are the best-built parts of the app. The transcript,
