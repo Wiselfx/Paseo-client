@@ -105,6 +105,10 @@ bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - R14 `r14-api-audit` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: PaseoUI→PaseoCore API checker (catch Xcode errors) + fixes.
+- M3k `m3k-review-comments` on ffaacc65 (panel): diff review comments + Send feedback.
+- M7i `m7i-turn-nav-effort` on 0778f3b0 (chat): turn rail, effort ladder, hero pickers.
+- M2.14 `m214-sidebar-unread` on 04d2d898 (sidebar): manual unread, DSH date sections, Active/Archived.
+- M4g `m4g-welcome-help` on 918fee9a (settings): welcome screen, help & support, chat settings.
 Known store gaps: commands cache never invalidated; GitHub search has no star count; host
 `diagnostics.request` has no store slot; fork can't carry provider feature values.
 Next candidates: advertise `owned_subscriptions` (DeepSeek, off-peak; complex); notifications/push research (DeepSeek after 10:00 UTC).
