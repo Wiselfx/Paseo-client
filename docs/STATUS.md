@@ -66,17 +66,17 @@ When the user is back: pull, Reset Package Caches (SwiftTerm is new), build, pas
 Also merged since: T14 file upload, M7b chat-follow + permission cards, M8b queue/drafts/full-screen
 composer, T15 git/file ops backend, M6a attachments, M7c file-call rows + summaries, M2.8 pin/rename/
 archive undo (confirmation kept when the host lacks archiveUndo), M4c host settings, M3f panel git +
-file ops (PaseoCore 339/126/17 = 482 green; one-off DaemonConnectionTests flake → T16).
+file ops, M2.9 sidebar badges/display options/hide (PaseoCore 339/126/17 = 482 green; one-off DaemonConnectionTests flake → T16).
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
 - M8c `m8c-agent-features` on worker 04d2d898: provider features / fast mode, default send (composer).
 - M7d `m7d-anchor-reveal` on worker 0778f3b0: chat-anchor, reveal, rewind (transcript).
 - T16 `t16-flake-usage` on worker 918fee9a: connection-test flake, context/usage store.
-- M2.9 `m29-sidebar-rows` on worker 79dd09d6: PR/service badges, display options, hide.
+- R10 `r10-split` on worker 79dd09d6: split PaseoSidebar + ClaudeSchedulesView into files (pure move).
 - M3g `m3g-terminal-extras` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: key bar, tabs, scripts.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
-Next candidates: notifications/push research (DeepSeek after 10:00 UTC).
+Next candidates: split ClaudeChatView (2.1k lines) once M8c+M7d land; notifications/push research (DeepSeek after 10:00 UTC).
 Roadmap order: see PARITY.md suggested milestones, renumbered below.
 
 UX decisions so far: left drawer = navigation (projects → workspaces), right panel = inside the
