@@ -1,0 +1,310 @@
+#if canImport(UIKit)
+import PaseoStore
+import SwiftUI
+import UIKit
+
+extension ClaudeChatView {
+    // MARK: Transcript
+
+    @ViewBuilder var content: some View {
+        if store.turns.isEmpty, store.pendingPermissions.isEmpty {
+            switch store.phase {
+            case .loading:
+                Spacer()
+                ProgressView()
+                Spacer()
+            case .failed(let message):
+                emptyState(title: "Couldn't load agent history", detail: message)
+            case .ready:
+                ClaudeHomeHero(hint: nil)
+            }
+        } else {
+            transcript
+        }
+    }
+
+    func emptyState(title: String, detail: String?) -> some View {
+        VStack(spacing: 10) {
+            Text(title)
+                .font(typography.serif(25, relativeTo: .title))
+                .foregroundStyle(ClaudePalette.ink)
+                .multilineTextAlignment(.center)
+            if let detail {
+                Text(detail)
+                    .font(typography.sans(14))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    var transcript: some View {
+        GeometryReader { geometry in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 27) {
+                        if store.timeline.hasOlder { olderHistoryRow }
+                        ForEach(store.turns) { turn in
+                            ClaudeTurnView(
+                                turn: turn, typography: typography,
+                                onMarkdown: handleMarkdown, localImageLoader: localImageLoader,
+                                highlightedSeq: findFlash,
+                                findTarget: findSeq,
+                                onOpenFile: { path in openFileViewer(at: path) },
+                                rewindChoices: rewindMenuScopes,
+                                onRewind: { scope, messageId in
+                                    pendingRewind = PendingRewind(messageId: messageId, scope: scope)
+                                }
+                            )
+                            .id(turn.id)
+                            .onAppear { lastTrackedTurn = turn.id }
+                        }
+                        if !store.pendingPermissions.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(store.pendingPermissions) { request in
+                                    ClaudePermissionCard(
+                                        request: request, store: store,
+                                        onAnswered: { answered in
+                                            permissionResolvedLines.append(answered)
+                                        })
+                                }
+                            }
+                            .animation(
+                                reduceMotion ? nil : .easeOut(duration: 0.22),
+                                value: store.pendingPermissions.count)
+                        }
+                        if !permissionResolvedLines.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(permissionResolvedLines) { item in
+                                    resolvedPermissionLine(item.line)
+                                }
+                            }
+                            .transition(.opacity)
+                        }
+                        Color.clear.frame(height: 1).id("bottom")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .overlay(alignment: .bottom) { transcriptFade }
+                // Follows the tail as it streams; loading older pages at the top does not jump.
+                .onChange(of: store.turns.last) { _, _ in
+                    guard !findOpen, isFollowing else { return }
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: store.pendingPermissions) { _, _ in
+                    guard !findOpen, isFollowing else { return }
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { scrollToBottom(proxy) }
+                }
+                .onChange(of: focused) { _, isFocused in
+                    if isFocused {
+                        isFollowing = true
+                        scrollToBottom(proxy)
+                    }
+                }
+                // Switching the open agent lands the transcript at the bottom, without animation —
+                // unless a find session is active; a session belongs to its agent, so it closes.
+                .onChange(of: store.agentId) { _, _ in
+                    anchoringToAnswer = false
+                    if findOpen {
+                        closeFind()
+                        return
+                    }
+                    isFollowing = true
+                    scrollToBottom(proxy, animated: false)
+                }
+                // Chat-anchor (M7d): when your message appears (pending send), pin it to the top
+                // of the viewport and let the answer grow below it — instead of the tail-follow
+                // pushing it off the top.
+                .onChange(of: pendingRowSignature) { _, _ in
+                    anchorToSentMessage(proxy)
+                }
+                .onAppear {
+                    scrollProxy = proxy
+                    isFollowing = true
+                    if !findOpen { scrollToBottom(proxy, animated: false) }
+                }
+                .onChange(of: findOpen) { _, isOpen in
+                    if !isOpen { restoreScroll(proxy: proxy) }
+                }
+                .onChange(of: findQuery) { _, query in
+                    findIndex = 0
+                    scheduleSearch(query)
+                }
+                .onScrollGeometryChange(for: ScrollFollowMetrics.self) { geometry in
+                    ScrollFollowMetrics(
+                        distanceFromBottom: geometry.contentSize.height - geometry.contentOffset.y
+                            - geometry.bounds.height,
+                        viewportHeight: geometry.bounds.height)
+                } action: { _, metrics in
+                    if anchoringToAnswer {
+                        // While anchored, the message stays pinned to the top; only once the
+                        // growing content overflows the viewport does tail-follow take over.
+                        if metrics.distanceFromBottom > 16 {
+                            anchoringToAnswer = false
+                            isFollowing = true
+                        }
+                        return
+                    }
+                    if metrics.distanceFromBottom <= 16 {
+                        if !isFollowing { isFollowing = true }
+                    } else if metrics.distanceFromBottom > metrics.viewportHeight / 3 {
+                        if isFollowing { isFollowing = false }
+                    }
+                }
+                .environment(\.claudeProcessCap, min(400, geometry.size.height * 0.5))
+            }
+        }
+    }
+
+    func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool = true) {
+        if animated {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+        } else {
+            proxy.scrollTo("bottom", anchor: .bottom)
+        }
+    }
+
+    /// Ids of the pending user-message rows, for the anchor's send detection.
+    var pendingRowSignature: String {
+        store.timeline.rows.lazy.filter(\.isPending).map(\.id).joined(separator: "|")
+    }
+
+    /// Scopes the rewind menu shows: host feature gate + the provider's advertised flags, verbatim.
+    var rewindMenuScopes: [RewindScope] {
+        guard session.isRewindSupportedByHost else { return [] }
+        return store.rewindCapabilities.menu
+    }
+
+    /// Pins the pending send to the top of the viewport (M7d chat-anchor). Only while a row is
+    /// still pending; once the daemon confirms it (or drops a failed send) the anchor holds the
+    /// position by itself and stops re-pinning.
+    func anchorToSentMessage(_ proxy: ScrollViewProxy) {
+        guard anchoringToAnswer, !pendingRowSignature.isEmpty else { return }
+        let newest = store.timeline.rows.last(where: {
+            if case .userMessage = $0.item { return true } else { return false }
+        })
+        guard let newest else {
+            anchoringToAnswer = false
+            return
+        }
+        let target = "row:\(newest.seqEnd)"
+        if reduceMotion {
+            proxy.scrollTo(target, anchor: .top)
+        } else {
+            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .top) }
+        }
+    }
+
+    /// Runs the confirmed rewind and toasts the outcome. One confirm in flight at a time.
+    func performPendingRewind(_ rewind: PendingRewind) {
+        guard !rewindInFlight else { return }
+        rewindInFlight = true
+        Task {
+            let failure = await store.rewind(toMessageId: rewind.messageId, scope: rewind.scope)
+            rewindInFlight = false
+            if let failure {
+                showToast(failure)
+            } else {
+                // The timeline is truncated away from the rewound point; resume tail-follow.
+                anchoringToAnswer = false
+                isFollowing = true
+                showToast("Rewound")
+            }
+        }
+    }
+
+    struct ScrollFollowMetrics: Equatable {
+        var distanceFromBottom: CGFloat
+        var viewportHeight: CGFloat
+    }
+
+    /// The 40 pt fade band: the transcript melts into the canvas just above the composer.
+    var transcriptFade: some View {
+        LinearGradient(
+            stops: [
+                .init(color: ClaudePalette.background.opacity(0), location: 0),
+                .init(color: ClaudePalette.background, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 40)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// "Back to the end": visible only while the reader has scrolled up more than a screen-third.
+    @ViewBuilder var backToEnd: some View {
+        if !findOpen && !isFollowing {
+            Button {
+                Haptics.selection()
+                anchoringToAnswer = false
+                isFollowing = true
+                if let scrollProxy {
+                    if reduceMotion {
+                        scrollProxy.scrollTo("bottom", anchor: .bottom)
+                    } else {
+                        withAnimation(.easeOut(duration: 0.3)) { scrollProxy.scrollTo("bottom", anchor: .bottom) }
+                    }
+                }
+            } label: {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .frame(width: 34, height: 34)
+                    .background(ClaudePalette.panel, in: .circle)
+                    .overlay {
+                        Circle().strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, composerHeight + 12)
+            .transition(.opacity)
+            .accessibilityIdentifier("transcript.backToEnd")
+            .accessibilityLabel("Back to the end")
+        }
+    }
+
+    func resolvedPermissionLine(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 11))
+            Text(text)
+                .font(typography.sans(12))
+        }
+        .foregroundStyle(ClaudePalette.tertiaryInk)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel(text)
+    }
+
+    var olderHistoryRow: some View {
+        Group {
+            if store.isLoadingOlder {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+            } else {
+                Button {
+                    Task { await store.loadOlder() }
+                } label: {
+                    Text("Load earlier")
+                        .font(typography.sans(13))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 30)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(height: 30)
+        // Reaching the top fetches one older page; the row stays put so it does not loop.
+        .onAppear { Task { await store.loadOlder() } }
+    }
+
+}
+#endif
