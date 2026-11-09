@@ -116,7 +116,12 @@ private struct WorkspaceFilesDirectoryList: View {
 
     /// The listing of this page's directory, captured when this page's refresh completed. The
     /// store keeps a single listing, so pages snapshot it rather than watch it change.
-    @State private var listing: Result<[FileExplorerEntry], String>?
+    @State private var listing: Listing?
+    /// A page snapshot: entries, or the error text to show (not `Result`: the failure is plain text).
+    private enum Listing: Equatable {
+        case success([FileExplorerEntry])
+        case failure(String)
+    }
     @State private var toast: String?
     /// Hidden files (dotfiles) are filtered out unless this is on; persisted per device.
     @AppStorage("paseo.files.showHidden") private var showHidden = false

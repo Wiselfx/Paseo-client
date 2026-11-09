@@ -984,7 +984,7 @@ private struct ReviewCommentSheet: View {
     let onDelete: (() -> Void)?
     let onCancel: () -> Void
 
-    @State private var body: String
+    @State private var text: String
     @FocusState private var focused: Bool
     private let typography = ClaudeTypography()
 
@@ -1001,11 +1001,11 @@ private struct ReviewCommentSheet: View {
         self.onSave = onSave
         self.onDelete = onDelete
         self.onCancel = onCancel
-        _body = State(initialValue: initialBody)
+        _text = State(initialValue: initialBody)
     }
 
     private var canSave: Bool {
-        !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -1025,7 +1025,7 @@ private struct ReviewCommentSheet: View {
                         .background(ClaudePalette.quoteWash, in: .rect(cornerRadius: 12))
                 }
                 ZStack(alignment: .topLeading) {
-                    if body.isEmpty {
+                    if text.isEmpty {
                         Text("Leave a comment")
                             .font(typography.sans(15))
                             .foregroundStyle(ClaudePalette.tertiaryInk)
@@ -1033,7 +1033,7 @@ private struct ReviewCommentSheet: View {
                             .padding(.horizontal, 5)
                             .padding(.vertical, 8)
                     }
-                    TextEditor(text: $body)
+                    TextEditor(text: $text)
                         .font(typography.sans(15))
                         .foregroundStyle(ClaudePalette.ink)
                         .scrollContentBackground(.hidden)
@@ -1063,7 +1063,7 @@ private struct ReviewCommentSheet: View {
                         .frame(height: 44)
                     Button {
                         guard canSave else { return }
-                        onSave(body)
+                        onSave(text)
                     } label: {
                         Text(isEditing ? "Save" : "Comment")
                             .font(typography.sans(15, weight: .semibold))

@@ -7,7 +7,7 @@ struct WorkspaceCreatePRSheet: View {
     let branch: String
     let baseRef: String?
     @Binding var title: String
-    @Binding var body: String
+    @Binding var prBody: String
     var failure: String?
     var busy: Bool
     var onCancel: () -> Void
@@ -28,7 +28,7 @@ struct WorkspaceCreatePRSheet: View {
                         .focused($focused)
                 }
                 ClaudeCard {
-                    TextEditor(text: $body)
+                    TextEditor(text: $prBody)
                         .font(typography.sans(14))
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 100, maxHeight: 160)

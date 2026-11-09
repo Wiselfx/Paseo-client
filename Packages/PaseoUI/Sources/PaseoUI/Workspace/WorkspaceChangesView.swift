@@ -212,7 +212,7 @@ struct WorkspaceChangesView: View {
                 branch: branchLabel,
                 baseRef: baseRef,
                 title: $createPRTitle,
-                body: $createPRBody,
+                prBody: $createPRBody,
                 failure: createPRFailure,
                 busy: gitActions.isCreatingPullRequest,
                 onCancel: { showCreatePRSheet = false },

@@ -560,7 +560,7 @@ struct PaseoSidebar: View {
 
 
 }
-private enum PaseoSidebarSheet: Identifiable {
+enum PaseoSidebarSheet: Identifiable {
     case settings
     case schedules
     case history

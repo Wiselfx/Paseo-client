@@ -519,7 +519,7 @@ enum ResolutionLine {
         }
         switch response {
         case .allow: return "Allowed: \(request.name)"
-        case .deny(let _, _, let interrupt): return interrupt == true ? "Canceled" : "Denied"
+        case .deny(_, _, let interrupt): return interrupt == true ? "Canceled" : "Denied"
         case .unknown(let behavior, _): return behavior == "dismiss" ? "Canceled" : "Denied"
         }
     }
