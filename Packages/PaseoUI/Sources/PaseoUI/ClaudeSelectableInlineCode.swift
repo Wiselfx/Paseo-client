@@ -135,13 +135,13 @@
                     guard visible.length > 0 else { return }
                     var rect = self.boundingRect(forGlyphRange: visible, in: container).offsetBy(
                         dx: origin.x, dy: origin.y)
-                    rect = rect.insetBy(dx: -1.5, dy: 0)
+                    rect = rect.insetBy(dx: -1, dy: -1)
                     // Keep rounded corners visible when code starts or ends at a wrapped line edge.
                     let left = max(origin.x, rect.minX), right = min(origin.x + container.size.width, rect.maxX)
                     rect.origin.x = left
                     rect.size.width = max(0, right - left)
                     color.setFill()
-                    UIBezierPath(roundedRect: rect, cornerRadius: 5).fill()
+                    UIBezierPath(roundedRect: rect, cornerRadius: 4).fill()
                 }
             }
             // UIKit's own backgrounds and selection remain above the decorative code pill.
