@@ -75,17 +75,19 @@ popover (scratch WorkspaceFiles walk) + on-device dictation (Info.plist mic/spee
 (swiftc -parse can't catch missing symbols: Xcode will) T16 flake fixed (test-side race) + context/usage store
 (`contextUsage`, `session.hostUsage`; no UI yet) M3i PR pane (checks, review/comment timeline
 from hand-written fixtures, Add to chat) + base-branch picker M8e context ring + sheet in the
-composer, opt-in sidebar usage row + reports sheet (PaseoCore 374/133/17 = 524 green). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+composer, opt-in sidebar usage row + reports sheet M7d chat anchor on send, per-chunk prose reveal,
+Rewind to here (opencode: `both` only; the sandbox agent's tail was truncated at seq 36 by a rewind)
+(PaseoCore 385/133/17 = 535 green). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
-- M7d `m7d-anchor-reveal` on worker 0778f3b0: chat-anchor, reveal, rewind (transcript).
+- R11 `r11-split-chat` on worker 79dd09d6-6c91-48a9-bac5-8467498bed43: split ClaudeChatView (2.4k lines) into `Conversation/` (pure move). Keep ClaudeChatView edits out of other tickets until it lands.
 - M4d `m4d-providers` on worker 918fee9a-86c0-44ca-9c60-3d00ebe60d8b: providers page/diagnostics/custom model, agent profiles.
 - M7e `m7e-agent-lifecycle` on worker 04d2d898-eb7d-4270-a06c-1e0fa0d33a51: archived agents in History, unarchive, delete.
 - M2.10 `m210-setup-archive` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: setup observation/rerun, worktree archive warning.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
-Next candidates: split ClaudeChatView (2.1k lines) once M7d lands; notifications/push research (DeepSeek after 10:00 UTC).
+Next candidates: notifications/push research (DeepSeek after 10:00 UTC).
 Roadmap order: see PARITY.md suggested milestones, renumbered below.
 
 UX decisions so far: left drawer = navigation (projects → workspaces), right panel = inside the
