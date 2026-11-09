@@ -203,13 +203,13 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Provider-feature chips / aggregated Features sheet in composer — Status: `done` (Features group in the agent-controls sheet — toggle rows with switches, select rows as option lists; `fast_mode` additionally surfaces as a quiet bolt chip in the composer toolbar when on) — Source: `docs/research/01-app-features.md:84`; docs/research/04-protocol-agents-permissions-settings.md:308-342; this client `…/Chat/ClaudeAgentControlsSheet.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Agent profiles picker (fills provider/model/mode/thinking/features once at creation) — Status: `store only (no UI)` — Source: `docs/research/01-app-features.md:85`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:118-127`
 - [ ] Feature: Fast mode toggle in composer/command center — Status: `done` (quiet bolt chip, visible only while fast mode is on, tap to turn off; commands in the Features sheet group; no command center) — Source: `docs/research/01-app-features.md:325`; this client `…/Chat/ClaudeChatView.swift` (`fastModeChip`), matched by upstream id `fast_mode` (`packages/app/src/agent-controls/policy.ts:4`)
-- [ ] Feature: Dictation mic button — Status: `missing` (the mic button exists but only focuses the field — it is not dictation) — Source: this client `…/Chat/ClaudeChatView.swift` (`roundButton("mic"…)`), `docs/research/01-app-features.md:86`
+- [ ] Feature: Dictation mic button — Status: `done` (on-device `SFSpeechRecognizer` + `AVAudioEngine`, prefers on-device recognition, live partials into the draft (at the end, not the caret — SwiftUI exposes no caret), quiet level-driven pulse on the mic, tap to stop; stops on send/background/2 s of silence; permissions on first use, inline note + Settings link when denied; Info.plist keys added) — Source: this client `…/Chat/DictationController.swift`, `…/Chat/ClaudeChatView.swift`; `docs/research/01-app-features.md:86`
 - [ ] Feature: Voice mode button — See Voice — Status: `missing` — Source: `docs/research/01-app-features.md:349`
 - [ ] Feature: Drafts (persisted, restorable; forked into new agent) — Status: `done` (persisted per agent in UserDefaults `paseo.draft.<id>`, ~500 ms debounce, cleared on send, restored on open; not forked into new agents) — Source: `docs/research/01-app-features.md:87`; this client `…/Chat/SavedDraftStore.swift`, `…/Chat/ClaudeChatView.swift`
-- [ ] Feature: @-files and /commands autocomplete popovers — Status: `missing` — Source: `docs/research/01-app-features.md:89`
+- [ ] Feature: @-files and /commands autocomplete popovers — Status: `done` (@-files: lazy BFS walk of the workspace (in-memory index, skips VCS/dependency dirs, capped), substring/prefix match with recents first, folders drill in, max 6 rows; /commands: the slash menu from M8a; both share `ComposerMenuContainer`) — Source: `docs/research/01-app-features.md:89`; this client `…/Chat/MentionMenu.swift`, `…/Chat/ComposerMenu.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Composer visual parity — DSH conversation bar (14 px radius bar, hairline, shadow, flat toolbar; not the 18 px hero card) — Status: `missing` (ours is a 27 pt capsule, filled circle send, no drawn caret) — Source: `docs/research/08-dsh-live-observation.md:427-507`; this client `…/Chat/ClaudeChatView.swift:352-452`
 - [ ] Feature: Caret animation (2 px accent caret, 80 ms glide) — See Conversation & turns / DSH turn UX — Status: `missing` — Source: `docs/research/08-dsh-live-observation.md:468-507`
-- [ ] Feature: Composer placeholder reads "Type / for commands" (DSH conversation) — Status: `missing` (ours: "Message the agent…") — Source: `docs/research/08-dsh-live-observation.md:443`; this client `…/Chat/ClaudeChatView.swift:363`
+- [ ] Feature: Composer placeholder reads "Type / for commands" (DSH conversation) — Status: `done` (composerPrompt returns "Type / for commands" when the agent reports commands, "Chat with Paseo"/"Reply to Paseo" otherwise) — Source: `docs/research/08-dsh-live-observation.md:443`; this client `…/Chat/ClaudeChatView.swift` (`composerPrompt`)
 - [x] Feature: Scroll-to-bottom fade bar + 40 px fade band (DSH) — Status: `done` (transcript fade to canvas; `allowsHitTesting(false)`) — Source: this client `…/Chat/ClaudeChatView.swift` (`transcriptFade`); `docs/research/06-dsh-ux-spec.md:288,294`
 - [ ] Feature: Stop control as bare ring+square glyph while running (DSH) — Status: `done` (stop.fill circle; style drift tolerated) — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.stop`); `docs/research/08-dsh-live-observation.md:450`
 
@@ -531,8 +531,8 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 104 | 25 % |
-| `missing` | 202 | 48 % |
+| `done` | 107 | 25 % |
+| `missing` | 199 | 47 % |
 | `desktop-only (flag)` | 46 | 11 % |
 | `store only (no UI)` | 31 | 7 % |
 | `in flight` (M3a 1 · M3b 5 · M3c 8 · M3d 5) | 19 | 5 % |
