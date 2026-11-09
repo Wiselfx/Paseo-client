@@ -101,6 +101,7 @@ public final class VoiceModeSession {
     /// PIPE: `transportReady` upstream — PCM is streamed only once set, and a reconnect
     /// clears it until the resync lands.
     private var transportReady = false
+    private var connectionGeneration: UInt64 = 0
     private var turnInProgress = false
     private var generation = 0
     private var lastVolumePublish = 0.0  // ms, same epoch as `nowMs` parameters
@@ -370,6 +371,11 @@ public final class VoiceModeSession {
     /// acks-in-flight state, and the next `.connected` re-issues `set_voice_mode`
     /// (`resyncVoiceMode` upstream).
     internal func handle(connection: ConnectionState) async {
+        // The `.connected` resync is fire-and-forget (it must never gate the directory),
+        // so its `set_voice_mode` round trip can land after the socket moved on. Every
+        // state change bumps the generation; a stale response writes nothing.
+        connectionGeneration &+= 1
+        let generation = connectionGeneration
         switch connection {
         case .reconnecting:
             transportReady = false
@@ -378,6 +384,7 @@ public final class VoiceModeSession {
             volume = 0
             resetPlaybackState()
             isAssistantAudioPlaying = false
+            isVoiceSwitching = false
             exposeNextAudioChunk()
         case .failed, .idle, .connecting:
             // The socket is gone for good: full local teardown so the UI stops capture,
@@ -399,6 +406,7 @@ public final class VoiceModeSession {
             do {
                 let response = try await client.send(
                     SetVoiceModeRequest(enabled: true, agentId: agentId))
+                guard generation == connectionGeneration else { return }
                 if response.accepted {
                     transportReady = true
                     error = nil
@@ -407,6 +415,7 @@ public final class VoiceModeSession {
                     error = voiceErrorText(response)
                 }
             } catch let failure {
+                guard generation == connectionGeneration else { return }
                 transportReady = false
                 error = String(describing: failure)
             }

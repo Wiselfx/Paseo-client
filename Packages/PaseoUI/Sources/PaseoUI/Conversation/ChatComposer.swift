@@ -351,7 +351,9 @@ extension ClaudeChatView {
             }
             .accessibilityLabel("Stop realtime voice and interrupt turn")
             .accessibilityIdentifier("composer.voice.stop")
-            .disabled(voice.isVoiceSwitching)
+            // Reachable while `.starting` too: a slow/hung `set_voice_mode` must not trap
+            // the user in voice mode with only a disabled stop button.
+            .disabled(voice.phase == .stopping)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
