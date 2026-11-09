@@ -4,6 +4,10 @@ import SwiftUI
 import UIKit
 
 /// One turn: your bubble, the process header, the process body, the answer.
+///
+/// In `Collapse turns` mode (Settings → General → Chat), completed turns older than the most
+/// recent one collapse to the prompt plus the first ~6 lines of the reply with a **Show more**
+/// row; **Show less** folds back. Find expands whatever holds a match automatically.
 struct ClaudeTurnView: View {
     let turn: Turn
     let typography: ClaudeTypography
@@ -20,10 +24,16 @@ struct ClaudeTurnView: View {
     var rewindChoices: [RewindScope] = []
     /// Called with (scope, messageId); the transcript presents the confirmation dialog.
     var onRewind: ((RewindScope, String) -> Void)? = nil
+    /// False for every turn except the most recent one; only that turn never collapses.
+    var isLatestTurn: Bool = true
 
     /// Nil until the reader taps, so the default can follow the turn's phase.
     @State private var userExpanded: Bool?
+    /// Collapse-turns override: true = Show more (expanded), false = Show less (folded),
+    /// nil = the mode's default.
+    @State private var userExpandedTurn: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
 
     var isRunning: Bool { turn.phase == .running }
     var isExpanded: Bool { userExpanded ?? isRunning }
@@ -40,7 +50,109 @@ struct ClaudeTurnView: View {
 
     var showsHeader: Bool { isRunning || !bodySegments.isEmpty }
 
+    /// `collapseTurns` applies to completed, non-latest turns only; a failure always renders fully.
+    var chatDisplayMode: ChatDisplayMode {
+        ChatDisplayMode(rawValue: chatDisplay) ?? .full
+    }
+
+    var showsCollapsedTurn: Bool {
+        guard chatDisplayMode == .collapseTurns, turn.phase == .completed, !isLatestTurn else {
+            return false
+        }
+        // Find keeps whatever holds the match visible — it wins over the user's fold too.
+        if turnContains(findTarget) { return false }
+        if let userExpandedTurn { return !userExpandedTurn }
+        return true
+    }
+
+    /// Whether any row of this turn covers `seq`.
+    func turnContains(_ seq: Int?) -> Bool {
+        guard let seq else { return false }
+        if let row = turn.userMessage, row.seqStart <= seq, seq <= row.seqEnd { return true }
+        for segment in turn.segments {
+            switch segment {
+            case .work(let group):
+                if group.rows.contains(where: { $0.seqStart <= seq && seq <= $0.seqEnd }) {
+                    return true
+                }
+            case .prose(let row), .todo(let row), .notice(let row):
+                if row.seqStart <= seq, seq <= row.seqEnd { return true }
+            }
+        }
+        return false
+    }
+
+    var showShowLess: Bool {
+        chatDisplayMode == .collapseTurns && turn.phase == .completed && !isLatestTurn
+            && userExpandedTurn == true
+    }
+
     var body: some View {
+        if showsCollapsedTurn {
+            collapsedTurn
+        } else {
+            fullTurn
+        }
+    }
+
+    /// The folded turn: the prompt plus the first ~6 lines of the reply, then **Show more**.
+    @ViewBuilder private var collapsedTurn: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let row = turn.userMessage, case .userMessage(let message) = row.item {
+                let rewindable = message.messageId != nil && !rewindChoices.isEmpty
+                ClaudeUserBubble(
+                    text: message.text, isPending: row.isPending,
+                    rewindChoices: rewindable ? rewindChoices : [],
+                    onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil
+                )
+                .id("row:\(row.seqEnd)")
+                .background(findHighlight(row.seqEnd))
+            }
+            if let finalProse, case .assistantMessage(let message) = finalProse.item {
+                ZStack(alignment: .bottom) {
+                    ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
+                        .frame(maxHeight: 6 * 23, alignment: .top)
+                        .clipped()
+                    LinearGradient(
+                        stops: [
+                            .init(color: ClaudePalette.background.opacity(0), location: 0),
+                            .init(color: ClaudePalette.background, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 26)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            } else {
+                // A turn with no answer section (all work / no prose): keep it honest.
+                Text("Turn complete.")
+                    .font(typography.sans(13))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+            }
+            Button {
+                Haptics.selection()
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                    userExpandedTurn = true
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("Show more")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .font(typography.sans(13))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Show more of this turn")
+        }
+    }
+
+    private var fullTurn: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
                 // The provider has to acknowledge the prompt before it can be rewound to.
@@ -76,6 +188,26 @@ struct ClaudeTurnView: View {
                     ClaudeCopyButton(text: copyText, label: "Copy response")
                 }
                 .padding(.top, 2)
+            }
+            if showShowLess {
+                Button {
+                    Haptics.selection()
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                        userExpandedTurn = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Show less")
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .font(typography.sans(13))
+                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show less of this turn")
             }
         }
         .onChange(of: turn.phase) { _, phase in

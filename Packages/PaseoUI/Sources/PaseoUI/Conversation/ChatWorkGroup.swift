@@ -16,8 +16,12 @@ struct ClaudeWorkGroupCell: View {
     @State private var sweepStart = Date()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.claudeProcessCap) private var processCap
+    @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
 
-    var opensByDefault: Bool { turnIsRunning && group.isActive }
+    var opensByDefault: Bool {
+        turnIsRunning && group.isActive
+            && ChatDisplayMode(rawValue: chatDisplay) != .collapseToolCalls
+    }
     var isExpanded: Bool { userExpanded ?? opensByDefault }
 
     /// The find target lives in one of this group's rows: expand so it becomes visible.

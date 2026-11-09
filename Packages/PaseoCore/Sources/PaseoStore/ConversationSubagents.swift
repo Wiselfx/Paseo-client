@@ -58,6 +58,36 @@ public final class ConversationSubagents {
         }
     }
 
+    /// One tail page of a provider subagent's timeline, read-only. Sets `error` and returns nil
+    /// on failure. Never advances the parent's list; rows are the same projected
+    /// `TimelineEntry`s the main timeline uses.
+    public func timelinePage(
+        for subagentId: String, limit: Int = 50
+    ) async -> ProviderSubagentTimelineRequest.Response? {
+        guard isSupported else {
+            error = "This provider does not support subagents."
+            return nil
+        }
+        guard let client else {
+            error = "This conversation is not connected to a daemon."
+            return nil
+        }
+        do {
+            let response = try await client.send(
+                ProviderSubagentTimelineRequest(
+                    parentAgentId: agentId, subagentId: subagentId, direction: .tail, limit: limit))
+            if let message = response.error {
+                error = message
+                return nil
+            }
+            error = nil
+            return response
+        } catch {
+            self.error = conversationErrorText(error)
+            return nil
+        }
+    }
+
     /// Called from `HostSession` once per `server_info`; the capability is read here only.
     internal func update(serverInfo info: ServerInfo?) {
         guard let info else { return }

@@ -7,20 +7,43 @@ extension ClaudeChatView {
     // MARK: Transcript
 
     @ViewBuilder var content: some View {
-        if store.turns.isEmpty, store.pendingPermissions.isEmpty {
-            switch store.phase {
-            case .loading:
-                Spacer()
-                ProgressView()
-                Spacer()
-            case .failed(let message):
-                emptyState(title: "Couldn't load agent history", detail: message)
-            case .ready:
-                ClaudeHomeHero(hint: nil)
+        VStack(spacing: 0) {
+            if let pill = subagentPill {
+                pill
             }
-        } else {
-            transcript
+            if store.turns.isEmpty, store.pendingPermissions.isEmpty {
+                switch store.phase {
+                case .loading:
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                case .failed(let message):
+                    emptyState(title: "Couldn't load agent history", detail: message)
+                case .ready:
+                    ClaudeHomeHero(hint: nil)
+                }
+            } else {
+                transcript
+            }
         }
+        // Opening the conversation is deliberate focus: refresh the track list now (list events
+        // aren't replayed), exactly like a reconnect does.
+        .task { await store.subagents.load() }
+    }
+
+    /// A quiet pill under the header while the agent has provider subagents. Nil when the
+    /// feature is off or everything finished (or was hidden this session).
+    @ViewBuilder var subagentPill: some View {
+        if store.subagents.isSupported, !visibleSubagents.isEmpty {
+            SubagentTrackPill(items: visibleSubagents) { sheet = .subagents }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+        }
+    }
+
+    /// Rows the pill and sheet show; "Archive finished" hides every non-running row this session.
+    var visibleSubagents: [ProviderSubagent] {
+        store.subagents.items.filter { !hiddenSubagentIds.contains($0.id) }
     }
 
     func emptyState(title: String, detail: String?) -> some View {
@@ -46,7 +69,7 @@ extension ClaudeChatView {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 27) {
                         if store.timeline.hasOlder { olderHistoryRow }
-                        ForEach(store.turns) { turn in
+                        ForEach(Array(store.turns.enumerated()), id: \.element.id) { index, turn in
                             ClaudeTurnView(
                                 turn: turn, typography: typography,
                                 onMarkdown: handleMarkdown, localImageLoader: localImageLoader,
@@ -56,7 +79,8 @@ extension ClaudeChatView {
                                 rewindChoices: rewindMenuScopes,
                                 onRewind: { scope, messageId in
                                     pendingRewind = PendingRewind(messageId: messageId, scope: scope)
-                                }
+                                },
+                                isLatestTurn: index == store.turns.count - 1
                             )
                             .id(turn.id)
                             .onAppear { lastTrackedTurn = turn.id }

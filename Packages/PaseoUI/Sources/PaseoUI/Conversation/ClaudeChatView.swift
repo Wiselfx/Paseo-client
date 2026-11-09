@@ -51,6 +51,8 @@ public struct ClaudeChatView: View {
     /// One quiet line per permission answer made this session; the store drops resolved
     /// requests without remembering the answer, so the client keeps the record.
     @State var permissionResolvedLines: [AnsweredPermission] = []
+    /// Provider subagents hidden via "Archive finished"; app-side only, in memory, this session.
+    @State var hiddenSubagentIds: Set<String> = []
     /// A file tapped from a Read/Edit/Write row; presented as the existing Files viewer in a sheet.
     @State var openFilePath: String?
     /// M7d rewind: a scope awaiting the can't-undo confirmation dialog (messageId + chosen scope).
@@ -142,8 +144,15 @@ public struct ClaudeChatView: View {
         .foregroundStyle(ClaudePalette.ink)
         .tint(ClaudePalette.ink)
         .overlay(alignment: .bottom) { backToEnd }
-        .sheet(item: $sheet) { _ in
-            ClaudeAgentControlsSheet(session: session, store: store)
+        .sheet(item: $sheet) { item in
+            switch item {
+            case .controls:
+                ClaudeAgentControlsSheet(session: session, store: store)
+            case .subagents:
+                ChatSubagentsSheet(
+                    subagents: store.subagents, typography: typography,
+                    hiddenIds: $hiddenSubagentIds)
+            }
         }
         .sheet(isPresented: $showContextSheet) {
             ClaudeContextSheet(store: store)
