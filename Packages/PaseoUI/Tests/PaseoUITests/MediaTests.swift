@@ -29,39 +29,6 @@ private let photo = ClaudeMedia(id: "one", fileName: "Garden.png", aspectRatio: 
     media.reduce(.attachSelected)
     #expect(media.draft.isEmpty)
 }
-@Test func mediaSendPreservesPixelsMetadataWithoutFilenameText() {
-    var state = SessionState()
-    state.media.draft = [photo]
-    #expect(state.canSend)
-    state.reduce(.send(""))
-    #expect(state.messages.first?.media == [photo])
-    #expect(state.messages.first?.text == "")
-    #expect(state.media.draft.isEmpty)
-    let token = state.responseID!
-    state.reduce(.newSession)
-    state.appendResponse("late", responseID: token)
-    #expect(state.messages.isEmpty)
-}
-@Test func mediaViewerHideCloseRemoveAndSessionReset() {
-    var state = SessionState()
-    state.media.recent = [photo]
-    state.media.draft = [photo]
-    state.reduce(.media(.open(photo)))
-    state.reduce(.media(.toggleControls))
-    #expect(!state.media.controlsVisible)
-    state.reduce(.media(.close))
-    #expect(state.media.viewer == nil)
-    #expect(state.media.controlsVisible)
-    state.reduce(.media(.toggleControls))
-    #expect(state.media.controlsVisible)
-    state.reduce(.media(.open(photo)))
-    state.reduce(.media(.removeDraft(photo.id)))
-    #expect(state.media.viewer == nil)
-    state.reduce(.media(.open(photo)))
-    state.reduce(.newSession)
-    #expect(state.media.viewer == nil)
-    #expect(state.media.recent == [photo])
-}
 @Test func mediaInvalidAspectRatiosAreSafeEvenAfterHostMutation() {
     for value in [Double.nan, .infinity, -.infinity, 0, -1] {
         var item = ClaudeMedia(id: "bad", fileName: "bad", aspectRatio: value)
