@@ -9,8 +9,8 @@ i18n `en.ts` (`onboarding.*`, `pairing.connectionMethods.*`, help menu) — reus
 
 1. **Welcome screen**: first run with no saved host (M1b's saved hosts) shows "Welcome to
    Paseo" with the connection-method tiles iOS can offer today (Direct connection → M1b's
-   add-host form; Scan QR / Paste pairing link shown disabled with "Coming soon"-free wording:
-   simply omit them if upstream would need relay) and a Settings entry. Settings → General gets
+   add-host form; omit Scan QR / Paste pairing link / Remote SSH, which need relay or SSH this
+   client lacks) and a Settings entry. Settings → General gets
    **Show setup again**. (The desktop onboarding modal never opens on phones upstream: mark it
    n/a in PARITY.)
 2. **Help & support**: a menu in Settings (or the sidebar footer, matching where the app keeps
