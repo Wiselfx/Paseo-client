@@ -29,6 +29,9 @@ struct PaseoSettingsView: View {
     /// M12: attention sound cue level (off | soft | clear), DSH wording. Default off.
     @AppStorage(SoundCueLevel.storageKey) private var soundCueLevel = SoundCueLevel.off.rawValue
     @Environment(\.notificationPermissionAction) private var requestNotificationPermission
+    @Environment(\.notificationTestAction) private var notificationTestAction
+    @State private var isSendingTestNotification = false
+    @State private var testNotificationSent: Bool?
     /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
     /// M7f: Full / Collapse tool calls / Collapse turns (Settings → General → Chat).
@@ -328,6 +331,22 @@ struct PaseoSettingsView: View {
         ChatDisplayMode(rawValue: chatDisplay) ?? .full
     }
 
+    /// Upstream `settings.notifications.testHint` / `permissionRequired` (en.ts:2383-2384),
+    /// keyed on the notifications toggle since PaseoUI cannot read the OS status.
+    private var testNotificationHint: String {
+        notificationsEnabled ? "Send a notification using these settings" : "Allow notification access before testing"
+    }
+
+    private func sendTestNotification() {
+        guard !isSendingTestNotification else { return }
+        isSendingTestNotification = true
+        Task {
+            let sent = await notificationTestAction()
+            isSendingTestNotification = false
+            testNotificationSent = sent
+        }
+    }
+
     private var generalPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -464,6 +483,41 @@ struct PaseoSettingsView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(ClaudePalette.secondary)
                     .padding(.leading, 16)
+                RowGroup {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Test notification")
+                                .font(.system(size: 17))
+                            Text(testNotificationHint)
+                                .font(.system(size: 13))
+                                .foregroundStyle(ClaudePalette.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                        Button(isSendingTestNotification ? "Sending..." : "Send") {
+                            sendTestNotification()
+                        }
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                        .padding(.horizontal, 18)
+                        .frame(height: 32)
+                        .background(ClaudePalette.chip, in: .capsule)
+                        .disabled(!notificationsEnabled || isSendingTestNotification)
+                        .accessibilityIdentifier("settings.notifications.test")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+                .alert(
+                    testNotificationSent == true ? "Test notification sent" : "Unable to send test notification",
+                    isPresented: Binding(
+                        get: { testNotificationSent != nil },
+                        set: { if !$0 { testNotificationSent = nil } }))
+                {
+                    Button("OK") { testNotificationSent = nil }
+                } message: {
+                    Text(testNotificationSent == true ? "Paseo handed the notification to the operating system." : "Failed to send notification.")
+                }
                 sectionLabel("Chat")
                 RowGroup {
                     HStack(spacing: 12) {

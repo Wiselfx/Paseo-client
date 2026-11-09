@@ -107,6 +107,9 @@ struct RootView: View {
                     { @Sendable in
                         Task { @MainActor in _ = await notifications.requestAuthorization() }
                     })
+                .environment(
+                    \.notificationTestAction,
+                    { @Sendable in await notifications.sendTestNotification() })
                 .onAppear { deliverNotifications(session) }
                 .onChange(of: session.attention.pending) { _, _ in
                     deliverNotifications(session)

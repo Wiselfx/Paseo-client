@@ -108,7 +108,7 @@ struct WorkspacePRSection: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
             ForEach(Array(status.checks.enumerated()), id: \.offset) { _, check in
-                checkRow(check)
+                checkRow(check, prNumber: status.number ?? 0)
             }
             if let rollup = checksRollup(status.checks) {
                 Text(rollup)
@@ -121,7 +121,7 @@ struct WorkspacePRSection: View {
         .padding(.bottom, 10)
     }
 
-    private func checkRow(_ check: CheckoutPrCheck) -> some View {
+    private func checkRow(_ check: CheckoutPrCheck, prNumber: Int) -> some View {
         let failing = isFailing(check.status)
         let passing = isPassing(check.status)
         return Button {
@@ -159,6 +159,13 @@ struct WorkspacePRSection: View {
         .buttonStyle(.plain)
         .disabled(check.url == nil || check.url?.isEmpty == true)
         .accessibilityLabel("Check \(check.name), \(check.status)")
+        .contextMenu {
+            if mentionInChat != nil {
+                Button("Add to chat") {
+                    mentionInChat?(excerptForCheck(check, prNumber: prNumber))
+                }
+            }
+        }
     }
 
     private func isPassing(_ status: String?) -> Bool {
@@ -443,6 +450,13 @@ struct WorkspacePRSection: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add to chat")
+    }
+
+    private func excerptForCheck(_ check: CheckoutPrCheck, prNumber: Int) -> String {
+        var line = "PR #\(prNumber) — \(check.name) (\(check.status))"
+        if let workflow = check.workflow, !workflow.isEmpty { line += " (\(workflow))" }
+        if let url = check.url, !url.isEmpty { line += "\n\(url)" }
+        return line
     }
 
     private func excerptForReview(_ review: PullRequestTimelineReview, prNumber: Int) -> String {
