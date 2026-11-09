@@ -28,7 +28,17 @@ final class AppModel {
     /// A saved relay host rejected its stored password (S3): RootView asks for the new one
     /// through the same password sheet the pairing flow uses. Set by `performConnect`,
     /// cleared by RootView once it presents the sheet.
-    var relayPasswordRequest: (offer: ConnectionOffer, savedID: UUID)?
+    var relayPasswordRequest: RelayPasswordRequest?
+
+    /// One saved host's password rejection. `Identifiable` (fresh id per instance, so the
+    /// sheet re-presents) and `Equatable` by identity — tuples are never Equatable, which
+    /// is what `.onChange(of:)` needs.
+    struct RelayPasswordRequest: Identifiable, Equatable {
+        let id = UUID()
+        let offer: ConnectionOffer
+        let savedID: UUID
+        static func == (a: Self, b: Self) -> Bool { a.id == b.id }
+    }
     /// Injected by the composition root so the sidebar footer and Settings → Hosts can switch.
     let hostContext = HostSwitchContext()
     /// Published snapshot for SwiftUI (phase and forms are observed directly).
@@ -240,7 +250,7 @@ final class AppModel {
                 reason == "password_required" || reason == "incorrect_password",
                 passwordToSave == nil
             {
-                relayPasswordRequest = (offer: relayOffer, savedID: existingSavedID ?? UUID())
+                relayPasswordRequest = RelayPasswordRequest(offer: relayOffer, savedID: existingSavedID ?? UUID())
                 phase = .setup(.idle)
                 return error
             }
