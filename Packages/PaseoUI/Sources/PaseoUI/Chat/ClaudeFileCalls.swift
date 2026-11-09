@@ -28,8 +28,8 @@ enum WorkRow: Identifiable, Hashable {
         var pending: ClaudeMergedFileCall?
 
         func flushPending() {
-            guard let pending else { return }
-            output.append(.fileCall(pending))
+            guard let call = pending else { return }
+            output.append(.fileCall(call))
             pending = nil
         }
 
