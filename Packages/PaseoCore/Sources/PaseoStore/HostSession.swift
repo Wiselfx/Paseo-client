@@ -33,6 +33,9 @@ public final class HostSession {
     public private(set) var hostSettings: HostSettingsStore
     /// Worktree setup observation (running/failed/blocked snapshot per workspace).
     public let setupObservation: WorkspaceSetupObservationStore
+    /// Socket-wide event subscription for pushes the other subscriptions don't carry
+    /// (provider snapshots, permissions, script status, subagent and background-work updates).
+    public let ownedEvents: OwnedEventSubscription
     /// Project `paseo.json` read/write + project icons (Settings → host → Projects → Project).
     public let projectConfig: ProjectConfigStore
     public let projectIcons: ProjectIconStore
@@ -51,6 +54,10 @@ public final class HostSession {
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
     private var checkouts: [String: CheckoutStore] = [:]
+    /// The agent-list subscription, so a re-fetch can release the previous one on a modern socket.
+    private var agentsSubscriptionId: String?
+    /// The timeline subscription, so a changed viewed set can release the previous one.
+    private var timelineSubscriptionId: String?
     private var stateTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     private var isStarted = false
@@ -69,6 +76,7 @@ public final class HostSession {
         self.workspaceDirectory = WorkspaceDirectory(client: client)
         self.gitExtras = GitExtrasStore(client: client)
         self.setupObservation = WorkspaceSetupObservationStore(client: client)
+        self.ownedEvents = OwnedEventSubscription(client: client)
         self.projectConfig = ProjectConfigStore(client: client)
         self.projectIcons = ProjectIconStore(client: client)
         self.agentLifecycle = AgentLifecycleStore(client: client)
@@ -149,6 +157,15 @@ public final class HostSession {
     public func refreshAgents() async {
         do {
             let response = try await client.send(FetchAgentsRequest(page: .init(limit: 200), subscribe: true))
+            let previousSubscriptionId = agentsSubscriptionId
+            agentsSubscriptionId = response.subscriptionId
+            // A modern socket creates a new owned subscription per subscribe; an old one would
+            // keep delivering the same agent updates. Release it after the new snapshot lands.
+            if serverInfo?.supportsOwnedSubscriptions == true, let previousSubscriptionId,
+                previousSubscriptionId != agentsSubscriptionId
+            {
+                await client.releaseOwnedSubscription(previousSubscriptionId)
+            }
             let entries = response.entries
 
             agents = entries
@@ -184,8 +201,12 @@ public final class HostSession {
             projectIcons.update(serverInfo: info)
             gitExtras.update(serverInfo: info)
             labels.update(serverInfo: info)
+            ownedEvents.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
             for store in conversations.values { store.update(serverInfo: info) }
+            // The daemon drops every subscription with the previous socket: always re-subscribe.
+            // Advisory only, so it never delays the directory, labels or a resync.
+            Task { await ownedEvents.connected() }
             if sawReconnect {
                 sawReconnect = false
                 await resync()
@@ -195,8 +216,17 @@ public final class HostSession {
             }
         case .reconnecting:
             sawReconnect = true
-        case .idle, .connecting, .failed:
-            break
+            ownedEvents.disconnected()
+            agentsSubscriptionId = nil
+            timelineSubscriptionId = nil
+        case .idle, .connecting:
+            ownedEvents.disconnected()
+            agentsSubscriptionId = nil
+            timelineSubscriptionId = nil
+        case .failed:
+            ownedEvents.disconnected()
+            agentsSubscriptionId = nil
+            timelineSubscriptionId = nil
         }
     }
 
@@ -212,7 +242,9 @@ public final class HostSession {
         }
         workspaceDirectory.prepareForReconnect()
         await workspaceDirectory.reload()
+        labels.prepareForReconnect()
         await labels.load()
+        await setupObservation.resubscribe()
         let openCheckouts = Array(checkouts.values)
         for store in openCheckouts {
             await store.resubscribe()
@@ -321,7 +353,18 @@ public final class HostSession {
         let agentIds = conversations.keys.sorted()
         let client = self.client
         Task {
-            _ = try? await client.send(SetAgentTimelineSubscriptionRequest(agentIds: agentIds))
+            guard let response = try? await client.send(
+                SetAgentTimelineSubscriptionRequest(agentIds: agentIds)) else { return }
+            let replaced = timelineSubscriptionId
+            timelineSubscriptionId = response.subscriptionId
+            // A modern socket keeps the previous subscription alive until it is released, and
+            // each subscription delivers its own copy of every stream. Release the old one
+            // after the new snapshot lands so nothing is missed and nothing is duplicated.
+            if serverInfo?.supportsOwnedSubscriptions == true, let replaced,
+                replaced != timelineSubscriptionId
+            {
+                await client.releaseOwnedSubscription(replaced)
+            }
         }
     }
 

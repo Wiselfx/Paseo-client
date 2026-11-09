@@ -61,6 +61,9 @@ public struct SetAgentTimelineSubscriptionRequest: PaseoRequest {
     public struct Response: Decodable, Sendable {
         public var requestId: String
         public var agentIds: [String]
+        /// The server-assigned subscription id. Present on every socket the daemon treats as
+        /// owned (`owned_subscriptions` in the hello); legacy sockets have it stripped.
+        public var subscriptionId: String?
     }
 }
 

@@ -43,6 +43,9 @@ public final class WorkspaceDirectory {
     public private(set) var supportsGithubRepositorySearch = false
     public private(set) var supportsBackgroundWorkspaces = false
     public private(set) var supportsExplicitEventSubscriptions = false
+    /// `features.ownedSubscriptions` plus this client's hello capability: the workspace
+    /// subscription is released with `subscription.release.request`.
+    public private(set) var supportsOwnedSubscriptions = false
     /// `features.workspacePinning`: pin/unpin RPC exists (added in v0.1.107).
     public private(set) var supportsWorkspacePinning = false
     /// `features.workspaceBaseBranch`: base-branch RPC exists (added after v0.11.2).
@@ -111,8 +114,16 @@ public final class WorkspaceDirectory {
                 FetchWorkspacesRequest(
                     includeBackground: supportsBackgroundWorkspaces ? true : nil,
                     subscribe: true))
+            let previousSubscriptionId = subscriptionId
             workspaces = response.entries
             subscriptionId = response.subscriptionId
+            // A modern socket creates a new owned subscription per fetch; release the previous one
+            // so updates are not delivered twice. Legacy daemons keep their last-query-wins slot.
+            if supportsOwnedSubscriptions, let previousSubscriptionId,
+                previousSubscriptionId != subscriptionId
+            {
+                await client.releaseOwnedSubscription(previousSubscriptionId)
+            }
             merge(projects: response.emptyProjects)
             for workspace in workspaces { ensureProject(for: workspace) }
             hasLoaded = true
@@ -321,6 +332,7 @@ public final class WorkspaceDirectory {
         supportsGithubRepositorySearch = serverInfo?.hasFeature("workspaceGithubRepositorySearch") ?? false
         supportsBackgroundWorkspaces = serverInfo?.hasFeature("backgroundWorkspaces") ?? false
         supportsExplicitEventSubscriptions = serverInfo?.hasFeature("explicitEventSubscriptions") ?? false
+        supportsOwnedSubscriptions = serverInfo?.supportsOwnedSubscriptions ?? false
         supportsWorkspacePinning = serverInfo?.hasFeature("workspacePinning") ?? false
         supportsWorkspaceBaseBranch = serverInfo?.hasFeature("workspaceBaseBranch") ?? false
         supportsWorkspaceArchiveUndo = serverInfo?.hasFeature("workspaceArchiveUndo") ?? false
@@ -337,6 +349,8 @@ public final class WorkspaceDirectory {
     /// A reconnect means the daemon forgot the event subscription too.
     internal func prepareForReconnect() {
         eventSubscriptionId = nil
+        // The old socket owned these; nothing to release on a dead connection.
+        subscriptionId = nil
     }
 
     internal func apply(_ update: WorkspaceUpdate) {
