@@ -14,7 +14,9 @@ import PaseoProtocol
             let result = state.applyStream(payload)
             if payload.seq != nil { #expect(result == .applied, "seq \(payload.seq!)") } else { #expect(result == .ignored) }
         }
-        let expected = Load.rows(full.entries)
+        let expected = Load.rows(full.entries).map {
+            TimelineRow(id: $0.id, turnId: $0.turnId, item: TimelineState.presentedItem($0.item), timestamp: $0.timestamp, seqStart: $0.seqStart, seqEnd: $0.seqEnd, isPending: $0.isPending)
+        }
         #expect(state.rows.count == expected.count)
         for (got, want) in zip(state.rows, expected) {
             #expect(got.id == want.id)
@@ -106,9 +108,11 @@ import PaseoProtocol
         state.addPendingUserMessage(text: "Think briefly first…", clientMessageId: "fixture-msg-1", timestamp: "2026-11-08T21:00:00.000Z")
         state.applyPage(try Load.page())
         let users = state.rows.filter { if case .userMessage = $0.item { true } else { false } }
-        #expect(users.count == 1)
-        #expect(users.first?.id == "local:fixture-msg-1")
-        #expect(users.first?.isPending == false)
+        // The fixture's agent_message projects to a user message (producer of "Sent by").
+        #expect(users.count == 2)
+        #expect(users.first?.id == "tool:paseo-agent-message:ca38ce5a-1a02-4301-a6ae-1929202c6ab6")
+        #expect(users.last?.id == "local:fixture-msg-1")
+        #expect(users.last?.isPending == false)
         #expect(state.rows.allSatisfy { !$0.isPending })
     }
 
