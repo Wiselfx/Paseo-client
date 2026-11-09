@@ -38,12 +38,14 @@ import Testing
         #expect(response.relayEnabled)
     }
 
-    @Test func relayDisabledShapeDecodesWithNilURL() throws {
+    @Test func relayDisabledShapeDecodesWithEmptyURL() throws {
+        // The daemon coerces the generator's null to "" at the RPC (daemon-session.ts:250);
+        // the schema types url as a plain string (messages.ts:5443).
         let response = try decodePayload(
             "daemon.get_pairing_offer.response",
-            #"{"requestId":"r-2","url":null,"qr":null,"relayEnabled":false}"#,
+            #"{"requestId":"r-2","url":"","qr":null,"relayEnabled":false}"#,
             as: DaemonGetPairingOfferRequest.Response.self)
-        #expect(response.url == nil)
+        #expect(response.url == "")
         #expect(!response.relayEnabled)
     }
 }

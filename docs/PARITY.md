@@ -47,7 +47,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Scan QR code pairing (native, encrypted relay) — Status: `missing` — Source: `docs/research/01-app-features.md:360`; plan: `docs/STATUS.md:72`
 - [ ] Feature: Paste pairing link (`#offer=` validation, protected-offer password prompt) — Status: `missing` — Source: `docs/research/01-app-features.md:360`
 - [ ] Feature: Host confirmation sheet ("Connect to this host?", fingerprint rows, changed-link variant) — Status: `missing` — Source: `docs/research/01-app-features.md:362`
-- [ ] Feature: Pair a device — generate the pairing offer + QR/link from this host — Status: `missing` — Source: `docs/research/01-app-features.md:361`; protocol area `docs/research/04-protocol-agents-permissions-settings.md:1177` (no pairing-offer code exists in PaseoCore)
+- [ ] Feature: Pair a device — generate the pairing offer + QR/link from this host — Status: `done` (R19: fetches `daemon.get_pairing_offer` when `daemonStatusRpc` is advertised — gated on it in the store, row hidden otherwise — renders the returned URL locally as a QR (Core Image, crisp, correction M, white quiet-zone tile) with a local-only Copy; relay-off shows the Enable relay flow behind `features.relayConfig`; the offer lives only in page state and is cleared on close) — Source: `docs/research/01-app-features.md:361`; protocol `packages/protocol/src/messages.ts:1489-1492,5439-5449`; upstream `packages/app/src/desktop/components/pair-device-section.tsx`; this client `PaseoProtocol/PairingOffer.swift`, `PaseoStore/HostSettingsStore.swift` (`loadPairingOffer`, `enableRelay`), `Settings/PairDevicePage.swift`
 - [ ] Feature: Host picker / "Switch host" (sidebar footer + Settings) and "All hosts" filter — Status: `done` (sidebar footer host-name chip → menu of saved hosts (checkmark on the current one) + "Add host…"; tapping a host disconnects the current session and connects to the other — one active host at a time, switching never leaves both open; Settings → Hosts page lists saved hosts with rename/forget and a "Current" badge; no "All hosts" filter) — Source: this client `Sidebar/PaseoSidebar.swift` (`hostChip`), `Chat/PaseoSettingsView.swift` (`.hosts` row), `Settings/HostsPage.swift`, `Settings/HostSwitchContext.swift`, `App/Sources/AppModel.swift`; `docs/research/01-app-features.md:363`
 - [ ] Feature: Saved hosts (every successful connection remembered; per-host Keychain passwords; tap-to-connect, swipe-to-forget, rename; last connected; migration of the legacy single-host settings) — Status: `done` (URLs + labels in UserDefaults JSON, no secrets committed or stored; passwords one Keychain account per host id; auto-connect to the most recent host at startup, failure shows the form preselected with inline error + Retry; legacy single host/port/password adopted automatically) — Source: this client `App/Sources/SavedHosts.swift`, `App/Sources/AppModel.swift`, `App/Sources/RootView.swift`, `Packages/PaseoUI/Sources/PaseoUI/ConnectView.swift`; `docs/research/01-app-features.md:363`
 - [ ] Feature: Host chooser for deep-link flows (searchable) — Status: `missing` — Source: `docs/research/01-app-features.md:364`
@@ -530,8 +530,8 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 314 | 74.4 % |
-| `missing` | 35 | 8.3 % |
+| `done` | 315 | 74.6 % |
+| `missing` | 34 | 8.1 % |
 | `desktop-only (flag)` | 48 | 11.4 % |
 | `store only (no UI)` | 5 | 1.2 % |
 | `in flight` | 0 | 0.0 % |

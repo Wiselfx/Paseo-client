@@ -273,8 +273,8 @@ public final class HostSettingsStore {
         pairingOfferState = .loading
         do {
             let response = try await client.send(DaemonGetPairingOfferRequest(), timeout: .seconds(30))
-            if let url = response.url, !url.isEmpty {
-                pairingOfferState = .received(url: url, relayEnabled: response.relayEnabled)
+            if !response.url.isEmpty {
+                pairingOfferState = .received(url: response.url, relayEnabled: response.relayEnabled)
             } else if response.relayEnabled {
                 pairingOfferState = .failed("Pairing offer unavailable.")
             } else {

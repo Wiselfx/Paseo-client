@@ -22,17 +22,16 @@ public struct DaemonGetPairingOfferRequest: PaseoRequest {
     // Source: messages.ts `DaemonGetPairingOfferResponseSchema`
     public struct Response: Decodable, Sendable {
         public var requestId: String
-        /// Zero or more offers: exactly one today. The schema types `url` as a non-null
-        /// string, but a relay-disabled daemon answers `{relayEnabled:false, url:null}`
-        /// (docs/research/11-relay-pairing.md §7), so decode tolerantly and treat nil as
-        /// "no link", never as a decode failure.
-        public var url: String?
+        /// Per the schema this is a non-null string; a relay-disabled daemon sends `""`
+        /// (`daemon-session.ts:250` coerces the generator's null with `?? ""`). An empty
+        /// string (or a relay-off flag) means "no link", never a decode failure.
+        public var url: String
         /// The daemon's terminal QR block (`\u001b` colours); the app ignores it and
         /// re-renders the URL itself.
         public var qr: String?
         public var relayEnabled: Bool
 
-        public init(requestId: String, url: String?, qr: String? = nil, relayEnabled: Bool) {
+        public init(requestId: String, url: String, qr: String? = nil, relayEnabled: Bool) {
             self.requestId = requestId
             self.url = url
             self.qr = qr

@@ -9,7 +9,8 @@ import UniformTypeIdentifiers
 /// Settings → Host → "Pair a device": renders the daemon's pairing offer as a QR the phone
 /// scans, with the copyable link beside it. Upstream is Paseo Desktop's
 /// `pair-device-section.tsx`; every user-facing string below cites its `en.ts` line
-/// (`pairing.device.*` at en.ts:1968-1993, row title at en.ts:2916, Cancel at en.ts:31).
+/// (`pairing.device.*` at en.ts:1968-1993, section title at en.ts:2915, row title at
+/// en.ts:2916).
 ///
 /// The offer URL is a credential: it lives only in store state until this page closes
 /// (`clearPairingOffer()` on disappear), it is never logged, and the Copy button marks the
@@ -20,13 +21,15 @@ struct PairDevicePage: View {
     @State private var copied = false
     @State private var confirmEnableRelay = false
     @State private var enableFailed: String?
+    /// The rasterized QR, cached per URL (NIT 6: don't re-render on every body pass).
+    @State private var cachedQR: UIImage? = nil
 
     private let typography = ClaudeTypography()
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                sectionLabel("Pair device")
+                sectionLabel("Pair devices") // en.ts:2915 pairDevices.title
                 content
             }
             .padding(.horizontal, 16)
@@ -74,13 +77,20 @@ struct PairDevicePage: View {
             .padding(.top, 24)
         case .failed(let message):
             VStack(alignment: .leading, spacing: 8) {
-                // en.ts:1970 failedToLoadOffer
-                Text("Failed to load pairing offer.")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
-                Text(message)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                if message == "Pairing offer unavailable." {
+                    // en.ts:1985 unavailable — one line, upstream shows it alone.
+                    Text(message)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                } else {
+                    // en.ts:1970 failedToLoadOffer
+                    Text("Failed to load pairing offer.")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(ClaudePalette.ink)
+                    Text(message)
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.secondary)
+                }
                 // en.ts:1991 retry
                 Button("Retry") {
                     Task { await session.hostSettings.loadPairingOffer() }
@@ -104,12 +114,15 @@ struct PairDevicePage: View {
             Text("Scan this QR code with Paseo on your phone, or copy the link below.")
                 .font(.system(size: 15))
                 .foregroundStyle(ClaudePalette.secondaryInk)
-            if let qr = Self.qrImage(for: url) {
+            if let qr = cachedQR {
                 Image(uiImage: qr)
                     .resizable()
                     .interpolation(.none)
                     .scaledToFit()
-                    .frame(maxWidth: 220)
+                    .frame(width: 220)
+                    // Upstream qrTile: white tile with padding (a QR needs a light surround).
+                    .padding(12)
+                    .background(Color.white, in: .rect(cornerRadius: 16))
                     .accessibilityLabel("Pairing QR code") // en.ts:1990 qrAccessibility
             } else {
                 // en.ts:1989 qrUnavailable
@@ -146,6 +159,9 @@ struct PairDevicePage: View {
                 .font(.system(size: 13))
                 .foregroundStyle(ClaudePalette.secondary)
         }
+        .task(id: url) {
+            cachedQR = Self.qrImage(for: url)
+        }
     }
 
     private var relayDisabledContent: some View {
@@ -159,13 +175,14 @@ struct PairDevicePage: View {
                     confirmEnableRelay = true
                 } label: {
                     // en.ts:1977 enableRelay
-                    Text("Enable relay")
+                    Text(session.hostSettings.isSaving ? "Enabling..." : "Enable relay") // en.ts:1978 enablingRelay
                         .font(.system(size: 15, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(ClaudePalette.ink)
+                .disabled(session.hostSettings.isSaving)
                 .accessibilityIdentifier("pairDevice.enableRelay")
             } else {
                 // en.ts:1984 updateRequired
@@ -193,18 +210,17 @@ struct PairDevicePage: View {
 
     /// Crisp QR: scaled with nearest-neighbour interpolation, error correction M
     /// (upstream `QRCode.toString(..., { errorCorrectionLevel: "M", margin: 1 })`,
-    /// pair-device-section.tsx:78-89).
+    /// pair-device-section.tsx:78-89). The render rect is the scaled image's own extent
+    /// (S1 review fix); the white tile in the view supplies the quiet zone (upstream
+    /// qrTile), since the generator emits no margin.
     nonisolated static func qrImage(for url: String) -> UIImage? {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(url.utf8)
         filter.correctionLevel = "M"
         guard let output = filter.outputImage else { return nil }
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 10, y: 10))
         let context = CIContext()
-        guard
-            let cg = context.createCGImage(
-                output.transformed(by: CGAffineTransform(scaleX: 10, y: 10)),
-                from: output.extent)
-        else { return nil }
+        guard let cg = context.createCGImage(scaled, from: scaled.extent) else { return nil }
         return UIImage(cgImage: cg)
     }
 

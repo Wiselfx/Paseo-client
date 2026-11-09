@@ -46,7 +46,7 @@ struct PairingOfferStoreTests {
         store.serverInfoChanged(
             try serverInfo(features: ["daemonStatusRpc": .bool(true)]))
         client.onSend(DaemonGetPairingOfferRequest.self) { _ in
-            DaemonGetPairingOfferRequest.Response(requestId: "r-2", url: nil, relayEnabled: false)
+            DaemonGetPairingOfferRequest.Response(requestId: "r-2", url: "", relayEnabled: false)
         }
         _ = await store.loadPairingOffer()
         #expect(store.pairingOfferState == .received(url: "", relayEnabled: false))
