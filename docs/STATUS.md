@@ -72,7 +72,7 @@ restart/view service, local links, 2k scrollback, M3h file sort/share/Markdown+i
 diff options (hunk-level whitespace hide, wrap, collapse) and jump-to-file, M8d @-file mention
 popover (scratch WorkspaceFiles walk) + on-device dictation (Info.plist mic/speech keys), R10 split:
 `Sidebar/` and `Schedules/` folders; restored a missing `sectionHeader` the Pinned section called
-(swiftc -parse can't catch missing symbols: Xcode will) (PaseoCore 355/126/17; PaseoCore 354/126/17 = 497 green; one-off
+(swiftc -parse can't catch missing symbols: Xcode will) (PaseoCore 355/126/17 = 498 green; one-off
 DaemonConnectionTests flake → T16). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
