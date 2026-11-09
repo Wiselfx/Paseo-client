@@ -126,6 +126,7 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
+- M14 `m14-usage-home` on Crouton c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: usage overview charts, connection states.
 - M13 `m13-voice-settings` on Crouton 6705fee4-a9d1-4be4-9962-4524eff8f59c: host Voice page, speech provider sheets, local models.
 - R16 `r16-relay-crypto` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: Noise NK, record codec, offer parsing (swift-crypto approved by the user). Plan: R17 transport, R18 pairing UI, R19 Pair device (`docs/research/11` §10).
 - Idle: DeepSeek 8872f024 (T17; deep protocol/subscription context).
