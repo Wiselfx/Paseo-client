@@ -16,12 +16,14 @@ final class FakeTransport: WebSocketTransport, @unchecked Sendable {
         var closedCode: Int?
         var closedReason = ""
         var outbound: [String] = []
+        var outboundBinary: [Data] = []
         var outboundWaiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
     }
 
     private let mutex = Mutex(State())
 
     var outbound: [String] { mutex.withLock { $0.outbound } }
+    var outboundBinary: [Data] { mutex.withLock { $0.outboundBinary } }
     var isClosedByClient: Bool { mutex.withLock { $0.closedCode != nil } }
 
     func send(text: String) async throws {
@@ -31,6 +33,17 @@ final class FakeTransport: WebSocketTransport, @unchecked Sendable {
             let ready = state.outboundWaiters.filter { state.outbound.count >= $0.target }
             state.outboundWaiters.removeAll { state.outbound.count >= $0.target }
             for waiter in ready { waiter.continuation.resume() }
+            return nil
+        }
+        if let throwClosed {
+            throw WebSocketClosed(code: throwClosed, reason: "closed")
+        }
+    }
+
+    func send(binary: Data) async throws {
+        let throwClosed: Int? = mutex.withLock { state in
+            guard state.closedCode == nil else { return state.closedCode }
+            state.outboundBinary.append(binary)
             return nil
         }
         if let throwClosed {
