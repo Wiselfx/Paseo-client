@@ -19,7 +19,7 @@ struct DraftChatView: View {
     var onCreated: (String) -> Void
 
     @State private var showControls = false
-    @State private var focused = false
+    @FocusState private var focused: Bool
     @State private var tray: [ComposerAttachmentItem] = []
     @State private var uploadPumpRunning = false
     @State private var photoSelection: [PhotosPickerItem] = []
