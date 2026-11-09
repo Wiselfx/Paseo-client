@@ -39,11 +39,17 @@ U-round: the first on-device fix round (2026-11-09). Spec: `docs/UX-SPEC.md`. Au
 | U3 | merged | DeepSeek | Auto history with an anchored prepend (lead fix: re-apply only on growth), full turn nav, translucent rail, full messages, bubble menu, mascot seeding, subagents capability wire fix (`provider_subagents`), thinking list, SVG/HTML |
 | U4 | merged | Crouton | PaseoFormat, CronDescription (11 tests), monochrome, toggle tint, file sizes, search header. Lead fixes: bytes hand-rolled (ByteCountFormatter has no locale); identifiers ungrouped |
 
-Tests: PaseoCore 678/192/145 green (1015).
+Tests: PaseoCore 683/200/145 green (1028).
 
 **Mac build gate (2026-11-09):** `ssh -i ~/.ssh/paseo_build_ed25519 claude@host.orb.internal build <pushed ref>` compiles the real app (iOS Simulator, signing off). Every merge is now compiled before the user pulls. Gate source `Tools/build-gate/build-gate`; the installed copy on the Mac changes only when the user re-copies it.
 
-**V-round (parity, from `/tmp/reviews/parity-sweep-2026-11-09.md`):** V1 chat actions (fork tab/workspace, in-flight fork, DSH Retract/Delete turn, compaction marker), V2 detach subagent + managed-subagents section + branch switcher, V3 test notification + service-URL setting + PR check Add to chat. All merged, Mac build green. Not ticketed (drop unless asked): DSH bar/caret, language, split settings, DSH mascots/ripple, plugins/catalog, config.apply bundle. Blocked: APNs push (needs server). Candidates next: archived workspaces (B2), host idle-cleanup/restart-recovery cards (B17), dictation insert-and-send (B19), provider SVG glyphs, AVAudioSession setActive off main.
+**V-round (parity, from `/tmp/reviews/parity-sweep-2026-11-09.md`):** V1 chat actions (fork tab/workspace, in-flight fork, DSH Retract/Delete turn, compaction marker), V2 detach subagent + managed-subagents section + branch switcher, V3 test notification + service-URL setting + PR check Add to chat. All merged, Mac build green. Not ticketed (drop unless asked): DSH bar/caret, language, split settings, DSH mascots/ripple, plugins/catalog, config.apply bundle. Blocked: APNs push (needs server). V4 (host idle/restart cards, dictation overlay + AVAudioSession off main, provider SVG glyphs) and V5 (17 pt chat text, tap-to-dismiss keyboard, composer height cap 40%, always-card composer in conversations; UX-SPEC §4.1 updated) merged at d78a2d9, Mac build green.
+
+**In flight:** P3 performance pass, fresh DeepSeek 71e60c03, own worktree `/home/paseo/.paseo/worktrees/0264elgj/p3-performance`, branch `p3-performance` (audit to `/tmp/reviews/perf-audit.md`; drawers/shell/scroll handlers). On finish: review, Mac-build, merge, ipa.
+
+**Gate `ipa <ref>` verb** added (65ec8de) → `/Users/Shared/Paseo-ipas/`; works once the user re-copies the gate (asked 2026-11-09). After each merged batch, run it so the user can test.
+
+Idle workers: DeepSeek aa2f0c45 (chat, u3-chat worktree), DeepSeek 165363ff (u2-new-session worktree). Candidates next: archived workspaces (B2), device feedback on V1–V5.
 
 **Merged:** U5 prompt outline (`docs/tickets/U5-outline.md`): daemon prompt index (`agent.timeline.list_prompts`), window jump with `mergeWindow`, tick rail with no reserved margin, picker-wheel haptics. `loadAllOlder` removed. Lead change at merge: the hidden rail is not hit-testable. Known gap: in the loaded-turns fallback (no index) the active tick is not highlighted.
 - Covers: upstream prompt index RPC + jump fetch, `loadAllOlder` removed, tick-only rail with no reserved margin, picker-wheel haptics.
