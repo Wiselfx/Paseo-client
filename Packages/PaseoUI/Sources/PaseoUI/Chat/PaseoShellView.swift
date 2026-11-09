@@ -189,25 +189,27 @@ public struct PaseoShellView: View {
     /// system. A failed (gave-up) connection offers Disconnect back to the connect screen.
     @ViewBuilder private var connectionBanner: some View {
         switch session.connection {
-        case .reconnecting(let attempt, _):
+        case .reconnecting:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small).tint(ClaudePalette.secondary)
-                Text("Reconnecting… (attempt \(attempt))")
+                Text("Reconnecting…")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(ClaudePalette.secondary)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
-            .frame(height: 40)
+            .padding(.vertical, 8)
+            .frame(minHeight: 40)
             .background(ClaudePalette.panel)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Reconnecting, attempt \(attempt)")
+            .accessibilityLabel("Reconnecting")
         case .failed:
             HStack(spacing: 8) {
                 Image(systemName: "wifi.slash")
                     .font(.system(size: 14))
                     .foregroundStyle(ClaudePalette.failureInk)
-                Text("Connection lost.")
+                Text("Can't reach the host. Check that the daemon is running.")
+                    .lineLimit(2)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(ClaudePalette.failureInk)
                 Spacer(minLength: 8)
@@ -219,7 +221,8 @@ public struct PaseoShellView: View {
                 .accessibilityIdentifier("shell.connection.disconnect")
             }
             .padding(.horizontal, 16)
-            .frame(height: 40)
+            .padding(.vertical, 8)
+            .frame(minHeight: 40)
             .background(ClaudePalette.panel)
         case .idle, .connecting, .connected:
             EmptyView()
