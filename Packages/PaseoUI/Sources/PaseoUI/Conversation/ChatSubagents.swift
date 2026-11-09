@@ -388,7 +388,7 @@ struct ChatSubagentsSheet: View {
         case .finished: return .unread
         case .unknown, nil: break
         }
-        switch agent.status {
+        return switch agent.status {
         case .running: .running
         case .error: .failed
         case .initializing, .idle, .closed, .unknown: .idle
