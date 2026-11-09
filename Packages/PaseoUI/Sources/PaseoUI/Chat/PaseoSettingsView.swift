@@ -28,6 +28,7 @@ struct PaseoSettingsView: View {
     @State private var providerSheetID: String?
     @State private var confirmDisconnect = false
     @State private var confirmRemoveProject: WorkspaceProjectDescriptor?
+    @State private var projectPage: WorkspaceProjectDescriptor?
     @State private var appendPromptDraft: String?
     @State private var appendPromptSaving = false
     @State private var resumePromptDraft: String?
@@ -1002,7 +1003,9 @@ struct PaseoSettingsView: View {
                 } else {
                     RowGroup {
                         ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
-                            projectRow(project, count: counts[project.id] ?? 0)
+                            projectRow(project, count: counts[project.id] ?? 0) {
+                                projectPage = project
+                            }
                             if index < projects.count - 1 { rowDivider }
                         }
                     }
@@ -1025,6 +1028,9 @@ struct PaseoSettingsView: View {
             .padding(.bottom, 20)
         }
         .scrollIndicators(.hidden)
+        .sheet(item: $projectPage) { project in
+            ProjectSettingsView(session: session, project: project)
+        }
         .confirmationDialog(
             "Remove project?",
             isPresented: Binding(
@@ -1044,24 +1050,33 @@ struct PaseoSettingsView: View {
         }
     }
 
-    private func projectRow(_ project: WorkspaceProjectDescriptor, count: Int) -> some View {
+    private func projectRow(
+        _ project: WorkspaceProjectDescriptor, count: Int, open: @escaping () -> Void
+    ) -> some View {
         let title = project.projectCustomName ?? project.projectDisplayName
         return HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 17))
-                    .lineLimit(1)
-                Text(project.projectRootPath)
-                    .font(typography.mono(12, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            Button(action: open) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 17))
+                            .lineLimit(1)
+                        Text(project.projectRootPath)
+                            .font(typography.mono(12, relativeTo: .footnote))
+                            .foregroundStyle(ClaudePalette.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer(minLength: 8)
+                    Text(count == 1 ? "1 workspace" : "\(count) workspaces")
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClaudePalette.secondary)
+                        .lineLimit(1)
+                }
+                .contentShape(.rect)
             }
-            Spacer(minLength: 8)
-            Text(count == 1 ? "1 workspace" : "\(count) workspaces")
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondary)
-                .lineLimit(1)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(title) project settings")
             if session.workspaceDirectory.supportsProjectRemove {
                 Menu {
                     Button("Remove project", role: .destructive) {

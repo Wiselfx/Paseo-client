@@ -33,6 +33,9 @@ public final class HostSession {
     public private(set) var hostSettings: HostSettingsStore
     /// Worktree setup observation (running/failed/blocked snapshot per workspace).
     public let setupObservation: WorkspaceSetupObservationStore
+    /// Project `paseo.json` read/write + project icons (Settings → host → Projects → Project).
+    public let projectConfig: ProjectConfigStore
+    public let projectIcons: ProjectIconStore
     /// Git extras for open workspaces: modern diffs, discard, branches, PR badge, live files.
     public let gitExtras: GitExtrasStore
 
@@ -57,6 +60,8 @@ public final class HostSession {
         self.workspaceDirectory = WorkspaceDirectory(client: client)
         self.gitExtras = GitExtrasStore(client: client)
         self.setupObservation = WorkspaceSetupObservationStore(client: client)
+        self.projectConfig = ProjectConfigStore(client: client)
+        self.projectIcons = ProjectIconStore(client: client)
     }
 
     /// Starts the event and state loops, then loads the agent list with a live subscription.
@@ -162,6 +167,7 @@ public final class HostSession {
             hostUsage.update(serverInfo: info)
             workspaceDirectory.update(serverInfo: info)
             setupObservation.update(serverInfo: info)
+            projectIcons.update(serverInfo: info)
             gitExtras.update(serverInfo: info)
             for store in checkouts.values { store.update(serverInfo: info) }
             for store in conversations.values { store.update(serverInfo: info) }
