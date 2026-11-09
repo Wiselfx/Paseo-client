@@ -99,7 +99,6 @@ extension ClaudeChatView {
             onRewind: { scope, messageId in
                 pendingRewind = PendingRewind(messageId: messageId, scope: scope)
             },
-            isLatestTurn: index == store.turns.count - 1,
             canRewrite: canRewrite,
             onEdit: { messageId, text in
                 pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .edit)
@@ -107,7 +106,8 @@ extension ClaudeChatView {
             onRerun: { messageId, text in
                 pendingMessageAction = PendingMessageAction(messageId: messageId, text: text, kind: .rerun)
             },
-            onFork: fork
+            onFork: fork,
+            isLatestTurn: index == store.turns.count - 1
         )
     }
 
