@@ -138,6 +138,8 @@ in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for 
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
 - P1 `p1-polish-audit` on DeepSeek 85844e34-6c29-4638-ae82-0b781364abc7: UI/UX audit doc + low-risk fixes (frontend-design skill as a lens at /tmp/polish-skill, outside the repo; pinned ClaudeUI/DSH style wins).
+- R17 `r17-relay-transport` on DeepSeek 6db40c26-be26-4576-9952-c2d85ca9b149: relay transport, reconnect, pinning.
+- M17 `m17-maps-drag-cost` on Crouton c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: map cards, drag file → composer, cost in mascot bubble.
 - M15 `m15-voice-mode` on Crouton 6705fee4-a9d1-4be4-9962-4524eff8f59c: realtime voice mode.
 - Idle: DeepSeek 8872f024 (T17; deep protocol/subscription context).
 Known store gaps: fork can't carry provider feature values.
