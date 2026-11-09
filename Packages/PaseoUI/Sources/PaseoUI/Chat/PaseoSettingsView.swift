@@ -26,6 +26,8 @@ struct PaseoSettingsView: View {
     /// M10: post local OS notifications when an agent or terminal needs you. On by default;
     /// permission is requested the first time one arrives, or when this is switched on.
     @AppStorage(AttentionNotificationKeys.enabled) private var notificationsEnabled = true
+    /// M12: attention sound cue level (off | soft | clear), DSH wording. Default off.
+    @AppStorage(SoundCueLevel.storageKey) private var soundCueLevel = SoundCueLevel.off.rawValue
     @Environment(\.notificationPermissionAction) private var requestNotificationPermission
     /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
@@ -415,6 +417,27 @@ struct PaseoSettingsView: View {
                     }
                 }
                 Text("Local notifications while Paseo is open or recently backgrounded. True push while the app is closed is not available without a relay.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .padding(.leading, 16)
+                RowGroup {
+                    HStack(spacing: 12) {
+                        Label("Sound cue", systemImage: "waveform")
+                            .font(.system(size: 17))
+                        Spacer(minLength: 8)
+                        Picker("Sound cue", selection: $soundCueLevel) {
+                            ForEach(SoundCueLevel.allCases, id: \.rawValue) { level in
+                                Text(level.title).tag(level.rawValue)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 190)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .accessibilityIdentifier("settings.notifications.soundCue")
+                }
+                Text("Play a cue when a task finishes or is blocked.")
                     .font(.system(size: 13))
                     .foregroundStyle(ClaudePalette.secondary)
                     .padding(.leading, 16)

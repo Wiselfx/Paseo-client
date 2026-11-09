@@ -82,6 +82,17 @@ extension ClaudeChatView {
                         Button("Camera", systemImage: "camera") { showCameraPicker = true }
                     }
                     Button("Files", systemImage: "folder") { showFileImporter = true }
+                    Button(
+                        forgeIsGitLab ? "Add issue or MR" : "Add issue or PR",
+                        systemImage: "arrow.triangle.branch"
+                    ) {
+                        if let workspaceId = store.agent?.workspaceId,
+                            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+                        {
+                            Task { await session.checkout(for: workspace).loadPrStatus() }
+                        }
+                        showForgePicker = true
+                    }
                     Button("Mention a file", systemImage: "at") { mentionFile() }
                     Divider()
                     Button("New agent", systemImage: "plus.bubble") {
@@ -189,6 +200,15 @@ extension ClaudeChatView {
             switch result {
             case .success(let urls): attachFileURLs(urls)
             case .failure(let error): showToast(error.localizedDescription)
+            }
+        }
+        .sheet(isPresented: $showForgePicker) {
+            ForgeSearchPicker(
+                session: session, cwd: store.agent?.cwd ?? "", isMergeRequest: forgeIsGitLab,
+                selectedIds: selectedForgeIds
+            ) { item in
+                toggleForgeAttachment(item)
+                showForgePicker = false
             }
         }
         .sheet(isPresented: $showCameraPicker) {
@@ -348,8 +368,11 @@ extension ClaudeChatView {
         // Send is disabled while an upload is in flight; the tray keeps the failed pills,
         // everything ready rides this send.
         let readyAttachments = trayItems.compactMap { item -> AgentAttachment? in
-            if case .done(let attachment) = item.phase { return .uploadedFile(attachment) }
-            return nil
+            switch item.phase {
+            case .done(let attachment): return .uploadedFile(attachment)
+            case .attached(let attachment): return attachment
+            case .pending, .uploading, .failed: return nil
+            }
         }
         guard !text.isEmpty || !readyAttachments.isEmpty else { return }
         guard !hasUploadingAttachment else { return }

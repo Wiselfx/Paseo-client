@@ -54,6 +54,8 @@ public final class HostSession {
     public let projectSetupProbe: ProjectSetupProbe
     /// Recent provider sessions and importing one into a Paseo agent (M11).
     public let importSession: ImportSessionStore
+    /// Forge issue/PR search for the composer's attach picker (M12).
+    public let forgeSearch: ForgeSearchStore
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
@@ -89,6 +91,7 @@ public final class HostSession {
         self.fileUploader = ConversationUpload(client: client)
         self.projectSetupProbe = ProjectSetupProbe(client: client)
         self.importSession = ImportSessionStore(client: client)
+        self.forgeSearch = ForgeSearchStore(client: client)
         self.labels.workspaceDirectory = self.workspaceDirectory
     }
 
@@ -202,6 +205,7 @@ public final class HostSession {
             schedules.serverInfoChanged(info)
             hostSettings.serverInfoChanged(info)
             importSession.serverInfoChanged(info)
+            forgeSearch.serverInfoChanged(info)
             hostUsage.update(serverInfo: info)
             workspaceDirectory.update(serverInfo: info)
             setupObservation.update(serverInfo: info)

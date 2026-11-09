@@ -22,6 +22,8 @@ enum ComposerAttachmentPhase: Equatable {
     case uploading
     /// Uploaded; the daemon-side reference.
     case done(AgentAttachment.UploadedFileAttachment)
+    /// A structured attachment (forge issue/change request) that needs no upload: ready now.
+    case attached(AgentAttachment)
     /// The upload failed; retry sets it back to `.pending`.
     case failed(String)
 }
@@ -62,6 +64,27 @@ final class ComposerAttachmentStore {
         pump(id, store: store)
     }
 
+    /// Adds a forge issue/change request pick from the search sheet. No bytes, no upload:
+    /// the phases ride straight to `sendWithAttachments` as structured attachments.
+    func addForge(_ attachment: AgentAttachment, to id: String, store: ConversationStore) {
+        let (fileName, mimeType): (String, String)
+        switch attachment {
+        case .forgeChangeRequest(let forge):
+            fileName = "#\(forge.number)"
+            mimeType = forge.mimeType
+        case .forgeIssue(let forge):
+            fileName = "#\(forge.number)"
+            mimeType = forge.mimeType
+        default:
+            fileName = "Attachment"
+            mimeType = "application/octet-stream"
+        }
+        let item = ComposerAttachmentItem(
+            fileName: fileName, mimeType: mimeType, byteCount: 0, data: Data(), thumbnail: nil,
+            phase: .attached(attachment))
+        add(item, to: id, store: store)
+    }
+
     /// Retry for a failed item.
     func retry(_ itemId: UUID, in id: String, store: ConversationStore) {
         setPhase(.pending, for: itemId, in: id)
@@ -83,8 +106,10 @@ final class ComposerAttachmentStore {
     /// Drops the successful attachments (the ones that rode this send). Failed ones stay.
     func consumeDoneAttachments(for id: String) {
         items[id]?.removeAll { item in
-            if case .done = item.phase { return true }
-            return false
+            switch item.phase {
+            case .done, .attached: return true
+            case .pending, .uploading, .failed: return false
+            }
         }
     }
 
@@ -174,7 +199,9 @@ struct ComposerAttachmentPill: View {
     }
 
     @ViewBuilder private var pill: some View {
-        if item.isImage, let thumbnail = item.thumbnail {
+        if case .attached(let attachment) = item.phase {
+            forgePill(attachment)
+        } else if item.isImage, let thumbnail = item.thumbnail {
             Button {
                 if case .failed = item.phase {
                     onRetry()
@@ -275,7 +302,64 @@ struct ComposerAttachmentPill: View {
         case .pending: "\(item.fileName), waiting to upload"
         case .uploading: "\(item.fileName), uploading"
         case .done: "\(item.fileName), uploaded"
+        case .attached(let attachment): forgeRemoveLabel(attachment)
         case .failed(let message): "\(item.fileName), failed: \(message)"
+        }
+    }
+
+    /// Upstream's pill remove label: "Remove {{kind}} {{number}}".
+    private func forgeRemoveLabel(_ attachment: AgentAttachment) -> String {
+        switch attachment {
+        case .forgeChangeRequest(let forge):
+            "Remove \(forge.forge?.lowercased() == "gitlab" ? "MR" : "PR") \(forge.number)"
+        case .forgeIssue(let forge): "Remove issue \(forge.number)"
+        default: "Remove attachment"
+        }
+    }
+
+    /// A forge issue/change-request pill: kind icon, "#42" and the kind word.
+    private func forgePill(_ attachment: AgentAttachment) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: forgeSymbol(attachment))
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.fileName)
+                    .font(typography.sans(12, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .lineLimit(1)
+                    .frame(maxWidth: 110, alignment: .leading)
+                Text(forgeKindWord(attachment))
+                    .font(typography.sans(10))
+                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .lineLimit(1)
+                    .frame(maxWidth: 110, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(height: 56)
+        .background(ClaudePalette.panel, in: .rect(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+        }
+    }
+
+    private func forgeSymbol(_ attachment: AgentAttachment) -> String {
+        switch attachment {
+        case .forgeChangeRequest: "arrow.triangle.branch"
+        case .forgeIssue: "exclamationmark.circle"
+        default: "doc"
+        }
+    }
+
+    private func forgeKindWord(_ attachment: AgentAttachment) -> String {
+        switch attachment {
+        case .forgeChangeRequest(let forge):
+            forge.forge?.lowercased() == "gitlab" ? "Merge request" : "Pull request"
+        case .forgeIssue: "Issue"
+        default: "Attachment"
         }
     }
 

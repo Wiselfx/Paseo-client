@@ -104,6 +104,7 @@ public struct ClaudeChatView: View {
     @State var photoSelection: [PhotosPickerItem] = []
     @State var showCameraPicker = false
     @State var showFileImporter = false
+    @State var showForgePicker = false
     @State var attachmentViewerImage: UIImage?
     /// M8d: @-mentions of workspace files.
     @State var mentionIndex = MentionIndex()
