@@ -52,10 +52,11 @@ public struct ClaudeChatView: View {
     @State var historyLoadInFlight = false
     /// The transcript's viewport height, for the outline rail's slot math.
     @State var transcriptHeight: CGFloat = 0
-    /// Turns the lazy stack has mounted, for the outline's reading position.
-    @State var visibleTurnIds: Set<String> = []
-    /// The last turn row that appeared; the find restore anchors to it.
-    @State var lastTrackedTurn: String?
+    /// Turns the lazy stack has mounted (for the outline's reading position) and the last one
+    /// that appeared (the find restore anchors to it). Both change whenever a turn crosses the
+    /// viewport edge, i.e. constantly while scrolling a long chat, and neither is displayed: they
+    /// live in a plain box so a scroll does not invalidate this view (P3).
+    @State var scrollTrack = TranscriptScrollTrack()
     @FocusState var findFocused: Bool
     // Chat-follow (M7b §1).
     @State var isFollowing = true

@@ -25,7 +25,7 @@ extension ClaudeChatView {
     func openFind() {
         Haptics.selection()
         guard !findOpen else { return }
-        findAnchor = lastTrackedTurn // restore at turn granularity; bottom stays bottom
+        findAnchor = scrollTrack.lastTrackedTurn // restore at turn granularity; bottom stays bottom
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { findOpen = true }
         findFocused = true
     }
