@@ -313,14 +313,11 @@ struct ClaudeUsageReportsSheet: View {
 
     static func percent(_ value: Double?) -> String {
         guard let value else { return "—" }
-        return "\(Int(value.rounded()))% used"
+        return "\(PaseoFormat.percent(value)) used"
     }
 
     static func compact(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = value >= 100 ? 0 : 2
-        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+        PaseoFormat.compact(value)
     }
 }
 #endif

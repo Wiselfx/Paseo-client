@@ -28,17 +28,10 @@ enum WorkspaceFileFormat {
         return parts.dropLast().joined(separator: "/")
     }
 
-    /// 842 B, 3.2 KB, 1.4 MB, 2.1 GB.
+    /// 842 B, 1.4 MB, 2.1 GB. The daemon sends bytes (FileExplorerEntrySchema
+    /// `size`, messages.ts:2937-2943); formatting is PaseoFormat's (UX-SPEC §0.2).
     static func bytes(_ size: Int) -> String {
-        let units = ["B", "KB", "MB", "GB", "TB"]
-        var value = Double(max(0, size))
-        var unit = 0
-        while value >= 1024, unit < units.count - 1 {
-            value /= 1024
-            unit += 1
-        }
-        if unit == 0 { return "\(Int(value)) B" }
-        return String(format: value >= 100 ? "%.0f %@" : "%.1f %@", value, units[unit])
+        PaseoFormat.bytes(size)
     }
 
     /// `2026-11-08T20:56:19Z` → `3m`, `2h`, `5d`, `Nov 3`. Unknown input is shown trimmed.

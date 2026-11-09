@@ -62,7 +62,7 @@ struct WorkspaceTerminalFileSheet: View {
                     ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                         let number = index + 1
                         HStack(spacing: 10) {
-                            Text("\(number)")
+                            Text("\(PaseoFormat.integer(number))")
                                 .font(typography.mono(11))
                                 .foregroundStyle(ClaudePalette.captionInk)
                                 .frame(width: 34, alignment: .trailing)

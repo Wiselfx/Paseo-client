@@ -121,10 +121,16 @@ struct ScheduleDetailPage: View {
                 .foregroundStyle(ClaudePalette.ink)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-            Text(summary.cadence.words)
+            Text(summary.cadence.detailWords)
                 .font(typography.sans(14))
                 .foregroundStyle(ClaudePalette.secondaryInk)
                 .multilineTextAlignment(.center)
+            if let rawExpression = summary.cadence.detailRawExpression {
+                Text(rawExpression)
+                    .font(typography.mono(12))
+                    .foregroundStyle(ClaudePalette.captionInk)
+                    .multilineTextAlignment(.center)
+            }
             if let state, state != .active {
                 ScheduleStatePill(state: state)
             } else {

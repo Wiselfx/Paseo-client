@@ -463,19 +463,19 @@ private struct QuestionSection: View {
                 ZStack {
                     if segments {
                         RoundedRectangle(cornerRadius: 4)
-                            .stroke(selected ? ClaudePalette.orange : ClaudePalette.tertiaryInk, lineWidth: 1.5)
+                            .stroke(selected ? ClaudePalette.ink : ClaudePalette.tertiaryInk, lineWidth: 1.5)
                             .frame(width: 16, height: 16)
                         if selected {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(ClaudePalette.orange)
+                                .foregroundStyle(ClaudePalette.ink)
                         }
                     } else {
                         Circle()
-                            .stroke(selected ? ClaudePalette.orange : ClaudePalette.tertiaryInk, lineWidth: 1.5)
+                            .stroke(selected ? ClaudePalette.ink : ClaudePalette.tertiaryInk, lineWidth: 1.5)
                             .frame(width: 16, height: 16)
                         if selected {
-                            Circle().fill(ClaudePalette.orange).frame(width: 8, height: 8)
+                            Circle().fill(ClaudePalette.ink).frame(width: 8, height: 8)
                         }
                     }
                 }

@@ -146,7 +146,7 @@ extension PaseoSidebar {
                     .foregroundStyle(ClaudePalette.secondaryInk)
                     .frame(width: 24, height: 24)
                     .background(ClaudePalette.chip, in: .circle)
-                Text("Hidden workspaces (\(hiddenWorkspacesSet.count))")
+                Text("Hidden workspaces (\(PaseoFormat.integer(hiddenWorkspacesSet.count)))")
                     .font(typography.sans(15))
                     .foregroundStyle(ClaudePalette.secondaryInk)
                 Spacer(minLength: 0)

@@ -71,13 +71,38 @@ func scheduleDuration(_ start: String, _ end: String?) -> String {
 }
 
 extension ScheduleCadence {
-    /// The cadence line for display: "Every day at 9:00 · Europe/Sofia".
+    /// The cadence line for the list: human words in the device time zone, never the raw expression.
     var words: String {
         switch self {
         case .every(let everyMs): ScheduleWords.cadence(everyMs: everyMs)
-        case .cron(let expression, let timezone): ScheduleWords.cadence(expression: expression, timezone: timezone)
-        case .unknown(let raw): "Cron: \(raw)"
+        case .cron(let expression, let timezone):
+            CronDescription.describe(expression: expression, scheduleTimeZone: timezone, now: Date(), deviceTimeZone: .current)
+        case .unknown: CronDescription.custom
         }
+    }
+
+    /// The raw expression for the detail page only, when the cadence has no human words.
+    var detailRawExpression: String? {
+        switch self {
+        case .every: nil
+        case .cron(let expression, let timezone):
+            CronDescription.isCustom(expression: expression, scheduleTimeZone: timezone, now: Date(), deviceTimeZone: .current) ? expression : nil
+        case .unknown(let raw): raw
+        }
+    }
+
+    /// The schedule's own time zone, shown in the detail page only.
+    var scheduleTimeZone: String? {
+        switch self {
+        case .cron(_, let timezone): timezone?.isEmpty == false ? timezone : nil
+        case .every, .unknown: nil
+        }
+    }
+
+    /// The detail-page cadence line: the list words plus the schedule time zone, when present.
+    var detailWords: String {
+        guard let scheduleTimeZone else { return words }
+        return "\(words) · \(scheduleTimeZone)"
     }
 }
 

@@ -248,7 +248,7 @@ struct ClaudeMergedFileRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if call.count > 1 {
-                    Text("×\(call.count)")
+                    Text("×\(PaseoFormat.integer(call.count))")
                         .font(typography.mono(11))
                         .foregroundStyle(ClaudePalette.captionInk)
                 }
@@ -263,11 +263,11 @@ struct ClaudeMergedFileRow: View {
     private func statBadge(_ stat: (added: Int, removed: Int)) -> some View {
         HStack(spacing: 6) {
             if stat.added > 0 {
-                Text("+\(stat.added)")
+                Text("+\(PaseoFormat.integer(stat.added))")
                     .foregroundStyle(ClaudePalette.successInk.opacity(0.8))
             }
             if stat.removed > 0 {
-                Text("−\(stat.removed)")
+                Text("−\(PaseoFormat.integer(stat.removed))")
                     .foregroundStyle(ClaudePalette.failureInk.opacity(0.8))
             }
         }

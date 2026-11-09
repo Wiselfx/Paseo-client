@@ -2,8 +2,8 @@
 import PaseoStore
 import SwiftUI
 
-/// The quiet context ring: a thin arc, track in `chip`, ramped colour by percent
-/// (green → amber → red). No numbers in the ring itself; the reading lives beside it.
+/// The quiet context ring: a thin monochrome arc, ink on a `tertiaryInk` track.
+/// No numbers in the ring itself; the reading lives beside it.
 /// Reduce Motion renders the final arc without interpolating.
 struct ClaudeMeterRing: View {
     /// 0…100, already clamped by the caller.
@@ -15,15 +15,18 @@ struct ClaudeMeterRing: View {
 
     private var clamped: Double { min(max(percent, 0), 100) }
 
+    /// At ≥ 90% the arc gets thicker; no colour change (UX-SPEC §4.1b).
+    private var effectiveLineWidth: CGFloat { clamped >= 90 ? lineWidth + 1 : lineWidth }
+
     var body: some View {
         ZStack {
             Circle()
-                .stroke(ClaudePalette.chip, lineWidth: lineWidth)
+                .stroke(ClaudePalette.tertiaryInk, lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: CGFloat(clamped / 100))
                 .stroke(
-                    Self.rampColor(clamped),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    Self.meterColor,
+                    style: StrokeStyle(lineWidth: effectiveLineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: size, height: size)
@@ -31,15 +34,12 @@ struct ClaudeMeterRing: View {
         .accessibilityHidden(true)
     }
 
-    /// green → amber → red, green below ~40 %, red from ~80 % on, continuous between.
-    static func rampColor(_ percent: Double) -> Color {
-        let fraction = min(max(percent, 0), 100) / 100
-        return Color(hue: 0.333 * (1 - fraction), saturation: 0.72, brightness: 0.82)
-    }
+    /// Monochrome by percent (UX-SPEC §0.1): ink at every level.
+    static var meterColor: Color { ClaudePalette.ink }
 }
 
 /// A thin progress bar for the sidebar's usage lines and the reports sheet's window rows:
-/// track in `chip`, fill ramped by percent, rounded ends.
+/// track in `tertiaryInk`, fill in ink, rounded ends.
 struct ClaudeUsageBar: View {
     let percent: Double
     var width: CGFloat = 56
@@ -48,11 +48,11 @@ struct ClaudeUsageBar: View {
 
     var body: some View {
         Capsule()
-            .fill(ClaudePalette.chip)
+            .fill(ClaudePalette.tertiaryInk)
             .frame(width: width, height: 3)
             .overlay(alignment: .leading) {
                 Capsule()
-                    .fill(ClaudeMeterRing.rampColor(clamped))
+                    .fill(ClaudeMeterRing.meterColor)
                     .frame(width: width * CGFloat(clamped / 100), height: 3)
             }
             .accessibilityHidden(true)

@@ -45,9 +45,9 @@
                             Text(title).font(.system(size: 17))
                             if let badge {
                                 Text(badge).font(.system(size: 11, weight: .semibold)).foregroundStyle(
-                                    badge.contains("usage") ? ClaudePalette.orange : ClaudePalette.ink
+                                    ClaudePalette.ink
                                 ).padding(.horizontal, 8).padding(.vertical, 5).background(
-                                    badge.contains("usage") ? ClaudePalette.orange.opacity(0.20) : ClaudePalette.chip,
+                                    ClaudePalette.chip,
                                     in: .capsule)
                             }
                         }

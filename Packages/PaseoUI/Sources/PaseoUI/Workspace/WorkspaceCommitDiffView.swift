@@ -102,10 +102,10 @@ struct WorkspaceCommitDiffView: View {
                         .truncationMode(.middle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text("+\(file.additions)")
+                Text("+\(PaseoFormat.integer(file.additions))")
                     .font(typography.mono(12))
                     .foregroundStyle(ClaudePalette.successInk)
-                Text("−\(file.deletions)")
+                Text("−\(PaseoFormat.integer(file.deletions))")
                     .font(typography.mono(12))
                     .foregroundStyle(ClaudePalette.failureInk)
                 if loadingPath == file.path {

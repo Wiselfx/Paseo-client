@@ -327,7 +327,7 @@ struct ClaudeAgentControlsSheet: View {
                     })
             )
             .labelsHidden()
-            .tint(ClaudePalette.orange)
+            .tint(.blue)
             .accessibilityLabel(toggle.label)
         }
         .padding(.horizontal, 16)

@@ -205,7 +205,7 @@ struct ClaudeTodoCard: View {
                 HStack(spacing: 8) {
                     Text("Tasks").font(typography.sans(14, weight: .medium)).foregroundStyle(ClaudePalette.primaryInk)
                     Spacer(minLength: 8)
-                    Text("\(completed)/\(list.items.count) tasks")
+                    Text("\(PaseoFormat.integer(completed))/\(PaseoFormat.integer(list.items.count)) tasks")
                         .font(typography.sans(13))
                         .foregroundStyle(ClaudePalette.secondaryInk)
                 }
