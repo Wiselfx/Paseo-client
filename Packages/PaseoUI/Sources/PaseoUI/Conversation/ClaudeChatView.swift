@@ -26,6 +26,8 @@ public struct ClaudeChatView: View {
     /// M7h fork: called with the new agent's id after "Fork from here" creates it; the shell
     /// navigates to it. Nil hides the fork affordance.
     var onForkAgent: ((String) -> Void)?
+    /// M7i hero seats: open a freshly created agent (workspace chip). Nil disables the seat.
+    var onOpenAgent: ((String) -> Void)?
 
     let typography = ClaudeTypography()
 
@@ -64,6 +66,9 @@ public struct ClaudeChatView: View {
     @State var rewindInFlight = false
     /// M7h message actions: the one awaiting confirmation (Edit/Rerun rewind on confirm).
     @State var pendingMessageAction: PendingMessageAction?
+    /// M7i turn rail: shown while scrolling (and hides shortly after), never always-on.
+    @State var turnNavVisible = false
+    @State var turnNavIdleTask: Task<Void, Never>?
     // Header title menu (M7 §1).
     @State var renamingAgent = false
     @State var renameText = ""
@@ -116,7 +121,8 @@ public struct ClaudeChatView: View {
     public init(
         session: HostSession, store: ConversationStore, onOpenSidebar: (() -> Void)? = nil,
         onOpenPanel: (() -> Void)? = nil, onBack: (() -> Void)? = nil,
-        onNewAgent: ((String) -> Void)? = nil, onForkAgent: ((String) -> Void)? = nil
+        onNewAgent: ((String) -> Void)? = nil, onForkAgent: ((String) -> Void)? = nil,
+        onOpenAgent: ((String) -> Void)? = nil
     ) {
         self.session = session
         self.store = store
@@ -125,6 +131,7 @@ public struct ClaudeChatView: View {
         self.onBack = onBack
         self.onNewAgent = onNewAgent
         self.onForkAgent = onForkAgent
+        self.onOpenAgent = onOpenAgent
         ClaudeFontResources.register()
     }
 
@@ -163,6 +170,11 @@ public struct ClaudeChatView: View {
                     hiddenIds: $hiddenSubagentIds)
             case .backgroundWork:
                 ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork, typography: typography)
+            case .turnNav:
+                ChatTurnNavSheet(turns: store.turns, currentTurnId: lastTrackedTurn) { id in
+                    sheet = nil
+                    jumpToTurn(id)
+                }
             }
         }
         .sheet(isPresented: $showContextSheet) {

@@ -107,14 +107,18 @@ extension ClaudeChatView {
                     HStack(spacing: 3) {
                         Text(modelChipTitle)
                         if let thinkingLabel {
-                            Text(thinkingLabel).foregroundStyle(ClaudePalette.secondaryInk)
+                            Text(thinkingLabel).foregroundStyle(
+                                hasCustomThinking ? ClaudePalette.orange.opacity(0.9) : ClaudePalette.secondaryInk)
                         }
                     }
                     .font(typography.sans(14))
+                    .foregroundStyle(hasCustomThinking ? ClaudePalette.orange : ClaudePalette.ink)
                     .lineLimit(1)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
-                    .background(ClaudePalette.chip, in: .capsule)
+                    .background(
+                        hasCustomThinking ? ClaudePalette.orange.opacity(0.15) : ClaudePalette.chip,
+                        in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Model, thinking and mode")
@@ -298,6 +302,12 @@ extension ClaudeChatView {
             .accessibilityLabel("Context window, \(Int(percent.rounded())) percent used")
             .accessibilityIdentifier("composer.contextMeter")
         }
+    }
+
+    /// True when the agent runs an explicitly picked thinking level (not the provider default) —
+    /// the chip tints accent in that case (DSH effort tint).
+    var hasCustomThinking: Bool {
+        store.agent?.thinkingOptionId != nil
     }
 
     var thinkingLabel: String? {

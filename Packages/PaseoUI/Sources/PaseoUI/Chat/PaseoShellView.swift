@@ -174,7 +174,8 @@ public struct PaseoShellView: View {
                 onOpenSidebar: { settleDrawer(open: true) },
                 onOpenPanel: { settlePanel(open: true) },
                 onNewAgent: { prompt in openNewAgent(prompt: prompt) },
-                onForkAgent: { agentId in select(agentId) }
+                onForkAgent: { agentId in select(agentId) },
+                onOpenAgent: { agentId in select(agentId) }
             )
             .id(conversation.agentId)
         } else {
