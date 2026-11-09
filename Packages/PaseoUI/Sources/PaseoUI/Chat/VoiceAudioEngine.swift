@@ -61,26 +61,24 @@ final class VoiceAudioEngine {
 
     /// Throws unless mic recording was granted (asks first, like dictation).
     func requestMicPermission() async throws {
-        let session = AVAudioSession.sharedInstance()
-        switch session.recordPermission {
+        // AVAudioApplication (iOS 17+) replaces the deprecated AVAudioSession permission API.
+        switch AVAudioApplication.shared.recordPermission {
         case .granted:
             return
         case .undetermined:
-            let granted = await withCheckedContinuation { cont in
-                session.requestRecordPermission { cont.resume(returning: $0) }
-            }
-            if !granted {
-                throw NSError(
-                    domain: "paseo.voice", code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Microphone permission is required to capture audio. Please enable microphone access in system settings."])
-            }
+            if await AVAudioApplication.requestRecordPermission() { return }
+            throw Self.micDenied
         case .denied:
-            throw NSError(
-                domain: "paseo.voice", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Microphone permission is required to capture audio. Please enable microphone access in system settings."])
+            throw Self.micDenied
         @unknown default:
             return
         }
+    }
+
+    private static var micDenied: NSError {
+        NSError(
+            domain: "paseo.voice", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Microphone permission is required to capture audio. Please enable microphone access in system settings."])
     }
 
     private func activateSession() throws {
@@ -165,7 +163,9 @@ final class VoiceAudioEngine {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         let pipeline = capturePipeline
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+        // Explicitly @Sendable: a closure formed in this @MainActor class would otherwise be
+        // main-actor isolated, and Swift 6's runtime check traps when the audio thread calls it.
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { @Sendable buffer, _ in
             pipeline.capture(buffer)
         }
     }
@@ -284,7 +284,7 @@ final class VoiceAudioEngine {
         inFlight = (nodeID, next.completion)
         player.scheduleBuffer(
             buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack
-        ) { [weak self] _ in
+        ) { @Sendable [weak self] _ in
             Task { @MainActor in
                 guard let self, nodeID == self.nextNodeID,
                     let finished = self.inFlight, finished.nodeID == nodeID
@@ -311,7 +311,7 @@ final class VoiceAudioEngine {
             Task { try? await Task.sleep(for: .seconds(3)); tone.finish() }
             player.scheduleBuffer(
                 buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack
-            ) { _ in
+            ) { @Sendable _ in
                 tone.finish()
             }
             player.play()
