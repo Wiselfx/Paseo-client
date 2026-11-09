@@ -227,7 +227,8 @@ struct ClaudeSweepText: View {
         if reduceMotion {
             base
         } else {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            // Display rate, not a 30 Hz cap: the band must not step at 120 Hz (P3).
+            TimelineView(.animation) { context in
                 base.overlay(alignment: .leading) {
                     if let phase = ClaudeSweep.phase(startedAt: start, at: context.date) {
                         Text(text)

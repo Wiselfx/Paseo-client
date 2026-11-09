@@ -135,7 +135,8 @@ struct ClaudeWorkGroupCell: View {
     var summary: some View {
         Group {
             if turnIsRunning && group.isActive && !reduceMotion {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                // Display rate, not a 30 Hz cap: the band must not step at 120 Hz (P3).
+                TimelineView(.animation) { context in
                     summaryRuns(ClaudePalette.tertiaryInk).overlay(alignment: .leading) {
                         if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: context.date) {
                             summaryRuns(ClaudePalette.shimmerInk)
