@@ -11,15 +11,10 @@ struct TerminalLinkedFile: Identifiable {
 
     var id: String { "\(path):\(line ?? 0):\(col ?? 0)" }
 
-    /// Resolves `~/` against the home directory; the daemon resolves the rest against the
-    /// workspace cwd for relative paths.
-    var resolvedPath: String {
-        if path.hasPrefix("~/") {
-            let home = FileManager.default.homeDirectoryForCurrentUser.path
-            return home + path.dropFirst()
-        }
-        return path
-    }
+    /// Sent as-is: the daemon expands `~/` against the host's home and resolves relative paths
+    /// against the workspace cwd (upstream `file-explorer/service.ts` → `resolvePathFromBase`).
+    /// This device's home directory means nothing on the host.
+    var resolvedPath: String { path }
 }
 
 /// A read-only file view opened from a terminal local link: mono text, line numbers, the
