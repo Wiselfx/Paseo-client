@@ -91,7 +91,7 @@ extension PaseoSidebar {
     /// The group's workspaces are already ordered by activity, so the head is the most recent one.
     func newAgent(in group: WorkspaceGroup) {
         guard let workspace = group.workspaces.first else {
-            showToast("No workspace in this project yet — create one first.")
+            showToast("No workspaces in this project yet. Create one first.")
             return
         }
         Haptics.selection()

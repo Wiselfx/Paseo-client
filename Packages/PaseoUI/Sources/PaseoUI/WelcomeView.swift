@@ -38,7 +38,7 @@ struct WelcomeView<DirectForm: View>: View {
                                 Text("Welcome")
                             }
                             .font(typography.sans(16, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .foregroundStyle(ClaudePalette.secondaryInk)
                             .frame(height: 44)
                             .contentShape(.rect)
                         }
@@ -94,9 +94,9 @@ struct WelcomeView<DirectForm: View>: View {
                     Haptics.selection()
                     showAppearance = true
                 } label: {
-                    Label("Settings", systemImage: "gearshape")
+                    Label("Appearance", systemImage: "circle.lefthalf.filled")
                         .font(typography.sans(15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                         .frame(height: 40)
                 }
                 .buttonStyle(.plain)
@@ -129,12 +129,12 @@ struct WelcomeView<DirectForm: View>: View {
                         .foregroundStyle(ClaudePalette.ink)
                     Text("Local network or VPN.")
                         .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .foregroundStyle(ClaudePalette.secondaryInk)
             }
             .padding(.horizontal, 18)
             .frame(height: 68)
@@ -182,14 +182,14 @@ private struct WelcomeAppearanceSheet: View {
                                         .frame(height: 64)
                                         .overlay {
                                             RoundedRectangle(cornerRadius: 14).stroke(
-                                                appearance == choice.rawValue ? Color.blue : .clear,
+                                                appearance == choice.rawValue ? ClaudePalette.orange : .clear,
                                                 lineWidth: 2)
                                         }
                                     Text(choice.rawValue)
-                                        .font(.system(size: 12))
+                                        .font(typography.sans(12))
                                         .foregroundStyle(
                                             appearance == choice.rawValue
-                                                ? .blue : ClaudePalette.secondary)
+                                                ? ClaudePalette.orange : ClaudePalette.secondaryInk)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -251,7 +251,7 @@ private struct WelcomeAppearanceSheet: View {
     ) -> some View where Option.RawValue == String {
         HStack {
             Text(title)
-                .font(.system(size: 17))
+                .font(typography.sans(17))
             Spacer(minLength: 8)
             Menu {
                 ForEach(Array(options), id: \.rawValue) { option in
@@ -267,11 +267,11 @@ private struct WelcomeAppearanceSheet: View {
             } label: {
                 HStack(spacing: 5) {
                     Text(current)
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(typography.sans(15))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(ClaudePalette.secondaryInk)
                 }
             }
         }

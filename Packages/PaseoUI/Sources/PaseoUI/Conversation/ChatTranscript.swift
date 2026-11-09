@@ -408,9 +408,11 @@ extension ClaudeChatView {
                         Circle().strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
                     }
                     .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .padding(.bottom, composerHeight + 12)
+            .padding(.bottom, composerHeight + 7)
             .transition(.opacity)
             .accessibilityIdentifier("transcript.backToEnd")
             .accessibilityLabel("Back to the end")

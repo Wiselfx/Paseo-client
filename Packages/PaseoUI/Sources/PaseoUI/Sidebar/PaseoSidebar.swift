@@ -339,7 +339,7 @@ struct PaseoSidebar: View {
     private var navigation: some View {
         VStack(spacing: 0) {
             if showSchedules {
-                navigationRow("Scheduled", symbol: "clock") { sheet = .schedules }
+                navigationRow("Schedules", symbol: "clock") { sheet = .schedules }
             }
             if showHistory {
                 navigationRow("History", symbol: "clock.arrow.2.circlepath") { sheet = .history }

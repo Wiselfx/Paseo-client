@@ -277,9 +277,6 @@ private struct WorkspaceFilesDirectoryList: View {
             .accessibilityLabel("New file or folder")
             Menu {
                 Toggle("Show hidden files", isOn: $showHidden)
-                Button("Refresh", systemImage: "arrow.clockwise") {
-                    Task { await refresh() }
-                }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 15, weight: .medium))
@@ -376,7 +373,11 @@ private struct WorkspaceFilesDirectoryList: View {
             .refreshable { await refresh() }
             .onChange(of: revealedRow) { _, target in
                 guard let target else { return }
-                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .center) }
+                if reduceMotion {
+                    proxy.scrollTo(target, anchor: .center)
+                } else {
+                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .center) }
+                }
             }
         }
     }
@@ -461,7 +462,13 @@ private struct WorkspaceFilesDirectoryList: View {
                 showToast("Relative path copied")
             }
         }
-        .accessibilityLabel(entry.isDirectory ? "Folder \(entry.name)" : "File \(entry.name)")
+        .accessibilityLabel(rowAccessibilityLabel(entry))
+    }
+
+    private func rowAccessibilityLabel(_ entry: FileExplorerEntry) -> String {
+        let kind = entry.isDirectory ? "Folder" : "File"
+        guard let meta = meta(entry) else { return "\(kind) \(entry.name)" }
+        return "\(kind) \(entry.name), \(meta)"
     }
 
     private var emptyView: some View {

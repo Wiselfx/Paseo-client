@@ -149,7 +149,7 @@ struct ClaudeTurnView: View {
                 }
             } else {
                 // A turn with no answer section (all work / no prose): keep it honest.
-                Text("Turn complete.")
+                Text("This turn ended without a reply.")
                     .font(typography.sans(13))
                     .foregroundStyle(ClaudePalette.tertiaryInk)
             }

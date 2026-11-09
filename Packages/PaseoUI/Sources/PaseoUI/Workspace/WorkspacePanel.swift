@@ -320,7 +320,7 @@ struct WorkspacePanel: View {
                             page == currentPage ? ClaudePalette.ink : Color.clear, in: .capsule)
                 }
                 .buttonStyle(.plain)
-                .accessibilityValue(page == currentPage ? "Selected" : "")
+                .accessibilityAddTraits(page == currentPage ? .isSelected : [])
             }
         }
         .padding(3)
@@ -378,6 +378,7 @@ struct WorkspacePanel: View {
     private var loadingPage: some View {
         ProgressView()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityLabel("Loading \(currentPage.title.lowercased())")
     }
 
     private var unavailable: some View {
