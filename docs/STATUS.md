@@ -64,15 +64,16 @@ R9 `docs/PARITY.md` (the roadmap). Last user-built commit: dbad49b (M2.6b + unde
 When the user is back: pull, Reset Package Caches (SwiftTerm is new), build, paste errors.
 
 Also merged since: T14 file upload, M7b chat-follow + permission cards, M8b queue/drafts/full-screen
-composer, T15 git/file ops backend, M6a composer attachments (PaseoCore 323/118/17 = 458 green).
+composer, T15 git/file ops backend, M6a attachments, M7c file-call rows + summaries, M2.8 pin/rename/
+archive undo (confirmation kept when the host lacks archiveUndo), M4c host settings, M3f panel git +
+file ops (PaseoCore 339/126/17 = 482 green; one-off DaemonConnectionTests flake → T16).
 
 Running (inkling workers, reused per area; DeepSeek allowed outside weekday 01–04/06–10 UTC):
-- M2.8 `m28-pin-rename` on worker 79dd09d6: pin, project rename, base branch, archive undo.
-- M7c `m7c-chat-files` on worker 0778f3b0: DSH file-call rows, tool summaries (owns transcript).
-- M4c `m4c-host-settings` on worker 918fee9a: host settings pages.
-- M3f `m3f-panel-git-files` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: panel git toolbar,
-  commits, file context menu, text editing.
-- M8c `m8c-agent-features` on worker 04d2d898: provider features / fast mode, default send.
+- M8c `m8c-agent-features` on worker 04d2d898: provider features / fast mode, default send (composer).
+- M7d `m7d-anchor-reveal` on worker 0778f3b0: chat-anchor, reveal, rewind (transcript).
+- T16 `t16-flake-usage` on worker 918fee9a: connection-test flake, context/usage store.
+- M2.9 `m29-sidebar-rows` on worker 79dd09d6: PR/service badges, display options, hide.
+- M3g `m3g-terminal-extras` on worker ffaacc65-22e1-47fc-90d5-346f88c6076e: key bar, tabs, scripts.
 Known store gaps (from M7/M8a/M2.7): no unarchive-agent RPC (History shows active only);
 commands cache never invalidated; GitHub search has no star count.
 Next candidates: notifications/push research (DeepSeek after 10:00 UTC).
