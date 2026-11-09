@@ -110,16 +110,19 @@ positives). PaseoCore 637 green; PARITY 288 done / 60 missing of 422. M10 local 
 (AttentionCenter + NotificationCoordinator; live socket only, no remote push without a relay/APNs;
 `docs/research/10`), PaseoCore 497/144/17 = 658 green. T18 (Crouton via pi): slash-command cache invalidates like
 upstream (provider snapshot change, reconnect), host diagnostics (Settings → Diagnostics, scrubbed),
-terminal font follows Code size; GitHub search has no stars on the wire (upstream schema). 665 green. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Follow-ups: advertise owned_subscriptions (setup push, maybe others). Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
+terminal font follows Code size; GitHub search has no stars on the wire (upstream schema). 665 green.
+T17 owned subscriptions ON (modern socket: every push family re-acquired, re-subscribed on reconnect;
+kill switch `OwnedSubscriptions.isEnabled`; contract `docs/research/09`; fixed agent attention +
+`notifications: true` so M10 works in modern mode). Setup progress push not seen live yet (no setup
+run in the sandbox). PaseoCore 524/144/20 = 688 green. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
 Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run on DeepSeek
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 - M11 `m11-import-session` on Crouton via pi c2f9fb62-9b12-42c4-a154-bd5a5e62c7a5: Import session, terminal tap → terminal, stale review drafts.
-- T17 `t17-owned-subscriptions` on DeepSeek 8872f024-782e-46a0-b371-3f2f19526184: advertise owned_subscriptions (done; contract `docs/research/09`; now merging foundation + proving attention and every push still arrive on the modern socket before merge).
 Known store gaps: fork can't carry provider feature values.
-Next candidates: advertise `owned_subscriptions` (DeepSeek, off-peak; complex); notifications/push research (DeepSeek after 10:00 UTC).
+
 Roadmap order: see PARITY.md suggested milestones, renumbered below.
 
 UX decisions so far: left drawer = navigation (projects → workspaces), right panel = inside the
