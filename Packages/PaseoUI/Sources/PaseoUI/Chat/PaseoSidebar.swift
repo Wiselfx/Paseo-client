@@ -465,7 +465,7 @@ struct PaseoSidebar: View {
     // MARK: Footer
 
     private var footer: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
             Button {
                 Haptics.selection()
                 sheet = .settings
@@ -478,6 +478,8 @@ struct PaseoSidebar: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
+
+            Spacer(minLength: 0)
 
             Button {
                 Haptics.selection()
@@ -497,8 +499,6 @@ struct PaseoSidebar: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("New workspace")
-
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 6)
