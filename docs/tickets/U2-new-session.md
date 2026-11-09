@@ -21,7 +21,8 @@ U1 runs in parallel and adds `onNewSession(workspaceId: String?)` from the sideb
    - The composer's model chip carries the provider glyph in draft. The controls sheet shows Provider only in draft.
    - The thinking control is the list (U3 deletes the slider; if both land, the list wins).
 3. **First send:** create the agent, show the pending bubble and fade the greeting, then switch to the live conversation without a navigation jump. On failure, restore the text and show the error inline.
-4. **Delete `ClaudeNewAgentSheet.swift`.** Route every "New agent" entry point to the draft: the panel's Agents tab, the composer + menu, the command center, the sidebar, and deep links. Grep for `openNewAgent`, `NewAgentRequest`, `ClaudeNewAgentSheet`, `onNewAgent`.
+4. **Dynamic composer** (UX-SPEC §4.1): a single-line pill at rest, a two-row card when focused or non-empty, in both the draft and live conversations. You own `ChatComposer.swift` this round; U4 only touches the chip color and context-ring color there, so expect tiny conflicts.
+5. **Delete `ClaudeNewAgentSheet.swift`.** Route every "New agent" entry point to the draft: the panel's Agents tab, the composer + menu, the command center, the sidebar, and deep links. Grep for `openNewAgent`, `NewAgentRequest`, `ClaudeNewAgentSheet`, `onNewAgent`.
 
 ## Acceptance
 

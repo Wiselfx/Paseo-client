@@ -170,7 +170,17 @@ Upstream model: a draft tab in the workspace, whose composer creates the agent o
 
 ## 4. Conversation
 
-### 4.1 Composer chips
+### 4.1 Composer: dynamic (Claude iOS reference, screenshots 2026-11-09)
+
+- **At rest** (not focused, empty draft, no attachments): a **single-line pill**. Leading: the `+` circle. Then the placeholder, then the mic and the voice button trailing. No model chip, no context ring and no other chips in this state.
+- **Focused, or with text or attachments:** the pill grows smoothly into a **two-row card**:
+  - row 1: the text field;
+  - row 2: `+`, the model chip ("Model *Thinking*": model in ink, thinking level in `secondaryInk`, grey chip fill), then the remaining chips (fast mode, context ring), with mic and voice/send trailing.
+- **Transition:** one `.smooth(duration: 0.25)` (§0.4) on height and chip opacity; the text field never jumps horizontally.
+- **Collapse:** it returns to the pill on blur, only when the draft and tray are empty.
+- **While a turn runs:** the stop button replaces send, in either state.
+
+### 4.1b Composer chips
 
 - **Model chip:** grey (`chip` fill, `ink` text, `secondaryInk` thinking label). No orange in any state, including "custom thinking".
 - **Context ring:** monochrome per §0.1. The ring fills with ink as context fills. At ≥ 90% the stroke gets thicker; no color change. Its label uses `PaseoFormat.compact`.
