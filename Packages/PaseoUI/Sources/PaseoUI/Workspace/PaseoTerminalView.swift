@@ -44,10 +44,7 @@ struct PaseoTerminalView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> TerminalView {
         ClaudeFontResources.register()
-        let font =
-            UIFont(name: ClaudeTypography.anthropicMono, size: 13)
-            ?? UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        let view = TerminalView(frame: .zero, font: font)
+        let view = TerminalView(frame: .zero, font: PaseoTerminalFont.current())
         view.terminalDelegate = context.coordinator
         let scrollback = PaseoTerminalScrollback.current()
         view.changeScrollback(scrollback)
@@ -75,6 +72,22 @@ struct PaseoTerminalView: UIViewRepresentable {
     }
 }
 
+/// The terminal's mono font. The base is 13 pt, scaled by the Settings → General → Code size
+/// step (`ClaudeTextScale.codeMultiplier()`, the same multiplier `ClaudeTypography.mono`
+/// applies to code text elsewhere), so the terminal follows the user's code-size choice.
+enum PaseoTerminalFont {
+    static let baseSize: CGFloat = 13
+
+    static func size() -> CGFloat {
+        baseSize * ClaudeTextScale.codeMultiplier()
+    }
+
+    static func current() -> UIFont {
+        UIFont(name: ClaudeTypography.anthropicMono, size: size())
+            ?? UIFont.monospacedSystemFont(ofSize: size(), weight: .regular)
+    }
+}
+
 /// The user's scrollback preference (Settings → Terminal): how many lines SwiftTerm keeps.
 /// `UserDefaults` has no typed integer present when never set — `integer(forKey:)` returns 0,
 /// which maps to the 2,000-line default.
@@ -94,6 +107,9 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     weak var view: TerminalView?
     /// The scrollback the view was last configured with — live re-application on change.
     var appliedScrollback = PaseoTerminalScrollback.defaultValue
+    /// The font size the view was last configured with — live re-application on a Code size
+    /// change, without touching the emulator buffer (scrollback survives).
+    var appliedFontSize = PaseoTerminalFont.baseSize
 
     private var terminalId: String?
     private var lastSize: TerminalSize?
@@ -127,6 +143,13 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         if target != appliedScrollback {
             appliedScrollback = target
             view?.changeScrollback(target)
+        }
+        // SwiftTerm's `font` setter re-derives the bold/italic set and relayouts the cells;
+        // the terminal buffer is untouched, so scrollback and live output survive a resize.
+        let fontSize = PaseoTerminalFont.size()
+        if fontSize != appliedFontSize {
+            appliedFontSize = fontSize
+            view?.font = PaseoTerminalFont.current()
         }
         applyToKeyBar()
     }
