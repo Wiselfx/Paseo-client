@@ -146,6 +146,10 @@ the audio engine (one explicit playback format, one-shot converters, capture DSP
 @Sendable audio callbacks + AVAudioApplication permission. R19 Pair devices (QR on a white tile, copy
 localOnly + 2 min expiry, enable relay behind relayConfig). PaseoCore 583/177/128 = 888 green;
 PARITY 319 done / 30 missing. api-audit: `AVAudioConverter.convert` missing-member is a false positive.
+R18 pairing UI (Crouton, two DeepSeek review rounds): Add host → Direct / Scan QR (VisionKit) / Paste link,
+"Connect to this host?" confirmation with upstream fingerprint, password sheet (incl. rotated password on a
+saved relay host), relay passwords in Keychain as `relay.<serverID>`, 1 MiB relay upload chunks.
+PaseoCore 585/177/134 = 896 green; PARITY 324 done / 25 missing. Relay track R15–R19 complete (needs Xcode).
 Xcode: the new package needs File → Packages → Resolve/Reset Package Caches. Gap: host `diagnostics.request` has wire type only (needs a store slot). R12 synced PARITY.md: 242 done / 104 missing / 47 desktop-only / 7 store-only of 420 rows. Unsure-compile hot spots: M3g SwiftTerm APIs (inputAccessoryView key
 bar, linkReporting/requestOpenLink, changeScrollback), M8c nested Features pages in ClaudeAgentControlsSheet.
 
@@ -153,7 +157,9 @@ Running. Inkling hit its free limit (2026-11-09 ~10:00 UTC): all workers now run
 in pi (`pi/opencode-go/deepseek-v4.1-flash`), off-peak only; reuse a worker for the same thread of
 work, start fresh when scope changes or its context drifts (256k context, compactions degrade it).
 Crouton (`pi/opencode-go/crouton-alpha-free`, thinking max) passed its trial (T18, M11): real tickets.
-- R18 `r18-pairing-ui`: re-review says mergeable after S3 (rotated password) + VisionKit delegate signatures; Crouton c2f9fb62 fixing.
+- P2 `p2-compile-sweep` on DeepSeek 85844e34: pre-Xcode compile sweep of PaseoUI/App since dbad49b (doc 13).
+- M15c `m15c-thinking-tone` on DeepSeek 8872f024: voice thinking tone (upstream blob + timing).
+- R17b `r17b-flake` on DeepSeek 6db40c26: deflake handshake-timeout test.
 - Idle: DeepSeek 85844e34 (P1 polish context), DeepSeek 6db40c26 (R17; reviewer for R18).
 Known store gaps: fork can't carry provider feature values.
 
