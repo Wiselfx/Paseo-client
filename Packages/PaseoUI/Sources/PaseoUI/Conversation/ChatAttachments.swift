@@ -169,7 +169,7 @@ extension ClaudeChatView {
     var selectedForgeIds: [String] {
         trayItems.compactMap { item in
             guard case .attached(let attachment) = item.phase else { return nil }
-            switch attachment {
+            return switch attachment {
             case .forgeChangeRequest(let forge): "change_request:\(forge.number)"
             case .forgeIssue(let forge): "issue:\(forge.number)"
             default: nil

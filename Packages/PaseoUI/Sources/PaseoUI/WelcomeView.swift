@@ -282,7 +282,7 @@ private struct WelcomeAppearanceSheet: View {
     }
 
     private func scaleRow<Option: CaseIterable & RawRepresentable & Equatable>(
-        _ title: String, options: Option.AllCases, current: String,
+        _ title: String, options: [Option], current: String,
         onSelect: @escaping (Option) -> Void
     ) -> some View where Option.RawValue == String {
         HStack {

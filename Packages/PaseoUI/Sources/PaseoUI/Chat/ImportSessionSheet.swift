@@ -190,7 +190,7 @@ struct ImportSessionSheet: View {
             .padding(.top, 24)
         } else if providersToFetch.isEmpty, store.phase == .ready {
             quietText("No importable providers are enabled.")
-        } else if store.phase == .failed, store.entries.isEmpty {
+        } else if case .failed = store.phase, store.entries.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text(store.providerErrors.first?.message ?? "Could not load sessions.")
                     .font(typography.sans(13))

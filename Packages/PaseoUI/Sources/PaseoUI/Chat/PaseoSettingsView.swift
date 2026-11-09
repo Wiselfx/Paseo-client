@@ -590,7 +590,7 @@ struct PaseoSettingsView: View {
 
     /// A labeled menu row for an S/M/L/XL ladder (used by both font-size rows).
     @ViewBuilder private func scaleMenuRow<Option: CaseIterable & RawRepresentable & Equatable>(
-        _ title: String, symbol: String, options: Option.AllCases, current: String,
+        _ title: String, symbol: String, options: [Option], current: String,
         identifier: String,
         onSelect: @escaping (Option) -> Void
     ) -> some View where Option.RawValue == String {
@@ -1561,7 +1561,7 @@ struct PaseoSettingsView: View {
         {
             return "\(countLine) · Disabled"
         }
-        switch provider.status {
+        return switch provider.status {
         case .ready: "\(countLine) · Ready"
         case .loading: "\(countLine) · Loading"
         case .error: "\(countLine) · Error"

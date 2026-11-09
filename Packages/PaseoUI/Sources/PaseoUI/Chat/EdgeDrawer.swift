@@ -43,7 +43,7 @@ struct EdgeDrawerDrag: ViewModifier {
         content.simultaneousGesture(gesture)
     }
 
-    private var gesture: DragGesture {
+    private var gesture: some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .global)
             .onChanged { value in
                 if dragOrigin == nil {

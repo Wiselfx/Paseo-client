@@ -182,6 +182,7 @@ public struct PairScanSheet: View {
         }
     }
 
+    @ViewBuilder
     private func concernContent(title: String, body: String?, pasteHint: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
