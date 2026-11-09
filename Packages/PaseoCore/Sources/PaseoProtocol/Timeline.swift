@@ -15,7 +15,9 @@ public enum TimelineItem: Sendable, Hashable, Decodable {
     case todo(TodoList)
     case error(message: String)
     case notification(level: String, message: String)
-    case compaction(status: String)
+    /// `messages.ts:772-776`: `status` is always there; `trigger` (`auto` / `manual`) and the
+    /// context size before compaction arrived later and old daemons send neither.
+    case compaction(status: String, trigger: String? = nil, preTokens: Int? = nil)
     /// `plugin` items and anything newer than this client.
     case unknown(type: String, raw: JSONValue)
 
@@ -90,7 +92,7 @@ public enum TimelineItem: Sendable, Hashable, Decodable {
         }
     }
 
-    private enum K: String, CodingKey { case message, level, status }
+    private enum K: String, CodingKey { case message, level, status, trigger, preTokens }
 
     public init(from decoder: Decoder) throws {
         let type = try decoder.discriminator()
@@ -106,7 +108,12 @@ public enum TimelineItem: Sendable, Hashable, Decodable {
             let c = try decoder.container(keyedBy: K.self)
             self = .notification(level: try c.decode(String.self, forKey: .level), message: try c.decode(String.self, forKey: .message))
         case "compaction":
-            self = .compaction(status: try decoder.container(keyedBy: K.self).decode(String.self, forKey: .status))
+            let c = try decoder.container(keyedBy: K.self)
+            self = .compaction(
+                status: try c.decode(String.self, forKey: .status),
+                trigger: try c.decodeIfPresent(String.self, forKey: .trigger),
+                // Tolerant: a future payload that puts something else here must not break the page.
+                preTokens: (try? c.decodeIfPresent(Int.self, forKey: .preTokens)) ?? nil)
         default:
             self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }

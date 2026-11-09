@@ -232,6 +232,54 @@ struct ClaudeTodoCard: View {
     }
 }
 
+/// A compaction in the timeline: a hairline on each side, a spinner while it runs (a scissors
+/// glyph once it is done), and the label. Upstream `message.tsx:1426-1470`; the words are
+/// `message-compaction-label.ts:10-27` (`en.ts:411-417`).
+struct ClaudeCompactionMarker: View {
+    let status: String
+    /// `auto` / `manual`; absent on old daemons and on the loading row.
+    let trigger: String?
+    let preTokens: Int?
+
+    private let typography = ClaudeTypography()
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ClaudeDivider()
+            HStack(spacing: 8) {
+                if status == "loading" {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "scissors").font(.system(size: 12, weight: .regular))
+                }
+                Text(Self.label(status: status, trigger: trigger, preTokens: preTokens))
+                    .font(typography.sans(13))
+                    .multilineTextAlignment(.center)
+                    .layoutPriority(1)
+            }
+            .foregroundStyle(ClaudePalette.tertiaryInk)
+            ClaudeDivider()
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Upstream's order, exactly: loading wins, then the trigger, then the token count, then the
+    /// bare "completed" line. The count is `Math.round(preTokens / 1000)` followed by "K"
+    /// (`message-compaction-label.ts:21-25`); UX-SPEC §0.2 groups the digits.
+    static func label(status: String, trigger: String?, preTokens: Int?) -> String {
+        if status == "loading" { return "Compacting..." }
+        if trigger == "auto" { return "Context automatically compacted" }
+        if trigger == "manual" { return "Context manually compacted" }
+        if let preTokens, preTokens != 0 {
+            let thousands = Int((Double(preTokens) / 1000).rounded())
+            return "Context compacted (\(PaseoFormat.integer(thousands))K tokens)"
+        }
+        return "Context compacted"
+    }
+}
+
 /// Error, notification, compaction, and the daemon's newer item types, as light chips.
 struct ClaudeNoticeRow: View {
     let item: TimelineItem
@@ -250,11 +298,8 @@ struct ClaudeNoticeRow: View {
                 .font(typography.sans(14))
                 .foregroundStyle(level == "error" ? ClaudePalette.failureInk : ClaudePalette.secondaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        case .compaction(let status):
-            Text(status == "loading" ? "Compacting conversation…" : "Conversation compacted")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
-                .frame(maxWidth: .infinity, alignment: .center)
+        case .compaction(let status, let trigger, let preTokens):
+            ClaudeCompactionMarker(status: status, trigger: trigger, preTokens: preTokens)
         case .unknown(let type, _):
             Text("Unsupported item: \(type)")
                 .font(typography.sans(13))

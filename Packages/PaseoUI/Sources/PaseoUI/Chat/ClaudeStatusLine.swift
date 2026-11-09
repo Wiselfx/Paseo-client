@@ -124,7 +124,7 @@ extension Turn {
         case .todo(let list): list.items.count
         case .error(let message): message.count
         case .notification(_, let message): message.count
-        case .compaction(let status): status.count
+        case .compaction(let status, _, _): status.count
         case .unknown(let type, _): type.count
         case .userMessage(let message): message.text.count
         }

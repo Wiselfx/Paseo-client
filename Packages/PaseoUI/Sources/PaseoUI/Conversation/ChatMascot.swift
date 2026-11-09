@@ -87,7 +87,7 @@ extension ClaudeChatView {
     /// The raw `status` of the newest compaction row (`loading` / `completed` / unknown), or nil.
     var lastCompactionStatus: String? {
         store.timeline.rows.compactMap { row -> String? in
-            if case .compaction(let status) = row.item { return status }
+            if case .compaction(let status, _, _) = row.item { return status }
             return nil
         }.last
     }

@@ -146,6 +146,10 @@ struct ClaudeUserBubble: View {
     var canRewrite: Bool = false
     var onEdit: (() -> Void)? = nil
     var onRerun: (() -> Void)? = nil
+    /// DSH "Retract this message": forks before this message and puts the text back in the new
+    /// session's composer (`message-actions.ts:197-207`). Nil hides the item — no host support, no
+    /// settled turn, or nothing above the message to fork from.
+    var onRetract: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Captured at insertion: true only for a message that was pending when it appeared
@@ -160,7 +164,8 @@ struct ClaudeUserBubble: View {
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
         onRewind: ((RewindScope) -> Void)? = nil, attributed: AttributedString? = nil,
-        canRewrite: Bool = false, onEdit: (() -> Void)? = nil, onRerun: (() -> Void)? = nil
+        canRewrite: Bool = false, onEdit: (() -> Void)? = nil, onRerun: (() -> Void)? = nil,
+        onRetract: (() -> Void)? = nil
     ) {
         self.text = text
         self.isPending = isPending
@@ -170,6 +175,7 @@ struct ClaudeUserBubble: View {
         self.canRewrite = canRewrite
         self.onEdit = onEdit
         self.onRerun = onRerun
+        self.onRetract = onRetract
         self._entered = State(initialValue: !isPending)
     }
 
@@ -233,6 +239,9 @@ struct ClaudeUserBubble: View {
             Divider()
             Button("Edit", systemImage: "pencil") { onEdit() }
             Button("Rerun", systemImage: "arrow.clockwise") { onRerun() }
+        }
+        if let onRetract {
+            Button("Retract this message", systemImage: "arrow.uturn.backward") { onRetract() }
         }
     }
 
