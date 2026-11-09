@@ -152,7 +152,7 @@ extension PaseoSidebar {
                     .font(typography.sans(11, weight: .semibold))
                     .foregroundStyle(pullRequestTint(workspace))
             }
-            if let dots = scriptDots(workspace), !dots.isEmpty {
+            if case let dots = scriptDots(workspace), !dots.isEmpty {
                 HStack(spacing: 3) {
                     ForEach(0..<dots.count, id: \.self) { index in
                         Circle().fill(dots[index]).frame(width: 5, height: 5)
