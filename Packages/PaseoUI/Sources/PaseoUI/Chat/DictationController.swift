@@ -27,6 +27,8 @@ final class DictationController: NSObject {
     private var committed = ""
     private var currentPartial = ""
     private var lastHeard = Date()
+    /// Set once the recognizer returns any text; before that, silence is "not started yet".
+    private var hasHeardSpeech = false
     private var silenceTask: Task<Void, Never>?
 
     /// Toggles listening. `currentDraft` snapshots what was already typed.
@@ -94,6 +96,7 @@ final class DictationController: NSObject {
         self.engine = engine
         self.request = bufferRequest
         lastHeard = Date()
+        hasHeardSpeech = false
 
         recognition = Self.startRecognition(recognizer, request: bufferRequest) {
             [weak self] text, isFinal, failed in
@@ -109,7 +112,9 @@ final class DictationController: NSObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let self else { return }
-                if Date().timeIntervalSince(self.lastHeard) > 2 {
+                // Before any words: wait up to 8 s for the user to start. After: 2.5 s of quiet ends it.
+                let limit: TimeInterval = self.hasHeardSpeech ? 2.5 : 8
+                if Date().timeIntervalSince(self.lastHeard) > limit {
                     self.stop(keepingDraft: true)
                     return
                 }
@@ -153,6 +158,10 @@ final class DictationController: NSObject {
     }
 
     private func handle(text: String, isFinal: Bool) {
+        if !text.isEmpty {
+            hasHeardSpeech = true
+            lastHeard = Date()
+        }
         if isFinal {
             committed += (committed.isEmpty ? "" : " ") + text
             currentPartial = ""
