@@ -29,6 +29,14 @@ public enum ClientCapabilities {
     ]
 }
 
+/// Oldest app version the daemon treats as provider-aware. Before it (see `MIN_VERSION_ALL_PROVIDERS`
+/// in `packages/server/src/server/session.ts`) the daemon hides every provider outside the legacy
+/// `claude`/`codex`/`opencode` set, because those clients validate provider ids against a closed
+/// enum and reject a whole session message that names `pi`, `omp`, etc. This client decodes
+/// provider ids as strings, so it can honestly advertise this floor. Source: `messages.ts`
+/// `WSHelloMessageSchema` and `docs/providers.md`.
+public let paseoProviderAwareAppVersion = "0.1.45"
+
 /// First frame after the socket opens. Not session-wrapped.
 public struct Hello: Encodable, Sendable {
     public var type = "hello"
@@ -48,13 +56,38 @@ public struct Hello: Encodable, Sendable {
 
     public init(clientId: String, appVersion: String?, credential: Credential?, capabilities: [String: Bool] = ClientCapabilities.implemented) {
         self.clientId = clientId
-        self.appVersion = appVersion
+        self.appVersion = Self.wireAppVersion(appVersion)
         self.capabilities = capabilities
         switch credential {
         case .password(let p): auth = Auth(kind: "password", password: p)
         case .localCredential(let t): auth = Auth(kind: "localCredential", token: t)
         case nil: auth = nil
         }
+    }
+
+    /// The daemon's provider list is gated on the app version we advertise (see
+    /// `paseoProviderAwareAppVersion`). The marketing version in the bundle can be lower than that
+    /// gate — an early app build is not an old client — so the hello never claims less than the
+    /// protocol behavior this client actually has. Versions at or above the floor pass through.
+    private static func wireAppVersion(_ appVersion: String?) -> String {
+        guard let appVersion, isAtLeast(appVersion, paseoProviderAwareAppVersion) else {
+            return paseoProviderAwareAppVersion
+        }
+        return appVersion
+    }
+
+    /// Numeric dotted-version comparison, ignoring prerelease suffixes, same rule as the daemon.
+    private static func isAtLeast(_ version: String, _ minimum: String) -> Bool {
+        let base = version.split(separator: "-", maxSplits: 1).first.map(String.init) ?? version
+        let parts = base.split(separator: ".").map { Int($0) ?? 0 }
+        let minimumParts = minimum.split(separator: ".").map { Int($0) ?? 0 }
+        for index in minimumParts.indices {
+            let value = index < parts.count ? parts[index] : 0
+            let required = minimumParts[index]
+            if value > required { return true }
+            if value < required { return false }
+        }
+        return true
     }
 }
 

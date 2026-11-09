@@ -145,10 +145,13 @@ public struct SetAgentModelRequest: PaseoRequest {
 
     public typealias Response = AgentActionResponse
 
-    private enum K: String, CodingKey { case agentId, modelId }
+    private enum K: String, CodingKey { case requestId, agentId, modelId }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: K.self)
+        // A hand-written encoder must carry the correlation id too: without it the daemon rejects
+        // the frame as invalid and never answers, so the caller waits for its timeout.
+        try c.encode(requestId, forKey: .requestId)
         try c.encode(agentId, forKey: .agentId)
         // The schema is `z.string().nullable()`: the key must be present even when clearing.
         if let modelId { try c.encode(modelId, forKey: .modelId) } else { try c.encodeNil(forKey: .modelId) }
@@ -171,10 +174,12 @@ public struct SetAgentThinkingRequest: PaseoRequest {
 
     public typealias Response = AgentActionResponse
 
-    private enum K: String, CodingKey { case agentId, thinkingOptionId }
+    private enum K: String, CodingKey { case requestId, agentId, thinkingOptionId }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: K.self)
+        // See SetAgentModelRequest: a hand-written encoder drops `requestId` unless it encodes it.
+        try c.encode(requestId, forKey: .requestId)
         try c.encode(agentId, forKey: .agentId)
         if let thinkingOptionId {
             try c.encode(thinkingOptionId, forKey: .thinkingOptionId)

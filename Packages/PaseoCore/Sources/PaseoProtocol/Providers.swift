@@ -141,6 +141,19 @@ public struct GetProvidersSnapshotRequest: PaseoRequest {
     }
 }
 
+// Source: messages.ts `ProvidersSnapshotUpdateMessageSchema`
+
+/// `providers_snapshot_update`: the daemon pushing a scope's catalogue after a provider finishes
+/// probing. Unsolicited (no correlation id) and scoped by `cwd`; entries replace the ones we hold.
+public struct ProvidersSnapshotUpdate: Decodable, Sendable {
+    /// Scope of this catalogue. Absent for the global scope.
+    public var cwd: String?
+    /// Daemon-side watch subscription, when the client asked for explicit subscriptions.
+    public var subscriptionId: String?
+    public var generatedAt: String?
+    public var entries: [ProviderSnapshotEntry]
+}
+
 // Source: messages.ts `RefreshProvidersSnapshotRequestMessageSchema`,
 // `RefreshProvidersSnapshotResponseMessageSchema`
 

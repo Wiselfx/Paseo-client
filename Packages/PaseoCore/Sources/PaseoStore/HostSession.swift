@@ -330,6 +330,10 @@ public final class ConversationStore: Identifiable {
     public private(set) var lastNotice: AgentProviderNotice?
     /// Last failed send, cancel or agent change, for a transient error banner. Cleared by the next success.
     public private(set) var actionError: String?
+    /// Last failed background fetch (opening the conversation, older pages, catching up after a
+    /// gap). Kept apart from `actionError` so a slow or timed-out refresh never appears on the
+    /// composer: only the user's own send, cancel or settings change belongs there.
+    public private(set) var backgroundError: String?
     /// The composer text. Lives here so it survives navigating away and back.
     public var draft = ""
     /// In-conversation search (find bar). Owned here so results survive view churn.
@@ -367,13 +371,14 @@ public final class ConversationStore: Identifiable {
             if let snapshot = page.agent { applyAgent(snapshot) }
             updateTurns()
             phase = .ready
+            backgroundError = nil
             // Opening a conversation is deliberate focus: acknowledge attention on the daemon.
             if agent?.requiresAttention == true { await clearAttention() }
         } catch {
             if timeline.rows.isEmpty {
                 phase = .failed(errorText(error))
             } else {
-                actionError = errorText(error)
+                backgroundError = errorText(error)
             }
         }
     }
@@ -389,8 +394,9 @@ public final class ConversationStore: Identifiable {
             timeline.applyPage(page)
             if let snapshot = page.agent { applyAgent(snapshot) }
             updateTurns()
+            backgroundError = nil
         } catch {
-            actionError = errorText(error)
+            backgroundError = errorText(error)
         }
     }
 
@@ -590,11 +596,12 @@ public final class ConversationStore: Identifiable {
                 timeline.applyPage(page)
                 if let snapshot = page.agent { applyAgent(snapshot) }
                 updateTurns()
+                backgroundError = nil
                 guard page.hasNewer else { return }
                 guard let next = timeline.endCursor, next != cursor else { return }
                 cursor = next
             } catch {
-                actionError = errorText(error)
+                backgroundError = errorText(error)
                 return
             }
         }

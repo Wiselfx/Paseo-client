@@ -23,6 +23,14 @@ struct ClaudeAgentControlsSheet: View {
         return session.agentControl.models(forProvider: providerId)
     }
 
+    /// The provider entry the daemon reported for this agent's provider, if the catalogue holds it.
+    private var providerEntry: ProviderSnapshotEntry? {
+        guard let providerId else { return nil }
+        return session.agentControl.provider(providerId)
+    }
+
+    private var providerIsLoading: Bool { providerEntry?.status == .loading }
+
     private var thinkingOptions: [ProviderThinkingOption] {
         guard let providerId, let modelId = store.agent?.model else { return [] }
         return session.agentControl.thinkingOptions(forProvider: providerId, modelId: modelId)
@@ -63,12 +71,18 @@ struct ClaudeAgentControlsSheet: View {
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(38)
         .onAppear {
-            switch session.agentControl.phase {
+            let catalog = session.agentControl
+            let providerMissing = store.agent?.provider.map { catalog.provider($0) == nil } ?? true
+            switch catalog.phase {
             case .idle, .failed:
                 let cwd = store.agent?.cwd
-                Task { await session.agentControl.loadCatalog(cwd: cwd) }
+                Task { await catalog.loadCatalog(cwd: cwd) }
             case .loading, .ready:
-                break
+                // Another screen may have loaded a catalogue for a different workspace.
+                if providerMissing {
+                    let cwd = store.agent?.cwd
+                    Task { await catalog.loadCatalog(cwd: cwd) }
+                }
             }
         }
     }
@@ -77,7 +91,7 @@ struct ClaudeAgentControlsSheet: View {
         switch session.agentControl.phase {
         case .loading where session.agentControl.providers.isEmpty:
             ProgressView().frame(maxWidth: .infinity).padding(.top, 24)
-        case .failed(let message):
+        case .failed(let message) where session.agentControl.providers.isEmpty:
             Text(message)
                 .font(.system(size: 14))
                 .foregroundStyle(ClaudePalette.failureInk)
@@ -122,10 +136,17 @@ struct ClaudeAgentControlsSheet: View {
         ScrollView {
             VStack(spacing: 12) {
                 if models.isEmpty {
-                    Text("No models reported by this provider")
+                    VStack(spacing: 8) {
+                        if providerIsLoading { ProgressView().controlSize(.small) }
+                        Text(
+                            providerIsLoading
+                                ? "Loading models from this provider…"
+                                : "No models reported by this provider"
+                        )
                         .font(.system(size: 14))
                         .foregroundStyle(ClaudePalette.secondaryInk)
-                        .padding(.top, 24)
+                    }
+                    .padding(.top, 24)
                 } else {
                     RowGroup {
                         ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
@@ -177,10 +198,14 @@ struct ClaudeAgentControlsSheet: View {
                 }
                 .padding(.horizontal, 16)
                 if thinkingOptions.isEmpty {
-                    Text("This model reports no thinking levels.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
-                        .padding(.horizontal, 16)
+                    Text(
+                        providerIsLoading
+                            ? "Waiting for this provider's model list…"
+                            : "This model reports no thinking levels."
+                    )
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .padding(.horizontal, 16)
                 }
             }
         }

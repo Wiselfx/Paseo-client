@@ -188,22 +188,69 @@ struct ClaudeNewAgentSheet: View {
 
     // MARK: Pages
 
-    private var providerPage: some View {
-        RowGroup {
-            let providers = catalog.readyProviders
-            ForEach(Array(providers.enumerated()), id: \.element.id) { index, provider in
-                SheetRow(
-                    title: provider.label ?? provider.provider,
-                    symbol: "server.rack",
-                    detail: provider.description,
-                    checked: form.providerId == provider.provider
-                ) {
-                    Haptics.selection()
-                    form.selectProvider(provider.provider, catalog: catalog)
-                    page = .root
+    @ViewBuilder private var providerPage: some View {
+        let providers = catalog.providers.filter(\.enabled)
+        if providers.isEmpty {
+            providerEmptyState
+        } else {
+            RowGroup {
+                ForEach(Array(providers.enumerated()), id: \.element.id) { index, provider in
+                    SheetRow(
+                        title: provider.label ?? provider.provider,
+                        symbol: "server.rack",
+                        detail: providerDetail(provider),
+                        checked: form.providerId == provider.provider,
+                        badge: providerBadge(provider)
+                    ) {
+                        guard provider.isAvailable else { return }
+                        Haptics.selection()
+                        form.selectProvider(provider.provider, catalog: catalog)
+                        page = .root
+                    }
+                    if index < providers.count - 1 { RowDivider() }
                 }
-                if index < providers.count - 1 { RowDivider() }
             }
+        }
+    }
+
+    /// Every provider the daemon reports is listed, in its order: one that is still probing says
+    /// so and fills in through `providers_snapshot_update`. Only a ready one can be picked.
+    @ViewBuilder private var providerEmptyState: some View {
+        switch catalog.phase {
+        case .loading, .idle:
+            ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
+        case .failed(let message):
+            Text(message)
+                .font(.system(size: 14))
+                .foregroundStyle(ClaudePalette.failureInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+        case .ready:
+            Text("No enabled providers on this host.")
+                .font(.system(size: 14))
+                .foregroundStyle(ClaudePalette.secondaryInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    private func providerDetail(_ provider: ProviderSnapshotEntry) -> String? {
+        switch provider.status {
+        case .ready: provider.description
+        case .loading: "Loading models…"
+        case .error: provider.error ?? "This provider could not start."
+        case .unavailable: provider.error ?? "Not available on this host."
+        case .unknown(let raw): raw.isEmpty ? nil : raw
+        }
+    }
+
+    private func providerBadge(_ provider: ProviderSnapshotEntry) -> String? {
+        switch provider.status {
+        case .ready: nil
+        case .loading: "Loading"
+        case .error: "Error"
+        case .unavailable: "Unavailable"
+        case .unknown: nil
         }
     }
 
@@ -309,11 +356,14 @@ final class ClaudeNewAgentForm {
     var error: String?
 
     func load(session: HostSession, cwd: String) async {
-        if session.agentControl.phase == .idle {
-            await session.agentControl.loadCatalog(cwd: cwd)
+        let catalog = session.agentControl
+        // Retry after a failure or an empty catalogue (an old build advertised an app version the
+        // daemon answered with only the legacy providers).
+        if catalog.phase == .idle || catalog.phase == .failed || catalog.providers.isEmpty {
+            await catalog.loadCatalog(cwd: cwd)
         }
-        if providerId == nil { providerId = session.agentControl.readyProviders.first?.provider }
-        applyDefaults(session.agentControl)
+        if providerId == nil { providerId = catalog.readyProviders.first?.provider }
+        applyDefaults(catalog)
     }
 
     func selectProvider(_ id: String, catalog: AgentControlStore) {
