@@ -14,7 +14,7 @@ extension ClaudeChatView {
         trayItems.contains { item in
             switch item.phase {
             case .pending, .uploading: true
-            case .done, .failed: false
+            case .done, .attached, .failed: false
             }
         }
     }
@@ -182,7 +182,7 @@ extension ClaudeChatView {
     func toggleForgeAttachment(_ item: ForgeSearchItem) {
         if let existing = trayItems.first(where: { candidate in
             guard case .attached(let attachment) = candidate.phase else { return false }
-            switch (attachment, item.kind) {
+            return switch (attachment, item.kind) {
             case (.forgeChangeRequest(let forge), .changeRequest): forge.number == item.number
             case (.forgeIssue(let forge), .issue): forge.number == item.number
             default: false
