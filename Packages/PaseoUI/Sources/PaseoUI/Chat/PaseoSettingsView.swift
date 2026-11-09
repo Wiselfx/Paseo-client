@@ -18,6 +18,8 @@ struct PaseoSettingsView: View {
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
     @AppStorage(PaseoSettingsKeys.haptics) private var haptics = true
     @AppStorage(PaseoSettingsKeys.mascot) private var mascot = true
+    /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
+    @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
     @State private var page: Page?
     @State private var confirmDisconnect = false
     @State private var confirmRemoveProject: WorkspaceProjectDescriptor?
@@ -233,6 +235,10 @@ struct PaseoSettingsView: View {
 
     // MARK: General
 
+    private var defaultSendBehavior: DefaultSendBehavior {
+        DefaultSendBehavior(rawValue: defaultSend) ?? .steer
+    }
+
     private var generalPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -308,6 +314,44 @@ struct PaseoSettingsView: View {
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.mascot")
                 }
+                sectionLabel("Chat")
+                RowGroup {
+                    HStack(spacing: 12) {
+                        Text("When the agent is running")
+                            .font(.system(size: 17))
+                        Spacer(minLength: 8)
+                        Menu {
+                            ForEach(DefaultSendBehavior.allCases, id: \.self) { option in
+                                Button {
+                                    Haptics.selection()
+                                    defaultSend = option.rawValue
+                                } label: {
+                                    Label(
+                                        option.label,
+                                        systemImage: defaultSendBehavior == option ? "checkmark" : "circle"
+                                    )
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(defaultSendBehavior.label)
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(ClaudePalette.secondary)
+                            }
+                        }
+                        .accessibilityLabel("Default send behavior, currently \(defaultSendBehavior.label)")
+                        .accessibilityIdentifier("settings.defaultsend")
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                }
+                Text("Applies when you tap send while a turn is running. Long-press on send does the opposite between Steer and Queue.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClaudePalette.secondary)
+                    .padding(.leading, 16)
             }
             .padding(.horizontal, 16)
             .padding(.top, 26)

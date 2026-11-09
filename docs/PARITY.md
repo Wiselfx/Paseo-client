@@ -192,7 +192,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Send and steer when the agent is running (auto behavior) — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (send while running steers; label "Send and steer"); `docs/research/01-app-features.md:47,75`
 - [ ] Feature: Long-press to queue / queue lane with Edit and Send now — Status: `done` — Source: `docs/research/01-app-features.md:46,75,88-89`; this client `Packages/PaseoCore/Sources/PaseoStore/MessageQueue.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Interrupt (stop) control — See Conversation & turns — Status: `done` — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.stop`, `store.cancel()`); `docs/research/01-app-features.md:48`
-- [ ] Feature: Keyboard behavior setting (Enter vs ⌘/Ctrl+Enter; Default send: Interrupt/Steer/Queue) — Status: `missing` — Source: `docs/research/01-app-features.md:75,272`
+- [ ] Feature: Keyboard behavior setting (Enter vs ⌘/Ctrl+Enter; Default send: Interrupt/Steer/Queue) — Status: `done` (Default send: steer/queue/interrupt setting in Settings → General → Chat, long-press is the steer↔queue opposite; Enter vs ⌘/Ctrl+Enter shortcut not built) — Source: `docs/research/01-app-features.md:75,272`; this client `…/Chat/PaseoSettingsView.swift`, `…/Chat/DefaultSend.swift`
 - [ ] Feature: Fullscreen input expansion — Status: `done` (expand control at the card's top-right when the draft runs ~5 lines; full-height editor, Sans 17, Done/Send; same draft binding) — Source: `docs/research/01-app-features.md:77`; this client `…/Chat/FullScreenComposer.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Attachment tray (pills above the input) — Status: `done` (56 pt image thumbnails / file pills with icon + name + size, remove "x", thin progress ring while uploading, retry on failure, downscale ≤ 2048 px JPEG 0.85 at attach time; uploads happen at attach, send is instant) — Source: `docs/research/01-app-features.md:78`; this client `…/Chat/ComposerAttachments.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Add attachment menu (image / file upload / issue-or-PR; paste; drag-and-drop; large pasted text becomes a file) — Status: `done` (PhotosPicker multi, Camera on devices with one, fileImporter any type, "Mention a file" inserts @ + focuses, paste of an image attaches; not: issue-or-PR forge picker, drag-and-drop, large-pasted-text-to-file) — Source: `docs/research/01-app-features.md:79-83`; this client `…/Chat/ClaudeChatView.swift`, `…/Chat/CameraCapture.swift`
@@ -200,9 +200,9 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Forge issue/PR attach + searchable picker — Status: `missing` — Source: `docs/research/01-app-features.md:79,83`; docs/research/02-protocol-workspaces-git-files.md:420
 - [ ] Feature: Attachment actions (open/remove per pill, open in side pane) — Status: `done` (remove per pill everywhere; image pills open a full-screen viewer; file pills have no open) — Source: `docs/research/01-app-features.md:82`; this client `…/Chat/ComposerAttachments.swift`
 - [ ] Feature: Agent controls (provider/model/thinking/mode) in the composer — Status: `done` (sheet, not chips) — Source: this client `…/Chat/ClaudeChatView.swift` (`composer.model` → `ClaudeAgentControlsSheet`); `docs/research/01-app-features.md:84`
-- [ ] Feature: Provider-feature chips / aggregated Features sheet in composer — Status: `missing` — Source: `docs/research/01-app-features.md:84`; docs/research/04-protocol-agents-permissions-settings.md:308-342
+- [ ] Feature: Provider-feature chips / aggregated Features sheet in composer — Status: `done` (Features group in the agent-controls sheet — toggle rows with switches, select rows as option lists; `fast_mode` additionally surfaces as a quiet bolt chip in the composer toolbar when on) — Source: `docs/research/01-app-features.md:84`; docs/research/04-protocol-agents-permissions-settings.md:308-342; this client `…/Chat/ClaudeAgentControlsSheet.swift`, `…/Chat/ClaudeChatView.swift`
 - [ ] Feature: Agent profiles picker (fills provider/model/mode/thinking/features once at creation) — Status: `store only (no UI)` — Source: `docs/research/01-app-features.md:85`; this client `Packages/PaseoCore/Sources/PaseoStore/HostSettingsStore.swift:118-127`
-- [ ] Feature: Fast mode toggle in composer/command center — Status: `missing` — Source: `docs/research/01-app-features.md:325`
+- [ ] Feature: Fast mode toggle in composer/command center — Status: `done` (quiet bolt chip, visible only while fast mode is on, tap to turn off; commands in the Features sheet group; no command center) — Source: `docs/research/01-app-features.md:325`; this client `…/Chat/ClaudeChatView.swift` (`fastModeChip`), matched by upstream id `fast_mode` (`packages/app/src/agent-controls/policy.ts:4`)
 - [ ] Feature: Dictation mic button — Status: `missing` (the mic button exists but only focuses the field — it is not dictation) — Source: this client `…/Chat/ClaudeChatView.swift` (`roundButton("mic"…)`), `docs/research/01-app-features.md:86`
 - [ ] Feature: Voice mode button — See Voice — Status: `missing` — Source: `docs/research/01-app-features.md:349`
 - [ ] Feature: Drafts (persisted, restorable; forked into new agent) — Status: `done` (persisted per agent in UserDefaults `paseo.draft.<id>`, ~500 ms debounce, cleared on send, restored on open; not forked into new agents) — Source: `docs/research/01-app-features.md:87`; this client `…/Chat/SavedDraftStore.swift`, `…/Chat/ClaudeChatView.swift`
@@ -235,7 +235,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Agent hard delete — Status: `missing` — Source: docs/research/04-protocol-agents-permissions-settings.md:361
 - [ ] Feature: Detach provider subagent from parent's track — Status: `store only (no UI)` (detach RPC mapped) — Source: docs/research/04-protocol-agents-permissions-settings.md:451; this client `Packages/PaseoProtocol/Agents.swift`; no UI
 - [ ] Feature: Provider subagent list/timeline (background tasks the provider reports) — Status: `store only (no UI)` — Source: this client `Packages/PaseoProtocol/Subagents.swift`, `Packages/PaseoStore/ConversationSubagents.swift`
-- [ ] Feature: Fast mode (per-provider, composer + command center) — Status: `missing` — Source: `docs/research/01-app-features.md:325`
+- [ ] Feature: Fast mode (per-provider, composer + command center) — Status: `done` (composer chip + Features group in the agent-controls sheet; provider advertises it as toggle `fast_mode`; no command center) — Source: `docs/research/01-app-features.md:325`; this client `…/Chat/ClaudeChatView.swift`, `…/Chat/ClaudeAgentControlsSheet.swift`
 - [ ] Feature: Model switch no-op bug fix (M2.5a) — Status: `done` — Source: `docs/STATUS.md:58`, `git log` `325b984`
 - [x] Feature: Agent list / history surface — See Search & history — Status: `done` (History screen, active agents only; archived hidden: `HostSession` discards them at ingest, no unarchive RPC) — Source: this client `Chat/ClaudeHistoryView.swift`; `docs/research/01-app-features.md:66`
 - [ ] Feature: Attention flags on agents (permission/error/finished) — Status: `done` — Source: this client `Packages/PaseoUI/Sources/PaseoUI/Chat/PaseoSidebar.swift:321-360`; `docs/research/04-protocol-agents-permissions-settings.md:642`
@@ -355,7 +355,7 @@ Status counts are in `## Counts` at the very bottom.
 - [ ] Feature: Chat settings (always expand reasoning; chat display mode Full/Collapse tool calls/Collapse turns; chat outline toggle) — Status: `missing` — Source: `docs/research/01-app-features.md:275`
 - [ ] Feature: Terminal settings (scrollback lines; terminal profiles are host-scoped) — Status: `missing` — Source: `docs/research/01-app-features.md:276`
 - [ ] Feature: General — Language dropdown (10 locales) — Status: `missing` — Source: `docs/research/01-app-features.md:272`
-- [ ] Feature: General — Sending card (Send shortcut Enter vs ⌘/Ctrl+Enter; Default send Interrupt/Steer/Queue) — Status: `missing` — Source: `docs/research/01-app-features.md:272`
+- [ ] Feature: General — Sending card (Send shortcut Enter vs ⌘/Ctrl+Enter; Default send Interrupt/Steer/Queue) — Status: `done` (Default send row in Settings → General → Chat, persisted `paseo.defaultSend`; Enter vs ⌘/Ctrl+Enter shortcut not built) — Source: `docs/research/01-app-features.md:272`; this client `…/Chat/PaseoSettingsView.swift`, `…/Chat/DefaultSend.swift`
 - [ ] Feature: General — "Show setup again" — Status: `missing` — Source: `docs/research/01-app-features.md:272`
 - [ ] Feature: Sidebar settings — Sidebar view picker + Header/Footer rows (reorder up/down, visibility switches, shortcut badges, usage row hidden by default) — Status: `missing` — Source: `docs/research/01-app-features.md:274`
 - [ ] Feature: Shortcuts settings (capture/rebind/clear/reset; sections General/Projects/Tabs/Layout/Agent Input; "Reset all") — Status: `desktop-only (flag)` — Source: `docs/research/01-app-features.md:280`
@@ -531,8 +531,8 @@ and `docs/research/06-dsh-ux-spec.md` / `08-dsh-live-observation.md`.
 
 | Status | Count | Share |
 |---|---|---|
-| `done` | 99 | 24 % |
-| `missing` | 207 | 49 % |
+| `done` | 104 | 25 % |
+| `missing` | 202 | 48 % |
 | `desktop-only (flag)` | 46 | 11 % |
 | `store only (no UI)` | 31 | 7 % |
 | `in flight` (M3a 1 · M3b 5 · M3c 8 · M3d 5) | 19 | 5 % |

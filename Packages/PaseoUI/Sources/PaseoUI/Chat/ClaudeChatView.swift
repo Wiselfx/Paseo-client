@@ -58,6 +58,8 @@ public struct ClaudeChatView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// M5a: the DSH crab above the composer, driven by the conversation's turns.
     @AppStorage(PaseoSettingsKeys.mascot) private var mascotEnabled = true
+    /// M8c: what tap does on send while a turn is running (steer | queue | interrupt).
+    @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
     @State private var mascot = MascotStateMachine()
     /// Failed tool calls we've already told the mascot about, by `callId`.
     @State private var signalledToolFailureIds: Set<String> = []
@@ -1259,6 +1261,7 @@ public struct ClaudeChatView: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: slashQuery != nil)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isQueueNonEmpty)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: !trayItems.isEmpty)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: fastModeActive)
     }
 
     private var composerCard: some View {
@@ -1333,6 +1336,7 @@ public struct ClaudeChatView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Model, thinking and mode")
                 .accessibilityIdentifier("composer.model")
+                fastModeChip
                 Spacer(minLength: 0)
                 roundButton("mic", label: "Dictate", color: ClaudePalette.chip, ink: ClaudePalette.ink) {
                     focused = true
@@ -1347,9 +1351,9 @@ public struct ClaudeChatView: View {
                     QueueSendButton(
                         isRunning: store.isRunning, canSend: canSendMessage
                     ) {
-                        send()
+                        tapSend()
                     } onQueue: {
-                        queueDraft()
+                        longPressSend()
                     }
                     .accessibilityIdentifier("composer.send")
                 }
@@ -1436,6 +1440,45 @@ public struct ClaudeChatView: View {
         modelLabel ?? "Model"
     }
 
+    /// The provider's fast-mode toggle, when offered. Matched by the upstream id
+    /// `FAST_MODE_FEATURE_ID = "fast_mode"` (`packages/app/src/agent-controls/policy.ts:4`).
+    private var fastModeFeature: AgentFeature.Toggle? {
+        guard let features = store.agent?.features else { return nil }
+        for feature in features {
+            if case .toggle(let toggle) = feature, toggle.id == "fast_mode" {
+                return toggle
+            }
+        }
+        return nil
+    }
+
+    private var fastModeActive: Bool { fastModeFeature?.value == true }
+
+    /// The quiet fast-mode chip in the toolbar: visible only while fast mode is on;
+    /// tapping turns it off. Bolt glyph, accent ink at low emphasis.
+    @ViewBuilder private var fastModeChip: some View {
+        if fastModeActive {
+            Button {
+                Haptics.selection()
+                Task { await store.setFeatureToggle(featureId: "fast_mode", value: false) }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Fast")
+                        .font(typography.sans(13, weight: .semibold))
+                }
+                .foregroundStyle(ClaudePalette.orange.opacity(0.8))
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background(ClaudePalette.chip, in: .capsule)
+            }
+            .accessibilityLabel("Fast mode on; turn off")
+            .accessibilityIdentifier("composer.fastmode")
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
+        }
+    }
+
     private var thinkingLabel: String? {
         guard let agent = store.agent, let model = agent.effectiveThinkingOptionId ?? agent.thinkingOptionId else {
             return nil
@@ -1445,7 +1488,30 @@ public struct ClaudeChatView: View {
             .first(where: { $0.id == model })?.label
     }
 
-    private func send() {
+    /// Tap on the send button. While a turn is running, the `paseo.defaultSend` setting decides:
+    /// steer (default), queue, or interrupt. Idle, it always starts a new turn.
+    private var defaultSendBehavior: DefaultSendBehavior {
+        DefaultSendBehavior(rawValue: defaultSend) ?? .steer
+    }
+
+    private func tapSend() {
+        if defaultSendBehavior == .queue, store.isRunning {
+            queueDraft()
+            return
+        }
+        send(behavior: store.isRunning && defaultSendBehavior == .interrupt ? "interrupt" : nil)
+    }
+
+    /// Long-press on the send button: the opposite of the default between steer and queue
+    /// (interrupt has no opposite there, so it queues).
+    private func longPressSend() {
+        switch defaultSendBehavior {
+        case .steer, .interrupt: queueDraft()
+        case .queue: send()
+        }
+    }
+
+    private func send(behavior: String? = nil) {
         let text = trimmedDraft
         // Send is disabled while an upload is in flight; the tray keeps the failed pills,
         // everything ready rides this send.
@@ -1459,7 +1525,7 @@ public struct ClaudeChatView: View {
         focused = false
         Haptics.send()
         Task {
-            await store.sendWithAttachments(text, attachments: readyAttachments)
+            await store.sendWithAttachments(text, attachments: readyAttachments, behavior: behavior)
             if store.actionError == nil {
                 attachmentStore.consumeDoneAttachments(for: store.agentId)
             }
