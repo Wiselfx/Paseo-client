@@ -114,6 +114,8 @@ public struct ClaudeChatView: View {
     @State var recentMentions: [String] = []
     /// M8d: on-device dictation into the draft.
     @State var dictation = DictationController()
+    /// M15: realtime voice capture/playback; feeds `session.voiceSession`.
+    @State var voiceEngine = VoiceAudioEngine()
 
     enum SlashCommandState {
         case idle, loading, ready
@@ -242,7 +244,14 @@ public struct ClaudeChatView: View {
         .onAppear { seedSavedDraft() }
         .onAppear { dictation.onDraft = { [weak store] text in store.draft = text } }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { dictation.stop(keepingDraft: true) }
+            if phase != .active {
+                dictation.stop(keepingDraft: true)
+                // M15: voice mode stops cleanly in the background (mic + wake lock off).
+                voiceEngine.stopCapture()
+                if session.voiceSession.isVoiceMode {
+                    Task { await session.voiceSession.stop() }
+                }
+            }
         }
         .task { await loadSlashCommands() }
         .onChange(of: store.activeTurnId) { oldId, newId in
