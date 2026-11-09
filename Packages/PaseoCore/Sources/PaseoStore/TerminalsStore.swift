@@ -58,12 +58,13 @@ public final class TerminalsStore {
     public private(set) var scriptsByWorkspace: [String: [WorkspaceScript]] = [:]
     public private(set) var loadingScriptWorkspaces: Set<String> = []
     /// Last terminal or script operation failure, for a transient banner. Cleared by a success.
-    public private(set) var error: String?
+    public internal(set) var error: String?
 
     /// `terminal-restore-modes` is mandatory for attaching; otherwise show the host-update UI.
     public var isSupported: Bool { capabilities.restoreModes }
 
-    private let client: any DaemonClient
+    /// Internal (not private) so the M3g `TerminalRename` extension can send the rename RPC.
+    internal let client: any DaemonClient
     private var watched: [String: WatchedWorkspace] = [:]
     private var attachments: [String: Attachment] = [:]
     private var slotTerminalIds: [UInt8: String] = [:]

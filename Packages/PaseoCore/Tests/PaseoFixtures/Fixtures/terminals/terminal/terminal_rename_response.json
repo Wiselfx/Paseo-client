@@ -1,0 +1,11 @@
+{
+  "type": "session",
+  "message": {
+    "type": "terminal.rename.response",
+    "payload": {
+      "requestId": "t16-1",
+      "success": true,
+      "error": null
+    }
+  }
+}
