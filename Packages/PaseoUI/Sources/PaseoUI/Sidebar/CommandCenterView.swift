@@ -21,6 +21,8 @@ struct CommandCenterSheet: View {
     let onOpenSettings: () -> Void
     /// Toggles the right-side workspace panel; nil hides the Toggle panel action.
     let onTogglePanel: (() -> Void)?
+    /// Opens the Import session sheet; nil hides the action when the daemon lacks the feature.
+    let onImportSession: (() -> Void)? = nil
     let onShowToast: (String) -> Void
     let onClose: () -> Void
     /// The agent open in the chat, if any; the Files group searches its workspace.
@@ -61,6 +63,7 @@ struct CommandCenterSheet: View {
     enum CommandAction: String, CaseIterable {
         case newAgent
         case newWorkspace
+        case importSession
         case openSettings
         case togglePanel
         case switchHost
@@ -69,6 +72,7 @@ struct CommandCenterSheet: View {
             switch self {
             case .newAgent: "New agent"
             case .newWorkspace: "New workspace"
+            case .importSession: "Import session"
             case .openSettings: "Open settings"
             case .togglePanel: "Toggle panel"
             case .switchHost: "Switch host…"
@@ -79,6 +83,7 @@ struct CommandCenterSheet: View {
             switch self {
             case .newAgent: "square.and.pencil"
             case .newWorkspace: "plus"
+            case .importSession: "square.and.arrow.down"
             case .openSettings: "gearshape"
             case .togglePanel: "sidebar.right"
             case .switchHost: "desktopcomputer"
@@ -89,6 +94,7 @@ struct CommandCenterSheet: View {
             switch self {
             case .newAgent: "create start run"
             case .newWorkspace: "create add worktree"
+            case .importSession: "existing cli terminal session resume host"
             case .openSettings: "preferences gear"
             case .togglePanel: "sidebar right files changes terminal"
             case .switchHost: "daemon saved server machine"
@@ -370,6 +376,7 @@ struct CommandCenterSheet: View {
             switch action {
             case .togglePanel: isTogglePanelVisible
             case .switchHost: isSwitchHostVisible
+            case .importSession: onImportSession != nil
             default: true
             }
         }
@@ -684,6 +691,8 @@ struct CommandCenterSheet: View {
             }
         case .newWorkspace:
             onNewWorkspace()
+        case .importSession:
+            onImportSession?()
         case .openSettings:
             onOpenSettings()
         case .togglePanel:

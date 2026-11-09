@@ -1,0 +1,33 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_recent_provider_sessions_response",
+    "payload": {
+      "requestId": "fixture-recent-1",
+      "entries": [
+        {
+          "providerId": "pi",
+          "providerLabel": "Pi",
+          "providerHandleId": "fixture-handle-1",
+          "cwd": "/tmp/fixture-sandbox",
+          "title": "Fix the flaky test",
+          "firstPromptPreview": "Fix the flaky test in the sandbox",
+          "lastPromptPreview": "Now run the suite again",
+          "lastActivityAt": "2026-11-09T05:00:00.000Z"
+        },
+        {
+          "providerId": "pi",
+          "providerLabel": "Pi",
+          "providerHandleId": "fixture-handle-2",
+          "cwd": "/tmp/fixture-sandbox",
+          "title": null,
+          "firstPromptPreview": null,
+          "lastPromptPreview": null,
+          "lastActivityAt": "2026-11-08T05:00:00.000Z"
+        }
+      ],
+      "filteredAlreadyImportedCount": 0,
+      "providerErrors": []
+    }
+  }
+}

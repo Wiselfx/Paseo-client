@@ -120,6 +120,7 @@ struct PaseoSidebar: View {
                     onNewWorkspace: { sheet = .newWorkspace },
                     onOpenSettings: { sheet = .settings },
                     onTogglePanel: onTogglePanel,
+                    onImportSession: session.agentControl.isSupported ? { sheet = .importSession } : nil,
                     onShowToast: { showToast($0) },
                     onClose: { sheet = nil },
                     selectedAgentId: selectedAgentId)
@@ -136,6 +137,11 @@ struct PaseoSidebar: View {
             case .addProject:
                 AddProjectSheet(session: session) { message in
                     showToast(message)
+                }
+            case .importSession:
+                ImportSessionSheet(session: session) { agentId in
+                    sheet = nil
+                    onSelectAgent(agentId)
                 }
             case .usage:
                 ClaudeUsageReportsSheet(session: session)
@@ -312,6 +318,11 @@ struct PaseoSidebar: View {
                 navigationRow("History", symbol: "clock.arrow.2.circlepath") { sheet = .history }
             }
             navigationRow("Search", symbol: "magnifyingglass") { sheet = .search }
+            if session.agentControl.isSupported {
+                navigationRow("Import session", symbol: "square.and.arrow.down") {
+                    sheet = .importSession
+                }
+            }
         }
         .padding(.top, 4)
     }
@@ -515,6 +526,7 @@ private enum PaseoSidebarSheet: Identifiable {
     case search
     case newWorkspace
     case addProject
+    case importSession
     case usage
     case newLabel(WorkspaceDescriptor)
     case labelsManager
@@ -528,6 +540,7 @@ private enum PaseoSidebarSheet: Identifiable {
         case .search: "search"
         case .newWorkspace: "newWorkspace"
         case .addProject: "addProject"
+        case .importSession: "importSession"
         case .usage: "usage"
         case .newLabel(let target): "newLabel:\(target.id)"
         case .labelsManager: "labelsManager"

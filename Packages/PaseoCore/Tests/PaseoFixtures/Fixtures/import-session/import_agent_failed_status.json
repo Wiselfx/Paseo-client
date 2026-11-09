@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "status",
+    "payload": {
+      "status": "agent_create_failed",
+      "requestId": "fixture-import-2",
+      "error": "session not found on host",
+      "errorCode": "import_failed"
+    }
+  }
+}

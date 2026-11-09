@@ -40,6 +40,8 @@ struct WorkspacePanel: View {
     var onNewAgent: (WorkspaceDescriptor) -> Void
     /// Inserts `@relative/path ` into the open conversation's composer (see `PaseoShellView`).
     var onMentionInChat: ((String) -> Void)?
+    /// A terminal to select when the panel reaches the Terminal page (notification tap).
+    var initialTerminalId: String? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage private var pageRaw: String
@@ -49,6 +51,7 @@ struct WorkspacePanel: View {
     @State private var agentPendingArchive: AgentSnapshot?
     @State private var renameText = ""
     @State private var showSetupSheet = false
+    @State private var showImportSheet = false
     @State private var observedSetupWorkspaceId: String?
 
     private let typography = ClaudeTypography()
@@ -57,7 +60,8 @@ struct WorkspacePanel: View {
         session: HostSession, workspace: WorkspaceDescriptor?, currentAgentId: String?,
         onSelectAgent: @escaping (String) -> Void,
         onNewAgent: @escaping (WorkspaceDescriptor) -> Void,
-        onMentionInChat: ((String) -> Void)? = nil
+        onMentionInChat: ((String) -> Void)? = nil,
+        initialTerminalId: String? = nil
     ) {
         self.session = session
         self.workspace = workspace
@@ -65,9 +69,11 @@ struct WorkspacePanel: View {
         self.onSelectAgent = onSelectAgent
         self.onNewAgent = onNewAgent
         self.onMentionInChat = onMentionInChat
-        // The last page is remembered per workspace.
+        self.initialTerminalId = initialTerminalId
+        // The last page is remembered per workspace; a notification tap lands on Terminal.
+        let initial: Page = initialTerminalId != nil ? .terminal : .agents
         let id = workspace?.id ?? "none"
-        _pageRaw = AppStorage(wrappedValue: Page.agents.rawValue, "paseo.panel.page.\(id)")
+        _pageRaw = AppStorage(wrappedValue: initial.rawValue, "paseo.panel.page.\(id)")
     }
 
     enum Page: String, CaseIterable {
@@ -103,6 +109,9 @@ struct WorkspacePanel: View {
         .background(ClaudePalette.background)
         .environment(\.mentionInChat, onMentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
+        .onChange(of: initialTerminalId) { _, terminalId in
+            if terminalId != nil { pageRaw = Page.terminal.rawValue }
+        }
         .task(id: workspace?.id) {
             if let previous = observedSetupWorkspaceId, previous != workspace?.id {
                 observedSetupWorkspaceId = nil
@@ -123,6 +132,14 @@ struct WorkspacePanel: View {
         .sheet(isPresented: $showSetupSheet) {
             if let workspace {
                 WorkspaceSetupSheet(session: session, workspace: workspace)
+            }
+        }
+        .sheet(isPresented: $showImportSheet) {
+            if let workspace {
+                ImportSessionSheet(session: session, cwd: workspace.cwd, workspaceId: workspace.id) { agentId in
+                    showImportSheet = false
+                    onSelectAgent(agentId)
+                }
             }
         }
         .alert(
@@ -332,7 +349,8 @@ struct WorkspacePanel: View {
             case .changes:
                 changesPage
             case .terminal:
-                WorkspaceTerminalsView(session: session, workspace: workspace)
+                WorkspaceTerminalsView(
+                    session: session, workspace: workspace, initialTerminalId: initialTerminalId)
             }
         } else {
             unavailable
@@ -383,6 +401,9 @@ struct WorkspacePanel: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 2) {
                 newAgentRow(workspace: workspace)
+                if session.agentControl.isSupported {
+                    importSessionRow
+                }
                 if agents.isEmpty {
                     Text("No agents in this workspace yet.")
                         .font(typography.sans(14))
@@ -424,6 +445,30 @@ struct WorkspacePanel: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("New agent")
+    }
+
+    private var importSessionRow: some View {
+        Button {
+            Haptics.selection()
+            showImportSheet = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.arrow.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(ClaudePalette.ink)
+                    .frame(width: 30, height: 30)
+                    .background(ClaudePalette.chip, in: .circle)
+                Text("Import session")
+                    .font(typography.sans(16, weight: .medium))
+                    .foregroundStyle(ClaudePalette.ink)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Import session")
     }
 
     private func agentRow(_ agent: AgentSnapshot) -> some View {

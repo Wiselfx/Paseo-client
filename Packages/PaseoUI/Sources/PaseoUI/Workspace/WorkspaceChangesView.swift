@@ -275,6 +275,21 @@ struct WorkspaceChangesView: View {
         WorkspaceReviewDrafts.shared.count(for: reviewKey)
     }
 
+    /// Drafts whose anchor is gone from the current diff (M3k follow-up): invisible in the
+    /// diff, skipped by the attachment builder. Only meaningful once the diff is ready —
+    /// before that, an empty file list would make every draft look stale.
+    private var staleReviewDrafts: [WorkspaceReviewDraftComment] {
+        guard extras.diffPhase == .ready else { return [] }
+        let scoped = WorkspaceReviewDrafts.shared.comments(for: reviewKey)
+        guard !scoped.isEmpty else { return [] }
+        let built = WorkspaceReviewAttachmentBuilder.buildAll(
+            comments: scoped, files: extras.files, cwd: checkout.cwd,
+            mode: compare == .uncommitted ? "uncommitted" : "base",
+            baseRef: baseRef)
+        let sentIds = Set((built?.1 ?? []).map(\.id))
+        return scoped.filter { !sentIds.contains($0.id) }
+    }
+
     /// The agents in this workspace; the open chat's agent is the default recipient.
     private var feedbackRecipients: [AgentSnapshot] {
         session.agents.filter { $0.workspaceId == checkout.workspaceId }
@@ -288,6 +303,7 @@ struct WorkspaceChangesView: View {
 
     @ViewBuilder private var sendFeedbackBar: some View {
         if reviewDraftCount > 0 {
+            VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
                 if let defaultRecipient = defaultFeedbackRecipient {
                     HStack(spacing: 0) {
@@ -347,6 +363,27 @@ struct WorkspaceChangesView: View {
                 }
             }
             .padding(.top, 2)
+            if !staleReviewDrafts.isEmpty {
+                HStack(spacing: 6) {
+                    Text("\(staleReviewDrafts.count) comments no longer match this diff")
+                        .font(typography.sans(12))
+                        .foregroundStyle(ClaudePalette.secondaryInk)
+                    Button("Clear") {
+                        Haptics.selection()
+                        for stale in staleReviewDrafts {
+                            WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: stale.id)
+                        }
+                    }
+                    .font(typography.sans(12, weight: .medium))
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear stale comments")
+                    .accessibilityIdentifier("changes.staleDrafts.clear")
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(
+                    "\(staleReviewDrafts.count) comments no longer match this diff")
+            }
+            }
         }
     }
 
