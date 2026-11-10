@@ -44,7 +44,7 @@ When in doubt, do what the iOS Claude app or the system apps (Notes, Mail) do.
 ### 0.3 Typography and layout
 
 - One line per label. A pill or button whose label can't fit is a design bug: shorten the label (use upstream's shorter wording) or let the pill grow. Never truncate a primary action to "New works…".
-- Sheet headers use the shared `SheetHeader`: title leading, close (xmark in a 30 pt circle) trailing, the title never under the button. Any custom header must lay out the same way (the History sheet is the reference).
+- Sheets follow the iOS 26 convention (amended 2026-11-10, user decision): a `NavigationStack` with a native toolbar, the close button leading (`Button(role: .close)`, the system glass xmark), the title centered inline, and a confirm action trailing (`Button(role: .confirm)`) where the sheet commits something. One shared `SheetScaffold` builds this; no custom headers.
 - SF Symbols must mean what they say:
   - terminal → `apple.terminal` (or `terminal`, whichever exists on iOS 26; check);
   - files → `folder`;
@@ -85,7 +85,7 @@ They must feel like one object: same canvas color family, same corner radius, sa
 
 ### 1.2 Left sidebar (reveal)
 
-- **Opening:** an edge swipe from the leading edge (24 pt zone), the header's sidebar button, or a two-finger swipe… keep the existing triggers.
+- **Opening:** a rightward horizontal swipe **anywhere** on the conversation (amended 2026-11-10, user decision; as in Claude iOS), except where the touch starts in horizontally scrolling content (code blocks, tables, diffs), plus the header's sidebar button.
 - **What moves:** the conversation card slides right to `drawerFraction` (0.82) of the width. The sidebar does not move; it is revealed underneath, at its final position from the start.
 - **Closing:** tap the visible strip of the card, swipe it back, or select something in the sidebar.
 - **During the move:** only the card's offset, its shadow opacity and the scrim change. Its corners are always display-radius (§1.1).
@@ -184,7 +184,7 @@ chat exists (V5, device feedback 2026-11-09).
 - **Transition:** one `.smooth(duration: 0.25)` (§0.4) on height and chip opacity; the text field never jumps horizontally.
 - **Collapse:** it returns to the pill on blur, only when the draft and tray are empty. Existing conversations never collapse (see above).
 - **While a turn runs:** the stop button replaces send, in either state.
-- **Text size:** the field is 17 pt sans, and a long draft caps at about 40 % of the space above the keyboard (≈ 8 lines on an iPhone) and then scrolls inside the field, so the controls row never hides under the keyboard (V5).
+- **Text size:** the field is 17 pt sans, and your sent bubbles are 17 pt too (user decision 2026-11-10), and a long draft caps at about 40 % of the space above the keyboard (≈ 8 lines on an iPhone) and then scrolls inside the field, so the controls row never hides under the keyboard (V5).
 
 ### 4.1b Composer chips
 

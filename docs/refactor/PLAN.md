@@ -714,6 +714,8 @@ apart, and no main-thread markdown parse over 8 ms on the M-size test chat.
 
 ## 5. Decisions for the user
 
+**Decided 2026-11-10:** the user accepted recommendations 1–6 (UX-SPEC amended: §0.3 sheets, §1.2 open anywhere, §4.1 17 pt bubbles). Item 2 (OCU values) is deferred to after this round.
+
 The lead's recommendation comes first. Everything else in this plan is the lead's call.
 
 1. **Sidebar opens on a full-width right swipe** (Claude iOS), not only from the 24 pt edge.
