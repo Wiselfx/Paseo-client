@@ -130,7 +130,7 @@ struct SettingsRoot: View {
                         .terminal, value: scrollbackSummary,
                         identifier: "settings.route.terminal")
                 } header: {
-                    Text("App")
+                    PageSectionHeader("App")
                 }
                 Section {
                     routeRow(
@@ -150,14 +150,14 @@ struct SettingsRoot: View {
                     routeRow(
                         .providers, value: providersSummary, identifier: "settings.route.providers")
                 } header: {
-                    Text("Host")
+                    PageSectionHeader("Host")
                 }
                 Section {
                     routeRow(.about, value: versionLine, identifier: "settings.route.about")
                     routeRow(.diagnostics, identifier: "settings.route.diagnostics")
                     routeRow(.help, identifier: "settings.route.help")
                 } header: {
-                    Text("About")
+                    PageSectionHeader("About")
                 }
                 Section {
                     Button(role: .destructive) {
@@ -228,20 +228,13 @@ struct SettingsRoot: View {
     // MARK: Rows
 
     private func routeRow(_ route: SettingsRoute, value: String? = nil, identifier: String) -> some View {
-        NavigationLink(value: route) {
-            ListRow(
-                title: route.title ?? "",
-                systemImage: route.symbol,
-                accessory: routeAccessory(value)
-            )
-        }
-        .panelRow()
+        PageLink(
+            route,
+            title: route.title ?? "",
+            systemImage: route.symbol,
+            detail: value
+        )
         .accessibilityIdentifier(identifier)
-    }
-
-    private func routeAccessory(_ value: String?) -> ListRow.Accessory {
-        guard let value else { return ListRow.Accessory.none }
-        return ListRow.Accessory.value(value)
     }
 
     // MARK: Summaries

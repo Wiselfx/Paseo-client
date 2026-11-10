@@ -17,6 +17,7 @@ extension PaseoSidebar {
             .foregroundStyle(Palette.tertiaryInk)
             .textCase(.uppercase)
             .lineLimit(1)
+            .truncationMode(.tail)
             .padding(.top, 18)
             .padding(.bottom, 6)
     }
@@ -138,6 +139,7 @@ extension PaseoSidebar {
                     .font(.paseo(.callout))
                     .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer(minLength: 0)
             }
             .padding(.top, 18)
@@ -188,6 +190,8 @@ extension PaseoSidebar {
                 Text("Hidden workspaces (\(PaseoFormat.integer(preferences.hiddenWorkspaces.count)))")
                     .font(.paseo(.callout))
                     .foregroundStyle(Palette.secondaryInk)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer(minLength: 0)
                 ClaudeChevron(expanded: showHidden)
             }

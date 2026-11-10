@@ -135,7 +135,7 @@ struct ClaudePermissionCard: View {
                 if answering { ProgressView().controlSize(.mini) }
             }
             Text(planText)
-                .font(.paseo(.title))
+                .font(.paseo(.processTitle))
                 .foregroundStyle(Palette.ink)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)

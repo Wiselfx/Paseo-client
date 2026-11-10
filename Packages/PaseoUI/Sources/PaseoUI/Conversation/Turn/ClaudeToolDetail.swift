@@ -57,7 +57,7 @@ struct ClaudeToolCallDetail: View {
                     .textSelection(.enabled)
             }
         case .plan(let text):
-            Text(text).font(.paseo(.title)).foregroundStyle(Palette.ink).textSelection(.enabled)
+            Text(text).font(.paseo(.callout)).foregroundStyle(Palette.ink).textSelection(.enabled)
         case .worktreeSetup(_, _, let log):
             ClaudeCodeBlock(output: log)
         case .unknown(_, let raw):

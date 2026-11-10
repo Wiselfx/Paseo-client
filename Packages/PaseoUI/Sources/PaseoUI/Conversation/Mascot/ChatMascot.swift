@@ -227,7 +227,7 @@ struct MascotCrab: View {
                     .foregroundStyle(Palette.ink)
             }
             if let tokens = tokenTotal(usage) {
-                Text("\(PaseoFormat.integer(tokens)) tokens")
+                Text("\(PaseoFormat.compactCount(tokens)) tokens")
                     .font(.paseo(.caption))
                     .foregroundStyle(Palette.secondaryInk)
             }

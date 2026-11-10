@@ -56,6 +56,34 @@ enum PaseoFormat {
         return text + scaled.1
     }
 
+    /// Token and line counts in the tightest form the context rows use: `950`, `1k`, `1.3k`,
+    /// `12k`, `134k`, `1.2M`. One decimal below ten of each unit, none above; never a trailing
+    /// `.0`. Integer arithmetic throughout, so `1_250` is `1.3k` and not the even-rounding `1.2k`.
+    static func compactCount(_ value: Int) -> String {
+        let magnitude = value.magnitude
+        let text: String
+        if magnitude < 1_000 {
+            text = String(magnitude)
+        } else if magnitude < 1_000_000 {
+            text = compactScale(magnitude, unit: 1_000) + "k"
+        } else if magnitude < 1_000_000_000 {
+            text = compactScale(magnitude, unit: 1_000_000) + "M"
+        } else {
+            text = compactScale(magnitude, unit: 1_000_000_000) + "B"
+        }
+        return value < 0 ? "-" + text : text
+    }
+
+    /// `1`, `1.3`, `12`, `134`: one decimal (half up) below ten units, whole units above it.
+    private static func compactScale(_ magnitude: UInt, unit: UInt) -> String {
+        if magnitude / unit >= 10 {
+            return String((magnitude + unit / 2) / unit)
+        }
+        let tenths = (magnitude * 10 + unit / 2) / unit
+        let fraction = tenths % 10
+        return fraction == 0 ? String(tenths / 10) : "\(tenths / 10).\(fraction)"
+    }
+
     /// `2m ago`, `yesterday`: one static formatter, the outputs the rows used to build per call.
     /// Main-actor only, like the display callers it serves: `RelativeDateTimeFormatter` is not
     /// Sendable.
