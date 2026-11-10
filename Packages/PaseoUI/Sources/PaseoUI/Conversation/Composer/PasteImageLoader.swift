@@ -19,15 +19,24 @@ enum PasteImageLoader {
         for provider in providers {
             for type in imageTypes
             where provider.hasItemConformingToTypeIdentifier(type.identifier) {
-                // `loadDataRepresentation(for:)` is the iOS 16 API; the identifier-based one
-                // returns `Progress` and has no async form.
-                if let data = try? await provider.loadDataRepresentation(for: type) {
+                if let data = await load(type.identifier, from: provider) {
                     images.append(data)
                     break
                 }
             }
         }
         return images
+    }
+
+    /// Both `loadDataRepresentation` forms return `Progress`, so neither has an async overload;
+    /// bridge the completion handler, which the system calls on a background queue.
+    nonisolated private static func load(_ identifier: String, from provider: NSItemProvider) async -> Data? {
+        nonisolated(unsafe) let provider = provider
+        return await withCheckedContinuation { continuation in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: identifier) { data, _ in
+                continuation.resume(returning: data)
+            }
+        }
     }
 }
 #endif
