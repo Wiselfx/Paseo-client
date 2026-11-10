@@ -189,9 +189,9 @@ struct DraftChatView: View {
     /// pill at rest, the two-row card once it has focus, text, an attachment or an error. Send
     /// creates the agent and hands its id back to the shell.
     private var composer: some View {
-        ComposerView(draft: draft, session: session, focused: $focused) { agentId in
-            onCreated(agentId)
-        }
+        ComposerView(
+            draft: draft, session: session, onCreated: { agentId in onCreated(agentId) },
+            focused: $focused)
         .padding(.bottom, 8)
     }
 

@@ -15,8 +15,9 @@ struct ChatFindBarView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
+        @Bindable var find = controller.find
         ClaudeFindBar(
-            query: $controller.find.query,
+            query: $find.query,
             isSearching: store.search.isSearching,
             resultCount: store.search.locations.count,
             currentIndex: controller.find.index,
