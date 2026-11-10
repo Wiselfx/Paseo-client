@@ -152,28 +152,6 @@ struct ClaudeTurnChevron: View {
     }
 }
 
-/// Touch has no hover: the summary row's leading seat shows its chevron while the row is open
-/// or while a finger is down, and the activity glyph otherwise. The key is injected by
-/// `ClaudePressButtonStyle`; it defaults to false everywhere else.
-private struct ClaudeRowPressedKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var claudeRowPressed: Bool {
-        get { self[ClaudeRowPressedKey.self] }
-        set { self[ClaudeRowPressedKey.self] = newValue }
-    }
-}
-
-/// A plain button style that publishes `isPressed` into the environment so the row's leading
-/// seat can follow the finger. No visual change of its own.
-struct ClaudePressButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.environment(\.claudeRowPressed, configuration.isPressed)
-    }
-}
-
 /// Rounded card with the 1 pt edge the process column uses.
 struct ClaudeCard<Content: View>: View {
     @ViewBuilder var content: () -> Content
