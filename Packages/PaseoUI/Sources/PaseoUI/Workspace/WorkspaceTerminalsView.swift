@@ -27,7 +27,8 @@ struct WorkspaceTerminalsView: View {
     /// their streams").
     @State private var mountedTerminalIds: [String] = []
     /// The terminal the crossfade just left. It stays opaque underneath while the incoming one
-    /// fades in, which is what makes the switch a crossfade instead of a dip to the canvas.
+    /// fades in — which is what makes the switch a crossfade instead of a dip to the canvas — and
+    /// is released when the fade ends.
     @State private var outgoingTerminalId: String?
     /// One reattach counter per terminal: bumping it builds a fresh emulator and resubscribes.
     @State private var reattachCounts: [String: Int] = [:]
@@ -57,6 +58,10 @@ struct WorkspaceTerminalsView: View {
     /// Upstream keeps the four most recently used terminals' streams alive: "The retained-panel
     /// LRU bounds the number of live streams" (`terminal-performance.md`).
     private static let maxMountedTerminals = 4
+
+    /// `Motion.fade`'s duration: how long the terminal a switch left behind stays opaque under the
+    /// incoming one.
+    private static let crossfadeMilliseconds = 200
 
     private var store: TerminalsStore { session.terminals }
     private var workspaceId: String { workspace.id }
@@ -227,6 +232,19 @@ struct WorkspaceTerminalsView: View {
         }
         selectedTerminalId = id
         outgoingTerminalId = previous
+        guard let previous, !reduceMotion else {
+            // Nothing to sit under: with Reduce Motion there is no fade to hide, so the outgoing
+            // terminal goes dark at once.
+            outgoingTerminalId = nil
+            return
+        }
+        // Holds the previous terminal opaque for exactly the length of the crossfade, then lets it
+        // go: a hidden emulator must not keep rendering under the visible one.
+        Task {
+            try? await Task.sleep(for: .milliseconds(Self.crossfadeMilliseconds))
+            guard outgoingTerminalId == previous else { return }
+            outgoingTerminalId = nil
+        }
     }
 
     /// The requested terminal when it exists, else the first one. The request wins even
@@ -445,7 +463,7 @@ struct WorkspaceTerminalsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(Motion.fade.resolved(reduceMotion:), value: stageState)
+        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: stageState)
     }
 
     /// One retained emulator. `generation` only changes when the user reattaches after the process
@@ -491,9 +509,9 @@ struct WorkspaceTerminalsView: View {
                 showAttachMenu = true
             },
             onCancelUpload: { session.fileUploader.cancel() })
-        // The outgoing terminal stays opaque for the length of the fade, so the incoming one
-        // fades in over it instead of both fading toward the canvas. The switch after this one
-        // drops it out of the pair, already covered.
+        // The terminal the switch just left stays opaque for the length of the fade, so the
+        // incoming one fades in over it instead of both fading toward the canvas. `select` clears
+        // it again when the fade ends, which takes it out of the composite.
         .opacity(isSelected || mounted.terminalId == outgoingTerminalId ? 1 : 0)
         .allowsHitTesting(isSelected)
         .accessibilityHidden(!isSelected)

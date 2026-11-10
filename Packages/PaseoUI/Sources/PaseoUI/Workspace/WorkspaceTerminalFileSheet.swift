@@ -46,8 +46,8 @@ struct WorkspaceTerminalFileSheet: View {
             }
             // The file arrives a moment after the sheet does: it fades in where the spinner was
             // rather than snapping in under it.
-            .animation(Motion.fade.resolved(reduceMotion:), value: text)
-            .animation(Motion.fade.resolved(reduceMotion:), value: failure)
+            .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: text)
+            .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: failure)
         }
         .task { await load() }
     }

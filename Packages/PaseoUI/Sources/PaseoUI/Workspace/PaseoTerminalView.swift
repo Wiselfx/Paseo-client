@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import Dispatch
 import PaseoStore
 import QuartzCore
 import SwiftTerm
@@ -126,6 +127,14 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     /// A burst larger than this is fed at once rather than held back for a frame.
     static let maxBufferedBytes = 256 * 1024
 
+    /// The coordinator whose terminal is on screen. Only one terminal is visible at a time, so a
+    /// keyboard hand-off has exactly one place to go.
+    private static weak var visibleTerminal: PaseoTerminalCoordinator?
+    /// The keyboard is up on a terminal that just went hidden. It moves to the visible terminal at
+    /// the end of this run loop turn, which is what keeps the keyboard from dropping and re-rising
+    /// on a switch.
+    private static var keyboardHandoff = false
+
     weak var store: TerminalsStore?
     weak var view: TerminalView?
     /// The scrollback the view was last configured with — live re-application on change.
@@ -228,10 +237,44 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     func setVisible(_ visible: Bool) {
         guard visible != isVisible else { return }
         isVisible = visible
-        guard visible, let store, let terminalId, attachedId == terminalId, let size = attachedSize
+        guard visible else {
+            // A hidden terminal must not keep the keyboard: keystrokes would land on a grid nobody
+            // can see. The hand-off itself runs at the end of this turn, after the visible terminal
+            // has been told it is visible, so it does not matter which of the two views SwiftUI
+            // updates first.
+            if view?.isFirstResponder == true {
+                Self.keyboardHandoff = true
+                Self.scheduleKeyboardHandoff()
+            }
+            return
+        }
+        Self.visibleTerminal = self
+        if let store, let terminalId, attachedId == terminalId, let size = attachedSize {
+            store.resize(terminalId, to: size, intent: .claim)
+            claimed = true
+        }
+        Self.scheduleKeyboardHandoff()
+    }
+
+    /// Hands the keyboard on once the whole update pass that switched terminals has run. One run
+    /// loop hop per tab switch, never per frame.
+    private static func scheduleKeyboardHandoff() {
+        guard keyboardHandoff else { return }
+        DispatchQueue.main.async {
+            // Main queue by construction; the hop exists to run after this run loop turn.
+            MainActor.assumeIsolated { handOverKeyboard() }
+        }
+    }
+
+    /// Becoming first responder resigns the hidden one in the same turn, so the keyboard stays up
+    /// instead of animating away and back.
+    private static func handOverKeyboard() {
+        guard keyboardHandoff else { return }
+        keyboardHandoff = false
+        guard let target = visibleTerminal, target.isVisible,
+            target.view?.isFirstResponder != true
         else { return }
-        store.resize(terminalId, to: size, intent: .claim)
-        claimed = true
+        _ = target.view?.becomeFirstResponder()
     }
 
     /// Releases the subscription, cancels the byte pump and resets the emulator.
@@ -254,6 +297,7 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         isAttaching = false
         isReplaying = false
         pendingResize = nil
+        if Self.visibleTerminal === self { Self.visibleTerminal = nil }
         view?.resetToInitialState()
     }
 
