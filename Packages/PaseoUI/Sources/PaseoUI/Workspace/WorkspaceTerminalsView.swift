@@ -21,8 +21,18 @@ struct WorkspaceTerminalsView: View {
     @State private var selectedTerminalId: String?
     @State private var isCreating = false
     @State private var busyScripts: Set<String> = []
-    @State private var exitMessage: String?
-    @State private var exitGeneration = 0
+    /// Recently selected terminal ids, most recent last. Every one of them stays mounted in the
+    /// stage, so a tab switch neither rebuilds an emulator nor asks the host for a fresh snapshot
+    /// (upstream `terminal-performance.md`: "Retained terminal tabs in the focused workspace keep
+    /// their streams").
+    @State private var mountedTerminalIds: [String] = []
+    /// The terminal the crossfade just left. It stays opaque underneath while the incoming one
+    /// fades in, which is what makes the switch a crossfade instead of a dip to the canvas.
+    @State private var outgoingTerminalId: String?
+    /// One reattach counter per terminal: bumping it builds a fresh emulator and resubscribes.
+    @State private var reattachCounts: [String: Int] = [:]
+    /// The last line of a terminal whose process ended, per terminal id.
+    @State private var exitMessages: [String: String] = [:]
     /// Last viewed time per terminal id (milliseconds), for the activity unread dot. In memory
     /// only; the daemon's activity pushes are what actually updates it.
     @State private var lastViewed: [String: Double] = [:]
@@ -42,7 +52,11 @@ struct WorkspaceTerminalsView: View {
 
     @Environment(\.openURL) private var openURL
     @Environment(\.toast) private var toast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Upstream keeps the four most recently used terminals' streams alive: "The retained-panel
+    /// LRU bounds the number of live streams" (`terminal-performance.md`).
+    private static let maxMountedTerminals = 4
 
     private var store: TerminalsStore { session.terminals }
     private var workspaceId: String { workspace.id }
@@ -69,14 +83,16 @@ struct WorkspaceTerminalsView: View {
         }
         .onAppear {
             if selectedTerminalId == nil || !terminalIds.contains(selectedTerminalId ?? "") {
-                selectedTerminalId = preferredTerminalId(from: terminalIds)
+                select(preferredTerminalId(from: terminalIds))
             }
             markCurrentViewed()
         }
         .onChange(of: terminalIds) { _, ids in
+            mountedTerminalIds.removeAll { !ids.contains($0) }
+            exitMessages = exitMessages.filter { ids.contains($0.key) }
+            reattachCounts = reattachCounts.filter { ids.contains($0.key) }
             if let selectedTerminalId, ids.contains(selectedTerminalId) { return }
-            selectedTerminalId = preferredTerminalId(from: ids)
-            exitMessage = nil
+            select(preferredTerminalId(from: ids))
             markCurrentViewed()
         }
         .onChange(of: selectedTerminalId) { _, _ in markCurrentViewed() }
@@ -179,6 +195,40 @@ struct WorkspaceTerminalsView: View {
         lastViewed[selectedTerminalId] = Date().timeIntervalSince1970 * 1000
     }
 
+    /// Live output arrived for a terminal. `lastViewed` is only written when the tab's dot would
+    /// actually change: a build burst must not re-evaluate the page for a dot that is already
+    /// idle. The coordinator already caps this at one call per half second.
+    private func markViewedIfChanged(_ terminalId: String) {
+        guard terminalId == selectedTerminalId,
+            let terminal = store.terminals(in: workspaceId).first(where: { $0.id == terminalId }),
+            isUnread(terminal)
+        else { return }
+        lastViewed[terminalId] = Date().timeIntervalSince1970 * 1000
+    }
+
+    /// Daemon activity newer than the last time this device looked at the terminal.
+    private func isUnread(_ terminal: TerminalInfo) -> Bool {
+        guard terminal.activityBucket == nil else { return false }
+        guard let changedAt = terminal.activity?.changedAt, changedAt > 0 else { return false }
+        return changedAt > (lastViewed[terminal.id] ?? 0)
+    }
+
+    /// Selects a terminal and keeps it at the front of the retained list, so the four most
+    /// recently used emulators stay mounted and keep applying output.
+    private func select(_ id: String?) {
+        guard id != selectedTerminalId else { return }
+        let previous = selectedTerminalId
+        if let id {
+            mountedTerminalIds.removeAll { $0 == id }
+            mountedTerminalIds.append(id)
+            while mountedTerminalIds.count > Self.maxMountedTerminals {
+                mountedTerminalIds.removeFirst()
+            }
+        }
+        selectedTerminalId = id
+        outgoingTerminalId = previous
+    }
+
     /// The requested terminal when it exists, else the first one. The request wins even
     /// after the list arrives late (a notification tap can race the terminal list load).
     private func preferredTerminalId(from ids: [String]) -> String? {
@@ -268,12 +318,9 @@ struct WorkspaceTerminalsView: View {
     private func terminalChip(_ terminal: TerminalInfo) -> some View {
         let isSelected = terminal.id == selectedTerminalId
         return Button {
+            guard selectedTerminalId != terminal.id else { return }
             Haptics.selection()
-            if selectedTerminalId != terminal.id {
-                selectedTerminalId = terminal.id
-                exitMessage = nil
-                markCurrentViewed()
-            }
+            select(terminal.id)
         } label: {
             HStack(spacing: 6) {
                 StatusDot(dotKind(for: terminal))
@@ -344,12 +391,7 @@ struct WorkspaceTerminalsView: View {
         case .running: return .running
         case nil:
             // Daemon activity arrived since the viewer last looked at this tab.
-            if let changedAt = terminal.activity?.changedAt, changedAt > 0,
-                changedAt > (lastViewed[terminal.id] ?? 0)
-            {
-                return .unread
-            }
-            return .idle
+            return isUnread(terminal) ? .unread : .idle
         }
     }
 
@@ -361,10 +403,7 @@ struct WorkspaceTerminalsView: View {
             Task {
                 let created = await store.createTerminal(in: workspaceId, cwd: workspace.cwd)
                 isCreating = false
-                if let created {
-                    selectedTerminalId = created.id
-                    exitMessage = nil
-                }
+                if let created { select(created.id) }
             }
         } label: {
             HStack(spacing: 6) {
@@ -388,37 +427,95 @@ struct WorkspaceTerminalsView: View {
         .accessibilityLabel("New terminal")
     }
 
+    /// The stage. Every recently used terminal stays mounted; only the selected one is visible,
+    /// hit-testable and reachable by VoiceOver, and the others keep applying output with their
+    /// streams open.
     private func terminalArea(_ terminals: [TerminalInfo]) -> some View {
         ZStack {
-            if !store.isSupported {
-                statusMessage(
-                    "Update the host to view terminals.",
-                    detail: "This host predates the terminal replay protocol.")
-            } else if let selectedTerminalId, terminals.contains(where: { $0.id == selectedTerminalId }) {
-                PaseoTerminalView(
-                    store: store,
-                    terminalId: selectedTerminalId,
-                    onExit: { message in exitMessage = exitLine(for: message) },
-                    onOutput: { markCurrentViewed() },
-                    onOpenLink: handleOpenLink,
-                    upload: uploadSnapshot,
-                    onAttach: {
-                        Haptics.selection()
-                        showAttachMenu = true
-                    },
-                    onCancelUpload: { session.fileUploader.cancel() })
-                .id("\(selectedTerminalId)-\(exitGeneration)")
-                if let exitMessage {
-                    exitOverlay(exitMessage)
-                }
-            } else if terminals.isEmpty {
-                emptyState
+            if mountedTerminals.isEmpty {
+                stagePlaceholder(terminals)
             } else {
-                // The selected id is stale during the same frame the data refreshes.
-                LoadingState()
+                ForEach(mountedTerminals) { mounted in
+                    terminalStageEntry(mounted)
+                }
+            }
+            if let terminalId = selectedTerminalId, let message = exitMessages[terminalId] {
+                exitOverlay(message, terminalId: terminalId)
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(Motion.fade.resolved(reduceMotion:), value: stageState)
+    }
+
+    /// One retained emulator. `generation` only changes when the user reattaches after the process
+    /// ended; a tab switch keeps the same identity, so nothing is rebuilt or replayed.
+    private struct MountedTerminal: Identifiable {
+        let terminalId: String
+        let generation: Int
+        var id: String { "\(terminalId)#\(generation)" }
+    }
+
+    private var mountedTerminals: [MountedTerminal] {
+        mountedTerminalIds.map { id in
+            MountedTerminal(terminalId: id, generation: reattachCounts[id] ?? 0)
+        }
+    }
+
+    /// Everything the stage's appearance depends on, so one `.animation` covers the tab
+    /// crossfade, a terminal arriving, and the exit card appearing or leaving.
+    private struct StageState: Equatable {
+        var selected: String?
+        var mounted: [String]
+        var exit: String?
+    }
+
+    private var stageState: StageState {
+        StageState(
+            selected: selectedTerminalId, mounted: mountedTerminalIds,
+            exit: selectedTerminalId.flatMap { exitMessages[$0] })
+    }
+
+    private func terminalStageEntry(_ mounted: MountedTerminal) -> some View {
+        let isSelected = mounted.terminalId == selectedTerminalId
+        return PaseoTerminalView(
+            store: store,
+            terminalId: mounted.terminalId,
+            isVisible: isSelected,
+            onExit: { message in recordExit(message, for: mounted.terminalId) },
+            onOutput: { markViewedIfChanged(mounted.terminalId) },
+            onOpenLink: handleOpenLink,
+            upload: isSelected ? uploadSnapshot : nil,
+            onAttach: {
+                Haptics.selection()
+                showAttachMenu = true
+            },
+            onCancelUpload: { session.fileUploader.cancel() })
+        // The outgoing terminal stays opaque for the length of the fade, so the incoming one
+        // fades in over it instead of both fading toward the canvas. The switch after this one
+        // drops it out of the pair, already covered.
+        .opacity(isSelected || mounted.terminalId == outgoingTerminalId ? 1 : 0)
+        .allowsHitTesting(isSelected)
+        .accessibilityHidden(!isSelected)
+    }
+
+    @ViewBuilder private func stagePlaceholder(_ terminals: [TerminalInfo]) -> some View {
+        if !store.isSupported {
+            statusMessage(
+                "Update the host to view terminals.",
+                detail: "This host predates the terminal replay protocol.")
+                .transition(.opacity)
+        } else if terminals.isEmpty {
+            emptyState.transition(.opacity)
+        } else {
+            // The selected id is stale during the same frame the data refreshes.
+            LoadingState().transition(.opacity)
+        }
+    }
+
+    /// Remembers why a terminal ended, per terminal, so a tab switch never shows the wrong one.
+    private func recordExit(_ message: String?, for terminalId: String) {
+        exitMessages[terminalId] = exitLine(for: message)
     }
 
     private var emptyState: some View {
@@ -433,10 +530,7 @@ struct WorkspaceTerminalsView: View {
                 Task {
                     let created = await store.createTerminal(in: workspaceId, cwd: workspace.cwd)
                     isCreating = false
-                    if let created {
-                        selectedTerminalId = created.id
-                        exitMessage = nil
-                    }
+                    if let created { select(created.id) }
                 }
             }))
         .padding(.horizontal, Space.xxxl)
@@ -479,7 +573,7 @@ struct WorkspaceTerminalsView: View {
         return "\(error)\nThe process may still be running."
     }
 
-    private func exitOverlay(_ message: String) -> some View {
+    private func exitOverlay(_ message: String, terminalId: String) -> some View {
         VStack(spacing: 12) {
             Text(message)
                 .font(.paseo(.footnote))
@@ -488,28 +582,19 @@ struct WorkspaceTerminalsView: View {
             HStack(spacing: 10) {
                 Button {
                     Haptics.selection()
-                    exitMessage = nil
-                    exitGeneration += 1
+                    exitMessages[terminalId] = nil
+                    // A fresh emulator and a fresh subscription, at the same grid.
+                    reattachCounts[terminalId, default: 0] += 1
                 } label: {
                     Text("Reattach")
-                        .font(.paseo(.callout, weight: .medium))
-                        .foregroundStyle(Palette.background)
-                        .padding(.horizontal, 16)
-                        .frame(minHeight: 36)
-                        .background(Palette.ink, in: .capsule)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.paseoPrimary())
                 Button {
-                    exitMessage = nil
+                    exitMessages[terminalId] = nil
                 } label: {
                     Text("Dismiss")
-                        .font(.paseo(.callout, weight: .medium))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.horizontal, 16)
-                        .frame(minHeight: 36)
-                        .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.paseoSecondary)
             }
         }
         .padding(20)
@@ -591,8 +676,7 @@ struct WorkspaceTerminalsView: View {
             if let terminalId = script.terminalId, terminalIds.contains(terminalId) {
                 Button {
                     Haptics.selection()
-                    selectedTerminalId = terminalId
-                    exitMessage = nil
+                    select(terminalId)
                 } label: {
                     Text("View")
                         .font(.paseo(.footnote, weight: .medium))

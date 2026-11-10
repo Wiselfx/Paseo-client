@@ -25,8 +25,8 @@ struct WorkspaceTerminalFileSheet: View {
 
     @State private var text: String?
     @State private var failure: String?
-    @State private var isLoading = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var files: WorkspaceFiles { checkout.files }
 
@@ -35,12 +35,19 @@ struct WorkspaceTerminalFileSheet: View {
             Group {
                 if let text {
                     linkedContent(text)
+                        .transition(.opacity)
                 } else if let failure {
                     failureView(failure)
+                        .transition(.opacity)
                 } else {
                     LoadingState()
+                        .transition(.opacity)
                 }
             }
+            // The file arrives a moment after the sheet does: it fades in where the spinner was
+            // rather than snapping in under it.
+            .animation(Motion.fade.resolved(reduceMotion:), value: text)
+            .animation(Motion.fade.resolved(reduceMotion:), value: failure)
         }
         .task { await load() }
     }
@@ -92,8 +99,6 @@ struct WorkspaceTerminalFileSheet: View {
     }
 
     private func load() async {
-        isLoading = true
-        defer { isLoading = false }
         await files.read(target.resolvedPath)
         if let file = files.file, let text = file.textContent {
             self.text = text

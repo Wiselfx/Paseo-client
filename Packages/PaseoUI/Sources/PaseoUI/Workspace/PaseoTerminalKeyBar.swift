@@ -179,11 +179,9 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         button.tintColor = Self.ink
         button.setTitleColor(Self.ink, for: .normal)
         button.accessibilityLabel = label
-        button.addAction(
-            UIAction { _ in
-                Haptics.light()
-                action(button)
-            }, for: .touchUpInside)
+        // Touch-down, not touch-up: a terminal key answers the moment the finger lands. The
+        // button's own highlight is the pressed state.
+        button.addAction(UIAction { _ in action(button) }, for: .touchDown)
         return button
     }
 
@@ -193,6 +191,8 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
 
     private func toggleControl(_ button: UIButton) {
         guard let terminalView else { return }
+        // The only haptic on the bar: a latched modifier is a mode, and you can feel it.
+        Haptics.selection()
         terminalView.controlModifier.toggle()
         button.tintColor = terminalView.controlModifier ? UIColor(Palette.orange) : Self.ink
     }

@@ -192,11 +192,43 @@ public final class HostSession {
     }
 
     /// Re-fetches the agent list (pull to refresh).
+    ///
+    /// Pages to the end the way upstream's directory sync does
+    /// (`directory-sync/index.ts:701-745`): `scope: "active"` so archived rows cannot crowd
+    /// active ones off a page, newest first, `subscribe` on the first page only, and the next
+    /// cursor followed while the host says there is one.
     public func refreshAgents() async {
+        var entries: [FetchAgentsRequest.Response.Entry] = []
+        var firstPageSubscriptionId: String?
+        var cursor: String?
+        var seenCursors: Set<String> = []
+        // Gated the way upstream gates it: only a host with background workspaces is asked for
+        // their agents, so an older daemon never sees the field.
+        let includeBackground = serverInfo?.hasFeature("backgroundWorkspaces") == true
         do {
-            let response = try await client.send(FetchAgentsRequest(page: .init(limit: 200), subscribe: true))
+            while true {
+                let page = FetchAgentsRequest.Page(
+                    limit: FetchAgentsRequest.maxPageLimit, cursor: cursor)
+                let response = try await client.send(
+                    FetchAgentsRequest(
+                        page: page,
+                        subscribe: cursor == nil,
+                        scope: "active",
+                        includeBackground: includeBackground ? true : nil,
+                        sort: [.updatedAtDescending]))
+                if cursor == nil { firstPageSubscriptionId = response.subscriptionId }
+                entries.append(contentsOf: response.entries)
+                // A host that answers with no page info, no next cursor, a cursor we already
+                // read, or a cursor with `hasMore` false has no further page.
+                guard let next = response.pageInfo?.cursorForNextPage,
+                    seenCursors.insert(next).inserted
+                else { break }
+                cursor = next
+            }
+            guard !Task.isCancelled else { return }
+
             let previousSubscriptionId = agentsSubscriptionId
-            agentsSubscriptionId = response.subscriptionId
+            agentsSubscriptionId = firstPageSubscriptionId
             // A modern socket creates a new owned subscription per subscribe; an old one would
             // keep delivering the same agent updates. Release it after the new snapshot lands.
             if serverInfo?.supportsOwnedSubscriptions == true, let previousSubscriptionId,
@@ -204,8 +236,9 @@ public final class HostSession {
             {
                 await client.releaseOwnedSubscription(previousSubscriptionId)
             }
-            let entries = response.entries
 
+            // `scope: "active"` already excludes archived rows on a modern host; the filter keeps
+            // an old host's list honest.
             setAgents(sortedAgents(entries.filter { $0.agent.archivedAt == nil }.map(\.agent)))
 
             var placements: [String: ProjectPlacement] = [:]
@@ -216,6 +249,12 @@ public final class HostSession {
             agentsError = nil
         } catch {
             agentsError = errorText(error)
+            // The subscribe we just opened will never be used; the previous one stays live.
+            if let firstPageSubscriptionId, firstPageSubscriptionId != agentsSubscriptionId,
+                serverInfo?.supportsOwnedSubscriptions == true
+            {
+                await client.releaseOwnedSubscription(firstPageSubscriptionId)
+            }
         }
     }
 
