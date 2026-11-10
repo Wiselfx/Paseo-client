@@ -14,9 +14,14 @@ struct ClaudeWorkGroupCell: View {
     @State private var userExpanded: Bool?
     @State private var contentHeight: CGFloat = 0
     @State private var sweepStart = Date()
+    /// The group's derived summary and seat glyph, cached per row identity (finding #15).
+    @State private var derivedCache = WorkGroupDerivedCache()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.claudeProcessCap) private var processCap
     @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
+
+    /// The masked sweep's rate: display rate was an offscreen pass per frame (findings #11, #24).
+    static let sweepTick: TimeInterval = 1.0 / 30.0
 
     var opensByDefault: Bool {
         turnIsRunning && group.isActive
@@ -33,7 +38,7 @@ struct ClaudeWorkGroupCell: View {
     }
 
     /// The leading seat's activity icon (doc 08 §1.2): the group's content decides the glyph.
-    var seatGlyph: ClaudeGlyph.Kind {
+    static func computeSeatGlyph(_ group: Turn.WorkGroup) -> ClaudeGlyph.Kind {
         var hasShell = false
         var hasFile = false
         for row in group.rows {
@@ -52,7 +57,8 @@ struct ClaudeWorkGroupCell: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let derived = derivedCache.derived(for: group)
+        return VStack(alignment: .leading, spacing: 8) {
             Button {
                 Haptics.selection()
                 withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
@@ -60,8 +66,8 @@ struct ClaudeWorkGroupCell: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    ClaudeLeadingSeat(glyph: seatGlyph, expanded: isExpanded)
-                    summary
+                    ClaudeLeadingSeat(glyph: derived.seat, expanded: isExpanded)
+                    summary(derived.summary)
                     Spacer(minLength: 4)
                 }
                 .frame(minHeight: 17.5) // the counted line: 14 pt × 1.25
@@ -71,7 +77,7 @@ struct ClaudeWorkGroupCell: View {
             .id("group:\(group.rows.first?.seqEnd ?? 0)")
             .onAppear { checkFindTarget() }
             .onChange(of: findTarget) { _, _ in checkFindTarget() }
-            .accessibilityLabel(summaryText)
+            .accessibilityLabel(derived.summary)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
             if isExpanded {
@@ -83,7 +89,7 @@ struct ClaudeWorkGroupCell: View {
 
     /// One sentence of what the group did, such as "Edited 3 files and ran 2 commands". Keeps
     /// DSH's wording; the headline counts folds and tool kinds into verbs. Revised from raw counts.
-    var summaryText: String {
+    static func computeSummaryText(_ group: Turn.WorkGroup) -> String {
         var editedFiles = Set<String>()
         var readFiles = Set<String>()
         var commands = 0, searches = 0, otherTools = 0
@@ -125,28 +131,29 @@ struct ClaudeWorkGroupCell: View {
         return String(first).uppercased() + joined.dropFirst()
     }
 
-    func summaryRuns(_ ink: Color) -> some View {
-        Text(summaryText)
+    func summaryRuns(_ text: String, _ ink: Color) -> some View {
+        Text(text)
             .font(typography.serif(14, weight: .medium))
             .tracking(-0.14)
             .foregroundStyle(ink)
     }
 
-    var summary: some View {
+    func summary(_ text: String) -> some View {
         Group {
             if turnIsRunning && group.isActive && !reduceMotion {
-                // Display rate, not a 30 Hz cap: the band must not step at 120 Hz (P3).
-                TimelineView(.animation) { context in
-                    summaryRuns(ClaudePalette.tertiaryInk).overlay(alignment: .leading) {
+                // A capped rate, not display rate: the masked sweep is an offscreen pass
+                // (findings #11, #24). The band's 48 steps don't need more than this.
+                TimelineView(.animation(minimumInterval: Self.sweepTick)) { context in
+                    summaryRuns(text, ClaudePalette.tertiaryInk).overlay(alignment: .leading) {
                         if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: context.date) {
-                            summaryRuns(ClaudePalette.shimmerInk)
+                            summaryRuns(text, ClaudePalette.shimmerInk)
                                 .mask(ClaudeSweep.windowGradient(phase: phase))
                                 .allowsHitTesting(false)
                         }
                     }
                 }
             } else {
-                summaryRuns(ClaudePalette.tertiaryInk)
+                summaryRuns(text, ClaudePalette.tertiaryInk)
             }
         }
     }
@@ -160,17 +167,18 @@ struct ClaudeWorkGroupCell: View {
     var card: some View {
         ScrollView(.vertical) {
             rows
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(key: ClaudeGroupHeightKey.self, value: proxy.size.height)
-                    }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    // Measure and clamp: once the rows pass the cap the frame stops changing, so
+                    // a growing group no longer re-lays-out the card every token (finding #23).
+                    let clamped = min(max(height, 1), processCap)
+                    guard clamped != contentHeight else { return }
+                    contentHeight = clamped
                 }
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollIndicators(.hidden)
         // Hugs its rows until they reach the host's cap, then scrolls inside the card.
         .frame(height: min(max(contentHeight, 1), processCap), alignment: .top)
-        .onPreferenceChange(ClaudeGroupHeightKey.self) { height in contentHeight = height }
         // The process card is transparent — the canvas shows through.
         .clipShape(.rect(cornerRadius: 8))
         .overlay {
@@ -211,11 +219,20 @@ struct ClaudeWorkGroupCell: View {
     }
 }
 
+/// Memoizes the group card's derived summary and seat glyph per row identity: appending a row
+/// invalidates, a reasoning row's text growing does not (finding #15).
+private final class WorkGroupDerivedCache {
+    private var key: [Int] = []
+    private var summary = ""
+    private var seat: ClaudeGlyph.Kind = .think
 
-struct ClaudeGroupHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
+    func derived(for group: Turn.WorkGroup) -> (summary: String, seat: ClaudeGlyph.Kind) {
+        let key = group.rows.map(\.seqEnd)
+        guard key != self.key else { return (summary, seat) }
+        self.key = key
+        self.summary = ClaudeWorkGroupCell.computeSummaryText(group)
+        self.seat = ClaudeWorkGroupCell.computeSeatGlyph(group)
+        return (self.summary, self.seat)
     }
 }
 

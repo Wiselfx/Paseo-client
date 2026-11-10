@@ -189,11 +189,14 @@ struct ClaudeCrabView: View {
             if CrabSheetLoader.image(animation: current, ink: false) == nil {
                 // Hidden until the first sheet frame is ready.
                 EmptyView()
-            } else if reduceMotion {
-                // Reduce Motion: the animation's `still` frame, static.
-                frame(at: Date(timeIntervalSinceReferenceDate: 0), index: animation.sheet.still)
+            } else if reduceMotion || current == .sleeping {
+                // Reduce Motion: the animation's `still` frame, static. The sleeping loop is 32
+                // frames forever; the same picture without the display-rate redraw (finding #11).
+                frame(at: Date(timeIntervalSinceReferenceDate: 0), index: current.sheet.still)
             } else {
-                TimelineView(.animation) { context in
+                // The frame clock, not the display clock: the crab changes frame every 80 ms, so
+                // the timeline only needs to tick that often (finding #11).
+                TimelineView(.animation(minimumInterval: CrabAnimation.frameSeconds)) { context in
                     frame(at: context.date)
                 }
             }

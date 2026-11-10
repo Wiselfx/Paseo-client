@@ -605,24 +605,12 @@ extension ClaudeChatView {
     /// Reads a workspace image through its checkout store (the same instance the panel shares),
     /// for bare absolute/`~` image paths in assistant prose. Returns nil when the workspace of
     /// this conversation isn't open in the directory — those render as path chips.
+    ///
+    /// The loader is built once per (session, workspaceId) and cached: a fresh closure would be a
+    /// new input to `ClaudeProse` on every body evaluation, re-running its body per streamed token
+    /// (finding #13).
     var localImageLoader: ((String) async -> UIImage?)? {
-        guard let workspaceId = store.agent?.workspaceId else { return nil }
-        let session = self.session
-        return { path in
-            guard let descriptor = session.workspaceDirectory.workspace(id: workspaceId) else {
-                return nil
-            }
-            let checkout = session.checkout(for: descriptor)
-            await checkout.files.read(path, maxBytes: 8 * 1024 * 1024)
-            guard checkout.files.phase == .ready,
-                let file = checkout.files.file,
-                file.kind == .image,
-                let content = file.content,
-                let data = Data(base64Encoded: content),
-                let image = UIImage(data: data)
-            else { return nil }
-            return image
-        }
+        imageLoaderCache.loader(for: store.agent?.workspaceId, session: session)
     }
 
     func handleMarkdown(_ action: MarkdownAction) {
@@ -646,6 +634,37 @@ extension ClaudeChatView {
         }
     }
 }
+
+/// Builds and caches one image loader per workspace, so the closure handed to `ClaudeProse` keeps
+/// its identity across body evaluations (finding #13). Main-actor only; the closure is not
+/// `Sendable`, so the box carries the same escape hatch as the other view-side caches.
+final class LocalImageLoaderCache: @unchecked Sendable {
+    private var workspaceId: String?
+    private var loader: ((String) async -> UIImage?)?
+
+    func loader(for workspaceId: String?, session: HostSession) -> ((String) async -> UIImage?)? {
+        guard let workspaceId else { return nil }
+        if workspaceId == self.workspaceId, let loader { return loader }
+        self.workspaceId = workspaceId
+        self.loader = { @MainActor path in
+            guard let descriptor = session.workspaceDirectory.workspace(id: workspaceId) else {
+                return nil
+            }
+            let checkout = session.checkout(for: descriptor)
+            await checkout.files.read(path, maxBytes: 8 * 1024 * 1024)
+            guard checkout.files.phase == .ready,
+                let file = checkout.files.file,
+                file.kind == .image,
+                let content = file.content,
+                let data = Data(base64Encoded: content),
+                let image = UIImage(data: data)
+            else { return nil }
+            return image
+        }
+        return self.loader
+    }
+}
+
 extension ClaudeChatView {
     /// The dictation mic, split out of the composer row so the type checker sees one small
     /// expression at a time.
