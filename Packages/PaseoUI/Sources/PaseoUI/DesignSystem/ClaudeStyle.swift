@@ -19,10 +19,10 @@ enum ClaudeMotion {
     static let feedback: Double = 0.12
     /// `--dsh-claude-duration-move`: the height roll on a disclosure.
     static let move: Double = 0.20
-    /// The wording swap: 150 ms per half with a 50 ms gap.
-    static let swap: Double = 0.15
+    /// The wording swap: the status line's enter/exit pair (OCU §12.22).
+    static let swap: Double = 0.24
     /// `--dsh-claude-duration-open`: the overtime badge.
-    static let open: Double = 0.25
+    static let open: Double = 0.3
     /// `--dsh-claude-period-hold` / status sweep.
     static let statusPeriod: Double = 1.5
     /// `--dsh-claude-duration-host-sweep-delay`: the band waits this long after the words appear.
@@ -38,7 +38,7 @@ enum ClaudeMotion {
     /// 10 s of silence before "No response yet".
     static let overtime: Double = 10
     /// `--dsh-claude-duration-rise`: the home greeting rising into place.
-    static let rise: Double = 0.5
+    static let rise: Double = 0.45
     /// `--dsh-claude-duration-stagger`: the second entrance starts this much later.
     static let stagger: Double = 0.07
     /// `--dsh-claude-distance-rise`.

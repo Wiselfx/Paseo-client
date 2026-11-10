@@ -60,9 +60,9 @@ struct ClaudeCodeBlock: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .background(Palette.codeSurface, in: .rect(cornerRadius: Radius.sm))
+        .background(Palette.codeSurface, in: .rect(cornerRadius: Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(Palette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
         }
         .codeTypeScale()
     }
@@ -106,7 +106,7 @@ struct ClaudeCopyButton: View {
             Haptics.selection()
             copied = true
             Task {
-                try? await Task.sleep(for: .seconds(1.5))
+                try? await Task.sleep(for: .seconds(2.5))
                 copied = false
             }
         } label: {
@@ -185,7 +185,7 @@ struct ClaudeUserBubble: View {
             bubble
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .scaleEffect(shownScale, anchor: .bottomTrailing)
+        .offset(y: shownOffset)
         .opacity(shownOpacity)
         .animation(
             reduceMotion
@@ -203,7 +203,7 @@ struct ClaudeUserBubble: View {
             .foregroundStyle(Palette.ink)
             .lineSpacing(4)
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.vertical, Space.md)
             .background(
                 Palette.userBubble, in: .rect(cornerRadius: Radius.bubble, style: .continuous)
             )
@@ -255,8 +255,9 @@ struct ClaudeUserBubble: View {
         }
     }
 
-    private var shownScale: CGFloat {
-        entered || reduceMotion ? 1 : 0.96
+    /// A sent message rises 10 pt into place (fade-up, OCU §12.20).
+    private var shownOffset: CGFloat {
+        entered || reduceMotion ? 0 : 10
     }
 
     private var shownOpacity: Double {

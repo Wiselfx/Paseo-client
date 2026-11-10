@@ -195,15 +195,16 @@ struct ClaudeLiveStatusLine: View {
                     .padding(.horizontal, 6)
                     .padding(.leading, 2)
                     .frame(height: 16)
-                    .background(Palette.warning.opacity(0.16), in: .rect(cornerRadius: Radius.xs))
+                    .background(Palette.warning.opacity(0.16), in: .rect(cornerRadius: Radius.sm))
                     .transition(.offset(y: 4).combined(with: .scale(scale: 0.92)).combined(with: .opacity))
             }
             Spacer(minLength: 0)
         }
         .frame(height: 24)
-        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: activity)
+        .animation(Motion.swap.resolved(reduceMotion: reduceMotion), value: activity)
+        // OCU §12: the overtime badge settles critically damped, like every surface.
         .animation(
-            Motion.disclosure.resolved(reduceMotion: reduceMotion),
+            Motion.settle.resolved(reduceMotion: reduceMotion),
             value: showsOvertime(at: date))
         .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
         .accessibilityElement(children: .combine)
@@ -278,13 +279,13 @@ private struct ClaudeBlurSwap: ViewModifier {
 extension AnyTransition {
     static var claudeWordEntrance: AnyTransition {
         .modifier(
-            active: ClaudeBlurSwap(blur: 2, y: 8, alpha: 0),
+            active: ClaudeBlurSwap(blur: 2, y: 6, alpha: 0),
             identity: ClaudeBlurSwap(blur: 0, y: 0, alpha: 1))
     }
 
     static var claudeWordExit: AnyTransition {
         .modifier(
-            active: ClaudeBlurSwap(blur: 2, y: -8, alpha: 0),
+            active: ClaudeBlurSwap(blur: 2, y: -4, alpha: 0),
             identity: ClaudeBlurSwap(blur: 0, y: 0, alpha: 1))
     }
 }

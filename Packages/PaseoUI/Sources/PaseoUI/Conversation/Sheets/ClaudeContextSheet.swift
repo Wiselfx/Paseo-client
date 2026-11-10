@@ -37,10 +37,12 @@ struct ClaudeContextSheet: View {
             ClaudeMeterRing(percent: percent, size: 64, lineWidth: 6)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(PaseoFormat.percent(percent)) used")
+                    .monospacedDigit()
                     .font(.paseo(.largeTitle))
                     .foregroundStyle(Palette.ink)
                 if let max = usage.maxTokens {
                     Text("of \(Self.tokenCount(max)) tokens")
+                        .monospacedDigit()
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.secondaryInk)
                 }
@@ -119,9 +121,11 @@ struct ClaudeContextSheet: View {
                             Spacer(minLength: 8)
                             VStack(alignment: .trailing, spacing: 1) {
                                 Text(Self.cost(entry.costUsd, fractionDigits: 4))
+                                    .monospacedDigit()
                                     .font(.paseo(.callout, weight: .medium))
                                     .foregroundStyle(Palette.ink)
                                 Text("\(Self.tokenCount(entry.tokens)) tokens")
+                                    .monospacedDigit()
                                     .font(.paseo(.caption2))
                                     .foregroundStyle(Palette.secondaryInk)
                             }
@@ -153,6 +157,7 @@ struct ClaudeContextSheet: View {
                 .foregroundStyle(Palette.ink)
             Spacer(minLength: 8)
             Text(value)
+                .monospacedDigit()
                 .font(.paseo(.callout))
                 .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)

@@ -1267,6 +1267,8 @@ enum ComposerFieldLimit {
 struct ComposerCardChrome: ViewModifier {
     let expanded: Bool
 
+    private var radius: CGFloat { expanded ? Radius.composer : Radius.composerPill }
+
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, expanded ? 8 : 12)
@@ -1274,10 +1276,10 @@ struct ComposerCardChrome: ViewModifier {
             .frame(minHeight: 48)
             .background(
                 Palette.composer,
-                in: .rect(cornerRadius: Radius.group, style: .continuous)
+                in: .rect(cornerRadius: radius, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: Radius.group, style: .continuous)
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .stroke(Palette.composerBorder, lineWidth: 0.7)
             }
     }

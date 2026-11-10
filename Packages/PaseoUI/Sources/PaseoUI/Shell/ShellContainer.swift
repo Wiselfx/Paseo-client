@@ -84,7 +84,8 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(Palette.background)
+        // The sidebar sits on the container's canvas (OCU §12.4).
+        view.backgroundColor = UIColor(Palette.sidebar)
         view.insetsLayoutMarginsFromSafeArea = false
         edgesForExtendedLayout = .all
         extendedLayoutIncludesOpaqueBars = true
