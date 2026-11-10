@@ -176,7 +176,7 @@ struct ClaudeTurnView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(turnSummaryLabel)
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: FilePathLinks.linkifiedForProse(message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
+                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
             } else {
                 // A turn with no answer section (all work / no prose): keep it honest.
                 Text("This turn ended without a reply.")
@@ -222,7 +222,7 @@ struct ClaudeTurnView: View {
                 .transition(.opacity.combined(with: .offset(y: -2)))
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: FilePathLinks.linkifiedForProse(message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: isRunning)
+                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: isRunning)
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
             }
@@ -352,7 +352,7 @@ struct ClaudeSegmentView: View {
                 highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
-                ClaudeProse(markdown: FilePathLinks.linkifiedForProse(message.text), typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: turnIsRunning)
+                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: turnIsRunning)
                     .id("row:\(row.seqEnd)")
                     .background {
                         RoundedRectangle(cornerRadius: 14)

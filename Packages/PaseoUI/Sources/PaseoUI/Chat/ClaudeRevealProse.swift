@@ -42,7 +42,7 @@ struct ClaudeRevealProse: View {
     private struct PieceRef: Identifiable {
         let id: Int
         let piece: RichPiece
-        /// UTF-16 offset of the piece's first unit within the source.
+        /// UTF-16 offset of the piece's first unit within the rendered piece stream.
         let start: Int
         /// UTF-16 length of the piece's source range.
         let length: Int
@@ -59,9 +59,8 @@ struct ClaudeRevealProse: View {
             switch piece {
             case .markdown(let chunk):
                 length = chunk.utf16.count
-            case .block(let block):
-                length = source.utf16.distance(
-                    from: block.range.lowerBound, to: block.range.upperBound)
+            case .block(_, let blockLength):
+                length = blockLength
             }
             refs.append(
                 PieceRef(id: index, piece: piece, start: offset, length: length, isTailMarkdown: false))
@@ -92,7 +91,7 @@ struct ClaudeRevealProse: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .mask(sweepMask(active: ref.isTailMarkdown))
                     }
-                case .block(let block):
+                case .block(let block, _):
                     ClaudeRichBlockView(block: block, localImageLoader: localImageLoader)
                         .phaseAnimator([Self.minOpacity, 1.0], trigger: revealTick) { content, phase in
                             content.opacity(
@@ -107,7 +106,7 @@ struct ClaudeRevealProse: View {
         .onAppear {
             primeForHistory()
         }
-        .onChange(of: markdown) { _, newValue in reveal(newValue) }
+        .onChange(of: markdown) { _, newValue in reveal(newValue, refs: refs) }
         .onChange(of: isStreaming) { _, streaming in
             if !streaming { sweepBoundary = 1 }
         }
@@ -138,10 +137,11 @@ struct ClaudeRevealProse: View {
     }
 
     /// History must not animate: record the tail piece so the first delta only sweeps its suffix.
-    private func primeForHistory() {
-        lastMarkdown = markdown
+    private func primeForHistory(_ source: String? = nil) {
+        let text = source ?? markdown
+        lastMarkdown = text
         sweepBoundary = 1
-        if let tail = pieceRefs(markdown).last(where: { $0.isTailMarkdown }) {
+        if let tail = pieceRefs(text).last(where: { $0.isTailMarkdown }) {
             tailStart = tail.start
             tailLength = tail.length
         } else {
@@ -150,12 +150,14 @@ struct ClaudeRevealProse: View {
         }
     }
 
-    private func reveal(_ source: String) {
+    /// `refs` are the pieces of `source` already computed for this update's body —
+    /// passing them avoids re-splitting the source on every delta.
+    private func reveal(_ source: String, refs: [PieceRef]) {
         let priorMarkdown = lastMarkdown
         lastMarkdown = source
         guard isStreaming, !reduceMotion else {
             // History (or motion off): just track the tail, never animate.
-            if let tail = pieceRefs(source).last(where: { $0.isTailMarkdown }) {
+            if let tail = refs.last(where: { $0.isTailMarkdown }) {
                 tailStart = tail.start
                 tailLength = tail.length
             }
@@ -164,11 +166,10 @@ struct ClaudeRevealProse: View {
         guard source.hasPrefix(priorMarkdown), source.utf16.count >= priorMarkdown.utf16.count
         else {
             // Rewritten rather than appended (rewind/refresh): no animation.
-            primeForHistory()
+            primeForHistory(source)
             sweepBoundary = 1
             return
         }
-        let refs = pieceRefs(source)
         guard let tail = refs.last(where: { $0.isTailMarkdown }) else {
             if let last = refs.last, case .block = last.piece {
                 revealTick += 1

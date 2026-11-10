@@ -53,6 +53,11 @@ enum FilePathLinks {
     // MARK: Markdown pre-pass (assistant prose)
 
     private static let pathRegex: NSRegularExpression? = try? NSRegularExpression(pattern: pathPattern)
+    /// Compiled once (P5-B): these were built per call, i.e. once per streamed token.
+    private static let fenceRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?:^|\n)```[\s\S]*?(?:```|$)|(?:^|\n)~~~[\s\S]*?(?:~~~|$)"#)
+    private static let inlineRegex: NSRegularExpression? = try? NSRegularExpression(pattern: #"`+[^`\n]*?`+"#)
+    private static let authoredRegex: NSRegularExpression? = try? NSRegularExpression(pattern: #"\[[^\]]*\]\([^)]*\)"#)
 
     /// Replaces every path candidate outside protected spans (code fences, inline code, authored
     /// links) with a `paseo-file:` markdown link whose display text is the path itself — the same
@@ -84,22 +89,25 @@ enum FilePathLinks {
         return output
     }
 
-    /// `linkified` memoized by source, for prose rendering (P3).
+    /// `linkified` memoized by source, for prose rendering (P3), now an LRU under a
+    /// byte budget (P5-B): the previous table evicted wholesale at 64 entries, so a long
+    /// answer lost its parse as it streamed.
     ///
     /// Linkifying is pure: four regex passes over the whole answer, ~0.7 ms per 8 k-char message,
-    /// and SwiftUI asks for it on every body evaluation — not only when the text changed. The
-    /// table is small and evicts wholesale, like `RichContentCache`, so streamed text (a new
-    /// string per token) only ever costs the parse it must cost anyway.
+    /// and SwiftUI asks for it on every body evaluation — not only when the text changed. Pieces
+    /// are small and stable, so the LRU holds the recent ones at a bounded cost.
     @MainActor static func linkifiedForProse(_ markdown: String) -> String {
-        if let cached = linkifiedCache[markdown] { return cached }
+        if let cached = linkifiedCache.value(for: markdown) { return cached }
         let result = linkified(markdown: markdown)
-        if linkifiedCache.count >= 64 { linkifiedCache.removeAll(keepingCapacity: true) }
-        linkifiedCache[markdown] = result
+        linkifiedCache.setValue(result, for: markdown)
         return result
     }
 
     /// Main-actor only, reached through `linkifiedForProse`.
-    @MainActor private static var linkifiedCache: [String: String] = [:]
+    @MainActor private static let linkifiedCache = ProseCache<String, String>(
+        budget: 4 * 1024 * 1024,
+        countLimit: 512,
+        cost: { source, linked in source.utf8.count + linked.utf8.count })
 
     /// Fenced code blocks, inline code spans and authored links — path candidates never linkify
     /// inside them.
@@ -109,17 +117,15 @@ enum FilePathLinks {
         var ranges: [NSRange] = []
 
         // Fenced code blocks (``` or ~~~), line-anchored.
-        let fencePattern = #"(?:^|\n)```[\s\S]*?(?:```|$)|(?:^|\n)~~~[\s\S]*?(?:~~~|$)"#
-        if let fenceRegex = try? NSRegularExpression(pattern: fencePattern) {
+        if let fenceRegex {
             ranges += fenceRegex.matches(in: text, range: full).map(\.range)
         }
         // Inline code spans (any backtick run, same length closed).
-        let inlinePattern = #"`+[^`\n]*?`+"#
-        if let inlineRegex = try? NSRegularExpression(pattern: inlinePattern) {
+        if let inlineRegex {
             ranges += inlineRegex.matches(in: text, range: full).map(\.range)
         }
         // Authored links.
-        if let authoredRegex = try? NSRegularExpression(pattern: #"\[[^\]]*\]\([^)]*\)"#) {
+        if let authoredRegex {
             ranges += authoredRegex.matches(in: text, range: full).map(\.range)
         }
         return ranges

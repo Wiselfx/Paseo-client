@@ -6,45 +6,61 @@ import PaseoStore
 /// block detected by `RichContentDetector`.
 enum RichPiece {
     case markdown(String)
-    case block(RichContentBlock)
+    /// The block plus its UTF-16 length in the unit it was detected from (the unit is
+    /// linkified, so its ranges do not index the original source).
+    case block(RichContentBlock, utf16Length: Int)
 }
 
 /// Small in-memory memo for `RichContentDetector.detect(in:)`. The prose re-renders on
 /// every streamed delta, so detection would run once per token; it is pure and
-/// deterministic, hence cacheable. Evict-all when the table fills. Called from view
+/// deterministic, hence cacheable. An LRU under a byte budget (P5-B) keeps the recent
+/// units warm instead of evicting the whole table at 64 entries. Called from view
 /// bodies, i.e. on the main actor.
 @MainActor
 enum RichContentCache {
-    private static var table: [String: [RichContentBlock]] = [:]
+    private static let table = ProseCache<String, [RichContentBlock]>(
+        budget: 4 * 1024 * 1024,
+        countLimit: 512,
+        cost: { source, _ in source.utf8.count })
 
     static func detect(_ source: String) -> [RichContentBlock] {
-        if let cached = table[source] { return cached }
+        if let cached = table.value(for: source) { return cached }
         let blocks = RichContentDetector.detect(in: source)
-        if table.count >= 64 { table.removeAll(keepingCapacity: true) }
-        table[source] = blocks
+        table.setValue(blocks, for: source)
         return blocks
     }
 }
 
 /// Splits `source` into the Markdown chunks between rich-content blocks and the blocks
-/// themselves, in document order. Markdown chunks are passed through untouched; rich
-/// blocks are emitted whole.
+/// themselves, in document order. The source is first split into block-level units
+/// (paragraphs, headings, lists, quotes, fences) by `RichContentDetector.splitIntoBlocks`,
+/// so a streamed token only re-parses the open unit; each unit is linkified (M7g) and
+/// detected through its own memo. Markdown chunks are otherwise passed through untouched;
+/// rich blocks are emitted whole.
 @MainActor
 func richPieces(_ source: String) -> [RichPiece] {
-    let blocks = RichContentCache.detect(source)
-    guard !blocks.isEmpty else { return [.markdown(source)] }
     var pieces: [RichPiece] = []
-    var cursor = source.startIndex
-    for block in blocks {
-        let range = block.range
-        if cursor < range.lowerBound {
-            pieces.append(.markdown(String(source[cursor..<range.lowerBound])))
+    for range in RichContentDetector.splitIntoBlocks(source) {
+        let unit = String(source[range])
+        let linked = FilePathLinks.linkifiedForProse(unit)
+        let blocks = RichContentCache.detect(linked)
+        guard !blocks.isEmpty else {
+            pieces.append(.markdown(linked))
+            continue
         }
-        pieces.append(.block(block))
-        cursor = range.upperBound
-    }
-    if cursor < source.endIndex {
-        pieces.append(.markdown(String(source[cursor...])))
+        var cursor = linked.startIndex
+        for block in blocks {
+            let blockRange = block.range
+            if cursor < blockRange.lowerBound {
+                pieces.append(.markdown(String(linked[cursor..<blockRange.lowerBound])))
+            }
+            let length = linked.utf16.distance(from: blockRange.lowerBound, to: blockRange.upperBound)
+            pieces.append(.block(block, utf16Length: length))
+            cursor = blockRange.upperBound
+        }
+        if cursor < linked.endIndex {
+            pieces.append(.markdown(String(linked[cursor...])))
+        }
     }
     return pieces
 }
