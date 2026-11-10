@@ -26,7 +26,6 @@ struct WorkspaceChangesView: View {
     @State private var showCommitSheet = false
     @State private var pendingDiscard: ParsedDiffFile?
     @State private var dismissedError: String?
-    @State private var toast: String?
     @State private var showCreatePRSheet = false
     @State private var createPRTitle = ""
     @State private var createPRBody = ""
@@ -37,12 +36,9 @@ struct WorkspaceChangesView: View {
     @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
     @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
     @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
-    @AppStorage("paseo.diff.sideBySide") private var sideBySide = false
     @State private var feedbackError: String?
 
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.toast) private var toast
     @Environment(\.openURL) private var openURL
     @Environment(\.mentionInChat) private var mentionInChat
 
@@ -141,49 +137,24 @@ struct WorkspaceChangesView: View {
                 conflictBanner
             }
             forgeSetupBanner
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        WorkspacePRSection(session: session, checkout: checkout)
-                        summary
-                        if files.isEmpty {
-                            listPlaceholder
-                        } else {
-                            ForEach(files) { file in
-                                fileRow(file)
-                                    .id(file.id)
-                                if file.id != files.last?.id {
-                                    ClaudeDivider().padding(.leading, 46)
-                                }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    WorkspacePRSection(session: session, checkout: checkout)
+                    summary
+                    if files.isEmpty {
+                        listPlaceholder
+                    } else {
+                        ForEach(files) { file in
+                            fileRow(file)
+                                .id(file.id)
+                            if file.id != files.last?.id {
+                                ClaudeDivider().padding(.leading, 46)
                             }
-                            .padding(.bottom, 12)
                         }
-                        if gitActions.supportsCommitsList {
-                            commitsSection
-                        }
+                        .padding(.bottom, Space.md)
                     }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    if files.count >= 3 {
-                        Menu {
-                            ForEach(files) { file in
-                                Button(shortFileName(file.path)) {
-                                    Haptics.selection()
-                                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                                        proxy.scrollTo(file.id, anchor: .top)
-                                    }
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "list.bullet")
-                                .font(.glyph(.regular, weight: .medium))
-                                .foregroundStyle(Palette.ink)
-                                .frame(width: 44, height: 44)
-                                .glassEffect()
-                        }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 20)
-                        .accessibilityLabel("Jump to file")
+                    if gitActions.supportsCommitsList {
+                        commitsSection
                     }
                 }
             }
@@ -192,18 +163,6 @@ struct WorkspaceChangesView: View {
         }
         .background(Palette.panel)
         .foregroundStyle(Palette.ink)
-        .overlay(alignment: .bottom) {
-            if let toast {
-                Text(toast)
-                    .font(.paseo(.footnote))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .glassEffect()
-                    .padding(.bottom, 96)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
-        }
         .sheet(isPresented: $showCommitSheet) {
             WorkspaceChangesCommitSheet(checkout: checkout) {
                 Task { await reload() }
@@ -240,7 +199,7 @@ struct WorkspaceChangesView: View {
             titleVisibility: .visible
         ) {
             let method = mergeCandidate ?? .squash
-            Button("Merge (\(method.rawValue))", role: .destructive) {
+            Button(mergeLabel(method), role: .destructive) {
                 mergeCandidate = nil
                 Task { await performMergePullRequest(method) }
             }
@@ -258,16 +217,17 @@ struct WorkspaceChangesView: View {
                 set: { if !$0 { pendingDiscard = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Discard Changes", role: .destructive) {
+            Button("Discard changes", role: .destructive) {
                 guard let target = pendingDiscard else { return }
                 pendingDiscard = nil
                 performDiscard(target)
             }
             Button("Cancel", role: .cancel) { pendingDiscard = nil }
         } message: {
+            // Upstream: workspace.fileActions.confirmRevert.message (en.ts:513).
             Text(
                 pendingDiscard.map {
-                    "This removes all changes in \($0.path), staged and unstaged. This cannot be undone."
+                    "Changes to \"\($0.path)\" will be permanently discarded."
                 } ?? ""
             )
         }
@@ -453,16 +413,6 @@ struct WorkspaceChangesView: View {
                     }
                 }
                 Spacer(minLength: 0)
-                Button {
-                    Task { await reload() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.glyph(.regular, weight: .medium))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Refresh changes")
             }
             if baseRef != nil {
                 compareSwitch
@@ -615,17 +565,14 @@ struct WorkspaceChangesView: View {
                 .foregroundStyle(Palette.secondaryInk)
             Spacer()
             if !files.isEmpty {
-                Text("+\(PaseoFormat.integer(extras.additions))")
-                    .foregroundStyle(Palette.successInk)
-                Text("−\(PaseoFormat.integer(extras.deletions))")
-                    .foregroundStyle(Palette.failureInk)
+                DiffStat(added: extras.additions, removed: extras.deletions)
             }
         }
         .font(.paseo(.codeSmall))
         .foregroundStyle(Palette.secondaryInk)
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, Space.xl)
+        .padding(.top, Space.md)
+        .padding(.bottom, Space.sm)
     }
 
     // MARK: List body states
@@ -633,52 +580,21 @@ struct WorkspaceChangesView: View {
     @ViewBuilder private var listPlaceholder: some View {
         switch extras.diffPhase {
         case .loading, .idle:
-            VStack(spacing: 12) {
-                ProgressView()
-                Text("Loading changes…")
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.secondaryInk)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 64)
+            LoadingState("Loading changes…")
+                .frame(minHeight: 200)
         case .failed(let message):
-            VStack(spacing: 12) {
-                Image(systemName: "exclamationmark.circle")
-                    .font(.glyph(.hero, weight: .light))
-                    .foregroundStyle(Palette.failureInk)
-                Text(message)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                Button {
-                    Task { await reloadDiff() }
-                } label: {
-                    Text("Retry")
-                        .font(.paseo(.callout, weight: .medium))
-                        .foregroundStyle(Palette.ink)
-                        .padding(.horizontal, 18)
-                        .frame(minHeight: 44)
-                        .background(Palette.chip, in: .capsule)
-                }
-                .buttonStyle(.plain)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 64)
+            InlineBanner(
+                .failure, title: message,
+                action: ("Retry", { Task { await reloadDiff() } })
+            )
+            .padding(.horizontal, Space.xl)
+            .padding(.top, Space.xl)
         case .ready:
-            VStack(spacing: 10) {
-                Image(systemName: "checkmark.circle")
-                    .font(.glyph(.hero, weight: .light))
-                    .foregroundStyle(Palette.tertiaryInk)
-                Text("No changes")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                Text(emptySubtitle)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 64)
+            EmptyState(
+                systemImage: "checkmark.circle",
+                title: "No changes",
+                message: emptySubtitle)
+            .frame(minHeight: 200)
         }
     }
 
@@ -718,12 +634,7 @@ struct WorkspaceChangesView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text("+\(PaseoFormat.integer(file.additions))")
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.successInk)
-                Text("−\(PaseoFormat.integer(file.deletions))")
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.failureInk)
+                DiffStat(added: file.additions, removed: file.deletions)
                 Image(systemName: "chevron.right")
                     .font(.glyph(.small, weight: .medium))
                     .foregroundStyle(Palette.tertiaryInk)
@@ -753,14 +664,10 @@ struct WorkspaceChangesView: View {
         }
     }
 
-    private func shortFileName(_ path: String) -> String {
-        (path as NSString).lastPathComponent
-    }
-
     private func statusStyle(for file: ParsedDiffFile) -> (letter: String, tint: Color, word: String) {
         if file.oldPath != nil { return ("R", Palette.unread, "Renamed") }
-        if file.isNew { return ("A", Palette.successInk, "Added") }
-        if file.isDeleted { return ("D", Palette.failureInk, "Deleted") }
+        if file.isNew { return ("A", Palette.diffAddedInk, "Added") }
+        if file.isDeleted { return ("D", Palette.diffRemovedInk, "Deleted") }
         return ("M", Palette.warning, "Modified")
     }
 
@@ -892,9 +799,6 @@ struct WorkspaceChangesView: View {
     private var moreMenu: some View {
         Menu {
             Section("Diff options") {
-                if horizontalSizeClass == .regular {
-                    Toggle("Side by side", isOn: $sideBySide).tint(Palette.toggleTint)
-                }
                 Toggle("Hide whitespace changes", isOn: $hideWhitespace).tint(Palette.toggleTint)
                 Toggle("Wrap long lines", isOn: $wrapLongLines).tint(Palette.toggleTint)
                 Button(collapseAllHunks ? "Expand all files" : "Collapse all files") {
@@ -950,9 +854,9 @@ struct WorkspaceChangesView: View {
             .disabled(true)
         } else {
             Menu("Merge PR") {
-                Button("Merge (squash)") { mergeCandidate = .squash }
-                Button("Merge (merge)") { mergeCandidate = .merge }
-                Button("Merge (rebase)") { mergeCandidate = .rebase }
+                Button(mergeLabel(.squash)) { mergeCandidate = .squash }
+                Button(mergeLabel(.merge)) { mergeCandidate = .merge }
+                Button(mergeLabel(.rebase)) { mergeCandidate = .rebase }
             }
         }
     }
@@ -1189,13 +1093,15 @@ struct WorkspaceChangesView: View {
                         .padding(.horizontal, 20)
                         .padding(.bottom, 8)
                 } else {
-                    ForEach(gitActions.commits) { commit in
-                        commitRow(commit)
-                        if commit.id != gitActions.commits.last?.id {
-                            ClaudeDivider().padding(.leading, 20)
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(gitActions.commits) { commit in
+                            commitRow(commit)
+                            if commit.id != gitActions.commits.last?.id {
+                                ClaudeDivider().padding(.leading, 20)
+                            }
                         }
                     }
-                    .padding(.bottom, 12)
+                    .padding(.bottom, Space.md)
                 }
             }
         }
@@ -1236,9 +1142,7 @@ struct WorkspaceChangesView: View {
 
     private func relativeAge(_ iso: String) -> String {
         guard let date = PaseoDate.parse(iso) else { return "" }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return PaseoFormat.relative(date)
     }
 
     private func performPull() async {
@@ -1302,28 +1206,11 @@ struct WorkspaceChangesView: View {
     }
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(Palette.failureInk)
-            Text(message)
-                .font(.paseo(.caption))
-                .foregroundStyle(Palette.failureInk)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button {
-                dismissedError = message
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(width: 26, height: 26)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss")
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Palette.failureInk.opacity(0.08))
+        InlineBanner(
+            .failure, title: message,
+            onDismiss: { dismissedError = message })
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.xs)
     }
 
     // MARK: Actions
@@ -1376,17 +1263,15 @@ struct WorkspaceChangesView: View {
     }
 
     private func showToast(_ message: String) {
-        withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) {
-            toast = message
-        }
-        let shown = message
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            if toast == shown {
-                withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) {
-                    toast = nil
-                }
-            }
+        toast?.show(message)
+    }
+
+    /// Upstream's merge labels (`en.ts:861-863`).
+    private func mergeLabel(_ method: PullRequestMergeMethod) -> String {
+        switch method {
+        case .squash: "Merge PR (squash)"
+        case .merge: "Merge PR (merge)"
+        case .rebase: "Merge PR (rebase)"
         }
     }
 

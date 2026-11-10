@@ -34,7 +34,7 @@ public struct WorkspaceReviewDraftComment: Codable, Hashable, Identifiable {
         self.updatedAt = updatedAt
     }
 
-    public enum DiffSide: String, Codable, Hashable {
+    public enum DiffSide: String, Codable, Hashable, Sendable {
         case old
         case new
     }

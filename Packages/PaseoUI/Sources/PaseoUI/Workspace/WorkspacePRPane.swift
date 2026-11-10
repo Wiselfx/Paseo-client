@@ -51,9 +51,7 @@ struct WorkspacePRSection: View {
 
     private func stateRow(_ status: CheckoutPrStatus) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            PRStatePill(
-                label: stateLabel(status),
-                tint: stateTint(status))
+            StatePill(stateLabel(status), tone: stateTone(status))
             VStack(alignment: .leading, spacing: 4) {
                 Text("#\(String(status.number ?? 0)) · \(status.title)")
                     .font(.paseo(.callout, weight: .semibold))
@@ -82,13 +80,13 @@ struct WorkspacePRSection: View {
         }
     }
 
-    private func stateTint(_ status: CheckoutPrStatus) -> Color {
-        if status.isMerged { return Palette.unread }
-        if status.isDraft == true { return Palette.secondaryInk }
+    private func stateTone(_ status: CheckoutPrStatus) -> StatePill.Tone {
+        if status.isMerged { return .neutral }
+        if status.isDraft == true { return .neutral }
         switch status.state.uppercased() {
-        case "OPEN": return Palette.successInk
-        case "CLOSED": return Palette.tertiaryInk
-        default: return Palette.secondaryInk
+        case "OPEN": return .success
+        case "CLOSED": return .neutral
+        default: return .neutral
         }
     }
 
@@ -248,6 +246,15 @@ struct WorkspacePRSection: View {
         timeline.items.compactMap { if case .unknown(let kind) = $0 { return kind } else { return nil } }
     }
 
+    /// "Unsupported item" rows are a debugging aid; release builds hide them.
+    private var hasUnknownItems: Bool {
+        #if DEBUG
+        !unknownItems.isEmpty
+        #else
+        false
+        #endif
+    }
+
     private func nestedComments(of review: PullRequestTimelineReview) -> [PullRequestTimelineComment] {
         comments.filter { $0.reviewId == review.id }
     }
@@ -289,7 +296,7 @@ struct WorkspacePRSection: View {
 
             if let error = timeline.error {
                 errorRow(error)
-            } else if reviews.isEmpty && standaloneComments.isEmpty && unknownItems.isEmpty {
+            } else if reviews.isEmpty && standaloneComments.isEmpty && !hasUnknownItems {
                 if !timeline.isLoading {
                     Text("No reviews yet.")
                         .font(.paseo(.footnote))
@@ -307,12 +314,14 @@ struct WorkspacePRSection: View {
                 ForEach(standaloneComments) { comment in
                     commentRow(comment, prNumber: status.number ?? 0, indented: false)
                 }
-                ForEach(unknownItems, id: \.self) { kind in
-                    Text("Unsupported item · \(kind)")
-                        .font(.paseo(.codeCaption))
-                        .foregroundStyle(Palette.captionInk)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 4)
+                if hasUnknownItems {
+                    ForEach(unknownItems, id: \.self) { kind in
+                        Text("Unsupported item · \(kind)")
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.captionInk)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 4)
+                    }
                 }
                 if timeline.truncated {
                     Text("Only some items are shown.")
@@ -370,7 +379,7 @@ struct WorkspacePRSection: View {
                         .font(.paseo(.footnote, weight: .semibold))
                         .foregroundStyle(Palette.ink)
                         .lineLimit(1)
-                    VerdictPill(verdict: review.reviewState)
+                    StatePill(verdictLabel(review.reviewState), tone: verdictTone(review.reviewState))
                     Spacer(minLength: 4)
                     Text(relativeTime(review.createdAt))
                         .font(.paseo(.caption2))
@@ -495,10 +504,24 @@ struct WorkspacePRSection: View {
 
     private func relativeTime(_ timestamp: Double) -> String {
         let seconds = timestamp > 10_000_000_000 ? timestamp / 1000 : timestamp
-        let date = Date(timeIntervalSince1970: seconds)
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return PaseoFormat.relative(Date(timeIntervalSince1970: seconds))
+    }
+
+    private func verdictLabel(_ verdict: PullRequestReviewVerdict) -> String {
+        switch verdict {
+        case .approved: "Approved"
+        case .changesRequested: "Changes requested"
+        case .commented: "Commented"
+        case .unknown(let raw): raw.capitalized
+        }
+    }
+
+    private func verdictTone(_ verdict: PullRequestReviewVerdict) -> StatePill.Tone {
+        switch verdict {
+        case .approved: .success
+        case .changesRequested: .failure
+        case .commented, .unknown: .neutral
+        }
     }
 }
 
@@ -517,51 +540,5 @@ private struct AuthorAvatar: View {
     }
 }
 
-private struct VerdictPill: View {
-    let verdict: PullRequestReviewVerdict
-
-    var body: some View {
-        Text(label)
-            .font(.paseo(.caption2, weight: .semibold))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .foregroundStyle(tint)
-            .background(tint.opacity(0.14), in: .capsule)
-    }
-
-    private var label: String {
-        switch verdict {
-        case .approved: "Approved"
-        case .changesRequested: "Changes requested"
-        case .commented: "Commented"
-        case .unknown(let raw): raw.capitalized
-        }
-    }
-
-    private var tint: Color {
-        switch verdict {
-        case .approved: Palette.successInk
-        case .changesRequested: Palette.failureInk
-        case .commented: Palette.secondaryInk
-        case .unknown: Palette.secondaryInk
-        }
-    }
-}
-
-private struct PRStatePill: View {
-    let label: String
-    let tint: Color
-
-    var body: some View {
-        Text(label)
-            .font(.paseo(.caption2, weight: .semibold))
-            .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .foregroundStyle(tint)
-            .background(tint.opacity(0.14), in: .capsule)
-    }
-}
 
 #endif

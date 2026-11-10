@@ -34,23 +34,20 @@ enum WorkspaceFileFormat {
         PaseoFormat.bytes(size)
     }
 
-    /// `2026-11-08T20:56:19Z` → `3m`, `2h`, `5d`, `Nov 3`. Unknown input is shown trimmed.
+    /// `2026-11-08T20:56:19Z` → `3m ago`, `yesterday`, `11/3/26, 4:56 PM`. Uses the shared
+    /// `PaseoFormat` formatters instead of building one per row (audit B N10). Unknown input is
+    /// shown trimmed.
+    @MainActor
     static func relativeModified(_ modifiedAt: String) -> String {
         let trimmed = modifiedAt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let date = PaseoDate.parse(trimmed) ?? epoch(trimmed) else { return trimmed }
         let seconds = max(0, Date().timeIntervalSince(date))
-        if seconds < 60 { return "now" }
-        if seconds < 3600 { return "\(Int(seconds / 60))m" }
-        if seconds < 86_400 { return "\(Int(seconds / 3600))h" }
-        if seconds < 2 * 86_400 { return "1d" }
-        if seconds < 7 * 86_400 { return "\(Int(seconds / 86_400))d" }
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.dateFormat = "MMM d"
-        return formatter.string(from: date)
+        if seconds >= 7 * 86_400 { return PaseoFormat.dateTime(date) }
+        return PaseoFormat.relative(date)
     }
 
     /// "size · relative date" for a row; either half may be missing.
+    @MainActor
     static func metaLine(size: Int, modifiedAt: String?) -> String? {
         var parts: [String] = []
         if size > 0 { parts.append(bytes(size)) }
