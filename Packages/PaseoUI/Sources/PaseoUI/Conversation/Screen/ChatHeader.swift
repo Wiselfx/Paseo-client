@@ -10,16 +10,10 @@ import UIKit
 /// message…" is offered). Everything else comes from `controller` state.
 struct ChatHeaderBar: View {
     @Bindable var store: ConversationStore
-    let controller: ChatController
+    @Bindable var controller: ChatController
 
     var body: some View {
-        ShellHeader(leading: leading, title: { titleMenu }) {
-            if let onOpenPanel = controller.onOpenPanel {
-                GlassIconButton(systemName: "sidebar.right", label: "Open workspace panel") {
-                    onOpenPanel()
-                }
-            }
-        }
+        headerBar
         .alert("Rename agent", isPresented: $controller.renamingAgent) {
             TextField("Name", text: $controller.renameText)
             Button("Cancel", role: .cancel) {}
@@ -60,14 +54,31 @@ struct ChatHeaderBar: View {
         }
     }
 
-    private var leading: ShellHeader<EmptyView, EmptyView>.Leading {
+    /// `ShellHeader.Leading` is nested in the generic, so the value is built *inside* a generic
+    /// builder: naming `ShellHeader<EmptyView, EmptyView>.Leading` at the property level would pin
+    /// the header's generic parameters.
+    private func makeHeaderBar<Title: View, Trailing: View>(
+        @ViewBuilder title: () -> Title, @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        let leading: ShellHeader<Title, Trailing>.Leading
         if let onOpenSidebar = controller.onOpenSidebar {
-            return .sidebar(onOpenSidebar)
+            leading = .sidebar(onOpenSidebar)
+        } else if let onBack = controller.onBack {
+            leading = .back(onBack)
+        } else {
+            leading = .none
         }
-        if let onBack = controller.onBack {
-            return .back(onBack)
+        return ShellHeader(leading: leading, title: title, trailing: trailing)
+    }
+
+    private var headerBar: some View {
+        makeHeaderBar(title: { titleMenu }) {
+            if let onOpenPanel = controller.onOpenPanel {
+                GlassIconButton(systemName: "sidebar.right", label: "Open workspace panel") {
+                    onOpenPanel()
+                }
+            }
         }
-        return .none
     }
 
     /// The title menu, in PLAN §RH order: jump, find, rename, copy id, divider, archive.

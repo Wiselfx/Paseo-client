@@ -3,6 +3,7 @@ import Observation
 import PaseoStore
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 // MARK: - Actions
 
@@ -488,12 +489,13 @@ struct TranscriptJump: Equatable {
 
     /// Retract: fork before the message, then hand the text back in the new session's composer.
     func retractMessage(userRow: TimelineRow) {
-        guard let boundary = actions.cutRow(for: userRow), case .userMessage(let message) = userRow.item
+        guard let boundary = actions.cutRow(for: userRow),
+            case .userMessage(let message) = userRow.item
         else { return }
         Task { [weak self] in
             guard let self else { return }
             await self.openForkedAgent(
-                await self.store.forkConversation(fromBoundarySeq: boundary),
+                await self.store.forkConversation(fromBoundarySeq: boundary.seqEnd),
                 toast: "The message is back in the composer", draft: message.text)
         }
     }
@@ -504,7 +506,7 @@ struct TranscriptJump: Equatable {
         Task { [weak self] in
             guard let self else { return }
             await self.openForkedAgent(
-                await self.store.forkConversation(fromBoundarySeq: boundary),
+                await self.store.forkConversation(fromBoundarySeq: boundary.seqEnd),
                 toast: "The turn is absent from the new session")
         }
     }

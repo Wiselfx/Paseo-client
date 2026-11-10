@@ -156,9 +156,11 @@ struct TranscriptView: View {
                 }
                 .onScrollPhaseChange { _, phase in
                     switch phase {
-                    case .interacting, .decelerating:
+                    case .interacting, .tracking, .decelerating, .animating:
                         revealTurnRail()
                     case .idle:
+                        reportReadingPosition()
+                    @unknown default:
                         reportReadingPosition()
                     }
                 }
