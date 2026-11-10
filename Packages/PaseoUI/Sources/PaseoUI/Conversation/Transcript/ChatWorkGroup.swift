@@ -132,7 +132,7 @@ struct ClaudeWorkGroupCell: View {
 
     func summaryRuns(_ text: String, _ ink: Color) -> some View {
         Text(text)
-            .font(.paseo(.title, weight: .medium))
+            .font(.paseo(.processTitle, weight: .medium))
             .tracking(-0.14)
             .foregroundStyle(ink)
     }
@@ -290,7 +290,7 @@ struct ClaudeStepRow: View {
         case .reasoning(let reasoning):
             if isExpanded {
                 Text("Think")
-                    .font(.paseo(.title, weight: .medium))
+                    .font(.paseo(.process, weight: .medium))
                     .foregroundStyle(Palette.tertiaryInk)
             } else {
                 Text(reasoning.text.replacingOccurrences(of: "\n", with: " "))
@@ -304,7 +304,7 @@ struct ClaudeStepRow: View {
             HStack(spacing: 6) {
                 ClaudeToolSeat(call: call, symbol: presentation.symbol)
                 Text(presentation.title)
-                    .font(.paseo(.title, weight: .medium))
+                    .font(.paseo(.process, weight: .medium))
                     .foregroundStyle(Palette.tertiaryInk)
                 if let subtitle = presentation.subtitle {
                     Circle().fill(Palette.captionInk).frame(width: 2, height: 2)
@@ -327,7 +327,7 @@ struct ClaudeStepRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(reasoningParagraphs(reasoning.text), id: \.self) { paragraph in
                     Text(paragraph)
-                        .font(.paseo(.title))
+                        .font(.paseo(.process))
                         .lineSpacing(10) // 13 / 23
                         .foregroundStyle(Palette.tertiaryInk)
                         .textSelection(.enabled)

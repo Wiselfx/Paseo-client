@@ -42,14 +42,11 @@ struct MetadataPage: View {
             }
             if !isAutomatic {
                 Section {
-                    NavigationLink(value: SettingsRoute.metadataModel) {
-                        ListRow(
-                            title: "Model",
-                            subtitle: modelLabel,
-                            accessory: ListRow.Accessory.chevron
-                        )
-                    }
-                    .panelRow()
+                    PageLink(
+                        SettingsRoute.metadataModel,
+                        title: "Model",
+                        subtitle: modelLabel
+                    )
                     .accessibilityIdentifier("settings.metadata.model")
                 } header: {
                     Text("Model")

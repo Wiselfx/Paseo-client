@@ -203,8 +203,9 @@ struct ClaudeMergedFileRow: View {
             HStack(spacing: 0) {
                 toggleButton {
                     Text(call.verb)
-                        .font(.paseo(.footnote))
+                        .font(.paseo(.process, weight: .medium))
                         .foregroundStyle(Palette.secondaryInk)
+                        .lineLimit(1)
                         .frame(minWidth: 42, alignment: .leading)
                         .padding(.vertical, 10)
                         .contentShape(.rect)

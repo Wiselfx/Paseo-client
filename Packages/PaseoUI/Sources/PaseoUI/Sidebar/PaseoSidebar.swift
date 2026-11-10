@@ -394,7 +394,7 @@ struct PaseoSidebar: View {
 
             newSessionPill
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, Space.lg)
         .padding(.bottom, 6)
     }
 

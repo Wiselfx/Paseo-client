@@ -167,7 +167,7 @@ struct ClaudeContextSheet: View {
     }
 
     static func tokenCount(_ value: Int) -> String {
-        PaseoFormat.integer(value)
+        PaseoFormat.compactCount(value)
     }
 
     static func percentValue(_ value: Double) -> String {

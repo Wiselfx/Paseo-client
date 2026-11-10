@@ -7,6 +7,10 @@ struct ListRow: View {
     enum Accessory {
         case none
         case chevron
+        /// An optional value and the push chevron, both inside the row's own padding. A
+        /// `NavigationLink`'s system chevron sits at the cell edge, out of line with the value
+        /// text and the separators; `PageLink` uses this instead.
+        case disclosure(String?)
         case checkmark(Bool)
         case value(String)
         case toggle(Binding<Bool>)
@@ -73,6 +77,13 @@ struct ListRow: View {
         .padding(.vertical, Space.md)
         .frame(minHeight: 44)
         .contentShape(.rect)
+        // The separator starts under the title, not under the icon (D3 §2).
+        .alignmentGuide(.listRowSeparatorLeading) { _ in titleLeading }
+    }
+
+    /// Where the title starts: past the glyph and its gap when the row has one.
+    private var titleLeading: CGFloat {
+        systemImage == nil ? Space.lg : Space.lg + 24 + Space.md
     }
 
     @ViewBuilder private var accessoryView: some View {
@@ -83,6 +94,18 @@ struct ListRow: View {
             Image(systemName: "chevron.right")
                 .font(.glyph(.small, weight: .semibold))
                 .foregroundStyle(Palette.tertiaryInk)
+        case .disclosure(let text):
+            HStack(spacing: Space.sm) {
+                if let text {
+                    Text(text)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .lineLimit(1)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
+            }
         case .checkmark(let isOn):
             if isOn {
                 Image(systemName: "checkmark")
@@ -111,6 +134,7 @@ struct ListRow: View {
     VStack(spacing: 0) {
         ListRow(title: "Title", subtitle: "Subtitle line", systemImage: "person")
         ListRow(title: "Chevron row", systemImage: "folder", accessory: .chevron, action: {})
+        ListRow(title: "Disclosure", systemImage: "folder", accessory: .disclosure("Light"), action: {})
         ListRow(title: "Checkmark", accessory: .checkmark(true), action: {})
         ListRow(title: "Value", accessory: .value("12 KB"), action: {})
         ListRow(title: "Badge", accessory: .badge("3"))

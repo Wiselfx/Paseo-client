@@ -61,15 +61,12 @@ struct ProjectsPage: View {
     }
 
     private func projectRow(_ project: WorkspaceProjectDescriptor, count: Int) -> some View {
-        NavigationLink(value: SettingsRoute.project(project.projectId)) {
-            ListRow(
-                title: project.projectCustomName ?? project.projectDisplayName,
-                subtitle: project.projectRootPath,
-                accessory: ListRow.Accessory.value(
-                    count == 1 ? "1 workspace" : "\(count) workspaces")
-            )
-        }
-        .panelRow()
+        PageLink(
+            SettingsRoute.project(project.projectId),
+            title: project.projectCustomName ?? project.projectDisplayName,
+            subtitle: project.projectRootPath,
+            detail: count == 1 ? "1 workspace" : "\(count) workspaces"
+        )
         .accessibilityIdentifier("settings.projects.open.\(project.projectId)")
     }
 }

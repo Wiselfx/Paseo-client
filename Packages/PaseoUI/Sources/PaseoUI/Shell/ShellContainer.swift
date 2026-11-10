@@ -146,7 +146,11 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
         super.viewDidLayoutSubviews()
         layout(card: conversationCard, hosting: conversationHost)
         layout(card: panelCard, hosting: panelHost)
-        sidebarHost.view.frame = view.bounds
+        // The sidebar lays out at the width the drawer reveals, not at the screen's width: at full
+        // width its rows ran under the conversation card and the New session pill was cut off
+        // (D3 §1).
+        sidebarHost.view.frame = CGRect(
+            x: 0, y: 0, width: drawerWidth, height: view.bounds.height)
         dimView.frame = conversationCard.bounds
         // Rotation and first layout: the state is unchanged, the geometry is not.
         writeModel(sidebar: sidebarProgress, panel: panelProgress)

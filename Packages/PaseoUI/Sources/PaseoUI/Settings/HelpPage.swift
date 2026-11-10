@@ -18,11 +18,8 @@ struct HelpPage: View {
     var body: some View {
         PageList {
             Section {
-                NavigationLink(value: SettingsRoute.diagnostics) {
-                    ListRow(title: "Run diagnostics", systemImage: "stethoscope")
-                }
-                .panelRow()
-                .accessibilityIdentifier("help.diagnostics")
+                PageLink(SettingsRoute.diagnostics, title: "Run diagnostics", systemImage: "stethoscope")
+                    .accessibilityIdentifier("help.diagnostics")
                 linkRow("What's new", systemImage: "gift", url: Self.changelogURL)
                     .accessibilityIdentifier("help.whatsNew")
             } header: {

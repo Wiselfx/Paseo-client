@@ -20,6 +20,7 @@ extension PaseoSidebar {
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Spacer(minLength: 0)
                 }
                 .contentShape(.rect)

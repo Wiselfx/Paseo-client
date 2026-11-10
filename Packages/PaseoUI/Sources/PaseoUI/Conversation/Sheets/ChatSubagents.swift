@@ -439,13 +439,13 @@ struct ChatSubagentTimelineView: View {
                     .tracking(0.6)
                     .foregroundStyle(Palette.tertiaryInk)
                 Text(message.text)
-                    .font(.paseo(.title))
+                    .font(.paseo(.processTitle))
                     .foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
         case .assistantMessage(let message):
             Text(message.text)
-                .font(.paseo(.title))
+                .font(.paseo(.processTitle))
                 .foregroundStyle(Palette.ink)
                 .lineSpacing(6)
                 .fixedSize(horizontal: false, vertical: true)

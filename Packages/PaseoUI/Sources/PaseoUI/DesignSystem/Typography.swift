@@ -12,6 +12,10 @@ enum TextRole: Hashable, Sendable {
     case largeTitle
     /// Serif 20: chat header title, sheet hero titles.
     case title
+    /// Serif 14: the work group's summary line and other process headings.
+    case processTitle
+    /// Serif 13: a tool row's title and the opened reasoning text.
+    case process
     /// Sans 17 semibold: section and row titles that lead.
     case headline
     /// Sans 17: chat body, composer, settings rows.
@@ -38,7 +42,7 @@ enum TextRole: Hashable, Sendable {
 
     var face: Face {
         switch self {
-        case .largeTitle, .title, .hero: .serif
+        case .largeTitle, .title, .processTitle, .process, .hero: .serif
         case .code, .codeSmall, .codeCaption: .mono
         case .headline, .body, .callout, .footnote, .caption, .caption2: .sans
         }
@@ -48,6 +52,8 @@ enum TextRole: Hashable, Sendable {
         switch self {
         case .largeTitle: 28
         case .title: 20
+        case .processTitle: 14
+        case .process: 13
         case .headline, .body: 17
         case .callout: 15
         case .footnote: 13
@@ -64,6 +70,8 @@ enum TextRole: Hashable, Sendable {
         switch self {
         case .largeTitle: .largeTitle
         case .title: .title3
+        case .processTitle: .subheadline
+        case .process: .footnote
         case .headline: .headline
         case .body: .body
         case .callout: .callout

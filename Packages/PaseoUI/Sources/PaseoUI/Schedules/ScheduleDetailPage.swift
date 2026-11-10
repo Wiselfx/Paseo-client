@@ -299,14 +299,12 @@ struct ScheduleDetailPage: View {
             .panelRow()
         }
         if let stored {
-            NavigationLink(
-                value: ClaudeSchedulesView.Route.editor(
+            PageLink(
+                ClaudeSchedulesView.Route.editor(
                     ClaudeSchedulesView.EditorSeed(
-                        stored: stored, isHeartbeat: stored.summary.target.agentId != nil))
-            ) {
-                ListRow(title: "Edit schedule", accessory: ListRow.Accessory.chevron)
-            }
-            .panelRow()
+                        stored: stored, isHeartbeat: stored.summary.target.agentId != nil)),
+                title: "Edit schedule"
+            )
             .accessibilityLabel("Edit schedule")
         }
         Button(role: .destructive) {

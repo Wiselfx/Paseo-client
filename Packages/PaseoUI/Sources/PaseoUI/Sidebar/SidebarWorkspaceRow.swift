@@ -19,6 +19,7 @@ extension PaseoSidebar {
                     Text(workspaceTitle(workspace))
                         .font(.paseo(.callout, weight: .medium))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     metaRow(workspace, derivations: derivations)
                 }
                 Spacer(minLength: 0)
@@ -135,23 +136,23 @@ extension PaseoSidebar {
                     .font(.paseo(.codeSmall))
                     .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
             if showDiffStats, let stat = workspace.diffStat, stat.additions > 0 || stat.deletions > 0 {
                 if showBranch { Text("·").foregroundStyle(Palette.captionInk) }
-                if stat.additions > 0 {
-                    Text("+\(PaseoFormat.integer(stat.additions))")
-                        .foregroundStyle(Palette.successInk.opacity(0.75))
-                }
-                if stat.deletions > 0 {
-                    Text("−\(PaseoFormat.integer(stat.deletions))")
-                        .foregroundStyle(Palette.failureInk.opacity(0.75))
-                }
+                // The title gives way, the numbers never do (D3 §1).
+                DiffStat(added: stat.additions, removed: stat.deletions, compact: true)
+                    .fixedSize()
+                    .layoutPriority(1)
+                    .opacity(0.75)
             }
             if let stamp = activityStamp {
                 if showBranch || hasVisibleDiffStat(workspace) {
                     Text("·").foregroundStyle(Palette.captionInk)
                 }
                 Text(relativeAge(stamp))
+                    .fixedSize()
+                    .layoutPriority(1)
                     .foregroundStyle(Palette.secondaryInk)
             }
             let rowLabels = labelDefinitions(for: workspace)
