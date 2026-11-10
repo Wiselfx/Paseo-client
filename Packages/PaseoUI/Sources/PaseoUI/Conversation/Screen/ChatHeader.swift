@@ -58,7 +58,7 @@ struct ChatHeaderBar: View {
     /// builder: naming `ShellHeader<EmptyView, EmptyView>.Leading` at the property level would pin
     /// the header's generic parameters.
     private func makeHeaderBar<Title: View, Trailing: View>(
-        @ViewBuilder title: () -> Title, @ViewBuilder trailing: () -> Trailing
+        @ViewBuilder title: @escaping () -> Title, @ViewBuilder trailing: @escaping () -> Trailing
     ) -> some View {
         let leading: ShellHeader<Title, Trailing>.Leading
         if let onOpenSidebar = controller.onOpenSidebar {

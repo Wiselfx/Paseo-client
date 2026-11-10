@@ -69,7 +69,7 @@ public struct ChatScreen: View {
             controller.openURLFromEnvironment = { url in openURL(url) }
         }
         .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
-        .onChange(of: toast) { _, center in controller.toastCenter = center }
+        .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }
     }
 }
 
