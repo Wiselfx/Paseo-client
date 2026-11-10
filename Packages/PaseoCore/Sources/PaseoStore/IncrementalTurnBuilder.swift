@@ -33,6 +33,9 @@ internal final class IncrementalTurnBuilder {
     /// How many turns the last `turns(from:activeTurnId:)` call constructed. Zero when nothing had
     /// to be built. Reuse probe for `IncrementalTurnBuilderTests`.
     internal private(set) var turnsBuiltLastUpdate = 0
+    /// How many row comparisons the last `turns(from:activeTurnId:)` call performed. The
+    /// streaming fast path must keep this near the changed run, not the transcript length.
+    internal private(set) var rowsComparedLastUpdate = 0
 
     internal init() {}
 
@@ -40,7 +43,7 @@ internal final class IncrementalTurnBuilder {
     internal func turns(from newRows: [TimelineRow], activeTurnId: String?) -> [Turn] {
         let previousActiveTurnId = self.activeTurnId
         let activeChanged = activeTurnId != previousActiveTurnId
-        let firstChange = Self.firstChangedRow(rows, newRows)
+        let firstChange = firstChangedRow(rows, newRows)
 
         // Same rows: only the active turn's phase/endedAt can differ.
         if firstChange == rows.count && firstChange == newRows.count {
@@ -55,21 +58,24 @@ internal final class IncrementalTurnBuilder {
         let rebuildStart = rebuildStart(forFirstChange: firstChange)
         let reusedCount = reusedTurnCount(endingAtOrBefore: rebuildStart)
 
-        var rebuiltTurns = Array(turns[0..<reusedCount])
-        var rebuiltRanges = Array(ranges[0..<reusedCount])
+        // Drop the stale tail in place instead of copying the reused prefix: a streamed
+        // token would otherwise allocate a fresh turns array per update. The reused turns
+        // keep their identity, so SwiftUI still sees unchanged values above the tail.
+        if turns.count > reusedCount {
+            turns.removeLast(turns.count - reusedCount)
+            ranges.removeLast(ranges.count - reusedCount)
+        }
         let rebuilt = TurnBuilder.turns(
             from: Array(newRows[rebuildStart...]), activeTurnId: activeTurnId)
         var offset = rebuildStart
         for turn in rebuilt {
             let count = Self.rowCount(of: turn)
-            rebuiltTurns.append(turn)
-            rebuiltRanges.append(offset..<(offset + count))
+            turns.append(turn)
+            ranges.append(offset..<(offset + count))
             offset += count
         }
 
         rows = newRows
-        turns = rebuiltTurns
-        ranges = rebuiltRanges
         self.activeTurnId = activeTurnId
 
         var built = rebuilt.count
@@ -85,31 +91,101 @@ internal final class IncrementalTurnBuilder {
     // MARK: - Where to rebuild from
 
     /// The first row index where the two row arrays differ, or `min(count)` when one is a prefix of
-    /// the other. The rows are wide structs, so compare their storage bytes and only fall back to
-    /// `==` when a byte difference is not a value difference (struct padding is not part of the
-    /// value and two copies of equal rows can differ there). `memcmp` stops at the first change.
-    private static func firstChangedRow(_ oldRows: [TimelineRow], _ newRows: [TimelineRow]) -> Int {
+    /// the other.
+    ///
+    /// The streaming fast path compares the newest rows first using a cheap row version
+    /// (`id`, `turnId`, seq range, pending flag and item kind). A live merge changes a
+    /// contiguous run at the tail, so walking backwards over differing versions finds the
+    /// first change in O(changed rows). The one row where the run stops is compared in full,
+    /// so a page that rewrites a row's content without moving its seq is still found. Only
+    /// when the newest row is unchanged — a middle edit, a prepended page, a removal — does
+    /// it fall back to a full forward `==` walk, which is not the per-token path.
+    private func firstChangedRow(_ oldRows: [TimelineRow], _ newRows: [TimelineRow]) -> Int {
         let shared = min(oldRows.count, newRows.count)
-        guard shared > 0 else { return 0 }
-        let stride = MemoryLayout<TimelineRow>.stride
-        let size = MemoryLayout<TimelineRow>.size
-        var first = shared
-        oldRows.withUnsafeBytes { oldBytes in
-            newRows.withUnsafeBytes { newBytes in
-                guard let oldBase = oldBytes.baseAddress, let newBase = newBytes.baseAddress else {
-                    return
-                }
-                for index in 0..<shared {
-                    if memcmp(oldBase + index * stride, newBase + index * stride, size) != 0 {
-                        first = index
-                        return
-                    }
+        guard shared > 0 else {
+            rowsComparedLastUpdate = 0
+            return 0
+        }
+
+        // Fast path: the newest shared row changed. Walk backwards over the changed run.
+        rowsComparedLastUpdate = 1
+        if Self.version(of: oldRows[shared - 1]) != Self.version(of: newRows[shared - 1]) {
+            var index = shared - 1
+            while index > 0 {
+                rowsComparedLastUpdate += 1
+                if Self.version(of: oldRows[index - 1]) != Self.version(of: newRows[index - 1]) {
+                    index -= 1
+                } else if oldRows[index - 1] == newRows[index - 1] {
+                    return index
+                } else {
+                    // Same metadata, different content: a page rewrote a row in place without
+                    // moving its seq (a tool call whose detail filled in, for example).
+                    index -= 1
                 }
             }
+            return 0
         }
-        var index = first
-        while index < shared && oldRows[index] == newRows[index] { index += 1 }
+
+        // A pure append leaves every existing row at its index. Detect it by the last
+        // existing row so appending a row does not scan the transcript either. Full equality
+        // (not just the version) so a page that rewrites the last row's content while adding
+        // rows after it is not mistaken for an append.
+        if newRows.count > oldRows.count {
+            rowsComparedLastUpdate += 1
+            if newRows[oldRows.count - 1] == oldRows[oldRows.count - 1] {
+                return oldRows.count
+            }
+        }
+
+        // The newest row is unchanged and this is not a pure append: a middle edit, a
+        // prepended page, or a removal. Walk forward with full equality.
+        var index = 0
+        while index < shared {
+            rowsComparedLastUpdate += 1
+            if oldRows[index] == newRows[index] {
+                index += 1
+            } else {
+                break
+            }
+        }
         return index
+    }
+
+    /// A cheap per-row version: identity plus the fields a merge can move without changing the
+    /// row's id. Comparing two is O(1) (ids are short), so the streaming fast path does not
+    /// walk the transcript. Item content with identical metadata is caught by the full-equality
+    /// check where the changed run stops.
+    private struct RowVersion: Equatable {
+        let id: String
+        let turnId: String?
+        let seqStart: Int
+        let seqEnd: Int
+        let isPending: Bool
+        let itemKind: ItemKind
+    }
+
+    private enum ItemKind: Equatable {
+        case userMessage, assistantMessage, reasoning, toolCall, todo, error, notification, compaction, unknown
+    }
+
+    private static func version(of row: TimelineRow) -> RowVersion {
+        RowVersion(
+            id: row.id, turnId: row.turnId, seqStart: row.seqStart, seqEnd: row.seqEnd,
+            isPending: row.isPending, itemKind: itemKind(of: row.item))
+    }
+
+    private static func itemKind(of item: TimelineItem) -> ItemKind {
+        switch item {
+        case .userMessage: return .userMessage
+        case .assistantMessage: return .assistantMessage
+        case .reasoning: return .reasoning
+        case .toolCall: return .toolCall
+        case .todo: return .todo
+        case .error: return .error
+        case .notification: return .notification
+        case .compaction: return .compaction
+        case .unknown: return .unknown
+        }
     }
 
     /// The row the rebuild starts at: the start of the turn that contains the first changed row, one

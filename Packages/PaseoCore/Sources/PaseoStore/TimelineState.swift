@@ -35,12 +35,17 @@ public struct TimelineState: Sendable, Equatable {
     /// The `seq` the next live timeline event must carry. Nil until the first page arrives.
     public private(set) var nextSeq: Int?
     public private(set) var hasOlder: Bool
+    /// The newest non-pending user message's `seqStart`. Maintained incrementally so
+    /// `ConversationStore` can read it in O(1) instead of scanning every row on every
+    /// streamed token. Pending sends are excluded: they are not in the daemon's index yet.
+    internal private(set) var latestPromptSeq: Int?
 
     public init() {
         epoch = nil
         rows = []
         nextSeq = nil
         hasOlder = false
+        latestPromptSeq = nil
     }
 
     public enum StreamResult: Sendable, Equatable {
@@ -104,6 +109,10 @@ public struct TimelineState: Sendable, Equatable {
         case .after:
             break
         }
+
+        // A page can rewrite or drop rows anywhere, so the newest prompt is recomputed from
+        // the merged rows. This is not the per-token path.
+        latestPromptSeq = Self.newestPromptSeq(in: rows)
     }
 
     /// Applies one live event. See T2 for the merge rules.
@@ -118,6 +127,9 @@ public struct TimelineState: Sendable, Equatable {
 
         merge(item: item, turnId: turnId, seq: seq, timestamp: payload.timestamp)
         nextSeq = expected + 1
+        // Live merges only append or update in place, so the newest prompt can only move
+        // when the last non-pending row became a user message.
+        refreshLatestPromptSeq()
         return .applied
     }
 
@@ -203,6 +215,24 @@ public struct TimelineState: Sendable, Equatable {
             rows.insert(row, at: lastNonPending + 1)
         } else {
             rows.insert(row, at: 0)
+        }
+    }
+
+    /// Recomputes the newest prompt from the end. Used after a page merge, which can drop or
+    /// rewrite rows anywhere.
+    private static func newestPromptSeq(in rows: [TimelineRow]) -> Int? {
+        rows.last { row in
+            guard !row.isPending else { return false }
+            if case .userMessage = row.item { return true }
+            return false
+        }?.seqStart
+    }
+
+    /// Updates the cached newest prompt when the last non-pending row is a user message.
+    /// Live merges never remove rows, so an unchanged last row means the prompt is unchanged.
+    private mutating func refreshLatestPromptSeq() {
+        if let last = rows.last(where: { !$0.isPending }), case .userMessage = last.item {
+            latestPromptSeq = last.seqStart
         }
     }
 
