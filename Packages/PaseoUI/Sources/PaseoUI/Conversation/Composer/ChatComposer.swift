@@ -28,8 +28,8 @@ struct ComposerView: View {
     let controller: ChatController?
     /// Draft mode: the session's stores (catalogue for create, the upload channel, agents).
     let draftHost: HostSession?
-    /// Draft mode: the shell swaps its conversation in once the agent exists.
-    let onCreated: ((String) -> Void)?
+    /// Draft mode: the shell creates the agent and swaps its conversation in (D2 §3).
+    let onSubmit: ((DraftSubmission) -> Void)?
 
     @Binding var text: String
     @FocusState.Binding var focused: Bool
@@ -37,6 +37,9 @@ struct ComposerView: View {
     /// Draft mode's own tray: there is no agent id to key the shared store by yet, and a draft
     /// uploads through the session's channel before the create request.
     @State private var localTray: [ComposerAttachmentItem] = []
+    /// The draft's tray while creation is in flight: it comes back if the shell reports a
+    /// failure (D2 §3). Never written after an `await`.
+    @State private var stashedTray: [ComposerAttachmentItem] = []
     @State private var uploadPumpRunning = false
     @State private var localAttachmentError: String?
     @State private var draftDictation = DictationController()
@@ -63,7 +66,7 @@ struct ComposerView: View {
         self.store = store
         self.controller = controller
         self.draftHost = nil
-        self.onCreated = nil
+        self.onSubmit = nil
         self._text = Binding(
             get: { store.draft }, set: { store.draft = $0 })
         self._focused = focused
@@ -71,14 +74,14 @@ struct ComposerView: View {
 
     /// The draft screen's composer: the same card, before its agent exists (R6 §5).
     init(
-        draft: DraftSession, session: HostSession, onCreated: @escaping (String) -> Void,
+        draft: DraftSession, session: HostSession, onSubmit: @escaping (DraftSubmission) -> Void,
         focused: FocusState<Bool>.Binding
     ) {
         self.mode = .draft(draft)
         self.store = nil
         self.controller = nil
         self.draftHost = session
-        self.onCreated = onCreated
+        self.onSubmit = onSubmit
         self._text = Binding(
             get: { draft.text }, set: { draft.text = $0 })
         self._focused = focused
@@ -106,6 +109,13 @@ struct ComposerView: View {
         .onChange(of: photoSelection) { _, items in
             guard !items.isEmpty else { return }
             handlePickedPhotos(items)
+        }
+        .onChange(of: draftSession?.error) { _, error in
+            // Creation failed in the shell: the draft stayed on screen, so the tray comes back.
+            // Anything attached in the meantime wins over the stash.
+            guard error != nil, !stashedTray.isEmpty else { return }
+            if localTray.isEmpty { localTray = stashedTray }
+            stashedTray = []
         }
         .onAppear {
             guard isDraft else { return }
@@ -661,22 +671,19 @@ struct ComposerView: View {
 
     private func send(behavior: String? = nil) {
         focused = false
-        if let draft = draftSession, let session = draftHost {
+        if let draft = draftSession {
             guard canSend else { return }
             draftDictation.stop(keepingDraft: true)
             localAttachmentError = nil
             draft.clearError()
             Haptics.send()
-            let attachments = readyAttachments
-            Task {
-                guard
-                    let agentId = await draft.create(
-                        using: session.agentControl, attachments: attachments)
-                else { return }
-                localTray = []
-                await session.refreshAgents()
-                onCreated?(agentId)
-            }
+            // The tray leaves the field before the hop, with a copy kept for a failed create:
+            // once the shell swaps the conversation in, this view's state is never written again
+            // (D2 §3). The shell runs the create from a task it owns.
+            let submission = DraftSubmission(text: draft.text, attachments: readyAttachments)
+            stashedTray = localTray
+            localTray = []
+            onSubmit?(submission)
             return
         }
         controller?.dictation.stop(keepingDraft: true)

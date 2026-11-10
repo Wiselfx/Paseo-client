@@ -55,6 +55,7 @@ public struct ShellView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.codeSizeStep) private var codeSizeStep
     @Environment(\.pureBlack) private var pureBlack
     @Environment(\.hostSwitch) private var hostSwitch
@@ -174,11 +175,7 @@ public struct ShellView: View {
                             addProjectRequested = true
                             drawer.open(.sidebar)
                         },
-                        onCreated: { agentId in
-                            self.lastDraftPreferences = draft.preferences
-                            self.draft = nil
-                            select(agentId)
-                        }
+                        onSubmit: { submission in submitDraft(submission) }
                     )
                     .id(draftId)
                 } else {
@@ -403,6 +400,36 @@ public struct ShellView: View {
 
     private func openNewAgent(workspace: WorkspaceDescriptor) {
         openNewSession(workspaceId: workspace.id)
+    }
+
+    // MARK: Draft creation
+
+    /// The draft's send, owned by the shell (D2 §3): creation outlives the composer, which is
+    /// destroyed by the swap, so no `@State` of a dying view is written after an `await`.
+    private func submitDraft(_ submission: DraftSubmission) {
+        guard let draft, !submission.isEmpty else { return }
+        Task { await createAgent(from: draft, submission: submission) }
+    }
+
+    /// Creates the agent, then shows its conversation. `select` builds the conversation store on
+    /// its own, so this never waits on `refreshAgents` (the agent update arrives on the
+    /// subscription) and never polls: `DraftSession.create` has already cleared the pending
+    /// bubble when it returns, so any wait here would flash the draft's hero before the swap.
+    private func createAgent(from draft: DraftSession, submission: DraftSubmission) async {
+        let session = self.session
+        guard
+            let agentId = await draft.create(
+                using: session.agentControl, attachments: submission.attachments)
+        else {
+            // The draft stays: `error` shows inline and the composer restores its tray.
+            return
+        }
+        // The user may have opened something else while the create was in flight; their screen
+        // wins over this draft's.
+        guard self.draft === draft else { return }
+        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) {
+            select(agentId)
+        }
     }
 
     /// True when there is no draft, or one nobody has touched yet: the idle shell may still
