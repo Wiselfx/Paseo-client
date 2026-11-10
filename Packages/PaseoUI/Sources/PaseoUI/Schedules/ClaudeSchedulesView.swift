@@ -3,16 +3,12 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// The Schedules screen: list what the daemon runs on a cadence, inspect a schedule's prompt and
-/// run history, create or edit one, pause/resume, run once, delete. Backed by `SchedulesStore`
-/// (`session.schedules`). Schedules have no push events, so the list polls on a timer while the
-/// screen is open, and every page inspects/loads on appear. The page stack is hand-rolled — the
-/// screen is a sheet, so there is no navigation bar.
+/// The Schedules sheet: `SheetScaffold` provides the header and the `NavigationStack`, so the
+/// detail and editor pages push and swipe-back returns to the list. Backed by `SchedulesStore`
+/// (`session.schedules`). Schedules have no push events, so the list polls while it is on
+/// screen and the app is active.
 struct ClaudeSchedulesView: View {
     let session: HostSession
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// What the editor opens with: nothing (a new schedule), or a stored schedule to edit. A
     /// heartbeat (`agent` target) edits only name, prompt, cadence and max runs.
@@ -30,95 +26,41 @@ struct ClaudeSchedulesView: View {
         var scheduleId: String? { stored?.id }
     }
 
-    enum Page: Hashable {
-        case list
+    /// A pushed page. The editor is pushed through `editorRequest` instead, because its triggers
+    /// are buttons (menu items, the toolbar), not rows.
+    enum Route: Hashable {
         case detail(String)
         case editor(EditorSeed)
     }
 
-    @State private var page: Page = .list
-    @State private var pendingDelete: ScheduleSummary?
-    @State private var toast: String?
-
-    private var schedules: SchedulesStore { session.schedules }
+    @State private var editorRequest: EditorSeed?
 
     var body: some View {
-        VStack(spacing: 0) {
-            switch page {
-            case .list:
-                SchedulesListPage(
-                    session: session, onClose: { dismiss() },
-                    onOpen: { page = .detail($0) },
-                    onNew: { page = .editor(.empty) },
-                    showToast: showToast)
-            case .detail(let id):
-                ScheduleDetailPage(
-                    session: session, scheduleId: id,
-                    onBack: { page = .list },
-                    onEdit: { seed in page = .editor(seed) },
-                    onDelete: { summary in pendingDelete = summary },
-                    showToast: showToast)
-                .id(id)
-            case .editor(let seed):
-                ScheduleEditorPage(
-                    session: session, seed: seed,
-                    onBack: { page = seed.scheduleId.map { .detail($0) } ?? .list },
-                    onCreated: { id in page = .detail(id) },
-                    showToast: showToast)
-                .id(seed)
-            }
-        }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.hidden)
-        .onAppear { Task { await schedules.load() } }
-        .confirmationDialog(
-            "Delete schedule?",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: { if !$0 { pendingDelete = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                guard let summary = pendingDelete else { return }
-                pendingDelete = nil
-                Task {
-                    if await schedules.delete(summary.id) {
-                        showToast("Schedule deleted")
-                        page = .list
-                    } else {
-                        showToast(schedules.actionError ?? "Couldn't delete the schedule.")
+        SheetScaffold("Schedules", detents: .large) {
+            SchedulesListPage(session: session, onNew: { editorRequest = .empty })
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case .detail(let id):
+                        ScheduleDetailPage(session: session, scheduleId: id)
+                    case .editor(let seed):
+                        ScheduleEditorPage(session: session, seed: seed)
                     }
                 }
-            }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: {
-            Text("Runs that already started finish, but no new runs will be created.")
-        }
-        .overlay(alignment: .bottom) { toastView }
-    }
-
-    private var toastView: some View {
-        Group {
-            if let toast {
-                Text(toast)
-                    .font(.paseo(.footnote))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .glassEffect()
-                    .padding(.bottom, 18)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
-        }
-    }
-
-    private func showToast(_ text: String) {
-        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = text }
-        Task {
-            try? await Task.sleep(for: .seconds(2.5))
-            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = nil }
+                .navigationDestination(item: $editorRequest) { seed in
+                    ScheduleEditorPage(session: session, seed: seed)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            Haptics.selection()
+                            editorRequest = .empty
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("New schedule")
+                        .accessibilityIdentifier("schedules.new")
+                    }
+                }
         }
     }
 }

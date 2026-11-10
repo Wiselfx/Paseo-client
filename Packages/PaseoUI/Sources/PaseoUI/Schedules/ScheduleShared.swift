@@ -38,27 +38,23 @@ struct ScheduleStatePill: View {
     }
 }
 
-/// Formats an ISO-8601 instant ("2026-11-09T07:30:00Z") as "Nov 9, 09:12", or "—" otherwise.
-func scheduleTimestamp(_ iso: String?) -> String {
+/// An ISO-8601 instant ("2026-11-09T07:30:00Z") in the device's date and time style, or "—".
+@MainActor func scheduleTimestamp(_ iso: String?) -> String {
     guard let iso, let date = PaseoDate.parse(iso) else { return "—" }
-    let formatter = DateFormatter()
-    formatter.locale = .current
-    formatter.dateFormat = "MMM d, HH:mm"
-    return formatter.string(from: date)
+    return PaseoFormat.dateTime(date)
 }
 
-/// "in 3h", "tomorrow at 09:00" for a next-run caption; "—" when missing.
-func scheduleNextRun(_ iso: String?) -> String {
+/// "In 3h", "Tomorrow at 09:00" for a next-run caption; "Not scheduled" when missing.
+@MainActor func scheduleNextRun(_ iso: String?) -> String {
     guard let iso, let date = PaseoDate.parse(iso) else { return "Not scheduled" }
     let seconds = date.timeIntervalSinceNow
     if seconds < 0 { return "Overdue" }
     if seconds < 3600 { return "In \(max(1, Int(seconds / 60))) min" }
     if seconds < 86_400 { return "In \(Int(seconds / 3600))h" }
     let days = Int(seconds / 86_400)
-    let formatter = DateFormatter()
-    formatter.locale = .current
-    formatter.dateFormat = "MMM d, HH:mm"
-    return days == 1 ? "Tomorrow at \(formatter.string(from: date))" : "In \(days) days · \(formatter.string(from: date))"
+    return days == 1
+        ? "Tomorrow at \(PaseoFormat.time(date))"
+        : "In \(days) days · \(PaseoFormat.dateTime(date))"
 }
 
 func scheduleDuration(_ start: String, _ end: String?) -> String {

@@ -18,24 +18,26 @@ struct CadencePreset: Hashable {
     ]
 }
 
+/// The schedule editor, pushed from the list or the detail page. Unsaved edits block the swipe
+/// down and ask "Discard changes?" on back (PLAN §RI 11); the keyboard has a Done button for
+/// the number pad and the prompt editor.
 struct ScheduleEditorPage: View {
     let session: HostSession
     let seed: ClaudeSchedulesView.EditorSeed
-    let onBack: () -> Void
-    let onCreated: (String) -> Void
-    let showToast: (String) -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.toast) private var toast
 
-    /// The picker currently open inside the editor; nil shows the form.
+    /// The picker this editor pushes; nil shows the form.
     enum Picker: Hashable {
-        case provider, model, mode, thinking, workspace
+        case provider, model, mode, thinking
     }
 
-    @State var picker: Picker?
+    @State private var picker: Picker?
     @State private var isSaving = false
+    @State private var asksDiscard = false
 
-    @State var name: String
+    @State private var name: String
     @State private var prompt: String
     @State private var cron: String
     @State private var usePreset: Int?
@@ -43,11 +45,25 @@ struct ScheduleEditorPage: View {
     /// A cadence that is `.every` or otherwise not one we can edit as cron: shown read-only.
     @State private var readOnlyCadence: String?
     @State private var maxRuns: String
-    @State var cwd: String
-    @State var providerId: String
-    @State var modelId: String
-    @State var modeId: String
-    @State var thinkingId: String
+    @State private var cwd: String
+    @State private var providerId: String
+    @State private var modelId: String
+    @State private var modeId: String
+    @State private var thinkingId: String
+
+    @FocusState private var promptFocused: Bool
+    @FocusState private var maxRunsFocused: Bool
+
+    private let initialName: String
+    private let initialPrompt: String
+    private let initialCron: String
+    private let initialTimezone: String
+    private let initialMaxRuns: String
+    private let initialCwd: String
+    private let initialProvider: String
+    private let initialModel: String
+    private let initialMode: String
+    private let initialThinking: String
 
     private var schedules: SchedulesStore { session.schedules }
     var workspaces: [WorkspaceDescriptor] {
@@ -56,337 +72,429 @@ struct ScheduleEditorPage: View {
     private var isHeartbeat: Bool { seed.isHeartbeat }
     var catalog: AgentControlStore { session.agentControl }
 
-    init(
-        session: HostSession, seed: ClaudeSchedulesView.EditorSeed,
-        onBack: @escaping () -> Void, onCreated: @escaping (String) -> Void, showToast: @escaping (String) -> Void
-    ) {
+    init(session: HostSession, seed: ClaudeSchedulesView.EditorSeed) {
         self.session = session
         self.seed = seed
-        self.onBack = onBack
-        self.onCreated = onCreated
-        self.showToast = showToast
+        var name = ""
+        var prompt = ""
+        var cron = CadencePreset.all[0].expression
+        var timezone = ""
+        var maxRuns = ""
+        var cwd = session.workspaceDirectory.groups.first?.workspaces.first?.cwd ?? ""
+        var providerId = session.agentControl.readyProviders.first?.provider ?? ""
+        var modelId = ""
+        var modeId = ""
+        var thinkingId = ""
+        var readOnlyCadence: String?
+        var usePreset: Int? = 0
         if let stored = seed.stored {
-            _name = State(initialValue: stored.summary.name ?? "")
-            _prompt = State(initialValue: stored.summary.prompt)
-            _maxRuns = State(initialValue: stored.summary.maxRuns.map(String.init) ?? "")
-            switch stored.summary.cadence {
-            case .cron(let expression, let timezone):
-                _cron = State(initialValue: expression)
-                _timezone = State(initialValue: timezone ?? "")
-                _usePreset = State(initialValue: CadencePreset.all.firstIndex(where: { $0.expression == expression }))
+            let summary = stored.summary
+            name = summary.name ?? ""
+            prompt = summary.prompt
+            maxRuns = summary.maxRuns.map(String.init) ?? ""
+            switch summary.cadence {
+            case .cron(let expression, let storedTimezone):
+                cron = expression
+                timezone = storedTimezone ?? ""
+                usePreset = CadencePreset.all.firstIndex(where: { $0.expression == expression })
             default:
-                _cron = State(initialValue: "")
-                _timezone = State(initialValue: "")
-                _usePreset = State(initialValue: nil)
-                _readOnlyCadence = State(initialValue: stored.summary.cadence.words)
+                cron = ""
+                timezone = ""
+                usePreset = nil
+                readOnlyCadence = summary.cadence.words
             }
-            if let config = stored.summary.target.newAgentConfig {
-                _cwd = State(initialValue: config.cwd)
-                _providerId = State(initialValue: config.provider)
-                _modelId = State(initialValue: config.model ?? "")
-                _modeId = State(initialValue: config.modeId ?? "")
-                _thinkingId = State(initialValue: config.thinkingOptionId ?? "")
+            if let config = summary.target.newAgentConfig {
+                cwd = config.cwd
+                providerId = config.provider
+                modelId = config.model ?? ""
+                modeId = config.modeId ?? ""
+                thinkingId = config.thinkingOptionId ?? ""
             } else {
-                _cwd = State(initialValue: "")
-                _providerId = State(initialValue: "")
-                _modelId = State(initialValue: "")
-                _modeId = State(initialValue: "")
-                _thinkingId = State(initialValue: "")
+                cwd = ""
+                providerId = ""
+                modelId = ""
+                modeId = ""
+                thinkingId = ""
             }
-        } else {
-            let firstWorkspace = session.workspaceDirectory.groups.first?.workspaces.first
-            _name = State(initialValue: "")
-            _prompt = State(initialValue: "")
-            _cron = State(initialValue: CadencePreset.all[0].expression)
-            _usePreset = State(initialValue: 0)
-            _timezone = State(initialValue: "")
-            _readOnlyCadence = State(initialValue: nil)
-            _maxRuns = State(initialValue: "")
-            _cwd = State(initialValue: firstWorkspace?.cwd ?? "")
-            let firstProvider = session.agentControl.readyProviders.first?.provider ?? ""
-            _providerId = State(initialValue: firstProvider)
-            _modelId = State(initialValue: "")
-            _modeId = State(initialValue: "")
-            _thinkingId = State(initialValue: "")
         }
+        _name = State(initialValue: name)
+        _prompt = State(initialValue: prompt)
+        _cron = State(initialValue: cron)
+        _usePreset = State(initialValue: usePreset)
+        _timezone = State(initialValue: timezone)
+        _readOnlyCadence = State(initialValue: readOnlyCadence)
+        _maxRuns = State(initialValue: maxRuns)
+        _cwd = State(initialValue: cwd)
+        _providerId = State(initialValue: providerId)
+        _modelId = State(initialValue: modelId)
+        _modeId = State(initialValue: modeId)
+        _thinkingId = State(initialValue: thinkingId)
+        initialName = name
+        initialPrompt = prompt
+        initialCron = cron
+        initialTimezone = timezone
+        initialMaxRuns = maxRuns
+        initialCwd = cwd
+        initialProvider = providerId
+        initialModel = modelId
+        initialMode = modeId
+        initialThinking = thinkingId
     }
 
     var body: some View {
-        Group {
-            if let picker {
-                pickerView(picker)
-            } else {
-                form
+        PageList {
+            Section {
+                TextField("Optional", text: $name)
+                    .font(.paseo(.callout))
+                    .textInputAutocapitalization(.sentences)
+                    .padding(.horizontal, Space.lg)
+                    .frame(minHeight: 44)
+                    .panelRow()
+                    .accessibilityIdentifier("schedule.name")
+            } header: {
+                Text("Name")
             }
-        }
-        .onAppear {
-            if catalog.readyProviders.isEmpty {
-                Task { await catalog.loadCatalog(cwd: nil) }
+            Section {
+                promptEditor
+                    .panelRow()
+            } header: {
+                Text("Prompt")
             }
-        }
-    }
-
-    // MARK: Form
-
-    private var form: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Text(seed.title)
-                    .font(.paseo(.title, weight: .semibold))
-                HStack {
-                    Button {
-                        Haptics.selection()
-                        onBack()
-                    } label: {
-                        Image(systemName: "chevron.left").font(.glyph(.large, weight: .light))
-                            .frame(width: 42, height: 42)
-                    }
-                    .glassEffect(in: .circle)
-                    .accessibilityLabel("Back")
-                    Spacer()
-                }
+            Section {
+                cadenceSection
+            } header: {
+                Text("Cadence")
             }
-            .frame(height: 56)
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    fieldLabel("Name")
-                    TextField("Optional", text: $name)
-                        .font(.paseo(.callout))
-                        .padding(.horizontal, 16)
-                        .frame(minHeight: 46)
-                        .background(Palette.panel, in: .capsule)
-                        .overlay { Capsule().stroke(Palette.ink.opacity(0.10), lineWidth: 0.5) }
-                        .accessibilityIdentifier("schedule.name")
-                    fieldLabel("Prompt")
-                    ZStack(alignment: .topLeading) {
-                        if prompt.isEmpty {
-                            Text("What should the agent do each time?")
-                                .font(.paseo(.callout))
-                                .foregroundStyle(Palette.secondaryInk)
-                                .padding(16)
-                                .allowsHitTesting(false)
-                        }
-                        TextEditor(text: $prompt)
-                            .font(.paseo(.callout))
-                            .scrollContentBackground(.hidden)
-                            .padding(8)
-                            .accessibilityIdentifier("schedule.prompt")
-                    }
-                    .frame(height: 132)
-                    .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
-                    .overlay { RoundedRectangle(cornerRadius: Radius.lg).stroke(Palette.ink.opacity(0.08), lineWidth: 0.5) }
-                    cadenceSection
-                    fieldLabel("Max runs")
-                    TextField("Unlimited", text: $maxRuns)
-                        .keyboardType(.numberPad)
-                        .font(.paseo(.callout))
-                        .padding(.horizontal, 16)
-                        .frame(minHeight: 46)
-                        .background(Palette.panel, in: .capsule)
-                        .overlay { Capsule().stroke(Palette.ink.opacity(0.10), lineWidth: 0.5) }
-                        .accessibilityIdentifier("schedule.maxRuns")
-                    if isHeartbeat {
-                        Text("This schedule prompts an existing agent every run.")
-                            .font(.paseo(.caption))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .padding(.horizontal, 6)
-                    } else {
-                        targetSection
-                        agentSection
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 24)
+            Section {
+                TextField("Unlimited", text: $maxRuns)
+                    .keyboardType(.numberPad)
+                    .focused($maxRunsFocused)
+                    .font(.paseo(.callout))
+                    .padding(.horizontal, Space.lg)
+                    .frame(minHeight: 44)
+                    .panelRow()
+                    .accessibilityIdentifier("schedule.maxRuns")
+            } header: {
+                Text("Max runs")
             }
-            if let actionError = schedules.actionError {
-                Text(actionError)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-            }
-            bottomBar
-        }
-    }
-
-    private func fieldLabel(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.paseo(.caption2, weight: .semibold))
-            .tracking(0.8)
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 6)
-    }
-
-    // MARK: Cadence
-
-    private var cadenceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            fieldLabel("Cadence")
-            if let readOnlyCadence {
-                HStack {
-                    Image(systemName: "clock").foregroundStyle(Palette.secondaryInk)
-                    Text(readOnlyCadence).font(.paseo(.callout)).foregroundStyle(Palette.ink)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 46)
-                .background(Palette.panel, in: .capsule)
-                .overlay { Capsule().stroke(Palette.ink.opacity(0.10), lineWidth: 0.5) }
-                Text("Interval cadences can't be edited here yet.")
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.horizontal, 6)
-            } else {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                    ForEach(Array(CadencePreset.all.enumerated()), id: \.offset) { index, preset in
-                        let selected = usePreset == index && cron == preset.expression
-                        Button {
-                            Haptics.selection()
-                            usePreset = index
-                            cron = preset.expression
-                        } label: {
-                            Text(preset.label)
-                                .font(.paseo(.caption, weight: .medium))
-                                .foregroundStyle(selected ? Palette.background : Palette.ink)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                                .frame(maxWidth: .infinity)
-                                .frame(minHeight: 42)
-                                .background(selected ? Palette.ink : Palette.panel, in: .rect(cornerRadius: Radius.md))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                }
-                TextField("Custom cron expression", text: $cron)
-                    .font(.paseo(.code))
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 46)
-                    .background(Palette.panel, in: .capsule)
-                    .overlay {
-                        Capsule().stroke(
-                            cronIsInvalid && !cron.isEmpty
-                                ? Palette.failureInk
-                                : Palette.ink.opacity(0.10),
-                            lineWidth: 0.5)
-                    }
-                    .onChange(of: cron) { _, expression in
-                        if let index = CadencePreset.all.firstIndex(where: { $0.expression == expression }) {
-                            usePreset = index
-                        } else {
-                            usePreset = nil
-                        }
-                    }
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .accessibilityIdentifier("schedule.cron")
-                if cronIsInvalid && !cron.isEmpty {
-                    Text("Five fields: minute hour day-of-month month day-of-week.")
-                        .font(.paseo(.caption))
-                        .foregroundStyle(Palette.failureInk)
-                        .padding(.horizontal, 6)
-                }
-                TextField("Timezone (optional)", text: $timezone)
-                    .font(.paseo(.code))
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 46)
-                    .background(Palette.panel, in: .capsule)
-                    .overlay { Capsule().stroke(Palette.ink.opacity(0.10), lineWidth: 0.5) }
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .accessibilityIdentifier("schedule.timezone")
-            }
-        }
-    }
-
-    // MARK: Target
-
-    private var targetSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            fieldLabel("Target workspace")
-            RowGroup {
-                ForEach(Array(workspaces.enumerated()), id: \.element.id) { index, workspace in
-                    if index > 0 { RowDivider() }
-                    workspaceRow(workspace)
-                }
-                if !cwd.isEmpty, !workspaces.contains(where: { $0.cwd == cwd }) {
-                    RowDivider()
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Custom directory").font(.paseo(.callout))
-                        Text(cwd)
-                            .font(.paseo(.codeCaption))
-                            .foregroundStyle(Palette.captionInk)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                }
-            }
-        }
-    }
-
-    private func workspaceRow(_ workspace: WorkspaceDescriptor) -> some View {
-        let selected = cwd == workspace.cwd
-        return Button {
-            Haptics.selection()
-            cwd = workspace.cwd
-        } label: {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(workspace.title ?? workspace.name)
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
-                    Text("\(workspace.projectDisplayName)\(workspace.branch.map { " · \($0)" } ?? "")")
+            if isHeartbeat {
+                Section {
+                    Text("This schedule prompts an existing agent every run.")
                         .font(.paseo(.caption))
                         .foregroundStyle(Palette.secondaryInk)
+                        .padding(.horizontal, Space.lg)
+                        .panelRow(Palette.background)
+                }
+            } else {
+                Section {
+                    workspaceRows
+                } header: {
+                    Text("Target workspace")
+                }
+                Section {
+                    agentRows
+                } header: {
+                    Text("Agent")
+                }
+            }
+            if let actionError = schedules.actionError {
+                Section {
+                    InlineBanner(.failure, title: actionError)
+                        .panelRow(Palette.background)
+                }
+            }
+            Section {
+                saveButton
+                    .panelRow(Palette.background)
+            }
+        }
+        .inlinePageTitle(seed.title)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    if isDirty { asksDiscard = true } else { dismiss() }
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .accessibilityLabel("Back")
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    promptFocused = false
+                    maxRunsFocused = false
+                }
+            }
+        }
+        .navigationDestination(item: $picker) { which in
+            pickerPage(which)
+        }
+        .sheetDirty(isDirty)
+        .confirmationDialog(
+            "Discard changes?", isPresented: $asksDiscard, titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        }
+        .task {
+            if catalog.readyProviders.isEmpty {
+                await catalog.loadCatalog(cwd: nil)
+            }
+        }
+    }
+
+    // MARK: Fields
+
+    private var promptEditor: some View {
+        ZStack(alignment: .topLeading) {
+            if prompt.isEmpty {
+                Text("What should the agent do each time?")
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .padding(Space.lg)
+                    .allowsHitTesting(false)
+            }
+            TextEditor(text: $prompt)
+                .font(.paseo(.callout))
+                .scrollContentBackground(.hidden)
+                .focused($promptFocused)
+                .padding(Space.sm)
+                .accessibilityIdentifier("schedule.prompt")
+        }
+        .frame(height: 132)
+    }
+
+    @ViewBuilder private var cadenceSection: some View {
+        if let readOnlyCadence {
+            ListRow(title: readOnlyCadence, systemImage: "clock")
+                .panelRow()
+            Text("Interval cadences can't be edited here yet.")
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.secondaryInk)
+                .padding(.horizontal, Space.lg)
+                .panelRow(Palette.background)
+        } else {
+            presetGrid
+                .padding(Space.lg)
+                .panelRow()
+            TextField("Custom cron expression", text: $cron)
+                .font(.paseo(.code))
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .padding(.horizontal, Space.lg)
+                .frame(minHeight: 44)
+                .panelRow()
+                .overlay {
+                    if cronIsInvalid, !cron.isEmpty {
+                        RoundedRectangle(cornerRadius: Radius.md)
+                            .stroke(Palette.failureInk, lineWidth: 0.5)
+                    }
+                }
+                .onChange(of: cron) { _, expression in
+                    if let index = CadencePreset.all.firstIndex(where: { $0.expression == expression }) {
+                        usePreset = index
+                    } else {
+                        usePreset = nil
+                    }
+                }
+                .accessibilityIdentifier("schedule.cron")
+            if cronIsInvalid, !cron.isEmpty {
+                Text("Five fields: minute hour day-of-month month day-of-week.")
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.failureInk)
+                    .padding(.horizontal, Space.lg)
+                    .panelRow(Palette.background)
+            }
+            TextField("Timezone (optional)", text: $timezone)
+                .font(.paseo(.code))
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .padding(.horizontal, Space.lg)
+                .frame(minHeight: 44)
+                .panelRow()
+                .accessibilityIdentifier("schedule.timezone")
+        }
+    }
+
+    private var presetGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Space.sm) {
+            ForEach(Array(CadencePreset.all.enumerated()), id: \.offset) { index, preset in
+                let selected = usePreset == index && cron == preset.expression
+                Button {
+                    Haptics.selection()
+                    usePreset = index
+                    cron = preset.expression
+                } label: {
+                    Text(preset.label)
+                        .font(.paseo(.caption, weight: .medium))
+                        .foregroundStyle(selected ? Palette.background : Palette.ink)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 42)
+                        .background(
+                            selected ? Palette.ink : Palette.chip,
+                            in: .rect(cornerRadius: Radius.md))
                 }
-                Spacer(minLength: 8)
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.glyph(.regular, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    // MARK: Agent
-
-    private var agentSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            fieldLabel("Agent")
-            RowGroup {
-                SheetRow(title: "Provider", value: providerValue, chevron: true) {
-                    picker = .provider
-                }
-                RowDivider()
-                SheetRow(title: "Model", value: modelValue, chevron: true) {
-                    picker = .model
-                }
-                RowDivider()
-                SheetRow(title: "Mode", value: modeValue, chevron: true) {
-                    picker = .mode
-                }
-                RowDivider()
-                SheetRow(title: "Thinking", value: thinkingValue, chevron: true) {
-                    picker = .thinking
-                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
     }
+
+    @ViewBuilder private var workspaceRows: some View {
+        ForEach(workspaces) { workspace in
+            ListRow(
+                title: workspace.title ?? workspace.name,
+                subtitle:
+                    "\(workspace.projectDisplayName)\(workspace.branch.map { " · \($0)" } ?? "")",
+                accessory: ListRow.Accessory.checkmark(cwd == workspace.cwd),
+                action: {
+                    Haptics.selection()
+                    cwd = workspace.cwd
+                }
+            )
+            .panelRow()
+        }
+        if !cwd.isEmpty, !workspaces.contains(where: { $0.cwd == cwd }) {
+            ListRow(title: "Custom directory", subtitle: cwd)
+                .panelRow()
+        }
+    }
+
+    @ViewBuilder private var agentRows: some View {
+        ListRow(
+            title: "Provider",
+            accessory: ListRow.Accessory.value(providerValue),
+            action: {
+                Haptics.selection()
+                picker = .provider
+            }
+        )
+        .panelRow()
+        ListRow(
+            title: "Model",
+            accessory: ListRow.Accessory.value(modelValue),
+            action: {
+                Haptics.selection()
+                picker = .model
+            }
+        )
+        .panelRow()
+        ListRow(
+            title: "Mode",
+            accessory: ListRow.Accessory.value(modeValue),
+            action: {
+                Haptics.selection()
+                picker = .mode
+            }
+        )
+        .panelRow()
+        ListRow(
+            title: "Thinking",
+            accessory: ListRow.Accessory.value(thinkingValue),
+            action: {
+                Haptics.selection()
+                picker = .thinking
+            }
+        )
+        .panelRow()
+    }
+
+    private var saveButton: some View {
+        Button {
+            save()
+        } label: {
+            Text(
+                isSaving
+                    ? "Saving…" : (seed.stored == nil ? "Create schedule" : "Save changes"))
+        }
+        .buttonStyle(.paseoPrimary(isWorking: isSaving))
+        .disabled(!canSave || isSaving)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("schedule.save")
+    }
+
+    // MARK: Picker
+
+    @ViewBuilder private func pickerPage(_ which: Picker) -> some View {
+        switch which {
+        case .provider:
+            SchedulePickerPage(
+                title: "Provider", rows: providerPickerRows, selected: $providerId
+            ) {
+                modelId = ""
+                modeId = ""
+                thinkingId = ""
+            }
+        case .model:
+            SchedulePickerPage(title: "Model", rows: modelPickerRows, selected: $modelId) {
+                thinkingId = ""
+            }
+        case .mode:
+            SchedulePickerPage(title: "Mode", rows: modePickerRows, selected: $modeId)
+        case .thinking:
+            SchedulePickerPage(title: "Thinking", rows: thinkingPickerRows, selected: $thinkingId)
+        }
+    }
+
+    private var providerPickerRows: [SchedulePickerRow] {
+        guard !catalog.readyProviders.isEmpty else {
+            return []
+        }
+        return catalog.readyProviders.map { entry in
+            SchedulePickerRow(
+                id: entry.provider,
+                title: entry.label ?? entry.provider,
+                detail: entry.description,
+                badge: nil)
+        }
+    }
+
+    private var modelPickerRows: [SchedulePickerRow] {
+        let models = catalog.models(forProvider: providerId)
+        return [
+            SchedulePickerRow(
+                id: "", title: "Provider default", detail: nil, badge: nil)
+        ] + models.map { model in
+            SchedulePickerRow(
+                id: model.id,
+                title: model.label,
+                detail: model.description,
+                badge: model.isDefault == true ? "Default" : nil)
+        }
+    }
+
+    private var modePickerRows: [SchedulePickerRow] {
+        let modes = catalog.modes(forProvider: providerId)
+        return [
+            SchedulePickerRow(id: "", title: "Provider default", detail: nil, badge: nil)
+        ] + modes.map { mode in
+            SchedulePickerRow(
+                id: mode.id, title: mode.label, detail: mode.description, badge: nil)
+        }
+    }
+
+    private var thinkingPickerRows: [SchedulePickerRow] {
+        guard let modelId = resolvedThinkingModelId else {
+            return [
+                SchedulePickerRow(id: "", title: "Provider default", detail: nil, badge: nil)
+            ]
+        }
+        let options = catalog.thinkingOptions(forProvider: providerId, modelId: modelId)
+        return [
+            SchedulePickerRow(id: "", title: "Provider default", detail: nil, badge: nil)
+        ] + options.map { option in
+            SchedulePickerRow(
+                id: option.id,
+                title: option.label,
+                detail: option.description,
+                badge: option.isDefault == true ? "Default" : nil)
+        }
+    }
+
+    // MARK: Values
 
     private var providerValue: String {
         if providerId.isEmpty { return "Choose a provider" }
@@ -403,13 +511,13 @@ struct ScheduleEditorPage: View {
 
     private var modeValue: String {
         if modeId.isEmpty { return "Provider default" }
-        return catalog.modes(forProvider: providerId).first(where: { $0.id == modeId })?.label ?? modeId
+        return catalog.modes(forProvider: providerId).first(where: { $0.id == modeId })?.label
+            ?? modeId
     }
 
     private var thinkingValue: String {
         if thinkingId.isEmpty { return "Provider default" }
-        let modelId = resolvedThinkingModelId
-        guard let modelId else { return thinkingId }
+        guard let modelId = resolvedThinkingModelId else { return thinkingId }
         return catalog.thinkingOptions(forProvider: providerId, modelId: modelId)
             .first(where: { $0.id == thinkingId })?.label ?? thinkingId
     }
@@ -419,9 +527,11 @@ struct ScheduleEditorPage: View {
         return catalog.defaultModel(forProvider: providerId)?.id
     }
 
-    // MARK: Bottom bar and validation
+    // MARK: Validation
 
-    private var promptIsEmpty: Bool { prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var promptIsEmpty: Bool {
+        prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     private var cronIsInvalid: Bool { !ScheduleWords.isValid(cron: cron) }
     private var maxRunsIsInvalid: Bool {
         let trimmed = maxRuns.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -430,27 +540,28 @@ struct ScheduleEditorPage: View {
     }
     private var canSave: Bool {
         if isHeartbeat {
-            return !promptIsEmpty && !maxRunsIsInvalid && (readOnlyCadence != nil || !cronIsInvalid)
+            return !promptIsEmpty && !maxRunsIsInvalid
+                && (readOnlyCadence != nil || !cronIsInvalid)
         }
-        return !promptIsEmpty && !cronIsInvalid && !maxRunsIsInvalid && !providerId.isEmpty && !cwd.isEmpty
+        return !promptIsEmpty && !cronIsInvalid && !maxRunsIsInvalid && !providerId.isEmpty
+            && !cwd.isEmpty
     }
 
-    private var bottomBar: some View {
-        Button {
-            save()
-        } label: {
-            Text(isSaving ? "Saving…" : (seed.stored == nil ? "Create schedule" : "Save changes"))
-                .font(.paseo(.callout, weight: .semibold))
-                .foregroundStyle(canSave ? Palette.background : Palette.background.opacity(0.55))
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 48)
-                .background(canSave ? Palette.ink : Palette.ink.opacity(0.3), in: .capsule)
-        }
-        .disabled(!canSave || isSaving)
-        .accessibilityIdentifier("schedule.save")
-        .padding(.horizontal, 16)
-        .padding(.bottom, 16)
+    /// True once any field differs from what the editor opened with (PLAN §RI 11).
+    private var isDirty: Bool {
+        name != initialName
+            || prompt != initialPrompt
+            || maxRuns != initialMaxRuns
+            || cron != initialCron
+            || timezone != initialTimezone
+            || cwd != initialCwd
+            || providerId != initialProvider
+            || modelId != initialModel
+            || modeId != initialMode
+            || thinkingId != initialThinking
     }
+
+    // MARK: Save
 
     private func save() {
         Haptics.selection()
@@ -459,8 +570,10 @@ struct ScheduleEditorPage: View {
             Task {
                 let edits = buildEdits(stored)
                 if await schedules.update(stored.id, edits) {
-                    showToast("Saved")
-                    onCreated(stored.id)
+                    toast?.show("Saved")
+                    isSaving = false
+                    dismiss()
+                    return
                 }
                 isSaving = false
             }
@@ -479,10 +592,13 @@ struct ScheduleEditorPage: View {
                 let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                 let draft = ScheduleDraft(
                     name: trimmedName.isEmpty ? nil : trimmedName,
-                    prompt: prompt, cadence: cadence, target: .newAgent(config), maxRuns: maxRunsValue)
-                if let created = await schedules.create(draft) {
-                    showToast("Schedule created")
-                    onCreated(created.id)
+                    prompt: prompt, cadence: cadence, target: .newAgent(config),
+                    maxRuns: maxRunsValue)
+                if await schedules.create(draft) != nil {
+                    toast?.show("Schedule created")
+                    isSaving = false
+                    dismiss()
+                    return
                 }
                 isSaving = false
             }
@@ -492,7 +608,8 @@ struct ScheduleEditorPage: View {
     private func buildEdits(_ stored: StoredSchedule) -> ScheduleEdits {
         let initial = stored.summary
         let namePatch = patchString(name, comparedTo: initial.name ?? "")
-        let promptEdit = prompt.trimmingCharacters(in: .whitespacesAndNewlines) == initial.prompt.trimmingCharacters(in: .whitespacesAndNewlines) ? nil : prompt
+        let promptEdit = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            == initial.prompt.trimmingCharacters(in: .whitespacesAndNewlines) ? nil : prompt
         let maxRunsPatch = patchInt(maxRuns, comparedTo: initial.maxRuns)
 
         var cadenceEdit: ScheduleCadence?
@@ -506,7 +623,8 @@ struct ScheduleEditorPage: View {
 
         guard let config = initial.target.newAgentConfig else {
             // A heartbeat: provider/model/mode/thinking stay untouched.
-            return ScheduleEdits(name: namePatch, prompt: promptEdit, cadence: cadenceEdit, maxRuns: maxRunsPatch)
+            return ScheduleEdits(
+                name: namePatch, prompt: promptEdit, cadence: cadenceEdit, maxRuns: maxRunsPatch)
         }
 
         var newAgentConfig: ScheduleNewAgentConfigUpdate? = nil
@@ -514,7 +632,9 @@ struct ScheduleEditorPage: View {
         let modelPatch = patchString(modelId, comparedTo: config.model ?? "")
         let modePatch = patchString(modeId, comparedTo: config.modeId ?? "")
         let thinkingPatch = patchString(thinkingId, comparedTo: config.thinkingOptionId ?? "")
-        if providerChanged || modelPatch != .unchanged || modePatch != .unchanged || thinkingPatch != .unchanged {
+        if providerChanged || modelPatch != .unchanged || modePatch != .unchanged
+            || thinkingPatch != .unchanged
+        {
             newAgentConfig = ScheduleNewAgentConfigUpdate(
                 provider: providerChanged ? providerId : nil,
                 model: modelPatch, modeId: modePatch, thinkingOptionId: thinkingPatch)
@@ -535,7 +655,8 @@ struct ScheduleEditorPage: View {
     private func patchInt(_ new: String, comparedTo old: Int?) -> SchedulePatch<Int> {
         let newTrimmed = new.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsed = newTrimmed.isEmpty ? nil : Int(newTrimmed)
-        guard newTrimmed.isEmpty || parsed != nil else { return .unchanged } // invalid input can't be saved anyway
+        // Invalid input can't be saved anyway.
+        guard newTrimmed.isEmpty || parsed != nil else { return .unchanged }
         if parsed == old { return .unchanged }
         guard let parsed else { return .clear }
         return .set(parsed)

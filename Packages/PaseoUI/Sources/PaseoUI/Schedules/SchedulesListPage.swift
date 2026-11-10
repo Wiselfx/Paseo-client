@@ -1,146 +1,206 @@
 #if canImport(UIKit)
-import Combine
 import PaseoStore
 import SwiftUI
 
 // MARK: - List page
 
+/// The Schedules list: one row per schedule, with the state pill and the next run. A row pushes
+/// the detail page; the same verbs live in its context menu (PLAN §RH) and Delete also swipes.
+/// No timer: `.task` polls while the list is on screen, and only while the app is active.
 struct SchedulesListPage: View {
     let session: HostSession
-    let onClose: () -> Void
-    let onOpen: (String) -> Void
     let onNew: () -> Void
-    let showToast: (String) -> Void
+
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.toast) private var toast
 
     @State private var now = Date()
-    private let poll = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
+    @State private var editorRequest: ClaudeSchedulesView.EditorSeed?
+    @State private var deleteRequest: ScheduleSummary?
 
     private var schedules: SchedulesStore { session.schedules }
     private var knownAgentIds: Set<String> { Set(session.agents.map(\.id)) }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            if let actionError = schedules.actionError {
-                Text(actionError)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-            }
-            content
-        }
-        .onReceive(poll) { date in
-            now = date
-            Task { await schedules.load() }
-        }
-    }
-
-    private var header: some View {
-        ZStack {
-            Text("Schedules")
-                .font(.paseo(.title, weight: .semibold))
-            HStack {
-                Button {
-                    Haptics.selection()
-                    onClose()
-                } label: {
-                    Image(systemName: "xmark").font(.glyph(.large, weight: .light))
-                        .frame(width: 42, height: 42)
-                }
-                .glassEffect(in: .circle)
-                .accessibilityLabel("Close")
-                Spacer()
-                Button {
-                    Haptics.selection()
-                    onNew()
-                } label: {
-                    Image(systemName: "plus").font(.glyph(.large, weight: .light))
-                        .frame(width: 42, height: 42)
-                }
-                .glassEffect(in: .circle)
-                .accessibilityLabel("New schedule")
+        Group {
+            if !schedules.isSupported {
+                unsupportedState
+            } else if case .failed(let message) = schedules.phase, schedules.schedules.isEmpty {
+                failedState(message)
+            } else if (schedules.phase == .idle || schedules.phase == .loading),
+                schedules.schedules.isEmpty
+            {
+                LoadingState()
+            } else if schedules.schedules.isEmpty {
+                emptyState
+            } else {
+                list
             }
         }
-        .frame(height: 56)
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
-    }
-
-    @ViewBuilder private var content: some View {
-        if !schedules.isSupported {
-            unsupportedState
-        } else if case .failed(let message) = schedules.phase, schedules.schedules.isEmpty {
-            failedState(message)
-        } else if (schedules.phase == .idle || schedules.phase == .loading), schedules.schedules.isEmpty {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if schedules.schedules.isEmpty {
-            emptyState
-        } else {
-            list
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Palette.background)
+        .navigationTitle("Schedules")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $editorRequest) { seed in
+            ScheduleEditorPage(session: session, seed: seed)
+        }
+        .task {
+            while !Task.isCancelled {
+                if scenePhase == .active {
+                    now = Date()
+                    await schedules.load()
+                }
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+        .confirmationDialog(
+            "Delete schedule?",
+            isPresented: Binding(
+                get: { deleteRequest != nil },
+                set: { if !$0 { deleteRequest = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                guard let summary = deleteRequest else { return }
+                deleteRequest = nil
+                Task { await delete(summary) }
+            }
+            Button("Cancel", role: .cancel) { deleteRequest = nil }
+        } message: {
+            Text("Runs that already started finish, but no new runs will be created.")
         }
     }
 
     private var list: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(schedules.schedules.enumerated()), id: \.element.id) { index, summary in
-                    if index > 0 {
-                        ClaudeDivider().padding(.leading, 20)
-                    }
+        List {
+            if let actionError = schedules.actionError {
+                Section {
+                    InlineBanner(.failure, title: actionError)
+                        .panelRow(Palette.background)
+                }
+            }
+            Section {
+                ForEach(schedules.schedules) { summary in
                     row(summary)
                 }
             }
-            .padding(.top, 4)
-            .padding(.bottom, 18)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Palette.background)
         .refreshable { await schedules.load() }
     }
 
     private func row(_ summary: ScheduleSummary) -> some View {
         let state = summary.state(now: now, knownAgentIds: knownAgentIds)
-        return Button {
-            Haptics.selection()
-            onOpen(summary.id)
-        } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title(summary))
-                        .font(.paseo(.callout, weight: .medium))
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
-                    Text(subtitle(summary))
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 4) {
+        return NavigationLink(value: ClaudeSchedulesView.Route.detail(summary.id)) {
+            HStack(spacing: 0) {
+                ListRow(title: title(summary), subtitle: summary.cadence.words)
+                VStack(alignment: .trailing, spacing: Space.xs) {
                     ScheduleStatePill(state: state)
                     Text(nextCaption(summary, state: state))
                         .font(.paseo(.caption2))
                         .foregroundStyle(Palette.captionInk)
                 }
+                .padding(.trailing, Space.lg)
             }
-            .padding(.horizontal, 20)
-            .frame(minHeight: 58)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .panelRow()
         .accessibilityLabel("Schedule \(title(summary))")
-        .accessibilityValue("\(subtitle(summary)), \(nextCaption(summary, state: state))")
+        .accessibilityValue("\(summary.cadence.words), \(nextCaption(summary, state: state))")
+        .contextMenu {
+            rowMenu(summary)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                deleteRequest = summary
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
+
+    @ViewBuilder private func rowMenu(_ summary: ScheduleSummary) -> some View {
+        let isPaused = summary.status == .paused
+        Button {
+            Haptics.selection()
+            Task { await setPaused(summary, paused: !isPaused) }
+        } label: {
+            Label(isPaused ? "Resume schedule" : "Pause schedule", systemImage: isPaused ? "play" : "pause")
+        }
+        if summary.target.newAgentConfig != nil {
+            Button {
+                Haptics.selection()
+                Task { await runNow(summary) }
+            } label: {
+                Label("Run now", systemImage: "play.fill")
+            }
+        }
+        Button {
+            Haptics.selection()
+            Task { await edit(summary) }
+        } label: {
+            Label("Edit", systemImage: "pencil")
+        }
+        Divider()
+        Button(role: .destructive) {
+            deleteRequest = summary
+        } label: {
+            Label("Delete schedule", systemImage: "trash")
+        }
+    }
+
+    // MARK: Actions
+
+    private func setPaused(_ summary: ScheduleSummary, paused: Bool) async {
+        let ok = paused
+            ? await schedules.pause(summary.id)
+            : await schedules.resume(summary.id)
+        if ok {
+            toast?.show(paused ? "Paused" : "Resumed")
+        } else {
+            toast?.show(schedules.actionError ?? "Couldn't update the schedule.")
+        }
+    }
+
+    /// The editor needs the full record, so inspect first when this row has not been opened.
+    private func edit(_ summary: ScheduleSummary) async {
+        let isHeartbeat = summary.target.agentId != nil
+        if schedules.selected?.id != summary.id {
+            _ = await schedules.inspect(summary.id)
+        }
+        guard let stored = schedules.selected, stored.id == summary.id else {
+            toast?.show("Still loading this schedule.")
+            return
+        }
+        editorRequest = ClaudeSchedulesView.EditorSeed(stored: stored, isHeartbeat: isHeartbeat)
+    }
+
+    private func runNow(_ summary: ScheduleSummary) async {
+        if await schedules.runOnce(summary.id) {
+            toast?.show("Run started")
+        } else {
+            toast?.show(schedules.actionError ?? "Couldn't start a run.")
+        }
+        await schedules.load()
+    }
+
+    private func delete(_ summary: ScheduleSummary) async {
+        if await schedules.delete(summary.id) {
+            toast?.show("Schedule deleted")
+        } else {
+            toast?.show(schedules.actionError ?? "Couldn't delete the schedule.")
+        }
+    }
+
+    // MARK: Text
 
     private func title(_ summary: ScheduleSummary) -> String {
         if let name = summary.name, !name.isEmpty { return name }
-        let firstLine = summary.prompt.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true).first
+        let firstLine = summary.prompt.split(
+            separator: "\n", maxSplits: 1, omittingEmptySubsequences: true
+        ).first
         return firstLine.map(String.init) ?? "Untitled schedule"
-    }
-
-    private func subtitle(_ summary: ScheduleSummary) -> String {
-        summary.cadence.words
     }
 
     private func nextCaption(_ summary: ScheduleSummary, state: ScheduleState) -> String {
@@ -151,80 +211,39 @@ struct SchedulesListPage: View {
         }
     }
 
+    // MARK: States
+
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "clock")
-                .font(.glyph(.large, weight: .light))
-                .frame(width: 48, height: 48)
-                .background(Palette.panel, in: .circle)
-            VStack(spacing: 4) {
-                Text("No schedules yet")
-                    .font(.paseo(.title))
-                    .foregroundStyle(Palette.ink)
-                Text("Schedules run agents on a cadence.")
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .multilineTextAlignment(.center)
-            }
-            Button {
+        EmptyState(
+            systemImage: "clock",
+            title: "No schedules yet",
+            message: "Schedules run agents on a cadence.",
+            action: (title: "New schedule", run: {
                 Haptics.selection()
                 onNew()
-            } label: {
-                Label("New schedule", systemImage: "plus")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.background)
-                    .padding(.horizontal, 17)
-                    .frame(minHeight: 44)
-                    .background(Palette.ink, in: .capsule)
-            }
-            .accessibilityIdentifier("schedules.new")
-        }
-        .padding(.horizontal, 36)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            })
+        )
+        .accessibilityIdentifier("schedules.empty")
     }
 
     private var unsupportedState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "clock")
-                .font(.glyph(.xlarge, weight: .light))
-                .foregroundStyle(Palette.tertiaryInk)
-            Text("Schedules aren't available on this host")
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-            Text("The daemon did not grant the automation.manage permission.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 32)
+        EmptyState(
+            systemImage: "clock",
+            title: "Schedules aren't available on this host",
+            message: "The host did not grant permission to manage schedules."
+        )
     }
 
     private func failedState(_ message: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.glyph(.xlarge, weight: .light))
-                .foregroundStyle(Palette.tertiaryInk)
-            Text(message)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
-            Button {
+        EmptyState(
+            systemImage: "exclamationmark.triangle",
+            title: message,
+            message: nil,
+            action: (title: "Retry", run: {
                 Haptics.selection()
                 Task { await schedules.load() }
-            } label: {
-                Text("Retry")
-                    .font(.paseo(.footnote, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 32)
-                    .background(Palette.chip, in: .capsule)
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 32)
+            })
+        )
     }
 }
 #endif

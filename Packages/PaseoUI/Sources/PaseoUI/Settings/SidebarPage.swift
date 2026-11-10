@@ -2,7 +2,8 @@
 import SwiftUI
 
 /// Settings → Sidebar: which header rows the sidebar shows, and whether the usage footer shows.
-/// All keys are `@AppStorage`, so the sidebar re-reads them live.
+/// All keys are `@AppStorage`, so the sidebar re-reads them live. These toggles only hide sidebar
+/// rows: Search always lists History, Schedules and Usage (PLAN §RI 9).
 struct SidebarPage: View {
     /// Shared with `Sidebar/PaseoSidebar.swift` (`navigation`). Default shown.
     @AppStorage("paseo.sidebar.showHistory") private var showHistory = true
@@ -11,89 +12,47 @@ struct SidebarPage: View {
     /// Shared with the sidebar usage footer. Hidden by default.
     @AppStorage("paseo.usage.showInSidebar") private var showUsage = false
 
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                sectionLabel("Header")
-                RowGroup {
-                    toggleRow(
-                        "History",
-                        subtitle: "Recent agents on this host",
-                        symbol: "clock.arrow.2.circlepath",
-                        isOn: $showHistory,
-                        identifier: "settings.sidebar.showHistory")
-                    rowDivider
-                    toggleRow(
-                        "Schedules",
-                        subtitle: "Recurring agent runs on this host",
-                        symbol: "clock",
-                        isOn: $showSchedules,
-                        identifier: "settings.sidebar.showSchedules")
-                }
+        PageList {
+            Section {
+                ListRow(
+                    title: "History",
+                    subtitle: "Recent agents on this host",
+                    systemImage: "clock.arrow.2.circlepath",
+                    accessory: ListRow.Accessory.toggle($showHistory)
+                )
+                .panelRow()
+                .accessibilityIdentifier("settings.sidebar.showHistory")
+                ListRow(
+                    title: "Schedules",
+                    subtitle: "Recurring agent runs on this host",
+                    systemImage: "clock",
+                    accessory: ListRow.Accessory.toggle($showSchedules)
+                )
+                .panelRow()
+                .accessibilityIdentifier("settings.sidebar.showSchedules")
+            } header: {
+                Text("Header")
+            } footer: {
                 Text("Rows that open the History and Schedules screens. Applies immediately.")
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.leading, 16)
-                sectionLabel("Footer")
-                RowGroup {
-                    toggleRow(
-                        "Usage",
-                        subtitle: "One line per account the host reports usage for, with its pinned-window meters",
-                        symbol: "chart.bar",
-                        isOn: $showUsage,
-                        identifier: "settings.sidebar.showUsage")
-                }
+            }
+            Section {
+                ListRow(
+                    title: "Usage",
+                    subtitle:
+                        "One line per account the host reports usage for, with its pinned-window meters",
+                    systemImage: "chart.bar",
+                    accessory: ListRow.Accessory.toggle($showUsage)
+                )
+                .panelRow()
+                .accessibilityIdentifier("settings.sidebar.showUsage")
+            } header: {
+                Text("Footer")
+            } footer: {
                 Text("Hidden by default. Toggling this applies immediately.")
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.leading, 16)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 26)
-            .padding(.bottom, 20)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    private func toggleRow(
-        _ title: String, subtitle: String, symbol: String,
-        isOn: Binding<Bool>, identifier: String
-    ) -> some View {
-        Toggle(isOn: isOn) {
-            HStack(spacing: 12) {
-                Image(systemName: symbol)
-                    .font(.glyph(.regular, weight: .light))
-                    .frame(width: 24)
-                    .foregroundStyle(Palette.ink.opacity(0.75))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.paseo(.body))
-                    Text(subtitle)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
         }
-        .tint(Palette.toggleTint)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minHeight: 52)
-        .accessibilityIdentifier(identifier)
-    }
-
-    private var rowDivider: some View {
-        Divider().padding(.leading, 16).padding(.trailing, 16)
-    }
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
-            .padding(.top, 8)
-            .padding(.bottom, -8)
+        .inlinePageTitle("Sidebar")
     }
 }
 #endif

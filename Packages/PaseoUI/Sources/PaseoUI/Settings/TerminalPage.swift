@@ -1,7 +1,8 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// Settings → Terminal: how much scrollback SwiftTerm keeps. Read live by `PaseoTerminalView`.
+/// Settings → Terminal: how much scrollback SwiftTerm keeps, and what tapping a script's service
+/// URL does. Read live by `PaseoTerminalView`.
 struct TerminalPage: View {
     /// Shared with `Workspace/PaseoTerminalView.swift`. Default 2,000 lines.
     @AppStorage("paseo.terminal.scrollback") private var scrollback = 2_000
@@ -24,98 +25,43 @@ struct TerminalPage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                sectionLabel("Terminal")
-                RowGroup {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Scrollback")
-                                .font(.paseo(.body))
-                            Text("Lines kept in the buffer")
-                                .font(.paseo(.footnote))
-                                .foregroundStyle(Palette.secondaryInk)
-                        }
-                        Spacer(minLength: 8)
-                        Menu {
-                            ForEach(options, id: \.value) { option in
-                                Button {
-                                    Haptics.selection()
-                                    scrollback = option.value
-                                } label: {
-                                    Label(
-                                        option.label,
-                                        systemImage: scrollback == option.value
-                                            ? "checkmark" : "circle")
-                                }
-                            }
+        PageList {
+            Section {
+                SettingsMenuRow("Scrollback", value: selectedLabel) {
+                    ForEach(options, id: \.value) { option in
+                        Button {
+                            Haptics.selection()
+                            scrollback = option.value
                         } label: {
-                            HStack(spacing: 5) {
-                                Text(selectedLabel)
-                                    .font(.paseo(.callout))
-                                    .foregroundStyle(Palette.secondaryInk)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.glyph(.small, weight: .semibold))
-                                    .foregroundStyle(Palette.tertiaryInk)
-                            }
+                            Label(
+                                option.label,
+                                systemImage: scrollback == option.value ? "checkmark" : "circle")
                         }
-                        .accessibilityLabel("Terminal scrollback, currently \(selectedLabel)")
-                        .accessibilityIdentifier("settings.terminal.scrollback")
                     }
-                    .padding(.horizontal, 16)
-                    .frame(height: 52)
-                    RowDivider()
-                    HStack(spacing: 12) {
-                        Text("Clicking a script's service URL")
-                            .font(.paseo(.body))
-                        Spacer(minLength: 8)
-                        Menu {
-                            ForEach(ServiceUrlBehavior.allCases, id: \.self) { option in
-                                Button {
-                                    Haptics.selection()
-                                    serviceUrlBehavior = option.rawValue
-                                } label: {
-                                    Label(
-                                        option.label,
-                                        systemImage: currentBehavior == option
-                                            ? "checkmark" : "circle")
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Text(currentBehavior.label)
-                                    .font(.paseo(.callout))
-                                    .foregroundStyle(Palette.secondaryInk)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.glyph(.small, weight: .semibold))
-                                    .foregroundStyle(Palette.tertiaryInk)
-                            }
-                        }
-                        .accessibilityLabel("Clicking a script's service URL, currently \(currentBehavior.label)")
-                        .accessibilityIdentifier("settings.terminal.serviceUrls")
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(height: 52)
                 }
+                .accessibilityIdentifier("settings.terminal.scrollback")
+                SettingsMenuRow(
+                    "Clicking a script's service URL", value: currentBehavior.label
+                ) {
+                    ForEach(ServiceUrlBehavior.allCases, id: \.self) { option in
+                        Button {
+                            Haptics.selection()
+                            serviceUrlBehavior = option.rawValue
+                        } label: {
+                            Label(
+                                option.label,
+                                systemImage: currentBehavior == option ? "checkmark" : "circle")
+                        }
+                    }
+                }
+                .accessibilityIdentifier("settings.terminal.serviceUrls")
+            } header: {
+                Text("Terminal")
+            } footer: {
                 Text("Applies to new and already-open terminal views on this device.")
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.leading, 16)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 26)
-            .padding(.bottom, 20)
         }
-        .scrollIndicators(.hidden)
-    }
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
-            .padding(.top, 8)
-            .padding(.bottom, -8)
+        .inlinePageTitle("Terminal")
     }
 }
 #endif

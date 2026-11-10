@@ -26,16 +26,19 @@ struct PairDevicePage: View {
 
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                sectionLabel("Pair devices") // en.ts:2915 pairDevices.title
-                content
+        PageList {
+            Section {
+                VStack(alignment: .leading, spacing: Space.md) {
+                    content
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Space.lg)
+                .panelRow()
+            } header: {
+                Text("Pair devices") // en.ts:2915 pairDevices.title
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 26)
-            .padding(.bottom, 20)
         }
-        .scrollIndicators(.hidden)
+        .inlinePageTitle("Pair a device")
         .task {
             if case .idle = session.hostSettings.pairingOfferState {
                 await session.hostSettings.loadPairingOffer()
@@ -118,7 +121,7 @@ struct PairDevicePage: View {
                     .resizable()
                     .interpolation(.none)
                     .scaledToFit()
-                    .frame(width: 220)
+                    .frame(maxWidth: 220)
                     // Upstream qrTile: white tile with padding (a QR needs a light surround).
                     .padding(12)
                     .background(Color.white, in: .rect(cornerRadius: Radius.lg))
@@ -231,13 +234,5 @@ struct PairDevicePage: View {
             options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(120)])
     }
 
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
-            .padding(.top, 8)
-            .padding(.bottom, -8)
-    }
 }
 #endif

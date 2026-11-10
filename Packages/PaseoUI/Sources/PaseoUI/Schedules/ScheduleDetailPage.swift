@@ -4,15 +4,17 @@ import SwiftUI
 
 // MARK: - Detail page
 
+/// One schedule: its prompt, target, recent runs and the verbs for it. Pushed from the list, so
+/// back is native; Delete pops back to the list when it succeeds.
 struct ScheduleDetailPage: View {
     let session: HostSession
     let scheduleId: String
-    let onBack: () -> Void
-    let onEdit: (ClaudeSchedulesView.EditorSeed) -> Void
-    let onDelete: (ScheduleSummary) -> Void
-    let showToast: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.toast) private var toast
 
     @State private var hasInspected = false
+    @State private var confirmDelete = false
 
     private var schedules: SchedulesStore { session.schedules }
     private var stored: StoredSchedule? {
@@ -25,94 +27,75 @@ struct ScheduleDetailPage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            content
-        }
-        .onAppear {
-            Task {
-                _ = await schedules.inspect(scheduleId)
-                hasInspected = true
+        Group {
+            if let summary {
+                detail(summary)
+            } else {
+                LoadingState()
             }
         }
-    }
-
-    private var header: some View {
-        ZStack {
-            Text(summary.map(titleString) ?? "Schedule")
-                .font(.paseo(.title, weight: .semibold))
-                .lineLimit(1)
-                .frame(maxWidth: 200)
-            HStack {
-                Button {
-                    Haptics.selection()
-                    onBack()
-                } label: {
-                    Image(systemName: "chevron.left").font(.glyph(.large, weight: .light))
-                        .frame(width: 42, height: 42)
-                }
-                .glassEffect(in: .circle)
-                .accessibilityLabel("Back")
-                Spacer()
-                Button("Edit") {
-                    Haptics.selection()
-                    if let stored {
-                        let isHeartbeat = stored.summary.target.agentId != nil
-                        onEdit(ClaudeSchedulesView.EditorSeed(stored: stored, isHeartbeat: isHeartbeat))
-                    } else {
-                        showToast("Still loading this schedule.")
-                    }
-                }
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-                .accessibilityLabel("Edit schedule")
-            }
+        .inlinePageTitle(summary.map(titleString) ?? "Schedule")
+        .task {
+            _ = await schedules.inspect(scheduleId)
+            hasInspected = true
         }
-        .frame(height: 56)
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
-    }
-
-    private func titleString(_ summary: ScheduleSummary) -> String {
-        if let name = summary.name, !name.isEmpty { return name }
-        let firstLine = summary.prompt.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true).first
-        return firstLine.map(String.init) ?? "Schedule"
-    }
-
-    @ViewBuilder private var content: some View {
-        if let summary {
-            detail(summary)
-        } else {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+        .refreshable { _ = await schedules.inspect(scheduleId) }
+        .confirmationDialog(
+            "Delete schedule?",
+            isPresented: $confirmDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task { await delete() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Runs that already started finish, but no new runs will be created.")
         }
     }
 
     private func detail(_ summary: ScheduleSummary) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        PageList {
+            Section {
                 hero(summary)
-                sectionLabel("Prompt")
-                promptPanel(summary)
-                sectionLabel("Target")
-                RowGroup { targetRows(summary) }
-                sectionLabel("Recent runs")
-                runsSection
-                sectionLabel("Actions")
-                RowGroup { actionRows(summary) }
+                    .panelRow(Palette.background)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .padding(.bottom, 24)
+            Section {
+                Text(summary.prompt)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Space.lg)
+                    .textSelection(.enabled)
+                    .panelRow()
+            } header: {
+                Text("Prompt")
+            }
+            Section {
+                targetRows(summary)
+            } header: {
+                Text("Target")
+            }
+            Section {
+                runsSection
+            } header: {
+                Text("Recent runs")
+            }
+            Section {
+                actionRows(summary)
+            } header: {
+                Text("Actions")
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
 
     // MARK: Hero
 
     private func hero(_ summary: ScheduleSummary) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: Space.sm) {
             Image(systemName: "clock")
                 .font(.glyph(.large, weight: .light))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(width: 48, height: 48)
                 .background(Palette.panel, in: .circle)
             Text(titleString(summary))
@@ -138,25 +121,8 @@ struct ScheduleDetailPage: View {
                     .foregroundStyle(Palette.captionInk)
             }
         }
-        .padding(.vertical, 4)
-    }
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.paseo(.caption2, weight: .semibold))
-            .tracking(0.8)
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 6)
-    }
-
-    private func promptPanel(_ summary: ScheduleSummary) -> some View {
-        Text(summary.prompt)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.ink)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
-            .textSelection(.enabled)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Space.lg)
     }
 
     // MARK: Target
@@ -171,20 +137,18 @@ struct ScheduleDetailPage: View {
 
     @ViewBuilder private func newAgentRows(_ config: ScheduleNewAgentConfig) -> some View {
         infoRow("Workspace", value: workspaceName(cwd: config.cwd), detail: config.cwd)
-        RowDivider()
         infoRow("Provider", value: providerLabel(config.provider))
-        RowDivider()
         infoRow("Model", value: modelLabel(provider: config.provider, model: config.model))
         if config.modeId != nil {
-            RowDivider()
             infoRow("Mode", value: modeLabel(provider: config.provider, mode: config.modeId))
         }
         if config.thinkingOptionId != nil {
-            RowDivider()
-            infoRow("Thinking", value: thinkingLabel(provider: config.provider, model: config.model, thinking: config.thinkingOptionId))
+            infoRow(
+                "Thinking",
+                value: thinkingLabel(
+                    provider: config.provider, model: config.model, thinking: config.thinkingOptionId))
         }
         if config.archiveOnFinish == true {
-            RowDivider()
             infoRow("Archive on finish", value: "On")
         }
     }
@@ -196,35 +160,17 @@ struct ScheduleDetailPage: View {
             value: agentTitle(agentId),
             detail: agentId.map { "Agent id: \($0)" })
         if let agentId,
-           let workspaceId = session.agents.first(where: { $0.id == agentId })?.workspaceId,
-           let workspace = session.workspaceDirectory.groups.flatMap(\.workspaces).first(where: { $0.id == workspaceId }) {
-            RowDivider()
+            let workspaceId = session.agents.first(where: { $0.id == agentId })?.workspaceId,
+            let workspace = session.workspaceDirectory.groups.flatMap(\.workspaces)
+                .first(where: { $0.id == workspaceId })
+        {
             infoRow("Workspace", value: workspace.name, detail: workspace.cwd)
         }
     }
 
     private func infoRow(_ title: String, value: String, detail: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title).font(.paseo(.callout))
-                Spacer(minLength: 8)
-                Text(value)
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            if let detail {
-                Text(detail)
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(Palette.captionInk)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        ListRow(title: title, subtitle: detail, accessory: ListRow.Accessory.value(value))
+            .panelRow()
     }
 
     private func workspaceName(cwd: String) -> String {
@@ -253,7 +199,8 @@ struct ScheduleDetailPage: View {
 
     private func modeLabel(provider: String, mode: String?) -> String {
         guard let mode else { return "Provider default" }
-        return session.agentControl.modes(forProvider: provider).first(where: { $0.id == mode })?.label ?? mode
+        return session.agentControl.modes(forProvider: provider).first(where: { $0.id == mode })?.label
+            ?? mode
     }
 
     private func thinkingLabel(provider: String, model: String?, thinking: String?) -> String {
@@ -269,27 +216,31 @@ struct ScheduleDetailPage: View {
 
     @ViewBuilder private var runsSection: some View {
         if let stored, !stored.runs.isEmpty {
-            RowGroup {
-                ForEach(Array(stored.runs.enumerated()), id: \.element.id) { index, run in
-                    if index > 0 { RowDivider() }
-                    runRow(run)
-                }
+            ForEach(stored.runs) { run in
+                runRow(run)
             }
         } else if !hasInspected {
-            ProgressView().controlSize(.small)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+            HStack {
+                InlineProgress()
+                Text("Loading…")
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Space.lg)
+            .panelRow()
         } else {
             Text("No runs yet.")
                 .font(.paseo(.footnote))
                 .foregroundStyle(Palette.secondaryInk)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .padding(.vertical, Space.md)
+                .panelRow()
         }
     }
 
     private func runRow(_ run: ScheduleRun) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.md) {
             Group {
                 switch run.status {
                 case .succeeded:
@@ -297,7 +248,7 @@ struct ScheduleDetailPage: View {
                 case .failed:
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Palette.failureInk)
                 case .running, .unknown:
-                    ProgressView().controlSize(.mini)
+                    InlineProgress()
                 }
             }
             .frame(width: 16)
@@ -311,82 +262,101 @@ struct ScheduleDetailPage: View {
                         .foregroundStyle(Palette.failureInk)
                         .lineLimit(2)
                 } else if let output = run.output, !output.isEmpty {
-                    Text(output.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? output)
-                        .font(.paseo(.caption))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(2)
+                    Text(
+                        output.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true)
+                            .first.map(String.init) ?? output
+                    )
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .lineLimit(2)
                 }
             }
-            Spacer(minLength: 6)
+            Spacer(minLength: Space.xs)
             Text(scheduleDuration(run.startedAt, run.endedAt))
                 .font(.paseo(.codeCaption))
                 .foregroundStyle(Palette.captionInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 11)
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.md)
+        .panelRow()
     }
 
     // MARK: Actions
 
     @ViewBuilder private func actionRows(_ summary: ScheduleSummary) -> some View {
         let isPaused = summary.status == .paused
-        Button {
+        ListRow(title: isPaused ? "Resume schedule" : "Pause schedule") {
             Haptics.selection()
-            Task {
-                let ok = isPaused ? await schedules.resume(summary.id) : await schedules.pause(summary.id)
-                if ok {
-                    showToast(isPaused ? "Resumed" : "Paused")
-                    _ = await schedules.inspect(scheduleId)
-                } else {
-                    showToast(schedules.actionError ?? "Couldn't update the schedule.")
-                }
-            }
-        } label: {
-            actionRowLabel(isPaused ? "Resume schedule" : "Pause schedule", symbol: isPaused ? "play" : "pause")
+            Task { await setPaused(summary, paused: !isPaused) }
         }
-        .buttonStyle(.plain)
+        .panelRow()
         if summary.target.newAgentConfig != nil {
-            RowDivider()
-            Button {
+            ListRow(title: "Run now") {
                 Haptics.selection()
-                Task {
-                    if await schedules.runOnce(summary.id) {
-                        showToast("Run started")
-                        _ = await schedules.inspect(scheduleId)
-                    } else {
-                        showToast(schedules.actionError ?? "Couldn't start a run.")
-                    }
-                }
-            } label: {
-                actionRowLabel("Run now", symbol: "play.fill")
+                Task { await runNow(summary) }
             }
-            .buttonStyle(.plain)
+            .panelRow()
         }
-        RowDivider()
-        Button {
+        if let stored {
+            NavigationLink(
+                value: ClaudeSchedulesView.Route.editor(
+                    ClaudeSchedulesView.EditorSeed(
+                        stored: stored, isHeartbeat: stored.summary.target.agentId != nil))
+            ) {
+                ListRow(title: "Edit schedule", accessory: ListRow.Accessory.chevron)
+            }
+            .panelRow()
+            .accessibilityLabel("Edit schedule")
+        }
+        Button(role: .destructive) {
             Haptics.selection()
-            onDelete(summary)
+            confirmDelete = true
         } label: {
-            actionRowLabel("Delete schedule", symbol: "trash", destructive: true)
+            Text("Delete schedule")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
+                .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .panelRow()
     }
 
-    private func actionRowLabel(_ title: String, symbol: String, destructive: Bool = false) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.glyph(.regular, weight: .light))
-                .frame(width: 22)
-                .foregroundStyle(destructive ? Palette.failureInk : Palette.ink)
-            Text(title)
-                .font(.paseo(.callout))
-                .foregroundStyle(destructive ? Palette.failureInk : Palette.ink)
-            Spacer(minLength: 0)
+    private func setPaused(_ summary: ScheduleSummary, paused: Bool) async {
+        let ok = paused
+            ? await schedules.pause(summary.id)
+            : await schedules.resume(summary.id)
+        if ok {
+            toast?.show(paused ? "Paused" : "Resumed")
+            _ = await schedules.inspect(scheduleId)
+        } else {
+            toast?.show(schedules.actionError ?? "Couldn't update the schedule.")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 13)
-        .contentShape(.rect)
+    }
+
+    private func runNow(_ summary: ScheduleSummary) async {
+        if await schedules.runOnce(summary.id) {
+            toast?.show("Run started")
+            _ = await schedules.inspect(scheduleId)
+        } else {
+            toast?.show(schedules.actionError ?? "Couldn't start a run.")
+        }
+    }
+
+    private func delete() async {
+        if await schedules.delete(scheduleId) {
+            toast?.show("Schedule deleted")
+            dismiss()
+        } else {
+            toast?.show(schedules.actionError ?? "Couldn't delete the schedule.")
+        }
+    }
+
+    private func titleString(_ summary: ScheduleSummary) -> String {
+        if let name = summary.name, !name.isEmpty { return name }
+        let firstLine = summary.prompt.split(
+            separator: "\n", maxSplits: 1, omittingEmptySubsequences: true
+        ).first
+        return firstLine.map(String.init) ?? "Schedule"
     }
 }
 #endif
