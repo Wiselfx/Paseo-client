@@ -26,18 +26,109 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
     }
 }
 
-/// Small in-memory memo for the prose parse: same shape as `RichContentCache` (evict-all when the
-/// table fills). Keys share storage with the strings the views already hold.
+/// Small in-memory memo for the prose parse (P3), now an LRU under a byte budget
+/// (P5-B): the previous table evicted wholesale at 64 entries, so scrolling back to an
+/// earlier message re-parsed it. Keys share storage with the strings the views hold.
 @MainActor
 enum MarkdownDocumentCache {
-    private static var table: [String: MarkdownDocumentModel] = [:]
+    private static let table = ProseCache<String, MarkdownDocumentModel>(
+        budget: 4 * 1024 * 1024,
+        countLimit: 512,
+        cost: { source, _ in source.utf8.count * 4 })
 
     static func document(for source: String) -> MarkdownDocumentModel {
-        if let cached = table[source] { return cached }
+        if let cached = table.value(for: source) { return cached }
         let document = MarkdownDocumentModel(source: source)
-        if table.count >= 64 { table.removeAll(keepingCapacity: true) }
-        table[source] = document
+        table.setValue(document, for: source)
         return document
+    }
+}
+
+/// A main-actor LRU memo for prose caches (markdown documents, rich detection,
+/// linkified text). Entries are kept until the byte budget or the count limit is hit,
+/// so a long answer stays warm while older pieces are evicted one at a time. The
+/// recency list is a linked list so a hit is O(1); the array version scanned every
+/// entry per hit, which is expensive when the keys are long streamed strings.
+@MainActor
+final class ProseCache<Key: Hashable, Value> {
+    private final class Node {
+        var key: Key
+        var value: Value
+        var cost: Int
+        var previous: Node?
+        var next: Node?
+        init(key: Key, value: Value, cost: Int) {
+            self.key = key
+            self.value = value
+            self.cost = cost
+        }
+    }
+
+    private var nodes: [Key: Node] = [:]
+    private var head: Node?
+    private var tail: Node?
+    private var cost = 0
+    private let budget: Int
+    private let countLimit: Int
+    private let costOf: (Key, Value) -> Int
+
+    init(budget: Int, countLimit: Int, cost: @escaping (Key, Value) -> Int) {
+        self.budget = max(1, budget)
+        self.countLimit = max(1, countLimit)
+        self.costOf = cost
+    }
+
+    func value(for key: Key) -> Value? {
+        guard let node = nodes[key] else { return nil }
+        moveToFront(node)
+        return node.value
+    }
+
+    func setValue(_ value: Value, for key: Key) {
+        let newCost = costOf(key, value)
+        if let node = nodes[key] {
+            cost += newCost - node.cost
+            node.value = value
+            node.cost = newCost
+            moveToFront(node)
+            return
+        }
+        let node = Node(key: key, value: value, cost: newCost)
+        nodes[key] = node
+        pushFront(node)
+        cost += newCost
+        evict()
+    }
+
+    private func moveToFront(_ node: Node) {
+        guard head !== node else { return }
+        detach(node)
+        pushFront(node)
+    }
+
+    private func pushFront(_ node: Node) {
+        node.previous = nil
+        node.next = head
+        head?.previous = node
+        head = node
+        if tail == nil { tail = node }
+    }
+
+    private func detach(_ node: Node) {
+        node.previous?.next = node.next
+        node.next?.previous = node.previous
+        if head === node { head = node.next }
+        if tail === node { tail = node.previous }
+        node.previous = nil
+        node.next = nil
+    }
+
+    private func evict() {
+        while cost > budget || nodes.count > countLimit, let node = tail {
+            detach(node)
+            nodes.removeValue(forKey: node.key)
+            cost -= node.cost
+        }
     }
 }
 public enum MarkdownUnsupportedKind: String, Equatable, Sendable { case html, math, footnote, other }

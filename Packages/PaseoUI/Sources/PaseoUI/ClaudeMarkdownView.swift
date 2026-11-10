@@ -121,8 +121,182 @@
         }
         private func blocks(_ blocks: [MarkdownBlock]) -> some View {
             VStack(alignment: .leading, spacing: theme.blockSpacing) {
-                ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in render(block) }
+                ForEach(identifiedBlocks(blocks)) { identified in
+                    render(identified.value)
+                }
             }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        /// One block plus a stable identity for `ForEach` (P5-B).
+        ///
+        /// Settled blocks are identified by their own content (hashed, plus their
+        /// occurrence among identical blocks), so inserting or removing a block does not
+        /// shift the identity of the blocks after it — the offset ids used before did.
+        /// The open (last) block is identified by position instead: its text streams in,
+        /// so a content hash would change on every token and SwiftUI would tear the block
+        /// down and rebuild it, losing its internal state (e.g. a code block's scroll
+        /// offset). Its position is stable while it grows.
+        private func identifiedBlocks(_ blocks: [MarkdownBlock]) -> [IdentifiedValue<MarkdownBlock>] {
+            identified(blocks) { block in
+                var hasher = Hasher()
+                block.hashStable(into: &hasher)
+                return hasher.finalize()
+            }
+        }
+
+        /// List items get the same treatment; the ordered-list number needs the index.
+        private func identifiedItems(_ items: [MarkdownListItem]) -> [IdentifiedValue<MarkdownListItem>] {
+            identified(items) { item in
+                var hasher = Hasher()
+                item.hashStable(into: &hasher)
+                return hasher.finalize()
+            }
+        }
+
+        /// Table rows, identified by their own cells.
+        private func identifiedRows(_ rows: [[[MarkdownInline]]]) -> [IdentifiedValue<[MarkdownInline]>] {
+            identified(rows) { row in
+                var hasher = Hasher()
+                row.hashStable(into: &hasher)
+                return hasher.finalize()
+            }
+        }
+
+        /// Wraps each value with a stable `ForEach` identity; see `identifiedBlocks`.
+        private func identified<Value>(_ values: [Value], hashing: (Value) -> Int) -> [IdentifiedValue<Value>] {
+            var occurrences: [Int: Int] = [:]
+            let lastIndex = values.count - 1
+            return values.enumerated().map { index, value in
+                if index == lastIndex {
+                    return IdentifiedValue(id: StableID(open: true, value: index, occurrence: 0), index: index, value: value)
+                }
+                let contentHash = hashing(value)
+                let occurrence = occurrences[contentHash, default: 0]
+                occurrences[contentHash] = occurrence + 1
+                return IdentifiedValue(
+                    id: StableID(open: false, value: contentHash, occurrence: occurrence), index: index, value: value)
+            }
+        }
+
+        private struct StableID: Hashable {
+            let open: Bool
+            let value: Int
+            let occurrence: Int
+        }
+
+        private struct IdentifiedValue<Value>: Identifiable {
+            let id: StableID
+            let index: Int
+            let value: Value
+        }
+
+        /// Renders one block. `@ViewBuilder` (not `AnyView`, P5-B): type erasure hides the
+        /// block type from SwiftUI's diff engine, so every prose re-render rebuilt the whole
+        /// block subtree. The concrete type per branch lets unchanged blocks be skipped.
+        @ViewBuilder private func render(_ block: MarkdownBlock) -> some View {
+            switch block {
+            case .paragraph(let content):
+                if content.count == 1, case .image(let image) = content[0], let imageContent {
+                    imageContent(image)
+                } else {
+                    inline(content)
+                }
+            case .heading(let level, let content):
+                inline(
+                    content,
+                    font: (theme.headingFonts.isEmpty
+                        ? theme.bodyFont.bold()
+                        : theme.headingFonts[min(max(level - 1, 0), theme.headingFonts.count - 1)])
+                ).accessibilityAddTraits(.isHeader)
+            case .rule:
+                Rectangle().fill(theme.rule).frame(height: 1).accessibilityLabel("Horizontal rule")
+            case .quote(let children):
+                blocks(children)
+                    .foregroundStyle(theme.secondary)
+                    .padding(.horizontal, 14) // .6em 1em ≈ .6em vertical, 1em horizontal
+                    .padding(.vertical, 8.4)
+                    .background(
+                        theme.quoteWash,
+                        in: UnevenRoundedRectangle(
+                            topLeadingRadius: 0, bottomLeadingRadius: 0, bottomTrailingRadius: 8,
+                            topTrailingRadius: 8))
+                    .accessibilityIdentifier("markdown.quote")
+            case .list(let start, let items):
+                VStack(alignment: .leading, spacing: theme.listSpacing) {
+                    ForEach(identifiedItems(items)) { identified in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(
+                                identified.value.checked.map { $0 ? "☑" : "☐" }
+                                    ?? start.map { "\($0 + identified.index)." } ?? "•"
+                            ).font(theme.bodyFont).frame(minWidth: 18, alignment: .trailing)
+                            blocks(identified.value.blocks)
+                        }
+                    }
+                }.accessibilityIdentifier("markdown.list")
+            case .code(let language, let content):
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text(language ?? "").font(.system(size: 14, design: .monospaced)).foregroundStyle(
+                            theme.secondary)
+                        Spacer()
+                        Button {
+                            onAction(.copyCode(content))
+                        } label: {
+                            Image(systemName: "square.on.square").frame(width: 28, height: 28)
+                        }.accessibilityLabel("Copy code").accessibilityIdentifier("markdown.code.copy")
+                        Button {
+                            expandedCode = .init(language: language, content: content)
+                            onAction(.expandCode(language: language, content: content))
+                        } label: {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 28, height: 28)
+                        }.accessibilityLabel("Expand code").accessibilityIdentifier("markdown.code.expand")
+                    }.foregroundStyle(theme.secondary).padding(.horizontal, 16).padding(.vertical, 8)
+                    Rectangle().fill(theme.rule).frame(height: 0.5)
+                    ScrollView(.horizontal) {
+                        codeText(language: language, content: content).accessibilityIdentifier(
+                            "markdown.code.content")
+                    }.scrollIndicators(.hidden).padding(16)
+                }.background(theme.codeBackground, in: .rect(cornerRadius: 24)).overlay {
+                    RoundedRectangle(cornerRadius: 24).stroke(theme.rule, lineWidth: 0.6)
+                }
+            case .table(let header, let rows, let alignments):
+                let columns = max(header.count, rows.map(\.count).max() ?? 0)
+                ScrollView(.horizontal) {
+                    ClaudeMarkdownTableLayout(
+                        columns: columns, availableWidth: tableViewport,
+                        maximumColumnWidth: max(50, theme.tableColumnWidth) + 24
+                    ) {
+                        ForEach(identifiedRows([header] + rows)) { identified in
+                            let row = identified.value
+                            let isHeader = identified.index == 0
+                            ForEach(0..<columns, id: \.self) { column in
+                                let cell = column < row.count ? row[column] : []
+                                let alignment = column < alignments.count ? alignments[column] : .left
+                                inline(
+                                    cell, font: isHeader ? theme.bodyFont.bold() : theme.bodyFont,
+                                    alignment: alignment
+                                )
+                                .padding(.horizontal, 12).padding(.vertical, 10)
+                                .frame(maxHeight: .infinity, alignment: .top)
+                                .background(isHeader ? theme.tableHeaderBackground : .clear)
+                                .overlay(alignment: .bottom) {
+                                    if identified.index < rows.count { Rectangle().fill(theme.rule).frame(height: 0.5) }
+                                }
+                            }
+                        }
+                    }.clipShape(.rect(cornerRadius: 8)).overlay {
+                        RoundedRectangle(cornerRadius: 8).stroke(theme.rule, lineWidth: 0.6)
+                    }
+                }.accessibilityIdentifier("markdown.table")
+            case .unsupported(let kind, let source):
+                if let unsupportedContent {
+                    unsupportedContent(kind, source)
+                } else {
+                    Text(verbatim: source).font(theme.codeFont).textSelection(.enabled).contextMenu {
+                        Button("Open content") { onAction(.unsupported(kind: kind, source: source)) }
+                    }
+                }
+            }
         }
         @ViewBuilder private func inline(
             _ content: [MarkdownInline], font: Font? = nil, alignment: MarkdownColumnAlignment = .left
@@ -138,111 +312,6 @@
                     .frame(
                         maxWidth: .infinity,
                         alignment: alignment == .right ? .trailing : alignment == .center ? .center : .leading)
-            }
-        }
-        private func render(_ block: MarkdownBlock) -> AnyView {
-            switch block {
-            case .paragraph(let content):
-                if content.count == 1, case .image(let image) = content[0], let imageContent {
-                    return imageContent(image)
-                }
-                return AnyView(inline(content))
-            case .heading(let level, let content):
-                return AnyView(
-                    inline(
-                        content,
-                        font: (theme.headingFonts.isEmpty
-                            ? theme.bodyFont.bold()
-                            : theme.headingFonts[min(max(level - 1, 0), theme.headingFonts.count - 1)])
-                    ).accessibilityAddTraits(.isHeader))
-            case .rule:
-                return AnyView(Rectangle().fill(theme.rule).frame(height: 1).accessibilityLabel("Horizontal rule"))
-            case .quote(let children):
-                return AnyView(
-                    blocks(children)
-                        .foregroundStyle(theme.secondary)
-                        .padding(.horizontal, 14) // .6em 1em ≈ .6em vertical, 1em horizontal
-                        .padding(.vertical, 8.4)
-                        .background(
-                            theme.quoteWash,
-                            in: UnevenRoundedRectangle(
-                                topLeadingRadius: 0, bottomLeadingRadius: 0, bottomTrailingRadius: 8,
-                                topTrailingRadius: 8))
-                        .accessibilityIdentifier("markdown.quote"))
-            case .list(let start, let items):
-                return AnyView(
-                    VStack(alignment: .leading, spacing: theme.listSpacing) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                Text(item.checked.map { $0 ? "☑" : "☐" } ?? start.map { "\($0 + index)." } ?? "•").font(
-                                    theme.bodyFont
-                                ).frame(minWidth: 18, alignment: .trailing)
-                                blocks(item.blocks)
-                            }
-                        }
-                    }.accessibilityIdentifier("markdown.list"))
-            case .code(let language, let content):
-                return AnyView(
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Text(language ?? "").font(.system(size: 14, design: .monospaced)).foregroundStyle(
-                                theme.secondary)
-                            Spacer()
-                            Button {
-                                onAction(.copyCode(content))
-                            } label: {
-                                Image(systemName: "square.on.square").frame(width: 28, height: 28)
-                            }.accessibilityLabel("Copy code").accessibilityIdentifier("markdown.code.copy")
-                            Button {
-                                expandedCode = .init(language: language, content: content)
-                                onAction(.expandCode(language: language, content: content))
-                            } label: {
-                                Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 28, height: 28)
-                            }.accessibilityLabel("Expand code").accessibilityIdentifier("markdown.code.expand")
-                        }.foregroundStyle(theme.secondary).padding(.horizontal, 16).padding(.vertical, 8)
-                        Rectangle().fill(theme.rule).frame(height: 0.5)
-                        ScrollView(.horizontal) {
-                            codeText(language: language, content: content).accessibilityIdentifier(
-                                "markdown.code.content")
-                        }.scrollIndicators(.hidden).padding(16)
-                    }.background(theme.codeBackground, in: .rect(cornerRadius: 24)).overlay {
-                        RoundedRectangle(cornerRadius: 24).stroke(theme.rule, lineWidth: 0.6)
-                    })
-            case .table(let header, let rows, let alignments):
-                let allRows = [header] + rows
-                let columns = max(header.count, rows.map(\.count).max() ?? 0)
-                return AnyView(
-                    ScrollView(.horizontal) {
-                        ClaudeMarkdownTableLayout(
-                            columns: columns, availableWidth: tableViewport,
-                            maximumColumnWidth: max(50, theme.tableColumnWidth) + 24
-                        ) {
-                            ForEach(allRows.indices, id: \.self) { row in
-                                ForEach(0..<columns, id: \.self) { column in
-                                    let cell = column < allRows[row].count ? allRows[row][column] : []
-                                    let alignment = column < alignments.count ? alignments[column] : .left
-                                    inline(
-                                        cell, font: row == 0 ? theme.bodyFont.bold() : theme.bodyFont,
-                                        alignment: alignment
-                                    )
-                                    .padding(.horizontal, 12).padding(.vertical, 10)
-                                    .frame(maxHeight: .infinity, alignment: .top)
-                                    .background(row == 0 ? theme.tableHeaderBackground : .clear)
-                                    .overlay(alignment: .bottom) {
-                                        if row < allRows.count - 1 { Rectangle().fill(theme.rule).frame(height: 0.5) }
-                                    }
-                                }
-                            }
-                        }.clipShape(.rect(cornerRadius: 8)).overlay {
-                            RoundedRectangle(cornerRadius: 8).stroke(theme.rule, lineWidth: 0.6)
-                        }
-                    }.accessibilityIdentifier("markdown.table"))
-            case .unsupported(let kind, let source):
-                if let unsupportedContent { return unsupportedContent(kind, source) }
-                return AnyView(
-                    Text(verbatim: source).font(theme.codeFont).textSelection(.enabled).contextMenu {
-                        Button("Open content") { onAction(.unsupported(kind: kind, source: source)) }
-                    })
             }
         }
         private func codeText(language: String?, content: String) -> some View {
@@ -357,4 +426,90 @@
             }
         }
     }
+
+/// Content hashes for the stable `ForEach` identities (P5-B). `MarkdownBlock` is only
+/// `Equatable` (its public contract), so the hash is written out rather than synthesized.
+private extension MarkdownInline {
+    func hashStable(into hasher: inout Hasher) {
+        switch self {
+        case .text(let value): hasher.combine("text"); hasher.combine(value)
+        case .softBreak: hasher.combine("softBreak")
+        case .hardBreak: hasher.combine("hardBreak")
+        case .code(let value): hasher.combine("code"); hasher.combine(value)
+        case .emphasis(let children): hasher.combine("emphasis"); children.hashStable(into: &hasher)
+        case .strong(let children): hasher.combine("strong"); children.hashStable(into: &hasher)
+        case .strikethrough(let children): hasher.combine("strikethrough"); children.hashStable(into: &hasher)
+        case .link(let destination, let children):
+            hasher.combine("link"); hasher.combine(destination); children.hashStable(into: &hasher)
+        case .image(let image):
+            hasher.combine("image")
+            hasher.combine(image.source)
+            hasher.combine(image.title ?? "")
+            hasher.combine(image.alt)
+        case .unsupported(let kind, let source):
+            hasher.combine("unsupported"); hasher.combine(kind.rawValue); hasher.combine(source)
+        }
+    }
+}
+
+private extension Array where Element == MarkdownInline {
+    func hashStable(into hasher: inout Hasher) {
+        hasher.combine(count)
+        for child in self { child.hashStable(into: &hasher) }
+    }
+}
+
+private extension MarkdownListItem {
+    func hashStable(into hasher: inout Hasher) {
+        hasher.combine(checked ?? false)
+        hasher.combine(checked == nil)
+        blocks.hashStable(into: &hasher)
+    }
+}
+
+private extension MarkdownBlock {
+    func hashStable(into hasher: inout Hasher) {
+        switch self {
+        case .paragraph(let content): hasher.combine("paragraph"); content.hashStable(into: &hasher)
+        case .heading(let level, let content):
+            hasher.combine("heading"); hasher.combine(level); content.hashStable(into: &hasher)
+        case .quote(let children): hasher.combine("quote"); children.hashStable(into: &hasher)
+        case .rule: hasher.combine("rule")
+        case .list(let start, let items):
+            hasher.combine("list"); hasher.combine(start ?? -1); hasher.combine(items.count)
+            for item in items { item.hashStable(into: &hasher) }
+        case .code(let language, let content):
+            hasher.combine("code"); hasher.combine(language ?? ""); hasher.combine(content)
+        case .table(let header, let rows, let alignments):
+            hasher.combine("table")
+            header.hashStable(into: &hasher)
+            hasher.combine(rows.count)
+            for row in rows { row.hashStable(into: &hasher) }
+            hasher.combine(alignments.count)
+            for alignment in alignments {
+                switch alignment {
+                case .left: hasher.combine(0)
+                case .center: hasher.combine(1)
+                case .right: hasher.combine(2)
+                }
+            }
+        case .unsupported(let kind, let source):
+            hasher.combine("unsupported"); hasher.combine(kind.rawValue); hasher.combine(source)
+        }
+    }
+}
+
+private extension Array where Element == MarkdownBlock {
+    func hashStable(into hasher: inout Hasher) {
+        hasher.combine(count)
+        for block in self { block.hashStable(into: &hasher) }
+    }
+}
+
+private extension Array where Element == [MarkdownInline] {
+    func hashStable(into hasher: inout Hasher) {
+        hasher.combine(count)
+        for row in self { row.hashStable(into: &hasher) }
+    }
+}
 #endif

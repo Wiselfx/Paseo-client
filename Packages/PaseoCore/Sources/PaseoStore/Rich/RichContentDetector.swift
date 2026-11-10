@@ -176,6 +176,90 @@ public enum RichContentDetector {
         return blocks.sorted { $0.range.lowerBound < $1.range.lowerBound }
     }
 
+    /// Splits `source` into block-level units for incremental prose rendering
+    /// (upstream `f35b0b8b7`): paragraphs, headings, lists and quotes become
+    /// individual ranges, so a streamed token re-parses only the open unit.
+    ///
+    /// Blank lines separate units, with three exceptions that keep a unit whole:
+    /// - fenced code blocks (``` or ~~~, including unclosed ones): a blank line
+    ///   inside a fence is body text;
+    /// - raw `<svg>…</svg>` blocks: one rich block, and it may contain blank lines;
+    /// - a blank line inside a list (between items, or before an indented
+    ///   continuation of an item): the list continues, so splitting there would
+    ///   change tight/loose rendering.
+    ///
+    /// Ranges cover `source` except for whitespace-only spans, which are dropped.
+    public static func splitIntoBlocks(_ source: String) -> [Range<String.Index>] {
+        let lines = splitLines(source)
+        var ranges: [Range<String.Index>] = []
+        var currentStart = source.startIndex
+        var openFence: (marker: Character, length: Int)?
+        var inSVG = false
+        var sawBlankRun = false
+        /// True while the last non-blank line belongs to a list item (a marker line,
+        /// an indented continuation, or a lazy paragraph continuation of one).
+        var inList = false
+
+        for line in lines {
+            let text = source[line.range]
+            let indent = leadingIndent(text)
+            let isListItem = isListItem(text)
+
+            if let fence = openFence {
+                if isClosingFence(text, marker: fence.marker, length: fence.length) {
+                    openFence = nil
+                }
+            } else if let opened = openingFence(text) {
+                openFence = (opened.marker, opened.length)
+            }
+            let inFence = openFence != nil
+
+            // Raw SVG is tracked only outside fences: a `<svg>` in a code sample is
+            // body text, not a rich block.
+            if !inFence {
+                if inSVG {
+                    if closesSVG(text) { inSVG = false }
+                } else if opensSVG(text) && !closesSVG(text) {
+                    inSVG = true
+                }
+            }
+
+            let isBlank = text.allSatisfy { $0.isWhitespace }
+            if isBlank {
+                if !inFence && !inSVG { sawBlankRun = true }
+                continue
+            }
+
+            if sawBlankRun {
+                let continuesList = inList && (isListItem || indent >= 2)
+                if !continuesList {
+                    ranges.append(currentStart..<line.range.lowerBound)
+                    currentStart = line.range.lowerBound
+                    inList = false
+                }
+                sawBlankRun = false
+            }
+
+            if !inFence {
+                if isListItem {
+                    inList = true
+                } else if inList && (indent >= 2 || !isParagraphBlockStarter(text)) {
+                    // Indented or lazy continuation of the open list item.
+                    inList = true
+                } else {
+                    inList = false
+                }
+            }
+        }
+
+        if currentStart < source.endIndex {
+            ranges.append(currentStart..<source.endIndex)
+        }
+        return ranges.filter { range in
+            !source[range].allSatisfy { $0.isWhitespace }
+        }
+    }
+
     /// §1.2 — `youtubeIdForUrl`: the 11-char ID from a watch/shorts/live/embed/youtu.be
     /// URL or a bare ID, or nil. Trims first. Streaming-safe: a partial ID never matches.
     public static func youtubeID(for value: String) -> String? {
@@ -500,7 +584,7 @@ struct Fence {
     var body: String
 }
 
-private func openingFence(_ line: Substring) -> (marker: Character, length: Int, info: String)? {
+private func openingFence<S: StringProtocol>(_ line: S) -> (marker: Character, length: Int, info: String)? {
     var i = line.startIndex
     var indent = 0
     while i < line.endIndex && line[i] == " " && indent < 4 {
@@ -1135,6 +1219,54 @@ private func isListItem<S: StringProtocol>(_ slice: S) -> Bool {
         return j == slice.endIndex || slice[j].isWhitespace
     }
     return false
+}
+
+/// Leading spaces (a tab counts as four) — used to tell an indented list
+/// continuation from a new top-level block.
+private func leadingIndent<S: StringProtocol>(_ text: S) -> Int {
+    var indent = 0
+    for char in text {
+        if char == " " {
+            indent += 1
+        } else if char == "\t" {
+            indent += 4
+        } else {
+            break
+        }
+    }
+    return indent
+}
+
+/// True when a line starts a new block rather than continuing a paragraph. Keeps a
+/// lazy paragraph continuation of a list item from ending the list early.
+private func isParagraphBlockStarter<S: StringProtocol>(_ line: S) -> Bool {
+    var i = line.startIndex
+    var indent = 0
+    while i < line.endIndex && line[i] == " " && indent < 4 {
+        indent += 1
+        i = line.index(after: i)
+    }
+    if indent >= 4 { return true } // indented code block
+    guard i < line.endIndex else { return false }
+    let marker = line[i]
+    if marker == ">" || marker == "#" || marker == "<" { return true }
+    let rest = line[i...]
+    if isListItem(rest) || isThematicBreak(rest) || isSetextUnderline(rest) { return true }
+    return openingFence(rest) != nil
+}
+
+/// `<svg` at the start of a line, opening a tag (not a self-closing `<svg/>`).
+private func opensSVG<S: StringProtocol>(_ line: S) -> Bool {
+    let trimmed = line.drop(while: { $0.isWhitespace })
+    guard let range = trimmed.range(of: "<svg", options: .caseInsensitive) else { return false }
+    guard range.lowerBound == trimmed.startIndex else { return false }
+    let after = trimmed[range.upperBound...]
+    guard let first = after.first else { return true } // the tag continues on the next line
+    return first.isWhitespace || first == ">"
+}
+
+private func closesSVG<S: StringProtocol>(_ line: S) -> Bool {
+    line.range(of: "</svg", options: .caseInsensitive) != nil
 }
 
 private func isBareURLLine(_ t: Substring) -> Bool {
