@@ -47,7 +47,7 @@ final class AppModel {
     /// the shell skeleton for it instead of the connect form (R11 §1).
     private(set) var launchConnecting = false
     /// One `start()` per app, however often the root re-appears.
-    private var hasStarted = false
+    private(set) var hasStarted = false
 
     private let defaults = UserDefaults.standard
     private var connection: DaemonConnection?
@@ -84,6 +84,13 @@ final class AppModel {
         wireHostContext()
     }
 
+    /// The shell skeleton instead of the connect form (R11 §1): while a saved host connects, and
+    /// on the frames between mount and `.task`. `savedHosts` is loaded in `init`, so the first
+    /// frame can already answer.
+    var showsLaunchSkeleton: Bool {
+        launchConnecting || (savedHosts.mostRecent != nil && !hasStarted)
+    }
+
     /// The expensive half of launch, run once from `RootView`'s `.task`: the saved password, the
     /// pre-M1b host migration, the host snapshot and the first connect (R11 §1).
     ///
@@ -92,12 +99,12 @@ final class AppModel {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
-        // Raised before the Keychain read, so the very first frame after the skeleton starts is
-        // the shell, not the connect form.
-        launchConnecting = savedHosts.mostRecent != nil
         password = Keychain.read(account: Keys.passwordAccount) ?? ""
         migrateLegacyHostIfNeeded()
         refreshHostContext()
+        // After the migration, so a legacy host the migration created gets the skeleton too. No
+        // suspension point since `hasStarted`, so the flag is set before any frame is drawn.
+        launchConnecting = savedHosts.mostRecent != nil
         if let last = savedHosts.mostRecent {
             // Startup: straight to the last host. On failure the connect screen shows with this
             // host preselected and the error inline.

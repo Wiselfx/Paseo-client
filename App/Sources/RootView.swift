@@ -95,7 +95,7 @@ struct RootView: View {
         Group {
             switch model.phase {
             case .setup(let status):
-                if model.launchConnecting {
+                if model.showsLaunchSkeleton {
                     // A saved host is connecting: the shell's first frame, never the form (§1).
                     LaunchSkeleton()
                 } else if !welcomeCompleted, model.savedHostsSnapshot.isEmpty, case .idle = status {
