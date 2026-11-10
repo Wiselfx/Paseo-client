@@ -41,6 +41,8 @@ internal final class IncrementalTurnBuilder {
 
     /// Returns exactly `TurnBuilder.turns(from: newRows, activeTurnId: activeTurnId)`.
     internal func turns(from newRows: [TimelineRow], activeTurnId: String?) -> [Turn] {
+        let signpost = PaseoSignpost.log.beginInterval("turn rebuild")
+        defer { PaseoSignpost.log.endInterval("turn rebuild", signpost) }
         let previousActiveTurnId = self.activeTurnId
         let activeChanged = activeTurnId != previousActiveTurnId
         let firstChange = firstChangedRow(rows, newRows)

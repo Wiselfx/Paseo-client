@@ -18,6 +18,11 @@ public final class ConversationSubagents {
     /// Last list or event failure, for the subagent track. Cleared by the next successful load.
     public private(set) var error: String?
 
+    /// The wire type this store follows.
+    static let messageType = "agent.provider_subagents.update"
+    /// Shared by every pushed update; `JSONDecoder` is safe for sequential use on the main actor.
+    private static let decoder = JSONDecoder()
+
     private let agentId: String
     private let client: (any DaemonClient)?
 
@@ -97,13 +102,19 @@ public final class ConversationSubagents {
 
     /// Routes one unsolicited message. Returns true when it belonged to this feature.
     internal func handle(messageType: String, raw: Data) -> Bool {
-        guard messageType == "agent.provider_subagents.update", isSupported else { return false }
+        guard messageType == Self.messageType, isSupported else { return false }
         guard
-            let update = try? JSONDecoder().decode(
+            let update = try? Self.decoder.decode(
                 SessionPayloadEnvelope<ProviderSubagentUpdate>.self, from: raw
             ).payload
         else { return false }
+        return apply(update)
+    }
 
+    /// Applies one pushed update that `HostSession` already decoded once and routed by parent.
+    /// Pushes for another parent are ignored here too, so the store is safe on its own.
+    internal func apply(_ update: ProviderSubagentUpdate) -> Bool {
+        guard isSupported else { return false }
         switch update.kind {
         case .upsert(let subagent):
             guard subagent.parentAgentId == agentId else { return true }
@@ -122,5 +133,12 @@ public final class ConversationSubagents {
             break
         }
         return true
+    }
+}
+
+extension ConversationStore {
+    /// Applies one pushed subagent update already decoded by `HostSession`.
+    internal func handleSubagentUpdate(_ update: ProviderSubagentUpdate) {
+        _ = subagents.apply(update)
     }
 }

@@ -97,6 +97,22 @@ public final class WorkspaceFiles {
         }
     }
 
+    /// Reads one file without touching this store's visible state. For inline previews: several
+    /// images can load at once without overwriting `file`/`phase`, which the Files page shows.
+    /// Same request as `read`; throws when the daemon answers without a file.
+    public func fetch(_ path: String, maxBytes: Int? = nil) async throws -> FileExplorerFile {
+        let response = try await client.send(
+            FileExplorerRequest(
+                cwd: cwd,
+                mode: .file,
+                path: path,
+                maxBytes: max(maxBytes ?? maxReadBytes, 1)))
+        guard let file = response.file else {
+            throw PaseoStoreError.missingFile(path: path, message: response.error)
+        }
+        return file
+    }
+
     /// Drops the last file so a view can go back to the listing without a re-read.
     public func clearFile() {
         file = nil
@@ -124,5 +140,18 @@ struct EntryCapabilities: Sendable, Hashable {
         self.supportsEntryOps = supportsEntryOps
         self.supportsEntryDuplicate = supportsEntryDuplicate
         self.supportsFileEditing = supportsFileEditing
+    }
+}
+
+/// A side-effect-free file read that failed (`WorkspaceFiles.fetch`). `read` reports the same
+/// failures through `phase`/`error` instead of throwing.
+public enum PaseoStoreError: LocalizedError, Sendable, Equatable {
+    /// The daemon answered without a file: it refused, or sent an unexpected shape.
+    case missingFile(path: String, message: String?)
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingFile(_, let message): return message ?? "The daemon returned no file."
+        }
     }
 }

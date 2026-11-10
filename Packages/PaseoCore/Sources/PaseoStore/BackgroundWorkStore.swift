@@ -22,6 +22,11 @@ public final class BackgroundWorkStore {
     /// Stop gate: `server_info.features.agentBackgroundWorkStop`.
     public private(set) var canStop = false
 
+    /// The wire type this store follows.
+    static let messageType = "agent.background_work.update"
+    /// Shared by every pushed update; `JSONDecoder` is safe for sequential use on the main actor.
+    private static let decoder = JSONDecoder()
+
     private let agentId: String
     private let client: (any DaemonClient)?
 
@@ -98,12 +103,18 @@ public final class BackgroundWorkStore {
 
     /// Routes one unsolicited message; returns true when it belonged to this feature.
     internal func handle(messageType: String, raw: Data) -> Bool {
-        guard messageType == "agent.background_work.update", isSupported else { return false }
+        guard messageType == Self.messageType, isSupported else { return false }
         guard
-            let update = try? JSONDecoder().decode(
-                SessionPayloadEnvelope<BackgroundWorkUpdate>.self, from: raw).payload,
-            update.agentId == agentId
+            let update = try? Self.decoder.decode(
+                SessionPayloadEnvelope<BackgroundWorkUpdate>.self, from: raw).payload
         else { return true }
+        return apply(update)
+    }
+
+    /// Applies one pushed update that `HostSession` already decoded once and routed by agent.
+    internal func apply(_ update: BackgroundWorkUpdate) -> Bool {
+        guard isSupported else { return false }
+        guard update.agentId == agentId else { return true }
         items = update.items
         error = nil
         return true
@@ -119,5 +130,10 @@ extension ConversationStore {
     /// Routes one unsolicited message; ignores parents that are not ours. Widened from T12.
     internal func handleBackgroundWorkUpdate(messageType: String, raw: Data) {
         _ = backgroundWork.handle(messageType: messageType, raw: raw)
+    }
+
+    /// Applies one pushed background-work update already decoded by `HostSession`.
+    internal func handleBackgroundWorkUpdate(_ update: BackgroundWorkUpdate) {
+        _ = backgroundWork.apply(update)
     }
 }
