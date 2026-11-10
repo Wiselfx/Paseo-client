@@ -132,6 +132,14 @@ extension ClaudeChatView {
             onRetract: canCut ? { row in retractMessage(userRow: row) } : nil,
             isLatestTurn: index == store.turns.count - 1
         )
+        // The landing line (DSH `turn-nav.css:155-194`): a 2 pt ink rule over the turn a jump
+        // just landed on. It rides the turn, so it follows the content as history prepends.
+        .overlay(alignment: .top) {
+            if turn.id == landingTurnId {
+                LandingLine(startedAt: landingStartedAt)
+                    .offset(y: -8)
+            }
+        }
     }
 
     var transcript: some View {
@@ -143,11 +151,20 @@ extension ClaudeChatView {
                             turnView(turn, index: index)
                             .id(turn.id)
                             .onAppear {
-                                scrollTrack.lastTrackedTurn = turn.id
-                                scrollTrack.visibleTurnIds.insert(turn.id)
+                                scrollTrack.turnAppeared(turn.id, seq: turn.firstRowSeq)
                                 reportReadingPosition()
                             }
-                            .onDisappear { scrollTrack.visibleTurnIds.remove(turn.id) }
+                            .onDisappear {
+                                scrollTrack.turnDisappeared(turn.id)
+                                reportReadingPosition()
+                            }
+                            // Content-space offset: the reading-position anchor and the jump lead both
+                            // read it O(1). It does not change while scrolling, only on layout.
+                            .onGeometryChange(for: CGFloat.self) { geometry in
+                                geometry.frame(in: .named(TranscriptScrollTrack.contentSpace)).minY
+                            } action: { minY in
+                                scrollTrack.turnOffsetChanged(turn.id, offset: minY)
+                            }
                         }
                         if !store.pendingPermissions.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -181,6 +198,7 @@ extension ClaudeChatView {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 20)
+                    .coordinateSpace(name: TranscriptScrollTrack.contentSpace)
                 }
                 .scrollPosition($scrollPosition)
                 .scrollDismissesKeyboard(.interactively)
@@ -253,6 +271,30 @@ extension ClaudeChatView {
                 } action: { _, metrics in
                     if transcriptHeight != metrics.viewportHeight {
                         transcriptHeight = metrics.viewportHeight
+                    }
+                    scrollTrack.contentOffset = metrics.offsetY
+                    // The second half of a glide-lead: the instant jump has landed, so the last
+                    // stretch glides (DSH `turn-nav.ts:412-474`).
+                    if let glide = pendingGlide {
+                        pendingGlide = nil
+                        withAnimation(reduceMotion ? nil : .smooth(duration: Self.glideDuration)) {
+                            proxy.scrollTo(glide.id, anchor: .top)
+                        }
+                    }
+                    // A jump to a row that had never been laid out measured its offset by landing
+                    // on it; take the last stretch back, then glide from there. The offset it just
+                    // landed on *is* the target's offset.
+                    if let pending = pendingLeadJump {
+                        pendingLeadJump = nil
+                        // The row's own offset when it has landed, else the offset it just jumped
+                        // to — either is the target's content position.
+                        let targetY = scrollTrack.offset(of: pending.id) ?? metrics.offsetY
+                        let distance = targetY - pending.fromOffset
+                        guard abs(distance) > Self.glideLead else { return }
+                        let leadY = targetY - (distance > 0 ? Self.glideLead : -Self.glideLead)
+                        pendingGlide = PendingGlide(id: pending.id)
+                        scrollPosition.scrollTo(y: leadY)
+                        return
                     }
                     // A prepended page moved the content down by its own height; put the reader
                     // back before anything else reacts to the new offsets.
@@ -667,21 +709,34 @@ extension ClaudeChatView {
 
     /// The timeline position under the top of the viewport: the first row of the topmost turn the
     /// lazy stack has mounted. Turns appear as they approach the viewport, so the earliest mounted
-    /// turn is the one the reader is inside or just below.
+    /// turn is the one the reader is inside or just below. The track keeps that anchor, so a
+    /// scroll frame reads it O(1) and only reports when it actually moved (finding #18).
     func reportReadingPosition() {
-        var seq = store.turns.first(where: { scrollTrack.visibleTurnIds.contains($0.id) })?.firstRowSeq
+        var seq = scrollTrack.topVisibleSeq
         if seq == nil, isFollowing { seq = outlineItems.last?.seq }
+        guard seq != scrollTrack.reportedReadingAnchor else { return }
+        scrollTrack.reportedReadingAnchor = seq
         store.promptOutline.reportReadingPosition(anchorSeq: seq)
     }
 
     /// Scroll-reveals the rail and keeps it up briefly; hidden again shortly after scrolling stops.
+    /// One task per reveal cycle: a scroll frame pushes the deadline out instead of cancelling and
+    /// restarting a Task every frame (finding #18).
     func revealTurnRail() {
         guard outlineItems.count >= ChatOutlineRail.minimumPrompts else { return }
         if !turnNavVisible { turnNavVisible = true }
-        turnNavIdleTask?.cancel()
-        turnNavIdleTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.5))
+        scrollTrack.turnNavIdleDeadline = Date().addingTimeInterval(Self.turnNavIdleDuration)
+        guard scrollTrack.turnNavIdleTask == nil else { return }
+        scrollTrack.turnNavIdleTask = Task { @MainActor in
+            while !Task.isCancelled {
+                guard let deadline = scrollTrack.turnNavIdleDeadline else { break }
+                let remaining = deadline.timeIntervalSinceNow
+                guard remaining > 0, !Task.isCancelled else { break }
+                try? await Task.sleep(for: .seconds(remaining))
+            }
             guard !Task.isCancelled else { return }
+            scrollTrack.turnNavIdleDeadline = nil
+            scrollTrack.turnNavIdleTask = nil
             turnNavVisible = false
         }
     }
@@ -697,16 +752,47 @@ extension ClaudeChatView {
     }
 
     /// Jumps the transcript to `id` (a turn view id). Reduce Motion jumps without animation.
+    ///
+    /// Long jumps use DSH's glide-lead (`turn-nav.ts:412-474`): go most of the way instantly, then
+    /// glide the last `glideLead` points, so the reader is not left waiting on a whole-distance
+    /// animation. Short jumps just glide.
     func jumpToTurn(_ id: String) {
         guard let proxy = scrollProxy else { return }
         // Jumping backwards releases the tail-follow, like M7b.
         isFollowing = false
-        if reduceMotion {
+        showLandingLine(for: id)
+        guard !reduceMotion else {
             proxy.scrollTo(id, anchor: .top)
-        } else {
-            // A long, decelerating glide (upstream's smooth scroll), not a snap: the lazy stack
-            // mounts the turns it passes, and the ease-in-out hides the estimated-height drift.
-            withAnimation(.smooth(duration: 0.55)) { proxy.scrollTo(id, anchor: .top) }
+            return
+        }
+        guard let targetY = scrollTrack.offset(of: id) else {
+            // A row that has never been laid out has no offset to lead from: jump instantly to
+            // measure it, then take the last stretch back and glide (the geometry handler finishes
+            // the jump).
+            pendingLeadJump = PendingLeadJump(id: id, fromOffset: scrollTrack.contentOffset)
+            proxy.scrollTo(id, anchor: .top)
+            return
+        }
+        let distance = targetY - scrollTrack.contentOffset
+        guard abs(distance) > Self.glideLead else {
+            withAnimation(.smooth(duration: Self.glideDuration)) { proxy.scrollTo(id, anchor: .top) }
+            return
+        }
+        let leadY = targetY - (distance > 0 ? Self.glideLead : -Self.glideLead)
+        pendingGlide = PendingGlide(id: id)
+        scrollPosition.scrollTo(y: leadY)
+    }
+
+    /// The landed turn's wayfinding line: a 2 pt ink rule over its first row, fading in and out
+    /// over `landingDuration` (DSH `turn-nav.css:155-194`). UX-SPEC §0.1 forbids orange as state.
+    func showLandingLine(for id: String) {
+        landingTurnId = id
+        landingStartedAt = Date()
+        let captured = id
+        Task {
+            try? await Task.sleep(for: .seconds(Self.landingDuration))
+            guard landingTurnId == captured else { return }
+            landingTurnId = nil
         }
     }
 
@@ -722,13 +808,127 @@ extension ClaudeChatView {
         .accessibilityLabel(text)
     }
 }
-/// Scroll bookkeeping for the transcript: which turns the lazy stack has mounted, and the last
-/// one it mounted. Nothing observes these values, so they must not be `@State` — a `@State` write
-/// invalidates its whole view, and these change every time a turn enters or leaves the viewport
-/// while the reader scrolls (P3).
-final class TranscriptScrollTrack {
+/// Scroll bookkeeping for the transcript: which turns the lazy stack has mounted, where they sit
+/// in the content, and the rail's idle timer. Nothing observes these values, so they must not be
+/// `@State` — a `@State` write invalidates its whole view, and these change every time a turn
+/// enters or leaves the viewport while the reader scrolls (P3).
+final class TranscriptScrollTrack: @unchecked Sendable {
+    /// The named space the transcript's content is measured in, for the jump lead.
+    static let contentSpace = "paseo.transcript.content"
+
     var visibleTurnIds: Set<String> = []
     var lastTrackedTurn: String?
+    /// The viewport's content offset, updated once per scroll frame (O(1)).
+    var contentOffset: CGFloat = 0
+    /// The topmost mounted turn's prompt seq: the reading-position anchor, read O(1) per frame.
+    private(set) var topVisibleSeq: Int?
+    /// The last anchor reported to `PromptOutline`, so a scroll frame does not re-resolve it.
+    var reportedReadingAnchor: Int?
+    /// The instant the rail should auto-hide; a scroll frame pushes it out.
+    var turnNavIdleDeadline: Date?
+    /// The rail's one idle task; a scroll frame extends the deadline instead of restarting it.
+    var turnNavIdleTask: Task<Void, Never>?
+
+    private var turnSeqs: [String: Int] = [:]
+    private var turnOffsets: [String: CGFloat] = [:]
+    private var topVisibleTurnId: String?
+
+    func turnAppeared(_ id: String, seq: Int?) {
+        visibleTurnIds.insert(id)
+        lastTrackedTurn = id
+        if let seq { turnSeqs[id] = seq }
+        if topVisibleTurnId == nil, let seq {
+            topVisibleTurnId = id
+            topVisibleSeq = seq
+        }
+    }
+
+    func turnDisappeared(_ id: String) {
+        visibleTurnIds.remove(id)
+        turnSeqs.removeValue(forKey: id)
+        turnOffsets.removeValue(forKey: id)
+        guard topVisibleTurnId == id else { return }
+        topVisibleTurnId = nil
+        topVisibleSeq = nil
+        // The top left with the viewport: the next topmost mounted turn takes over. Only this
+        // rare path scans, and it keeps the anchor from reading nil for a whole frame.
+        let remaining = visibleTurnIds.compactMap { id in
+            turnOffsets[id].map { offset in (offset, id) }
+        }
+        if let top = remaining.min(by: { $0.0 < $1.0 }) {
+            topVisibleTurnId = top.1
+            topVisibleSeq = turnSeqs[top.1]
+        }
+    }
+
+    func turnOffsetChanged(_ id: String, offset: CGFloat) {
+        turnOffsets[id] = offset
+        guard let seq = turnSeqs[id] else { return }
+        guard let topId = topVisibleTurnId else {
+            topVisibleTurnId = id
+            topVisibleSeq = seq
+            return
+        }
+        guard id != topId, offset < (turnOffsets[topId] ?? .infinity) else { return }
+        topVisibleTurnId = id
+        topVisibleSeq = seq
+    }
+
+    /// The content offset of a mounted turn, for the jump lead. Nil when it was never laid out.
+    func offset(of id: String) -> CGFloat? { turnOffsets[id] }
+}
+
+/// The second half of a glide-lead: the instant jump has landed, so the last stretch glides.
+struct PendingGlide: Equatable {
+    var id: String
+}
+
+/// A jump to a row that had never been laid out: jump instantly to measure its offset, then take
+/// the last stretch back and glide from there.
+struct PendingLeadJump: Equatable {
+    var id: String
+    var fromOffset: CGFloat
+}
+
+/// DSH's landing line: a 2 pt ink rule over the turn a jump just landed on, fading in and out
+/// over `ClaudeChatView.landingDuration` (`turn-nav.css:155-194`). UX-SPEC §0.1 forbids orange as
+/// state, so it is ink. Reduce Motion shows it standing for the same time, without the fade.
+struct LandingLine: View {
+    let startedAt: Date
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if reduceMotion {
+                Rectangle().fill(ClaudePalette.ink).frame(height: 2)
+            } else {
+                TimelineView(.animation) { context in
+                    let (opacity, scaleX) = Self.phase(at: context.date)
+                    Rectangle()
+                        .fill(ClaudePalette.ink)
+                        .frame(height: 2)
+                        .scaleEffect(x: CGFloat(scaleX), y: 1, anchor: .center)
+                        .opacity(opacity)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// `0% opacity 0 scaleX .5 → 25% opacity 1 scaleX 1 → 70% opacity 1 → 100% opacity 0`.
+    static func phase(at date: Date) -> (opacity: Double, scaleX: Double) {
+        let t = date.timeIntervalSince(startedAt) / ClaudeChatView.landingDuration
+        if t <= 0 { return (0, 0.5) }
+        if t < 0.25 {
+            let k = t / 0.25
+            return (k, 0.5 + 0.5 * k)
+        }
+        if t < 0.7 { return (1, 1) }
+        if t < 1 { return (1 - (t - 0.7) / 0.3, 1) }
+        return (0, 1)
+    }
 }
 
 /// The timeline position of a turn's first row, for the outline's reading-position report. A turn

@@ -82,7 +82,15 @@ public struct ClaudeChatView: View {
     @State var pendingMessageAction: PendingMessageAction?
     /// M7i turn rail: shown while scrolling (and hides shortly after), never always-on.
     @State var turnNavVisible = false
-    @State var turnNavIdleTask: Task<Void, Never>?
+    /// The turn a jump just landed on, for the landing line; nil once its fade is done.
+    @State var landingTurnId: String?
+    @State var landingStartedAt = Date()
+    /// The second half of a glide-lead: the instant lead has landed, so the rest glides.
+    @State var pendingGlide: PendingGlide?
+    /// A jump to a row that had never been laid out, measuring its offset before leading.
+    @State var pendingLeadJump: PendingLeadJump?
+    /// One image loader per workspace, so `ClaudeProse` keeps its input identity (finding #13).
+    @State var imageLoaderCache = LocalImageLoaderCache()
     // Header title menu (M7 §1).
     @State var renamingAgent = false
     @State var renameText = ""
@@ -448,6 +456,18 @@ public struct ClaudeChatView: View {
             mentionMatches = []
         }
     }
+}
+
+/// Turn-nav motion constants, ported from DSH's `turn-nav.ts` / `turn-nav.css`.
+extension ClaudeChatView {
+    /// `TURN_NAV_GLIDE_LEAD_PX`: the last stretch of a long jump glides; the rest is instant.
+    static let glideLead: CGFloat = 480
+    /// The glide's duration (`easeScrollFor`'s short glide).
+    static let glideDuration: TimeInterval = 0.3
+    /// The landing line's fade (`turn-nav.css:155-194`).
+    static let landingDuration: TimeInterval = 1.4
+    /// How long the rail stays up after the last scroll frame.
+    static let turnNavIdleDuration: TimeInterval = 1.5
 }
 
 /// Watches the composer's text in a body of its own (P3).

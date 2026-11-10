@@ -1,5 +1,4 @@
 #if canImport(UIKit)
-import Combine
 import Foundation
 import PaseoStore
 import SwiftUI
@@ -143,10 +142,14 @@ struct ClaudeLiveStatusLine: View {
     /// The clause the model last said it was on, held across the gaps between clauses.
     @State private var lastModelWords: String?
     @State private var lastActivityAt = Date()
-    @State private var now = Date()
+    /// The words' first appearance anchors the band's 300 ms delay.
+    @State private var sweepStart = Date()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Ticks the clock and the wording lock four times a second (`TICK_MS`).
-    private let ticker = Timer.publish(every: ClaudeMotion.tick, on: .main, in: .common).autoconnect()
+
+    /// One timeline drives the clock and the sweep: a 4 Hz `Timer.publish` and a display-rate
+    /// masked sweep were two continuous sources (findings #11, #24). The band's 48 steps don't
+    /// need more than this.
+    private static let tick: TimeInterval = 1.0 / 30.0
 
     init(turn: Turn, typography: ClaudeTypography = ClaudeTypography()) {
         self.turn = turn
@@ -154,20 +157,33 @@ struct ClaudeLiveStatusLine: View {
         _activity = State(initialValue: ClaudeActivity.current(for: turn))
     }
 
-    private var elapsed: TimeInterval { max(1, now.timeIntervalSince(turn.startedAt ?? now)) }
-    private var showsOvertime: Bool { now.timeIntervalSince(lastActivityAt) >= ClaudeMotion.overtime }
+    private func elapsed(at date: Date) -> TimeInterval {
+        max(1, date.timeIntervalSince(turn.startedAt ?? date))
+    }
+
+    private func showsOvertime(at date: Date) -> Bool {
+        date.timeIntervalSince(lastActivityAt) >= ClaudeMotion.overtime
+    }
 
     var body: some View {
+        TimelineView(.animation(minimumInterval: Self.tick)) { context in
+            line(at: context.date)
+                .onChange(of: context.date) { _, date in advanceActivity(at: date) }
+        }
+    }
+
+    @ViewBuilder
+    private func line(at date: Date) -> some View {
         HStack(spacing: 6) {
             ClaudeLoader()
-            ClaudeSweepText(text: activity.text, font: typography.sans(14))
+            sweepText(activity.text, font: typography.sans(14), at: date)
                 .id(activity)
                 .transition(.asymmetric(insertion: .claudeWordEntrance, removal: .claudeWordExit))
-            Text(DurationText.short(elapsed))
+            Text(DurationText.short(elapsed(at: date)))
                 .font(typography.sans(13).monospacedDigit())
                 .foregroundStyle(ClaudePalette.captionInk)
                 .padding(.leading, 2)
-            if showsOvertime {
+            if showsOvertime(at: date) {
                 Text("No response yet")
                     .font(typography.sans(11, weight: .medium))
                     .foregroundStyle(ClaudePalette.warning)
@@ -183,62 +199,52 @@ struct ClaudeLiveStatusLine: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: ClaudeMotion.swap), value: activity)
         .animation(
             reduceMotion ? nil : .spring(response: ClaudeMotion.open, dampingFraction: 0.62),
-            value: showsOvertime)
+            value: showsOvertime(at: date))
         .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
-        .onReceive(ticker) { date in
-            now = date
-            var next = ClaudeActivity.current(for: turn)
-            if case .model(let words) = next {
-                lastModelWords = words
-            } else if next == .thinking, ClaudeActivity.reasoningIsNewest(turn), let held = lastModelWords {
-                next = .model(held)
-            }
-            // A wording stands for a second so a fast turn reads as one line, not a flicker.
-            // The call's own words are never lost to the lock: they wait for it and are written
-            // first when it ends.
-            if date.timeIntervalSince(wordingChangedAt) >= ClaudeMotion.wordLock {
-                let winner = pendingDetail ?? next
-                if winner != activity {
-                    activity = winner
-                    wordingChangedAt = date
-                    lastActivityAt = date
-                }
-                pendingDetail = nil
-            } else if next.isCallOwnWords, next != activity {
-                pendingDetail = next
-            }
-        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(activity.text)
     }
-}
 
-/// The words with the host's highlight band swept across them while the turn runs.
-/// The band is a masked copy of the glyphs tinted the shimmer ink — never a coloured wash.
-struct ClaudeSweepText: View {
-    let text: String
-    let font: Font
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The words' first appearance anchors the band's 300 ms delay.
-    @State private var start = Date()
-
-    @ViewBuilder var body: some View {
+    /// The words with the host's highlight band swept across them while the turn runs.
+    /// The band is a masked copy of the glyphs tinted the shimmer ink — never a coloured wash.
+    @ViewBuilder
+    private func sweepText(_ text: String, font: Font, at date: Date) -> some View {
         let base = Text(text).font(font).foregroundStyle(ClaudePalette.secondaryInk)
         if reduceMotion {
             base
         } else {
-            // Display rate, not a 30 Hz cap: the band must not step at 120 Hz (P3).
-            TimelineView(.animation) { context in
-                base.overlay(alignment: .leading) {
-                    if let phase = ClaudeSweep.phase(startedAt: start, at: context.date) {
-                        Text(text)
-                            .font(font)
-                            .foregroundStyle(ClaudePalette.shimmerInk)
-                            .mask(ClaudeSweep.windowGradient(phase: phase))
-                            .allowsHitTesting(false)
-                    }
+            base.overlay(alignment: .leading) {
+                if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: date) {
+                    Text(text)
+                        .font(font)
+                        .foregroundStyle(ClaudePalette.shimmerInk)
+                        .mask(ClaudeSweep.windowGradient(phase: phase))
+                        .allowsHitTesting(false)
                 }
             }
+        }
+    }
+
+    /// The wording lock: a wording stands for a second so a fast turn reads as one line, not a
+    /// flicker. The call's own words are never lost to the lock: they wait for it and are written
+    /// first when it ends.
+    private func advanceActivity(at date: Date) {
+        var next = ClaudeActivity.current(for: turn)
+        if case .model(let words) = next {
+            lastModelWords = words
+        } else if next == .thinking, ClaudeActivity.reasoningIsNewest(turn), let held = lastModelWords {
+            next = .model(held)
+        }
+        if date.timeIntervalSince(wordingChangedAt) >= ClaudeMotion.wordLock {
+            let winner = pendingDetail ?? next
+            if winner != activity {
+                activity = winner
+                wordingChangedAt = date
+                lastActivityAt = date
+            }
+            pendingDetail = nil
+        } else if next.isCallOwnWords, next != activity {
+            pendingDetail = next
         }
     }
 }
