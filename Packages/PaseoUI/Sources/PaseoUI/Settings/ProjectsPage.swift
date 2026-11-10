@@ -33,7 +33,7 @@ struct ProjectsPage: View {
                 if projects.isEmpty {
                     EmptyState(
                         title: "No projects on this host yet",
-                        message: "Add a project from the sidebar."
+                        message: "Add project from the sidebar."
                     )
                     .frame(minHeight: 180)
                     .panelRow(Palette.background)
