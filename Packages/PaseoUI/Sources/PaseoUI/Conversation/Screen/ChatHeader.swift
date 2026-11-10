@@ -114,6 +114,8 @@ struct ChatHeaderBar: View {
                         .lineLimit(1)
                 }
             }
+            // Breathing room under the status bar; the title block stays bare, no band (D1 §1).
+            .padding(.top, Space.xs)
             .frame(maxWidth: .infinity, alignment: .center)
             .contentShape(.rect)
         }

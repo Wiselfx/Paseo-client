@@ -25,11 +25,12 @@ struct DraftChatView: View {
             .onChange(of: session.agentControl.providers) { _, _ in seedIfNeeded() }
     }
 
-    /// The draft's page: header, then the greeting or the pending bubble, then the workspace line
-    /// and the composer — or the Add project action when the host has no workspace at all (§3.1).
+    /// The draft's page: the stage (greeting, or the pending bubble) with the header floating over
+    /// it, then the workspace line and the composer — or the Add project action when the host has
+    /// no workspace at all (§3.1). The draft has no scroll content, so only the header is a bar
+    /// (D1 §1).
     private var column: some View {
         VStack(spacing: 0) {
-            header
             stage
             if needsProject {
                 addProjectAction
@@ -38,6 +39,7 @@ struct DraftChatView: View {
                 composer
             }
         }
+        .safeAreaBar(edge: .top) { header }
         // No background here: the shell's rounded card is the canvas (UX-SPEC §1.1).
         .foregroundStyle(Palette.ink)
         .tint(Palette.ink)
@@ -76,7 +78,7 @@ struct DraftChatView: View {
                 Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }
         }
-        .frame(height: 48)
+        .frame(minHeight: 48)
         .padding(.horizontal, 12)
     }
 
