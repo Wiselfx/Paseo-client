@@ -132,6 +132,7 @@ extension PaseoSidebar {
         HStack(spacing: 4) {
             if showBranch {
                 Text(workspace.branch ?? workspaceKindLabel(workspace))
+                    .font(.paseo(.codeSmall))
                     .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
             }

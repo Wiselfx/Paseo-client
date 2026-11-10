@@ -86,7 +86,7 @@ struct ClaudeFindBar: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 44)
-        .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
+        .background(Palette.chip, in: .rect(cornerRadius: Radius.sm))
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 8)

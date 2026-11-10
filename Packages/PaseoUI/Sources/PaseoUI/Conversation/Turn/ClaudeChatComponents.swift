@@ -60,9 +60,9 @@ struct ClaudeCodeBlock: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .background(Palette.codeSurface, in: .rect(cornerRadius: Radius.sm))
+        .background(Palette.codeSurface, in: .rect(cornerRadius: Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(Palette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
         }
         .codeTypeScale()
     }
@@ -203,7 +203,7 @@ struct ClaudeUserBubble: View {
             .foregroundStyle(Palette.ink)
             .lineSpacing(4)
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.vertical, Space.md)
             .background(
                 Palette.userBubble, in: .rect(cornerRadius: Radius.bubble, style: .continuous)
             )

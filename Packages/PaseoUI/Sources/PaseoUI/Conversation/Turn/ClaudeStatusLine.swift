@@ -195,7 +195,7 @@ struct ClaudeLiveStatusLine: View {
                     .padding(.horizontal, 6)
                     .padding(.leading, 2)
                     .frame(height: 16)
-                    .background(Palette.warning.opacity(0.16), in: .rect(cornerRadius: Radius.xs))
+                    .background(Palette.warning.opacity(0.16), in: .rect(cornerRadius: Radius.sm))
                     .transition(.offset(y: 4).combined(with: .scale(scale: 0.92)).combined(with: .opacity))
             }
             Spacer(minLength: 0)

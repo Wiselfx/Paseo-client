@@ -134,6 +134,7 @@ struct ClaudeUsageReportsSheet: View {
                 .font(.paseo(.caption2))
                 .foregroundStyle(Palette.secondaryInk)
             Text(value)
+                .monospacedDigit()
                 .font(.paseo(.headline))
                 .foregroundStyle(Palette.ink)
                 .lineLimit(1)
@@ -217,6 +218,7 @@ struct ClaudeUsageReportsSheet: View {
                     .foregroundStyle(Palette.ink)
                 Spacer(minLength: 8)
                 Text(Self.percent(window.usedPct))
+                    .monospacedDigit()
                     .font(.paseo(.footnote, weight: .medium))
                     .foregroundStyle(window.usedPct == nil ? Palette.secondaryInk : Palette.ink)
                 Text(ClaudeUsageResets.short(afterISO: window.resetsAt) ?? "")
@@ -237,6 +239,7 @@ struct ClaudeUsageReportsSheet: View {
                 .foregroundStyle(Palette.secondaryInk)
             Spacer(minLength: 8)
             Text(value)
+                .monospacedDigit()
                 .font(.paseo(.footnote, weight: .medium))
                 .foregroundStyle(Palette.ink)
         }

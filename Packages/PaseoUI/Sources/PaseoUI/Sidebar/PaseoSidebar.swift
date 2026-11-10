@@ -357,6 +357,7 @@ struct PaseoSidebar: View {
                     .lineLimit(1)
                 ClaudeUsageBar(percent: used, width: 44)
                 Text(resets.map { "\(percent)% · \($0)" } ?? "\(percent)%")
+                    .monospacedDigit()
                     .font(.paseo(.caption2))
                     .foregroundStyle(Palette.secondaryInk)
                     .fixedSize()
