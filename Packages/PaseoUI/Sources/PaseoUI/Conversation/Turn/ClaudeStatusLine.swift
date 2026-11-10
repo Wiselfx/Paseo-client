@@ -144,6 +144,8 @@ struct ClaudeLiveStatusLine: View {
     /// The words' first appearance anchors the band's 300 ms delay.
     @State private var sweepStart = Date()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
+    @Environment(\.scenePhase) private var scenePhase
 
     /// One timeline drives the clock and the sweep: a 4 Hz `Timer.publish` and a display-rate
     /// masked sweep were two continuous sources (findings #11, #24). The band's 48 steps don't
@@ -163,8 +165,13 @@ struct ClaudeLiveStatusLine: View {
         date.timeIntervalSince(lastActivityAt) >= ClaudeMotion.overtime
     }
 
+    /// The sweep and the elapsed clock stop while covered, backgrounded or animating less.
+    private var paused: Bool {
+        reduceMotion || isSurfaceObscured || scenePhase != .active
+    }
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: Self.tick)) { context in
+        TimelineView(.animation(minimumInterval: Self.tick, paused: paused)) { context in
             line(at: context.date)
                 .onChange(of: context.date) { _, date in advanceActivity(at: date) }
         }

@@ -43,7 +43,7 @@ struct ClaudeRichBlockView: View {
         case .localFileLink(let path, _):
             RichPathChip(path: path, glyph: "doc.text")
         case .rawSVG(let source, _):
-            RichWebCard(kind: .svg, code: source)
+            RichSVGCard(code: source)
         case .visualize(let code, _):
             RichWebCard(kind: .visualize, code: code)
         case .mapCard(let reference, _):
@@ -638,14 +638,22 @@ enum RichWebKind {
     case visualize, svg
 }
 
-/// A web-backed block: a sandboxed WKWebView sized to its content (non-scrollable), with a
-/// "View source" toggle that swaps in the raw source with a copy button.
+/// A ` ```visualize ` block: a sandboxed WKWebView sized to its content, with a "View source"
+/// toggle that swaps in the raw source with a copy button.
+///
+/// The live web view exists only while the card is on screen and a slot is free (R9 §2). Off
+/// screen the card draws its last snapshot, which is taken as it leaves; that keeps a long
+/// transcript from holding one web process per card.
 struct RichWebCard: View {
     let kind: RichWebKind
     let code: String
 
     @State private var showSource = false
     @State private var contentHeight: CGFloat
+    @State private var isVisible = false
+    @State private var holdsSlot = false
+    @State private var snapshot: UIImage?
+    @State private var width: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
 
     private let typography = ClaudeTypography()
@@ -656,6 +664,7 @@ struct RichWebCard: View {
         _contentHeight = State(initialValue: kind == .visualize ? 240 : 80)
     }
 
+    /// Built once per (content, scheme) instead of on every `body` pass.
     private var document: String {
         let dark = colorScheme == .dark
         switch kind {
@@ -664,62 +673,150 @@ struct RichWebCard: View {
         }
     }
 
+    private var showsLive: Bool { isVisible && holdsSlot }
+
     var body: some View {
         RichCard {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(kind == .visualize ? "Visualization" : "SVG")
-                        .font(typography.sans(12, weight: .medium))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .accessibilityAddTraits(.isHeader)
-                    Spacer(minLength: 8)
-                    Button {
-                        showSource.toggle()
-                    } label: {
-                        Text(showSource ? "Hide source" : "View source")
-                            .font(typography.mono(11))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 10)
-                            .overlay(
-                                Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(showSource ? "Hide source" : "View source")
-                }
+                header
                 if showSource {
-                    ScrollView {
-                        Text(code)
-                            .font(typography.mono(11))
-                            .foregroundStyle(Palette.ink)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 260)
-                    HStack {
-                        Spacer(minLength: 0)
-                        Button {
-                            UIPasteboard.general.string = code
-                            Haptics.selection()
-                        } label: {
-                            Label("Copy source", systemImage: "doc.on.doc")
-                                .font(typography.sans(12, weight: .medium))
-                                .foregroundStyle(Palette.secondaryInk)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    source
                 } else {
-                    SandboxedHTMLView(
-                        html: document,
-                        heightFloor: kind == .visualize ? 80 : 30,
-                        heightCeiling: kind == .visualize ? 800 : 400
-                    ) { newHeight in
-                        contentHeight = newHeight
-                    }
-                    .frame(height: contentHeight)
+                    stage
                 }
             }
         }
+        .background { widthReader }
+        .onAppear { setVisible(true) }
+        .onDisappear { setVisible(false) }
+        .onScrollVisibilityChange(threshold: 0.1) { visible in setVisible(visible) }
+        .task(id: snapshotKey) { await captureSnapshotIfNeeded() }
+    }
+
+    private var header: some View {
+        HStack {
+            Text(kind == .visualize ? "Visualization" : "SVG")
+                .font(typography.sans(12, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            Button {
+                showSource.toggle()
+            } label: {
+                Text(showSource ? "Hide source" : "View source")
+                    .font(typography.mono(11))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showSource ? "Hide source" : "View source")
+        }
+    }
+
+    @ViewBuilder private var stage: some View {
+        if showsLive {
+            SandboxedHTMLView(
+                html: document,
+                heightFloor: kind == .visualize ? 80 : 30,
+                heightCeiling: kind == .visualize ? 800 : 400
+            ) { newHeight in
+                contentHeight = newHeight
+            }
+            .frame(height: contentHeight)
+        } else if let snapshot {
+            Image(uiImage: snapshot)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: contentHeight)
+        } else {
+            Rectangle()
+                .fill(Palette.codeSurface)
+                .frame(height: contentHeight)
+                .overlay { ProgressView().controlSize(.small).tint(Palette.secondaryInk) }
+        }
+    }
+
+    private var source: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView {
+                Text(code)
+                    .font(typography.mono(11))
+                    .foregroundStyle(Palette.ink)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 260)
+            HStack {
+                Spacer(minLength: 0)
+                Button {
+                    UIPasteboard.general.string = code
+                    Haptics.selection()
+                } label: {
+                    Label("Copy source", systemImage: "doc.on.doc")
+                        .font(typography.sans(12, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// The card's inner width, for snapshots at the real size instead of a guess.
+    private var widthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { width = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
+        }
+    }
+
+    private var snapshotKey: String? {
+        guard width > 1, !showsLive else { return nil }
+        return RichSnapshotCache.key(html: document, width: width, dark: colorScheme == .dark)
+    }
+
+    /// Takes the slot when one is free; on the way out it snapshots first, so the card has
+    /// something to show if it comes back — or stays off screen — without a live web view.
+    @MainActor
+    private func setVisible(_ visible: Bool) {
+        guard isVisible != visible else { return }
+        isVisible = visible
+        if visible {
+            if !holdsSlot { holdsSlot = LiveWebViewBudget.shared.claim() }
+        } else if holdsSlot {
+            let html = document
+            let renderWidth = max(width, 1)
+            let dark = colorScheme == .dark
+            let height = contentHeight
+            holdsSlot = false
+            LiveWebViewBudget.shared.release()
+            Task { @MainActor in
+                let key = RichSnapshotCache.key(html: html, width: renderWidth, dark: dark)
+                if RichSnapshotCache.image(for: key) != nil { return }
+                let rendered = await RichSnapshotQueue.shared.snapshot(
+                    html: html, width: renderWidth, scale: UIScreen.main.scale)
+                guard let rendered else { return }
+                RichSnapshotCache.store(rendered, for: key)
+                snapshot = rendered
+                contentHeight = max(height, min(rendered.size.height, 800))
+            }
+        }
+    }
+
+    @MainActor
+    private func captureSnapshotIfNeeded() async {
+        guard let key = snapshotKey else { return }
+        if let cached = RichSnapshotCache.image(for: key) {
+            snapshot = cached
+            return
+        }
+        let rendered = await RichSnapshotQueue.shared.snapshot(
+            html: document, width: width, scale: UIScreen.main.scale)
+        guard let rendered else { return }
+        RichSnapshotCache.store(rendered, for: key)
+        snapshot = rendered
     }
 }
 

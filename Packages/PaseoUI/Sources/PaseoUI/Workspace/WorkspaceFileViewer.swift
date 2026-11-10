@@ -714,7 +714,7 @@ import UIKit
 
 /// A file's text, monospaced, with the syntax theme in force, a line-number gutter, horizontal
 /// scroll for long lines and selection. Line heights match on both sides so the gutter and the
-/// text line up. Highlighting is capped by `ClaudeCodeHighlighter`, which falls back to plain.
+/// text line up. Highlighting runs on `CodeHighlighter` (off main) and falls back to plain text.
 struct WorkspaceCodeView: View {
     let source: String
     let language: String?
@@ -734,7 +734,7 @@ struct WorkspaceCodeView: View {
                     if lines.count <= 4000 {
                         Gutter(count: lines.count)
                     }
-                    Text(highlighted)
+                    Text(highlighted ?? AttributedString(source))
                         .font(.paseo(.codeSmall))
                         .lineSpacing(Self.lineSpacing)
                         .textSelection(.enabled)
@@ -746,13 +746,25 @@ struct WorkspaceCodeView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .codeTypeScale()
+        // Same fallback behavior as the Markdown code blocks: plain text until (or unless) the
+        // highlighter answers. Off main, so a large file never blocks the viewer's paint.
+        .task(id: highlightKey) {
+            let result = await CodeHighlighter.shared.highlight(
+                source, language: language, theme: syntaxTheme)
+            if highlighted != result { highlighted = result }
+        }
+        // A different file of the same length would otherwise keep the previous tokens.
+        .onChange(of: source) { _, _ in highlighted = nil }
     }
 
-    private var highlighted: AttributedString {
-        let theme: ClaudeCodeSyntaxTheme = colorScheme == .dark ? .dark : .light
-        let colored = ClaudeCodeHighlighter.shared.highlight(source, language: language, theme: theme)
-        // Same fallback behavior as the Markdown code blocks: plain text if the highlighter refuses.
-        return (try? AttributedString(colored, including: \.uiKit)) ?? AttributedString(source)
+    @State private var highlighted: AttributedString?
+
+    private var syntaxTheme: ClaudeCodeSyntaxTheme {
+        colorScheme == .dark ? .dark : .light
+    }
+
+    private var highlightKey: String {
+        "\(syntaxTheme.rawValue)/\(language ?? "")/\(source.utf16.count)"
     }
 
     private struct Gutter: View {
