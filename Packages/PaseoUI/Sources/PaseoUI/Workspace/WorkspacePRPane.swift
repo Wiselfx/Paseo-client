@@ -51,7 +51,7 @@ struct WorkspacePRSection: View {
 
     private func stateRow(_ status: CheckoutPrStatus) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            StatePill(
+            PRStatePill(
                 label: stateLabel(status),
                 tint: stateTint(status))
             VStack(alignment: .leading, spacing: 4) {
@@ -549,7 +549,7 @@ private struct VerdictPill: View {
     }
 }
 
-private struct StatePill: View {
+private struct PRStatePill: View {
     let label: String
     let tint: Color
 

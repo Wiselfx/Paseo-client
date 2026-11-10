@@ -173,7 +173,11 @@ private struct ToastWindowHost: UIViewRepresentable {
         return UIView(frame: .zero)
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.apply(
+            colorScheme: context.environment.colorScheme,
+            pureBlack: context.environment.pureBlack)
+    }
 
     static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
         coordinator.detach()
@@ -181,10 +185,27 @@ private struct ToastWindowHost: UIViewRepresentable {
 
     final class Coordinator {
         private let center: ToastCenter
-        @MainActor private weak var window: ToastWindow?
+        /// The app owns the window: losing it hides the toast for good.
+        @MainActor private var window: ToastWindow?
+        @MainActor private var colorScheme: ColorScheme?
+        @MainActor private var pureBlack = false
 
         init(center: ToastCenter) {
             self.center = center
+        }
+
+        /// The window is separate from the app's, so it does not inherit the in-app appearance.
+        @MainActor func apply(colorScheme: ColorScheme, pureBlack: Bool) {
+            self.colorScheme = colorScheme
+            self.pureBlack = pureBlack
+            applyAppearance()
+        }
+
+        /// Never called from a place that has no window yet: `attach()` applies it once it has one.
+        @MainActor private func applyAppearance() {
+            guard let window, let colorScheme else { return }
+            window.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+            window.traitOverrides[PureBlackTrait.self] = pureBlack
         }
 
         @MainActor func attach() {
@@ -202,8 +223,9 @@ private struct ToastWindowHost: UIViewRepresentable {
             let host = UIHostingController(rootView: root)
             host.view.backgroundColor = .clear
             window.rootViewController = host
-            window.isHidden = false
             self.window = window
+            applyAppearance()
+            window.isHidden = false
         }
 
         @MainActor func detach() {

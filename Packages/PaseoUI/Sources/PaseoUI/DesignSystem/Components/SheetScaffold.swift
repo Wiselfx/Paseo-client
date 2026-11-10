@@ -109,8 +109,6 @@ struct SheetScaffold<Content: View>: View {
                 ) {
                     Button("Discard changes", role: .destructive) { close() }
                     Button("Keep editing", role: .cancel) {}
-                } message: {
-                    Text("Your edits will be lost.")
                 }
                 .onPreferenceChange(SheetDirtyKey.self) { isDirty = $0 }
         }
