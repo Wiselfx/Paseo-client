@@ -16,7 +16,6 @@ struct ClaudeHistoryView: View {
     /// Tap row → the sidebar dismisses this sheet and selects the agent.
     let onOpenAgent: (String) -> Void
 
-    private let typography = ClaudeTypography()
     @State private var query = ""
     @State private var renamingAgent: AgentSnapshot?
     @State private var renameText = ""
@@ -68,8 +67,8 @@ struct ClaudeHistoryView: View {
             }
             content
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
         .task {
@@ -139,13 +138,13 @@ struct ClaudeHistoryView: View {
     private var header: some View {
         ZStack {
             Text("History")
-                .font(typography.serif(19, relativeTo: .headline, weight: .semibold))
+                .font(.paseo(.title, weight: .semibold))
             HStack {
                 Button {
                     Haptics.selection()
                     onClose()
                 } label: {
-                    Image(systemName: "xmark").font(.system(size: 19, weight: .light))
+                    Image(systemName: "xmark").font(.glyph(.large, weight: .light))
                         .frame(width: 42, height: 42)
                 }
                 .glassEffect(in: .circle)
@@ -163,10 +162,10 @@ struct ClaudeHistoryView: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.small))
+                .foregroundStyle(Palette.secondaryInk)
             TextField("Search history", text: $query)
-                .font(typography.sans(15))
+                .font(.paseo(.callout))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .accessibilityIdentifier("history.search")
@@ -176,8 +175,8 @@ struct ClaudeHistoryView: View {
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.small))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
@@ -186,7 +185,7 @@ struct ClaudeHistoryView: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 42)
-        .background(ClaudePalette.chip, in: .rect(cornerRadius: 11))
+        .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }
@@ -194,18 +193,18 @@ struct ClaudeHistoryView: View {
     private func actionErrorBanner(_ message: String) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(ClaudePalette.failureInk)
+                .foregroundStyle(Palette.failureInk)
             Text(message)
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.failureInk)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 dismissedActionError = message
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(width: 26, height: 26)
             }
             .buttonStyle(.plain)
@@ -213,7 +212,7 @@ struct ClaudeHistoryView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(ClaudePalette.failureInk.opacity(0.08))
+        .background(Palette.failureInk.opacity(0.08))
     }
 
     // MARK: Content
@@ -225,33 +224,33 @@ struct ClaudeHistoryView: View {
                 Spacer()
                 ProgressView()
                 Text("Loading history…")
-                    .font(typography.sans(14))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 30, weight: .light))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.xlarge, weight: .light))
+                    .foregroundStyle(Palette.failureInk)
                 Text("Couldn't load agent history")
-                    .font(typography.sans(16, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Text(message)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                 Button {
                     Task { await session.agentLifecycle.load() }
                 } label: {
                     Text("Retry")
-                        .font(typography.sans(14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .padding(.horizontal, 18)
-                        .frame(height: 44)
-                        .background(ClaudePalette.chip, in: .capsule)
+                        .frame(minHeight: 44)
+                        .background(Palette.chip, in: .capsule)
                 }
                 .buttonStyle(.plain)
             }
@@ -268,14 +267,14 @@ struct ClaudeHistoryView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "clock.arrow.2.circlepath")
-                .font(.system(size: 26, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.xlarge, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(query.isEmpty ? "No sessions yet" : "No sessions match")
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text(query.isEmpty ? "Start one from the sidebar." : "Try a different title.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 32)
@@ -290,9 +289,9 @@ struct ClaudeHistoryView: View {
                     }
                 } header: {
                     Text(group.label.uppercased())
-                        .font(typography.sans(11, weight: .semibold))
+                        .font(.paseo(.caption2, weight: .semibold))
                         .tracking(0.8)
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             }
             if session.agentLifecycle.hasMore {
@@ -305,8 +304,8 @@ struct ClaudeHistoryView: View {
                             ProgressView().controlSize(.small)
                         } else {
                             Text("Load more")
-                                .font(typography.sans(14, weight: .medium))
-                                .foregroundStyle(ClaudePalette.secondaryInk)
+                                .font(.paseo(.callout, weight: .medium))
+                                .foregroundStyle(Palette.secondaryInk)
                         }
                         Spacer()
                     }
@@ -340,29 +339,29 @@ struct ClaudeHistoryView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(title(for: agent))
-                            .font(typography.sans(15, weight: .medium))
-                            .foregroundStyle(archived ? ClaudePalette.secondaryInk : ClaudePalette.ink)
+                            .font(.paseo(.callout, weight: .medium))
+                            .foregroundStyle(archived ? Palette.secondaryInk : Palette.ink)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         if archived {
                             Text("Archived")
-                                .font(typography.sans(10, weight: .semibold))
-                                .foregroundStyle(ClaudePalette.tertiaryInk)
+                                .font(.paseo(.caption2, weight: .semibold))
+                                .foregroundStyle(Palette.tertiaryInk)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(ClaudePalette.chip, in: .capsule)
+                                .background(Palette.chip, in: .capsule)
                         }
                     }
                     Text(subtitle(for: agent))
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
                 Text(relativeAge(agent.lastUserMessageAt ?? agent.updatedAt))
-                    .font(typography.mono(11))
-                    .foregroundStyle(ClaudePalette.captionInk)
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.captionInk)
             }
             .padding(.horizontal, 20)
             .frame(minHeight: 54)
@@ -370,7 +369,7 @@ struct ClaudeHistoryView: View {
         }
         .buttonStyle(.plain)
         .listRowInsets(EdgeInsets())
-        .listRowSeparatorTint(ClaudePalette.divider)
+        .listRowSeparatorTint(Palette.divider)
         .accessibilityLabel("\(archived ? "Archived agent" : "Open agent") \(title(for: agent))")
         .contextMenu { rowActions(agent) }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -380,13 +379,13 @@ struct ClaudeHistoryView: View {
             Button { requestArchive(agent) } label: {
                 Label(archived ? "Unarchive" : "Archive", systemImage: archived ? "tray.and.arrow.up" : "archivebox")
             }
-            .tint(ClaudePalette.secondaryInk)
+            .tint(Palette.secondaryInk)
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button { beginRename(agent) } label: {
                 Label("Rename", systemImage: "pencil")
             }
-            .tint(ClaudePalette.secondaryInk)
+            .tint(Palette.secondaryInk)
         }
     }
 
