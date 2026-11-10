@@ -212,3 +212,18 @@ workspace, the chat stays clean. Composer keeps the Claude iOS shape; turn UI fo
 - SwiftUI can't compile on Linux: UI tickets must `rg` deleted types and `swiftc -parse`; the user
   builds in Xcode. Avoid Apple-only `#if` branches.
 - No screenshots unless needed (quota).
+
+## D-round (device feedback, 2026-11-10 evening)
+
+The user picked the OCU look; it is merged on foundation (`cffc95e`, display name back to "Paseo").
+They tested it on device and reported problems. Tickets: `docs/tickets/_D-common.md` and D1–D4. Workers are DeepSeek, one worktree each under `~/.paseo/worktrees/0264elgj/`:
+
+| Ticket | Branch | Agent |
+|---|---|---|
+| D1 header/scroll chrome, send scrolls to your message, bottom-jump fix | `d1-chrome` | 78c4600a |
+| D2 Claude-style composer, image paste (multi), live voice meters, draft-send crash (P0) | `d2-composer` | 331a6f4c |
+| D3 sidebar width, Settings chevrons, turn-detail fonts (R2 serif→title bug), compact k numbers | `d3-layout` | b92d04cb |
+| D4 terminal smoothness (upstream docs/terminal-*.md), agent paging (65 vs 72 subagents) | `d4-terminal` | faf08a0b |
+
+Next after merges: D5 haptics. Today there are 212 `selection()` calls and 34 `success()` notification buzzes. Plan: none on plain navigation taps, copy gets a light tick rather than success, and success is kept for awaited completions only.
+Waiting on the user: the device crash log for the draft-send crash.
