@@ -637,14 +637,15 @@ struct ComposerView: View {
     }
 
     private var composerPrimary: some View {
-        ComposerPrimaryButton(
+        let onQueue: (() -> Void)? = controller == nil ? nil : { longPressSend() }
+        return ComposerPrimaryButton(
             state: primaryState,
             isEnabled: primaryIsEnabled,
             isMuted: voice?.isMuted ?? false,
             waveform: controller?.voiceEngine.waveform,
             reduceMotion: reduceMotion,
             onTap: primaryTap,
-            onQueue: controller == nil ? nil : longPressSend)
+            onQueue: onQueue)
     }
 
     private func primaryTap() {
