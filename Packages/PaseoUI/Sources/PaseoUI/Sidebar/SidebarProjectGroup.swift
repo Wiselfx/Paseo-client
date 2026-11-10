@@ -28,7 +28,7 @@ extension PaseoSidebar {
             .accessibilityLabel(title)
             .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
             Button {
-                newAgent(in: group)
+                newSession(in: group)
             } label: {
                 Image(systemName: "plus")
                     .font(.glyph(.small, weight: .semibold))
@@ -37,21 +37,26 @@ extension PaseoSidebar {
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("New agent in \(title)")
+            .accessibilityLabel("New session in \(title)")
         }
         .padding(.top, 18)
         .padding(.bottom, 6)
         .contextMenu {
-            Button("New agent", systemImage: "plus") { newAgent(in: group) }
+            // PLAN §RH order: open-variants, edit verbs, copy, then the destructive verb.
+            Button("New session", systemImage: "plus") { newSession(in: group) }
             Button("Rename…", systemImage: "pencil") {
                 renameText = group.project.projectCustomName ?? ""
                 renamingProject = group.project
             }
+            Button("Project settings…", systemImage: "gearshape") {
+                sheet = .project(group.project)
+            }
             Button("Copy path", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = group.project.projectRootPath
+                Clipboard.copy(group.project.projectRootPath)
                 showToast("Path copied")
             }
             if session.workspaceDirectory.supportsProjectRemove {
+                Divider()
                 Button("Remove project", systemImage: "trash", role: .destructive) {
                     projectPendingRemoval = group.project
                 }
@@ -64,33 +69,23 @@ extension PaseoSidebar {
     }
 
     /// The group's workspaces are already ordered by activity, so the head is the most recent one.
-    func newAgent(in group: WorkspaceGroup) {
+    func newSession(in group: WorkspaceGroup) {
         guard let workspace = group.workspaces.first else {
             showToast("No workspaces in this project yet. Create one first.")
             return
         }
-        Haptics.selection()
+        // The shell settles the drawer and plays the one haptic (PLAN §RH).
         onNewSession(workspace.id)
     }
 
     // MARK: Collapse state
 
-    var collapsedProjectsSet: Set<String> {
-        Set(collapsedProjects.split(separator: ",").map(String.init).filter { !$0.isEmpty })
-    }
-
     func isCollapsed(_ projectId: String) -> Bool {
-        collapsedProjectsSet.contains(projectId)
+        preferences.isCollapsed(projectId: projectId)
     }
 
     func toggleCollapsed(_ projectId: String) {
-        var collapsed = collapsedProjectsSet
-        if collapsed.contains(projectId) {
-            collapsed.remove(projectId)
-        } else {
-            collapsed.insert(projectId)
-        }
-        collapsedProjects = collapsed.sorted().joined(separator: ",")
+        preferences.toggleCollapsed(projectId: projectId)
     }
 }
 #endif

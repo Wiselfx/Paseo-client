@@ -9,7 +9,7 @@ import UIKit
 ///
 /// Hidden until the probe answers; a failed read stays quiet (the probe caches `failed`).
 /// Tapping the body opens the M2.11 Project page; the xmark dismisses it, persisted per
-/// project in `@AppStorage("paseo.sidebar.setupCalloutDismissed")`.
+/// project in `SidebarPreferences.setupCalloutDismissed`.
 ///
 /// Mirrors upstream's `worktree-setup-callout-source` policy: git project, no setup commands,
 /// dismissal key per project. Shown in the project (grouped) sidebar only — the date grouping
@@ -70,22 +70,14 @@ extension PaseoSidebar {
             $0.projectId == group.project.projectId && $0.workspaceKind == .worktree
         }
         guard hasWorktree else { return false }
-        guard !setupCalloutDismissedProjects.contains(group.project.projectId) else { return false }
+        guard !preferences.isSetupCalloutDismissed(projectId: group.project.projectId) else {
+            return false
+        }
         return session.projectSetupProbe.hasSetupCommands[group.project.projectRootPath] == false
     }
 
-    var setupCalloutDismissedProjects: Set<String> {
-        Set(
-            setupCalloutDismissed
-                .split(separator: ",")
-                .map(String.init)
-                .filter { !$0.isEmpty })
-    }
-
     func dismissWorktreeSetupCallout(_ projectId: String) {
-        var set = setupCalloutDismissedProjects
-        set.insert(projectId)
-        setupCalloutDismissed = set.sorted().joined(separator: ",")
+        preferences.dismissSetupCallout(projectId: projectId)
     }
 }
 #endif

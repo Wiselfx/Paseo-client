@@ -61,7 +61,7 @@ extension PaseoSidebar {
     ) -> some View {
         let isEmpty =
             groups.allSatisfy { $0.workspaces.isEmpty } && pinned.isEmpty
-            && hiddenWorkspacesSet.isEmpty
+            && preferences.hiddenWorkspaces.isEmpty
         if isEmpty {
             emptyDirectoryState
         } else {
@@ -97,7 +97,7 @@ extension PaseoSidebar {
         derivations: SidebarDerivations
     ) -> some View {
         let visible = buckets.filter { !$0.workspaces.isEmpty }
-        let isEmpty = visible.isEmpty && pinned.isEmpty && hiddenWorkspacesSet.isEmpty
+        let isEmpty = visible.isEmpty && pinned.isEmpty && preferences.hiddenWorkspaces.isEmpty
         if isEmpty {
             emptyDirectoryState
         } else {
@@ -169,7 +169,7 @@ extension PaseoSidebar {
     /// Add project moved into the navigation rows above the directory (§2.3); the directory
     /// keeps only the hidden-workspaces disclosure.
     @ViewBuilder var trailingRows: some View {
-        if !hiddenWorkspacesSet.isEmpty {
+        if !preferences.hiddenWorkspaces.isEmpty {
             hiddenWorkspacesRow
         }
     }
@@ -185,7 +185,7 @@ extension PaseoSidebar {
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 24, height: 24)
                     .background(Palette.chip, in: .circle)
-                Text("Hidden workspaces (\(PaseoFormat.integer(hiddenWorkspacesSet.count)))")
+                Text("Hidden workspaces (\(PaseoFormat.integer(preferences.hiddenWorkspaces.count)))")
                     .font(.paseo(.callout))
                     .foregroundStyle(Palette.secondaryInk)
                 Spacer(minLength: 0)
@@ -202,21 +202,23 @@ extension PaseoSidebar {
                 : "Show hidden workspaces")
     }
 
-    var emptyDirectoryState: some View {
-        let error = session.workspaceDirectory.error
-        let filtered = labelFilterName != nil
-        return Text(
-            session.workspaceDirectory.isLoading
-                ? "Loading workspaces…"
-                : (filtered
-                    ? "No workspaces with this label."
-                    : (error ?? "No workspaces on this host yet."))
-        )
-        .font(.paseo(.callout))
-        .foregroundStyle(
-            error == nil || filtered ? Palette.secondaryInk : Palette.failureInk
-        )
-        .padding(.vertical, 24)
+    /// An error is a banner with a retry (PLAN §RI 22); everything else is the quiet line.
+    @ViewBuilder var emptyDirectoryState: some View {
+        if let error = session.workspaceDirectory.error, labelFilterName == nil {
+            InlineBanner(.failure, title: error, action: ("Try again", retryDirectory))
+                .padding(.vertical, 24)
+        } else {
+            Text(
+                session.workspaceDirectory.isLoading
+                    ? "Loading workspaces…"
+                    : (labelFilterName == nil
+                        ? "No workspaces on this host yet."
+                        : "No workspaces with this label.")
+            )
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
+            .padding(.vertical, 24)
+        }
     }
 
     
@@ -227,24 +229,18 @@ extension PaseoSidebar {
         SidebarSort(rawValue: sortRaw) ?? .activity
     }
 
-    var hiddenWorkspacesSet: Set<String> {
-        Set(hiddenWorkspaces.split(separator: ",").map(String.init).filter { !$0.isEmpty })
-    }
-
     /// Hidden rows show up only while the "Hidden workspaces" row is expanded.
     func isVisible(_ workspace: WorkspaceDescriptor) -> Bool {
-        showHidden || !hiddenWorkspacesSet.contains(workspace.id)
+        showHidden || !preferences.isHidden(workspace.id)
     }
 
     /// Persisted client-side set of hidden workspace ids (`paseo.sidebar.hiddenWorkspaces`).
     func isHiddenFromSidebar(_ workspace: WorkspaceDescriptor) -> Bool {
-        hiddenWorkspacesSet.contains(workspace.id)
+        preferences.isHidden(workspace.id)
     }
 
     func toggleHiddenFromSidebar(_ workspace: WorkspaceDescriptor) {
-        var set = hiddenWorkspacesSet
-        if set.contains(workspace.id) { set.remove(workspace.id) } else { set.insert(workspace.id) }
-        hiddenWorkspaces = set.sorted().joined(separator: ",")
+        preferences.toggleHidden(workspace.id)
     }
 
     /// Pinned workspaces, newest activity first.
@@ -370,49 +366,27 @@ extension PaseoSidebar {
 
     // MARK: Date-group collapse (persisted, like projects)
 
-    var collapsedDateGroupsSet: Set<String> {
-        Set(collapsedDateGroups.split(separator: ",").map(String.init).filter { !$0.isEmpty })
-    }
-
     func isDateGroupCollapsed(_ id: String) -> Bool {
-        collapsedDateGroupsSet.contains(id)
+        preferences.isDateGroupCollapsed(id)
     }
 
     func toggleDateGroupCollapsed(_ id: String) {
-        var collapsed = collapsedDateGroupsSet
-        if collapsed.contains(id) {
-            collapsed.remove(id)
-        } else {
-            collapsed.insert(id)
-        }
-        collapsedDateGroups = collapsed.sorted().joined(separator: ",")
+        preferences.toggleDateGroupCollapsed(id)
     }
 
     // MARK: Manual unread marks (persisted locally, DSH `manual-unread`)
 
-    var manualUnreadSet: Set<String> {
-        Set(manualUnread.split(separator: ",").map(String.init).filter { !$0.isEmpty })
-    }
-
     func isManuallyUnread(_ workspace: WorkspaceDescriptor) -> Bool {
-        manualUnreadSet.contains(workspace.id)
+        preferences.isUnread(workspace.id)
     }
 
     func toggleManualUnread(_ workspace: WorkspaceDescriptor) {
-        var set = manualUnreadSet
-        if set.contains(workspace.id) {
-            set.remove(workspace.id)
-        } else {
-            set.insert(workspace.id)
-        }
-        manualUnread = set.sorted().joined(separator: ",")
+        preferences.toggleUnread(workspace.id)
     }
 
     /// Cleared when the workspace is opened.
     func clearManualUnread(_ workspace: WorkspaceDescriptor) {
-        var set = manualUnreadSet
-        guard set.remove(workspace.id) != nil else { return }
-        manualUnread = set.sorted().joined(separator: ",")
+        preferences.clearUnread(workspace.id)
     }
 
     /// Workspaces within a project per the sidebar sort; projects ordered by their newest

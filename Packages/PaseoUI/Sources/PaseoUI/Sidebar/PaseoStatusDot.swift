@@ -1,33 +1,32 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// 6 pt dot: breathing while running, yellow for input, blue for unread, hollow for idle.
+/// The sidebar's old status dot, kept as a mapping onto the one dot the design system has.
+/// New code uses `StatusDot`; the remaining call sites in Conversation, Settings and Workspace
+/// migrate in their own tickets.
+@available(
+    *, deprecated,
+    message: "Use StatusDot. R6/R7/R8 migrate their call sites; the sidebar no longer uses this."
+)
 struct PaseoStatusDot: View {
     enum Kind: Equatable { case running, needsInput, failed, done, unread, idle }
 
     let kind: Kind
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathing = false
 
     var body: some View {
-        Group {
-            switch kind {
-            case .running:
-                Circle().fill(Palette.secondaryInk).frame(width: 6, height: 6)
-                    .opacity(breathing ? 1 : 0.3)
-                    .animation(
-                        reduceMotion ? nil : .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
-                        value: breathing)
-                    .onAppear { breathing = true }
-            case .needsInput: Circle().fill(Palette.warning).frame(width: 6, height: 6)
-            case .failed: Circle().fill(Palette.failureInk).frame(width: 6, height: 6)
-            case .done: Circle().fill(Palette.successInk).frame(width: 6, height: 6)
-            case .unread: Circle().fill(Palette.unread).frame(width: 6, height: 6)
-            case .idle: Circle().strokeBorder(Palette.captionInk, lineWidth: 1).frame(width: 6, height: 6)
-            }
+        StatusDot(state)
+    }
+
+    /// One meaning per dot: a finished workspace is no longer green (UX-SPEC §0.1 keeps green for
+    /// diff counts), so `.done` reads as the same quiet dot as `.idle`.
+    private var state: StatusDot.State {
+        switch kind {
+        case .running: .running
+        case .needsInput: .attention
+        case .failed: .failed
+        case .unread: .unread
+        case .done, .idle: .idle
         }
-        .frame(width: 8, height: 8)
-        .accessibilityHidden(true)
     }
 }
 #endif
