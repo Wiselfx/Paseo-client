@@ -696,7 +696,7 @@ struct WorkspaceChangesDiffView: View {
         Task {
             let discarded = await extras.discard(paths: [file.path])
             if discarded {
-                Haptics.success()
+                Haptics.light()
                 toast?.show("Discarded \(file.path)")
                 dismiss()
             } else {

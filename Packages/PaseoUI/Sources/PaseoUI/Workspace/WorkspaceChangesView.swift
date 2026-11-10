@@ -1249,7 +1249,7 @@ struct WorkspaceChangesView: View {
         Task {
             let discarded = await extras.discard(paths: [file.path])
             if discarded {
-                Haptics.success()
+                Haptics.light()
                 showToast("Discarded \(file.path)")
             } else {
                 Haptics.failure()

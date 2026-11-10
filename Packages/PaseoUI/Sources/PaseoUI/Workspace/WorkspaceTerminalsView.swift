@@ -377,7 +377,7 @@ struct WorkspaceTerminalsView: View {
         } else {
             Task {
                 let ok = await store.killTerminal(terminal.id)
-                if ok { Haptics.success() } else { Haptics.failure() }
+                if ok { Haptics.light() } else { Haptics.failure() }
             }
         }
     }
@@ -387,7 +387,7 @@ struct WorkspaceTerminalsView: View {
         closeCandidate = nil
         Task {
             let ok = await store.killTerminal(target.id)
-            if ok { Haptics.success() } else { Haptics.failure() }
+            if ok { Haptics.light() } else { Haptics.failure() }
         }
     }
 
