@@ -245,7 +245,7 @@ struct WorkspacePanel: View {
             // strip can never drive the same progress twice.
             view.edgeDrawerDrag(
                 edge: nil, screenWidth: dismissDrag.width, drawerWidth: dismissDrag.width,
-                isOpen: true, blocked: false, openDirection: .trailing,
+                isOpen: { true }, blocked: { false }, openDirection: .trailing,
                 excludeLeadingEdge: true,
                 progress: dismissDrag.progress, onSettle: dismissDrag.onSettle)
         } else {

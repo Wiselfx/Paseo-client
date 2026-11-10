@@ -42,9 +42,11 @@ public struct PaseoShellView: View {
     /// True when the draft was opened from an entry point rather than by the idle shell, so a
     /// late agent list never yanks it away from someone who is typing.
     @State private var draftOpenedByUser = false
-    @State private var isDrawerOpen = false
+    /// Which drawer is open. A reference box on purpose: a flip of a plain @State Bool re-evaluates
+    /// the shell body, which rebuilds the sidebar and the chat (their closures are new values) in
+    /// the middle of the settle animation. Only gestures and actions read this, never `body`.
+    @State private var openState = ShellOpenState()
     @State private var drawerProgress: CGFloat = 0
-    @State private var isPanelOpen = false
     @State private var panelProgress: CGFloat = 0
     /// A terminal to open the panel on, from a notification tap; cleared when the panel closes.
     @State private var panelTerminalId: String?
@@ -151,7 +153,7 @@ public struct PaseoShellView: View {
             onNewAgent: { openNewAgent(workspace: $0) },
             currentWorkspaceId: conversation?.agent?.workspaceId,
             onDisconnect: onDisconnect,
-            onTogglePanel: { settlePanel(open: !isPanelOpen) },
+            onTogglePanel: { settlePanel(open: !openState.panel) },
             addProjectRequest: $addProjectRequested
         )
         .frame(width: width)
@@ -172,15 +174,14 @@ public struct PaseoShellView: View {
         ) {
             main
         }
-            .background { EdgeDrawerCard() }
             .environment(\.composerFocusRequested, $composerFocusRequested)
             .edgeDrawerDrag(
                 edge: .leading, screenWidth: width, drawerWidth: drawerWidth,
-                isOpen: isDrawerOpen, blocked: isPanelOpen,
+                isOpen: { [openState] in openState.drawer }, blocked: { [openState] in openState.panel },
                 progress: $drawerProgress, onSettle: { settleDrawer(open: $0) })
             .edgeDrawerDrag(
                 edge: .trailing, screenWidth: width, drawerWidth: width * panelFraction,
-                isOpen: isPanelOpen, blocked: isDrawerOpen,
+                isOpen: { [openState] in openState.panel }, blocked: { [openState] in openState.drawer },
                 progress: $panelProgress, onSettle: { settlePanel(open: $0) })
     }
 
@@ -215,7 +216,7 @@ public struct PaseoShellView: View {
         }
         .edgeDrawerDrag(
             edge: .leading, screenWidth: width, drawerWidth: width,
-            isOpen: isPanelOpen, blocked: isDrawerOpen, openDirection: .trailing,
+            isOpen: { [openState] in openState.panel }, blocked: { [openState] in openState.drawer }, openDirection: .trailing,
             requiresEdgeZone: true,
             progress: $panelProgress, onSettle: { settlePanel(open: $0) })
     }
@@ -361,9 +362,9 @@ public struct PaseoShellView: View {
     /// Both progresses settle inside one `withAnimation`: opening one drawer closes the other in
     /// the same frame with the same curve, so there is no double animation and no desync (§1.4).
     private func settle(drawer: Bool, panel: Bool) {
-        let changed = drawer != isDrawerOpen || panel != isPanelOpen
-        isDrawerOpen = drawer
-        isPanelOpen = panel
+        let changed = drawer != openState.drawer || panel != openState.panel
+        openState.drawer = drawer
+        openState.panel = panel
         if !panel { panelTerminalId = nil }
         let animation = EdgeDrawer.settleAnimation(reduceMotion: reduceMotion)
         withAnimation(animation) {
@@ -478,7 +479,7 @@ public struct PaseoShellView: View {
                 await session.refreshAgents()
             }
         }
-        if closeDrawer && isDrawerOpen { self.settleDrawer(open: false) }
+        if closeDrawer && openState.drawer { self.settleDrawer(open: false) }
     }
 
     // MARK: Drafts
@@ -566,6 +567,12 @@ public struct PaseoShellView: View {
     }
 }
 
+/// The two open flags, held by reference so changing them never invalidates the shell body.
+final class ShellOpenState {
+    var drawer = false
+    var panel = false
+}
+
 /// The conversation card: the one place that reads the drawer progresses for the middle surface.
 ///
 /// SwiftUI invalidates the view whose body reads a @State, and it runs that body on every finger
@@ -605,6 +612,9 @@ struct ConversationCard<Content: View>: View {
         let offset = drawerWidth * drawerProgress - width * parallax * panelProgress
         content
             .frame(width: width, height: height)
+            // The card's own opaque background moves with the card. Outside the offset it would
+            // stay put and cover the sidebar behind it.
+            .background { EdgeDrawerCard() }
             .overlay {
                 EdgeDrawerDim(
                     progress: max(drawerProgress, panelProgress), onTap: onTapScrim)

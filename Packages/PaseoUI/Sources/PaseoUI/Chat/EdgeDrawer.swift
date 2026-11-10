@@ -39,9 +39,11 @@ struct EdgeDrawerDrag: ViewModifier {
     let edge: DrawerEdge?
     let screenWidth: CGFloat
     let drawerWidth: CGFloat
-    let isOpen: Bool
+    /// Read when a gesture begins, not when the view is built, so the shell never has to
+    /// re-evaluate (and rebuild the sidebar and the chat) just to hand a gesture a new Bool.
+    let isOpen: () -> Bool
     /// The other drawer is open, so this one never arms.
-    let blocked: Bool
+    let blocked: () -> Bool
     /// Keep requiring the 24 pt edge zone even while open (the panel's leading-edge dismissal).
     let requiresEdgeZone: Bool
     /// For a drag on an open surface: never arm inside the leading 24 pt, which the panel's own
@@ -68,14 +70,14 @@ struct EdgeDrawerDrag: ViewModifier {
                     guard abs(value.translation.width) > abs(value.translation.height) else {
                         return
                     }
-                    guard !blocked else { return }
+                    guard !blocked() else { return }
                     if edge != nil {
-                        guard isOpen || isInEdgeZone(value.startLocation.x) else { return }
+                        guard isOpen() || isInEdgeZone(value.startLocation.x) else { return }
                         guard !requiresEdgeZone || isInEdgeZone(value.startLocation.x) else {
                             return
                         }
                     } else {
-                        guard isOpen else { return }
+                        guard isOpen() else { return }
                         guard !excludeLeadingEdge || value.startLocation.x > EdgeDrawer.edgeZone
                         else { return }
                     }
@@ -119,8 +121,8 @@ extension View {
     ///     vertically scrolling list in the middle of the screen).
     ///   - excludeLeadingEdge: leave the leading 24 pt to the panel's own edge dismissal.
     func edgeDrawerDrag(
-        edge: DrawerEdge?, screenWidth: CGFloat, drawerWidth: CGFloat, isOpen: Bool,
-        blocked: Bool, openDirection: DrawerEdge? = nil, requiresEdgeZone: Bool = false,
+        edge: DrawerEdge?, screenWidth: CGFloat, drawerWidth: CGFloat,
+        isOpen: @escaping () -> Bool, blocked: @escaping () -> Bool, openDirection: DrawerEdge? = nil, requiresEdgeZone: Bool = false,
         excludeLeadingEdge: Bool = false,
         progress: Binding<CGFloat>, onSettle: @escaping (Bool) -> Void
     ) -> some View {
