@@ -49,10 +49,12 @@ struct ClaudeContextSheet: View {
                 Text("\(PaseoFormat.percent(percent)) used")
                     .font(typography.serif(28))
                     .foregroundStyle(ClaudePalette.ink)
+                    .monospacedDigit()
                 if let max = usage.maxTokens {
                     Text("of \(Self.tokenCount(max)) tokens")
                         .font(typography.sans(14))
                         .foregroundStyle(ClaudePalette.secondaryInk)
+                        .monospacedDigit()
                 }
             }
             Spacer(minLength: 0)
@@ -131,9 +133,11 @@ struct ClaudeContextSheet: View {
                                 Text(Self.cost(entry.costUsd, fractionDigits: 4))
                                     .font(typography.sans(15, weight: .medium))
                                     .foregroundStyle(ClaudePalette.ink)
+                                    .monospacedDigit()
                                 Text("\(Self.tokenCount(entry.tokens)) tokens")
                                     .font(typography.sans(11))
                                     .foregroundStyle(ClaudePalette.secondaryInk)
+                                    .monospacedDigit()
                             }
                         }
                         .padding(.horizontal, 16)
@@ -165,6 +169,7 @@ struct ClaudeContextSheet: View {
             Text(value)
                 .font(typography.sans(15))
                 .foregroundStyle(ClaudePalette.secondaryInk)
+                .monospacedDigit()
                 .lineLimit(1)
         }
         .padding(.horizontal, 16)

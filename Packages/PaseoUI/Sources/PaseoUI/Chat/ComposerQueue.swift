@@ -50,7 +50,7 @@ struct QueueSendButton: View {
     var body: some View {
         Image(systemName: "arrow.up")
             .font(.system(size: 17, weight: .medium))
-            .frame(width: 36, height: 36)
+            .frame(width: 44, height: 44)
             .foregroundStyle(.white)
             .background(ClaudePalette.orange, in: .circle)
             .opacity(canSend ? 1 : 0.4)

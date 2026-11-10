@@ -35,17 +35,17 @@ struct ClaudePermissionCard: View {
                 questionCard(form)
             } else if isPlan {
                 planCard
-                    .padding(14)
-                    .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+                    .padding(12)
+                    .background(ClaudePalette.panel, in: .rect(cornerRadius: ClaudeRadius.card))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 16).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: ClaudeRadius.card).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
                     }
             } else {
                 toolCard
-                    .padding(14)
-                    .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+                    .padding(12)
+                    .background(ClaudePalette.panel, in: .rect(cornerRadius: ClaudeRadius.card))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 16).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: ClaudeRadius.card).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
                     }
             }
         }
@@ -427,7 +427,7 @@ private struct QuestionSection: View {
                 .font(.system(size: 14))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(ClaudePalette.chip, in: .rect(cornerRadius: 10))
+                .background(ClaudePalette.chip, in: .rect(cornerRadius: ClaudeRadius.control))
                 .padding(.top, 4)
                 .padding(.horizontal, 8)
                 .accessibilityLabel("Other answer")

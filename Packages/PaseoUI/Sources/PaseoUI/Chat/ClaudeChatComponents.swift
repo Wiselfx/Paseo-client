@@ -61,9 +61,9 @@ struct ClaudeCodeBlock: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .background(ClaudePalette.codeBackground, in: .rect(cornerRadius: 8))
+        .background(ClaudePalette.codeBackground, in: .rect(cornerRadius: ClaudeRadius.code))
         .overlay {
-            RoundedRectangle(cornerRadius: 8).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: ClaudeRadius.code).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
         }
     }
 
@@ -159,7 +159,7 @@ struct ClaudeUserBubble: View {
     @State private var showingText = false
 
     /// The bubble's shape, shared by the fill and the context-menu preview.
-    private static let bubbleRadius: CGFloat = 20
+    private static let bubbleRadius: CGFloat = ClaudeRadius.bubble
 
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
@@ -198,7 +198,7 @@ struct ClaudeUserBubble: View {
             .foregroundStyle(ClaudePalette.primaryInk)
             .lineSpacing(8) // 14 / 22
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
             .background(
                 ClaudePalette.userBubble, in: .rect(cornerRadius: Self.bubbleRadius, style: .continuous)
             )

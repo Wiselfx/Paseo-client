@@ -224,12 +224,12 @@ enum ClaudePalette {
             $0.userInterfaceStyle == .dark
                 ? UIColor(white: 1, alpha: 0.09) : UIColor(white: 233 / 255, alpha: 1)
         })
-    /// `#F4F2F3` light / translucent white dark — DSH's `#F4F2F3` / `rgba(255,255,255,0.06)`.
+    /// `#F0EFEC` light / translucent white 6 % dark (OCU §12.7).
     static let userBubble = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
                 ? UIColor(white: 1, alpha: 0.06)
-                : UIColor(red: 244 / 255, green: 242 / 255, blue: 243 / 255, alpha: 1)
+                : UIColor(red: 240 / 255, green: 239 / 255, blue: 236 / 255, alpha: 1)
         })
     /// `--dsh-claude-chip`, the hover/pressed plate.
     static let chip = adaptive(light: 0.965, dark: 0.14)
@@ -319,6 +319,17 @@ enum ClaudeEasing {
     static func snap(duration: Double) -> Animation {
         .timingCurve(0.32, 0.72, 0, 1, duration: duration)
     }
+}
+
+/// The official radius scale (`06:1010,1016`; `v2/03:84-85`): controls 8, cards 12, bubbles 18,
+/// code 12, composers 14, panels 10.
+enum ClaudeRadius {
+    static let control: CGFloat = 8
+    static let card: CGFloat = 12
+    static let bubble: CGFloat = 18
+    static let code: CGFloat = 12
+    static let composer: CGFloat = 14
+    static let panel: CGFloat = 10
 }
 
 /// "Completed in 4s", "Worked for 2m 10s".
@@ -455,9 +466,9 @@ struct ClaudeCard<Content: View>: View {
     var body: some View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 10))
+            .background(ClaudePalette.panel, in: .rect(cornerRadius: ClaudeRadius.card))
             .overlay {
-                RoundedRectangle(cornerRadius: 10).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: ClaudeRadius.card).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
             }
     }
 }

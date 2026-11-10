@@ -174,7 +174,7 @@ struct ClaudeLiveStatusLine: View {
                     .padding(.horizontal, 6)
                     .padding(.leading, 2)
                     .frame(height: 16)
-                    .background(ClaudePalette.warning.opacity(0.16), in: .rect(cornerRadius: 5))
+                    .background(ClaudePalette.warning.opacity(0.16), in: .rect(cornerRadius: ClaudeRadius.control))
                     .transition(.offset(y: 4).combined(with: .scale(scale: 0.92)).combined(with: .opacity))
             }
             Spacer(minLength: 0)

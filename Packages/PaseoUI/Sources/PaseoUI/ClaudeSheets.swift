@@ -77,7 +77,7 @@
     struct RowGroup<Content: View>: View {
         @ViewBuilder var content: () -> Content
         var body: some View {
-            VStack(spacing: 0, content: content).background(ClaudePalette.panel, in: .rect(cornerRadius: 28))
+            VStack(spacing: 0, content: content).background(ClaudePalette.panel, in: .rect(cornerRadius: ClaudeRadius.card))
         }
     }
     struct RowDivider: View {

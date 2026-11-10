@@ -167,7 +167,7 @@ extension ClaudeChatView {
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 18, weight: .regular))
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
                 .foregroundStyle(ClaudePalette.ink)
                 .background(ClaudePalette.chip, in: .circle)
         }
@@ -327,7 +327,7 @@ extension ClaudeChatView {
             } label: {
                 Image(systemName: voiceActiveForAgent && voice.isMuted ? "mic.slash.fill" : "waveform.and.mic")
                     .font(.system(size: 17, weight: .medium))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .foregroundStyle(voiceActiveForAgent ? .white : ClaudePalette.ink)
                     .background(voiceActiveForAgent ? ClaudePalette.orange : ClaudePalette.chip, in: .circle)
             }
@@ -497,7 +497,7 @@ extension ClaudeChatView {
                 }
                 .foregroundStyle(ClaudePalette.ink)
                 .padding(.horizontal, 12)
-                .frame(height: 36)
+                .frame(height: 44)
                 .background(ClaudePalette.chip, in: .capsule)
             }
             .accessibilityLabel("Fast mode on; turn off")
@@ -518,7 +518,7 @@ extension ClaudeChatView {
                 showContextSheet = true
             } label: {
                 ClaudeMeterRing(percent: percent, size: 16, lineWidth: 1.5)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .accessibilityLabel("Context window, \(Int(percent.rounded())) percent used")
@@ -680,9 +680,9 @@ extension ClaudeChatView {
 /// to this many lines and then scrolls inside itself — `TextField(axis: .vertical)` scrolls once it
 /// reaches its line limit.
 enum ComposerFieldLimit {
-    /// About 40 % of the space above the keyboard, in text lines of the 17 pt composer face
-    /// (≈ 8 lines on an iPhone in portrait). Clamped so an unmeasured pass still leaves a usable
-    /// field, and a tall screen can never take more than a third of the card.
+    /// About 40 % of the space above the keyboard — 40 svh, capped at 384 px — in text lines of
+    /// the 17 pt composer face (≈ 8 lines on an iPhone in portrait). Clamped so an unmeasured pass
+    /// still leaves a usable field, and a tall screen can never take more than a third of the card.
     static func lines(
         availableHeight: CGFloat, fontSize: CGFloat = ClaudeTypography.chatBodySize
     ) -> Int {
@@ -705,10 +705,10 @@ struct ComposerCardChrome: ViewModifier {
             .frame(minHeight: 48)
             .background(
                 ClaudePalette.composer,
-                in: .rect(cornerRadius: expanded ? 27 : 24, style: .continuous)
+                in: .rect(cornerRadius: expanded ? ClaudeRadius.composer : 24, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: expanded ? 27 : 24, style: .continuous)
+                RoundedRectangle(cornerRadius: expanded ? ClaudeRadius.composer : 24, style: .continuous)
                     .stroke(ClaudePalette.composerBorder, lineWidth: 0.7)
             }
     }
@@ -749,7 +749,7 @@ struct ComposerModelChip: View {
             .foregroundStyle(ClaudePalette.ink)
             .lineLimit(1)
             .padding(.horizontal, 14)
-            .frame(height: 36)
+            .frame(height: 44)
             .background(ClaudePalette.chip, in: .capsule)
         }
         .buttonStyle(.plain)
@@ -819,7 +819,7 @@ struct ComposerMicButton: View {
         Button(action: action) {
             Image(systemName: isListening ? "mic.fill" : "mic")
                 .font(.system(size: 17, weight: .medium))
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
                 .foregroundStyle(isListening ? ClaudePalette.background : ClaudePalette.ink)
                 .background(isListening ? ClaudePalette.ink : ClaudePalette.chip, in: .circle)
                 .scaleEffect(scale)

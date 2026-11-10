@@ -80,7 +80,7 @@ struct ClaudeFindBar: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 44)
-        .background(ClaudePalette.chip, in: .rect(cornerRadius: 12))
+        .background(ClaudePalette.chip, in: .rect(cornerRadius: ClaudeRadius.control))
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 8)

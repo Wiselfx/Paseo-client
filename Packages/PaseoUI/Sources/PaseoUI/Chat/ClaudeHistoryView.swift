@@ -186,7 +186,7 @@ struct ClaudeHistoryView: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 42)
-        .background(ClaudePalette.chip, in: .rect(cornerRadius: 11))
+        .background(ClaudePalette.chip, in: .rect(cornerRadius: ClaudeRadius.control))
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }

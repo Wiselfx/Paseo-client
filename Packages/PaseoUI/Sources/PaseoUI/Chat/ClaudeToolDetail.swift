@@ -142,9 +142,9 @@ struct ClaudeDiffView: View {
             .frame(maxHeight: 300)
             .fixedSize(horizontal: false, vertical: true)
         }
-        .background(ClaudePalette.codeBackground, in: .rect(cornerRadius: 8))
+        .background(ClaudePalette.codeBackground, in: .rect(cornerRadius: ClaudeRadius.code))
         .overlay {
-            RoundedRectangle(cornerRadius: 8).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: ClaudeRadius.code).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
         }
     }
 

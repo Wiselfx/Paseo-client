@@ -260,8 +260,8 @@
                         codeText(language: language, content: content).accessibilityIdentifier(
                             "markdown.code.content")
                     }.scrollIndicators(.hidden).padding(16)
-                }.background(theme.codeBackground, in: .rect(cornerRadius: 24)).overlay {
-                    RoundedRectangle(cornerRadius: 24).stroke(theme.rule, lineWidth: 0.6)
+                }.background(theme.codeBackground, in: .rect(cornerRadius: ClaudeRadius.code)).overlay {
+                    RoundedRectangle(cornerRadius: ClaudeRadius.code).stroke(theme.rule, lineWidth: 0.6)
                 }
             case .table(let header, let rows, let alignments):
                 let columns = max(header.count, rows.map(\.count).max() ?? 0)

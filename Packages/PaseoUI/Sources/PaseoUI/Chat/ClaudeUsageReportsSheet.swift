@@ -160,6 +160,7 @@ struct ClaudeUsageReportsSheet: View {
             Text(value)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(ClaudePalette.ink)
+                .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -243,6 +244,7 @@ struct ClaudeUsageReportsSheet: View {
                 Text(Self.percent(window.usedPct))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(window.usedPct == nil ? ClaudePalette.secondary : ClaudePalette.ink)
+                    .monospacedDigit()
                 Text(ClaudeUsageResets.short(afterISO: window.resetsAt) ?? "")
                     .font(.system(size: 11))
                     .foregroundStyle(ClaudePalette.secondary)
@@ -263,6 +265,7 @@ struct ClaudeUsageReportsSheet: View {
             Text(value)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(ClaudePalette.ink)
+                .monospacedDigit()
         }
     }
 

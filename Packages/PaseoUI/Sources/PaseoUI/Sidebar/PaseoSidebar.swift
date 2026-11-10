@@ -430,6 +430,7 @@ struct PaseoSidebar: View {
                 Text(resets.map { "\(percent)% · \($0)" } ?? "\(percent)%")
                     .font(typography.sans(11))
                     .foregroundStyle(ClaudePalette.secondaryInk)
+                    .monospacedDigit()
                     .fixedSize()
             }
             .contentShape(.rect)
