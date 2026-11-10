@@ -14,11 +14,27 @@ struct WorkspaceCreatePRSheet: View {
     var onCreate: () -> Void
 
     @FocusState private var focused: Bool
+    @State private var originalTitle: String?
+    @State private var originalBody: String?
 
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isDirty: Bool {
+        guard let originalTitle, let originalBody else { return false }
+        return title != originalTitle || prBody != originalBody
+    }
 
     var body: some View {
-        VStack(spacing: 14) {
-            SheetHeader(title: "Create pull request", close: onCancel)
+        SheetScaffold(
+            "Create pull request",
+            detents: .large,
+            confirm: SheetConfirm("Create pull request", isEnabled: !trimmedTitle.isEmpty, isWorking: busy) {
+                onCreate()
+            },
+            onClose: onCancel
+        ) {
             VStack(alignment: .leading, spacing: 10) {
                 ClaudeCard {
                     TextField("Title", text: $title)
@@ -38,38 +54,18 @@ struct WorkspaceCreatePRSheet: View {
                     .foregroundStyle(Palette.secondaryInk)
                     .padding(.horizontal, 2)
                 if let failure {
-                    Text(failure)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.failureInk)
-                        .padding(.horizontal, 2)
+                    InlineBanner(.failure, title: failure)
                 }
             }
-            .padding(.horizontal, 16)
-            Spacer(minLength: 0)
-            Button {
-                onCreate()
-            } label: {
-                if busy {
-                    ProgressView().tint(Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                } else {
-                    Text("Create pull request")
-                        .font(.paseo(.callout, weight: .semibold))
-                        .foregroundStyle(Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 46)
-                }
+            .padding(.horizontal, Space.lg)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .sheetDirty(isDirty)
+            .onAppear {
+                guard originalTitle == nil else { return }
+                originalTitle = title
+                originalBody = prBody
             }
-            .background(Palette.ink.opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.35 : 1), in: .capsule)
-            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 }
 #endif

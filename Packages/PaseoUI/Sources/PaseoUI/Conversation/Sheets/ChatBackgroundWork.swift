@@ -47,27 +47,20 @@ struct BackgroundWorkRow: View {
 struct ChatBackgroundWorkSheet: View {
     let backgroundWork: BackgroundWorkStore
 
-    @Environment(\.dismiss) private var dismiss
     @State private var pendingStop: BackgroundWorkItem?
 
     private var canStop: Bool { backgroundWork.canStop }
 
     var body: some View {
-        NavigationStack {
+        SheetScaffold("Background Work", detents: .mediumLarge) {
             Group {
                 if backgroundWork.items.isEmpty {
-                    VStack(spacing: 10) {
-                        ClaudeGlyph(kind: .api, size: 28, color: Palette.tertiaryInk)
-                        Text("No background tasks")
-                            .font(.paseo(.title))
-                            .foregroundStyle(Palette.ink)
-                        Text("Background work your agent starts appears here.")
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    EmptyState(
+                        systemImage: "gearshape.2",
+                        title: "No background tasks",
+                        message: "Background work your agent starts appears here."
+                    )
+                    .padding(.horizontal, 40)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
@@ -78,23 +71,13 @@ struct ChatBackgroundWorkSheet: View {
                                 }
                             }
                             if let error = backgroundWork.error {
-                                Text(error)
-                                    .font(.paseo(.caption))
-                                    .foregroundStyle(Palette.failureInk)
-                                    .padding(.horizontal, 16)
+                                InlineBanner(.failure, title: error)
+                                    .padding(.horizontal, Space.lg)
                                     .padding(.vertical, 10)
                             }
                         }
                         .padding(.vertical, 4)
                     }
-                }
-            }
-            .background(Palette.background)
-            .navigationTitle("Background Work")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
                 }
             }
             .confirmationDialog(
@@ -114,7 +97,6 @@ struct ChatBackgroundWorkSheet: View {
                 Text("Its output will be discarded.")
             }
             .task { await backgroundWork.load() }
-            .presentationDetents([.medium, .large])
         }
     }
 
@@ -178,18 +160,14 @@ struct ChatBackgroundWorkSheet: View {
         guard let date = PaseoDate.parse(iso) else {
             return iso.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
         let seconds = max(0, Date().timeIntervalSince(date))
         if seconds < 3600 {
             return "started \(Int(seconds / 60))m ago"
         }
         if Calendar.current.isDateInToday(date) {
-            return "started \(formatter.string(from: date))"
+            return "started \(PaseoFormat.time(date))"
         }
-        formatter.dateStyle = .short
-        return "started \(formatter.string(from: date))"
+        return "started \(PaseoFormat.dateTime(date))"
     }
 }
 #endif

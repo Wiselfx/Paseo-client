@@ -103,44 +103,19 @@ struct ChatSubagentsSheet: View {
     /// Opens a managed subagent in the shell; the caller dismisses the sheet.
     var onOpenAgent: (String) -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @State private var pushTarget: ProviderSubagent?
-    /// One dialog slot: SwiftUI only presents the last dialog attached to a view, so both
-    /// confirmations share this state.
-    @State private var confirmation: Confirmation?
+    @State private var detachTarget: AgentSnapshot?
     @State private var detachingId: String?
     @State private var detachError: String?
 
-    private enum Confirmation {
-        case detach(AgentSnapshot)
-        case archiveFinished
-
-        var title: String {
-            switch self {
-            case .detach: "Detach subagent?"
-            case .archiveFinished: "Archive finished subagents?"
-            }
+    /// Upstream `resolveSubagentLabel` (`subagents/detach-subagent.ts`): a blank title, or the
+    /// "new agent" placeholder, names nothing, so the dialog says "This subagent".
+    static func detachLabel(_ agent: AgentSnapshot) -> String {
+        let trimmed = agent.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty, trimmed.lowercased() != "new agent" else {
+            return "This subagent"
         }
-
-        /// Upstream `resolveDetachSubagentDialog` wording; the archive copy is this app's.
-        var message: String {
-            switch self {
-            case .detach(let agent):
-                "\(Self.detachLabel(agent)) will leave this track and continue as a standalone agent."
-            case .archiveFinished:
-                "Finished rows disappear until the app is relaunched."
-            }
-        }
-
-        /// Upstream `resolveSubagentLabel` (`subagents/detach-subagent.ts`): a blank title, or
-        /// the "new agent" placeholder, names nothing, so the dialog says "This subagent".
-        static func detachLabel(_ agent: AgentSnapshot) -> String {
-            let trimmed = agent.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !trimmed.isEmpty, trimmed.lowercased() != "new agent" else {
-                return "This subagent"
-            }
-            return trimmed
-        }
+        return trimmed
     }
 
     private var items: [ProviderSubagent] {
@@ -164,26 +139,17 @@ struct ChatSubagentsSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        SheetScaffold("Subagents", detents: .mediumLarge) {
             Group {
                 if subagents.isLoading && items.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingState()
                 } else if items.isEmpty && managed.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: "person.2")
-                            .font(.glyph(.xlarge, weight: .light))
-                            .foregroundStyle(Palette.tertiaryInk)
-                        Text("No subagents")
-                            .font(.paseo(.title))
-                            .foregroundStyle(Palette.ink)
-                        Text("Subagents your provider runs for this agent appear here.")
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    EmptyState(
+                        systemImage: "person.2",
+                        title: "No subagents",
+                        message: "Subagents your provider runs for this agent appear here."
+                    )
+                    .padding(.horizontal, 40)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
@@ -200,10 +166,8 @@ struct ChatSubagentsSheet: View {
                                 }
                             }
                             if let error = detachError ?? subagents.error {
-                                Text(error)
-                                    .font(.paseo(.caption))
-                                    .foregroundStyle(Palette.failureInk)
-                                    .padding(.horizontal, 16)
+                                InlineBanner(.failure, title: error)
+                                    .padding(.horizontal, Space.lg)
                                     .padding(.vertical, 10)
                             }
                         }
@@ -211,20 +175,12 @@ struct ChatSubagentsSheet: View {
                     }
                 }
             }
-            .background(Palette.background)
-            .navigationTitle("Subagents")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
             .safeAreaInset(edge: .bottom) {
                 if finishedCount > 0 {
                     VStack(spacing: 0) {
                         ClaudeDivider()
-                        Button("Archive finished") {
-                            confirmation = .archiveFinished
+                        Button("Hide finished") {
+                            hiddenIds.formUnion(items.filter { $0.status != .running }.map(\.id))
                         }
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.ink)
@@ -239,32 +195,25 @@ struct ChatSubagentsSheet: View {
                     subagents: subagents, subagent: subagent)
             }
             .confirmationDialog(
-                confirmation?.title ?? "",
+                "Detach subagent?",
                 isPresented: Binding(
-                    get: { confirmation != nil },
-                    set: { if !$0 { confirmation = nil } }),
+                    get: { detachTarget != nil },
+                    set: { if !$0 { detachTarget = nil } }),
                 titleVisibility: .visible,
-                presenting: confirmation
-            ) { item in
-                switch item {
-                case .detach(let agent):
-                    // Upstream's confirm is not destructive: detaching loses nothing.
-                    Button("Detach") {
-                        confirmation = nil
-                        Task { await detach(agent) }
-                    }
-                case .archiveFinished:
-                    Button("Archive finished", role: .destructive) {
-                        confirmation = nil
-                        hiddenIds.formUnion(items.filter { $0.status != .running }.map(\.id))
-                    }
+                presenting: detachTarget
+            ) { agent in
+                // Upstream's confirm is not destructive: detaching loses nothing.
+                Button("Detach") {
+                    detachTarget = nil
+                    Task { await detach(agent) }
                 }
-                Button("Cancel", role: .cancel) { confirmation = nil }
-            } message: { item in
-                Text(item.message)
+                Button("Cancel", role: .cancel) { detachTarget = nil }
+            } message: { agent in
+                Text(
+                    "\(Self.detachLabel(agent)) will leave this track and continue as a standalone agent."
+                )
             }
             .task { await subagents.load() }
-            .presentationDetents([.medium, .large])
         }
     }
 
@@ -333,7 +282,7 @@ struct ChatSubagentsSheet: View {
                         .accessibilityLabel("Detaching")
                 } else {
                     Button {
-                        confirmation = .detach(agent)
+                        detachTarget = agent
                     } label: {
                         Image(systemName: "person.badge.minus")
                             .font(.glyph(.regular, weight: .medium))
@@ -363,7 +312,7 @@ struct ChatSubagentsSheet: View {
             }
             if canDetach {
                 Button("Detach", systemImage: "person.badge.minus") {
-                    confirmation = .detach(agent)
+                    detachTarget = agent
                 }
             }
         }
@@ -436,30 +385,19 @@ struct ChatSubagentTimelineView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 if loading && rows.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
+                    LoadingState()
                         .padding(.top, 60)
                 } else if let error {
-                    VStack(spacing: 10) {
-                        Text(error)
-                            .font(.paseo(.callout))
-                            .foregroundStyle(Palette.failureInk)
-                            .multilineTextAlignment(.center)
+                    VStack(spacing: Space.md) {
+                        InlineBanner(.failure, title: error)
                         Button("Retry") { Task { await load() } }
-                            .font(.paseo(.callout, weight: .medium))
-                            .foregroundStyle(Palette.ink)
-                            .padding(.horizontal, 18)
-                            .frame(minHeight: 36)
-                            .background(Palette.chip, in: .capsule)
+                            .buttonStyle(.paseoSecondary)
                     }
                     .padding(.top, 60)
                     .frame(maxWidth: .infinity)
                 } else if rows.isEmpty {
-                    Text("No timeline rows yet.")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
+                    EmptyState(title: "No timeline rows yet.")
                         .padding(.top, 60)
-                        .frame(maxWidth: .infinity)
                 } else {
                     ForEach(rows, id: \.seq) { row in
                         timelineRow(row)

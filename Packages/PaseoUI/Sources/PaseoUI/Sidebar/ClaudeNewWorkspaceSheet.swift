@@ -81,6 +81,12 @@ struct ClaudeNewWorkspaceSheet: View {
         prompt.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Any field the user touched: the sheet asks before discarding.
+    private var isDirty: Bool {
+        !trimmedName.isEmpty || !trimmedPrompt.isEmpty || isolation != .worktree
+            || projectId != nil || baseBranchText != currentBranch
+    }
+
     private var canCreate: Bool {
         guard busyStep == nil, selectedProject != nil else { return false }
         if isolation == .worktree { return directory.supportsWorkspaceCreate }
@@ -88,8 +94,16 @@ struct ClaudeNewWorkspaceSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            SheetHeader(title: "New workspace", close: { dismiss() })
+        SheetScaffold(
+            "New workspace",
+            detents: .large,
+            confirm: SheetConfirm(
+                "Create workspace", isEnabled: canCreate, isWorking: busyStep != nil,
+                identifier: "newWorkspace.create"
+            ) {
+                create()
+            }
+        ) {
             ScrollView {
                 VStack(spacing: 12) {
                     RowGroup {
@@ -134,29 +148,17 @@ struct ClaudeNewWorkspaceSheet: View {
                     }
                     promptSection
                     if let error = directory.actionError {
-                        Text(error)
-                            .font(.paseo(.caption))
-                            .foregroundStyle(Palette.failureInk)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 4)
+                        InlineBanner(.failure, title: error)
                     }
                     if let error = catalog.actionError {
-                        Text(error)
-                            .font(.paseo(.caption))
-                            .foregroundStyle(Palette.failureInk)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 4)
+                        InlineBanner(.failure, title: error)
                     }
-                    createButton
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
+                .padding(.horizontal, Space.lg)
+                .padding(.bottom, Space.md)
+                .sheetDirty(isDirty)
             }
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
         .onAppear {
             baseBranchText = currentBranch
             if !directory.supportsWorkspaceCreate { isolation = .local }
@@ -258,29 +260,6 @@ struct ClaudeNewWorkspaceSheet: View {
                 .padding(12)
             }
         }
-    }
-
-    private var createButton: some View {
-        Button {
-            create()
-        } label: {
-            HStack(spacing: 8) {
-                if busyStep != nil {
-                    ProgressView().controlSize(.small).tint(Palette.background)
-                }
-                Text(busyStep?.label ?? "Create workspace")
-                    .font(.paseo(.callout, weight: .medium))
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .foregroundStyle(Palette.background)
-            .background(Palette.ink, in: .capsule)
-            .opacity(canCreate ? 1 : 0.4)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canCreate)
-        .padding(.top, 4)
-        .accessibilityIdentifier("newWorkspace.create")
     }
 
     private func create() {

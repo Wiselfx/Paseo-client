@@ -45,30 +45,41 @@ struct AddProjectSheet: View {
     private var canSearch: Bool { directory.supportsGithubRepositorySearch }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Add project", close: { dismiss() })
+        SheetScaffold("Add project", detents: .large, confirm: confirmAction) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: Space.md) {
                     modePicker
                     switch mode {
                     case .folder: folderMode
                     case .github: githubMode
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .padding(.horizontal, Space.lg)
+                .padding(.bottom, Space.lg)
             }
             .scrollIndicators(.hidden)
-            if mode == .folder {
-                addButton
-            } else if let selected {
-                cloneBar(repository: selected)
+        }
+    }
+
+    /// The bar's one button: add a folder, or clone the picked repository.
+    private var confirmAction: SheetConfirm? {
+        switch mode {
+        case .folder:
+            SheetConfirm(
+                "Add project", isEnabled: canAdd, isWorking: directory.isAddingProject,
+                identifier: "addProject.confirm"
+            ) {
+                Task { await addFromPath() }
+            }
+        case .github:
+            guard let selected else { return nil }
+            return SheetConfirm(
+                "Clone", isEnabled: canCloneRepository(selected), isWorking: directory.isCloning,
+                identifier: "addProject.clone"
+            ) {
+                Task { await clone(selected) }
             }
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
     }
 
     // MARK: Mode picker
@@ -127,38 +138,11 @@ struct AddProjectSheet: View {
                 .foregroundStyle(Palette.captionInk)
                 .padding(.leading, 4)
             if let actionError = directory.actionError {
-                Text(actionError)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 4)
+                InlineBanner(.failure, title: actionError)
             }
         }
     }
 
-    private var addButton: some View {
-        Button {
-            Task { await addFromPath() }
-        } label: {
-            HStack(spacing: 8) {
-                if directory.isAddingProject {
-                    ProgressView().controlSize(.small).tint(Palette.background)
-                }
-                Text(directory.isAddingProject ? "Adding…" : "Add project")
-                    .font(.paseo(.callout, weight: .medium))
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .foregroundStyle(Palette.background)
-            .background(Palette.ink, in: .capsule)
-            .opacity(canAdd ? 1 : 0.4)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canAdd)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
-        .accessibilityIdentifier("addProject.confirm")
-    }
 
     private var canAdd: Bool {
         !directory.isAddingProject
@@ -207,7 +191,7 @@ struct AddProjectSheet: View {
             .textInputAutocapitalization(.never)
             .onChange(of: search) { _, query in scheduleSearch(query) }
             if searchState == .searching {
-                ProgressView().controlSize(.small)
+                InlineProgress()
             } else if !search.isEmpty {
                 Button {
                     search = ""
@@ -245,11 +229,8 @@ struct AddProjectSheet: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 24)
         case .failed(let message):
-            Text(message)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.failureInk)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 16)
+            InlineBanner(.failure, title: message)
+                .padding(.top, Space.lg)
         }
         if !results.isEmpty {
             RowGroup {
@@ -363,37 +344,11 @@ struct AddProjectSheet: View {
                 .frame(height: 48)
             }
             if let actionError = directory.actionError {
-                Text(actionError)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                InlineBanner(.failure, title: actionError)
             }
         }
     }
 
-    private func cloneBar(repository: GithubRepository) -> some View {
-        Button {
-            Task { await clone(repository) }
-        } label: {
-            HStack(spacing: 8) {
-                if directory.isCloning {
-                    ProgressView().controlSize(.small).tint(Palette.background)
-                }
-                Text(directory.isCloning ? "Cloning…" : "Clone")
-                    .font(.paseo(.callout, weight: .medium))
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .foregroundStyle(Palette.background)
-            .background(Palette.ink, in: .capsule)
-            .opacity(canCloneRepository(repository) ? 1 : 0.4)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canCloneRepository(repository))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
-        .accessibilityIdentifier("addProject.clone")
-    }
 
     private func canCloneRepository(_ repository: GithubRepository) -> Bool {
         !directory.isCloning

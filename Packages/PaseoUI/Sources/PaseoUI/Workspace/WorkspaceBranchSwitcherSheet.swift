@@ -38,25 +38,18 @@ struct WorkspaceBranchSwitcherSheet: View {
     private var isBusy: Bool { switchingTo != nil }
 
     var body: some View {
-        VStack(spacing: 14) {
-            SheetHeader(title: "Switch branch", close: { dismiss() })
-            searchField
-            if let switchError {
-                Text(switchError)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .accessibilityIdentifier("branchSwitcher.error")
+        SheetScaffold("Switch branch", detents: .mediumLarge) {
+            VStack(spacing: Space.md) {
+                searchField
+                if let switchError {
+                    InlineBanner(.failure, title: switchError)
+                        .padding(.horizontal, Space.lg)
+                        .accessibilityIdentifier("branchSwitcher.error")
+                }
+                content
+                    .frame(maxHeight: .infinity)
             }
-            content
-                .frame(maxHeight: .infinity)
-            Spacer(minLength: 8)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
         .task {
             guard !hasLoaded else { return }
             // One page, like upstream's `getBranchSuggestions(200)`.
@@ -76,7 +69,7 @@ struct WorkspaceBranchSwitcherSheet: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
             if isBusy {
-                ProgressView().controlSize(.small)
+                InlineProgress()
             }
         }
         .padding(.horizontal, 14)
@@ -87,16 +80,15 @@ struct WorkspaceBranchSwitcherSheet: View {
 
     @ViewBuilder private var content: some View {
         if !hasLoaded && extras.branchSuggestions.isEmpty {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingState()
         } else if let branchError = extras.branchError, extras.branchSuggestions.isEmpty {
             // Upstream `branchSwitcher.failedToLoad`.
-            Text("Could not load branches. Reopen the picker to try again.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.failureInk)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityHint(Text(branchError))
+            InlineBanner(
+                .failure, title: "Could not load branches. Reopen the picker to try again."
+            )
+            .padding(.horizontal, Space.xl)
+            .frame(maxHeight: .infinity)
+            .accessibilityHint(Text(branchError))
         } else if branches.isEmpty {
             emptyState
         } else {
@@ -112,12 +104,11 @@ struct WorkspaceBranchSwitcherSheet: View {
                 // Upstream keeps a footer under the options when the last read failed
                 // (`branch-switcher.tsx`, `errorFooter`).
                 if extras.branchError != nil {
-                    Text("Could not load branches. Reopen the picker to try again.")
-                        .font(.paseo(.caption))
-                        .foregroundStyle(Palette.failureInk)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
+                    InlineBanner(
+                        .failure, title: "Could not load branches. Reopen the picker to try again."
+                    )
+                    .padding(.horizontal, Space.lg)
+                    .padding(.vertical, 10)
                 }
             }
         }
@@ -126,10 +117,7 @@ struct WorkspaceBranchSwitcherSheet: View {
     /// Upstream `branchSwitcher.empty`, also shown when the search filters everything out — the
     /// Combobox uses the same string for both.
     private var emptyState: some View {
-        Text("No branches found.")
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState(title: "No branches found.")
     }
 
     private func branchRow(_ branch: BranchSuggestion) -> some View {
@@ -148,7 +136,7 @@ struct WorkspaceBranchSwitcherSheet: View {
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if switchingTo == branch.name {
-                    ProgressView().controlSize(.small)
+                    InlineProgress()
                 } else if current {
                     Image(systemName: "checkmark")
                         .font(.glyph(.small, weight: .semibold))

@@ -9,15 +9,12 @@ import SwiftUI
 struct ClaudeUsageReportsSheet: View {
     let session: HostSession
 
-    @Environment(\.dismiss) private var dismiss
-
     private var overview: UsageOverview {
         UsageOverviewBuilder.compute(agents: session.agents)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Usage", close: { dismiss() })
+        SheetScaffold("Usage", detents: .large) {
             Group {
                 if session.hostUsage.reports.isEmpty && overview.sessions == 0 {
                     emptyState
@@ -40,10 +37,6 @@ struct ClaudeUsageReportsSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.height(560)])
-        .presentationDragIndicator(.visible)
         .task {
             if case .idle = session.hostUsage.phase {
                 _ = await session.hostUsage.load(forceRefresh: false)
@@ -56,30 +49,15 @@ struct ClaudeUsageReportsSheet: View {
     @ViewBuilder private var emptyState: some View {
         switch session.hostUsage.phase {
         case .loading, .idle:
-            VStack(spacing: 12) {
-                ProgressView().controlSize(.small).tint(Palette.ink)
-                Text("Loading usage…")
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.secondaryInk)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingState("Loading usage…")
         case .failed(let message):
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Usage isn't available right now.")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                Text(message)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            EmptyState(
+                title: "Usage isn't available right now.",
+                message: message
+            )
             .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         case .ready:
-            Text("The host reports no usage sources for this device.")
-                .font(.paseo(.callout))
-                .foregroundStyle(Palette.secondaryInk)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            EmptyState(title: "The host reports no usage sources for this device.")
         }
     }
 

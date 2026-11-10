@@ -9,11 +9,8 @@ import SwiftUI
 struct MessageTextSheet: View {
     let text: String
 
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Select text", close: { dismiss() })
+        SheetScaffold("Select text", detents: .mediumLarge) {
             ScrollView {
                 Text(text)
                     .font(.paseo(.callout))
@@ -21,12 +18,10 @@ struct MessageTextSheet: View {
                     .textSelection(.enabled)
                     .lineSpacing(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
+                    .padding(.horizontal, Space.lg)
+                    .padding(.vertical, Space.lg)
             }
         }
-        .background(Palette.background)
-        .presentationDetents([.medium, .large])
     }
 }
 #endif

@@ -10,10 +10,8 @@ struct ProviderDetailSheet: View {
     let session: HostSession
     let providerID: String
 
-    @Environment(\.dismiss) private var dismiss
     @State private var newModelID = ""
     @State private var modelError: String?
-    @State private var diagnosticCopied = false
 
 
     private var entry: ProviderSnapshotEntry? { session.agentControl.provider(providerID) }
@@ -28,24 +26,19 @@ struct ProviderDetailSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: entry?.label ?? providerID, close: { dismiss() })
+        SheetScaffold(entry?.label ?? providerID, detents: .large) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: Space.lg) {
                     statusSection
                     diagnosticSection
                     discoveredSection
                     customModelsSection
+                    refreshBar
                 }
-                .padding(.bottom, 24)
+                .padding(.bottom, Space.xxl)
             }
             .scrollIndicators(.hidden)
-            refreshBar
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
         .task {
             if diagnostic == nil {
                 _ = await session.hostSettings.providerDiagnostic(providerID)
@@ -83,11 +76,8 @@ struct ProviderDetailSheet: View {
             statusRow(symbol: "clock", title: "Catalogue", detail: catalogueDetail)
             if let error = entry?.error, !error.isEmpty {
                 RowDivider()
-                Text(error)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
+                InlineBanner(.failure, title: error)
+                    .padding(.horizontal, Space.lg)
                     .padding(.vertical, 10)
             }
         }
@@ -204,21 +194,8 @@ struct ProviderDetailSheet: View {
             }
             .frame(maxHeight: 220)
             HStack {
-                Button {
-                    Haptics.selection()
-                    UIPasteboard.general.string = text
-                    diagnosticCopied = true
-                    Task {
-                        try? await Task.sleep(for: .seconds(1.5))
-                        diagnosticCopied = false
-                    }
-                } label: {
-                    Label(diagnosticCopied ? "Copied" : "Copy",
-                          systemImage: diagnosticCopied ? "checkmark" : "doc.on.doc")
-                        .font(.paseo(.footnote, weight: .medium))
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("settings.providers.diagnostic.copy")
+                CopyButton(text: text, label: "Copy diagnostic")
+                    .accessibilityIdentifier("settings.providers.diagnostic.copy")
                 Button {
                     Haptics.selection()
                     Task { _ = await session.hostSettings.providerDiagnostic(providerID) }
@@ -326,10 +303,8 @@ struct ProviderDetailSheet: View {
             addCustomModelRow
         }
         if let modelError {
-            Text(modelError)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.failureInk)
-                .padding(.leading, 16)
+            InlineBanner(.failure, title: modelError)
+                .padding(.horizontal, Space.lg)
         }
         Text("Custom models live in the daemon's config, merged into this provider's catalogue.")
             .font(.paseo(.footnote))
@@ -433,27 +408,15 @@ struct ProviderDetailSheet: View {
     private var refreshBar: some View {
         HStack {
             Spacer()
-            Button {
+            Button("Refresh") {
                 Haptics.selection()
                 Task { await session.agentControl.refreshCatalog() }
-            } label: {
-                Label(
-                    session.agentControl.phase == .loading ? "Refreshing…" : "Refresh",
-                    systemImage: "arrow.clockwise")
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(Palette.background)
-                    .padding(.horizontal, 17)
-                    .frame(minHeight: 44)
-                    .background(Palette.ink, in: .capsule)
-                    .opacity(session.agentControl.phase == .loading ? 0.7 : 1)
             }
-            .buttonStyle(.plain)
-            .disabled(session.agentControl.phase == .loading)
+            .buttonStyle(.paseoPrimary(isWorking: session.agentControl.phase == .loading))
             .accessibilityIdentifier("settings.providers.refresh")
             Spacer()
         }
-        .padding(.vertical, 12)
-        .overlay(alignment: .top) { Divider() }
+        .padding(.vertical, Space.md)
     }
 
     // MARK: Shared bits

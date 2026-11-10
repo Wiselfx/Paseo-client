@@ -40,24 +40,19 @@ struct ImportSessionSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Import session") { dismiss() }
+        SheetScaffold("Import session", detents: .large) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: Space.md) {
                     scopeRow
                     if store.supportsSearch { searchField }
                     if providersToFetch.count > 1 { providerFilter }
                     content
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .padding(.horizontal, Space.lg)
+                .padding(.bottom, Space.lg)
             }
             .scrollIndicators(.hidden)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
         .task {
             await session.agentControl.loadCatalog(cwd: scopeCwd)
             await reload()
@@ -178,32 +173,26 @@ struct ImportSessionSheet: View {
         if !store.supportsSnapshot {
             quietText("Update the host to import sessions.")
         } else if store.phase == .loading, store.entries.isEmpty {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Loading recent sessions…")
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.secondaryInk)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 24)
+            LoadingState("Loading recent sessions…")
+                .padding(.top, 24)
         } else if providersToFetch.isEmpty, store.phase == .ready {
             quietText("No importable providers are enabled.")
         } else if case .failed = store.phase, store.entries.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(store.providerErrors.first?.message ?? "Could not load sessions.")
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
+            VStack(alignment: .leading, spacing: Space.sm) {
+                InlineBanner(
+                    .failure, title: store.providerErrors.first?.message ?? "Could not load sessions."
+                )
                 refreshButton
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 16)
+            .padding(.top, Space.lg)
         } else {
             if !store.providerErrors.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(store.providerErrors, id: \.provider) { error in
-                        Text("Could not load \(providerLabel(error.provider)) sessions")
-                            .font(.paseo(.caption))
-                            .foregroundStyle(Palette.failureInk)
+                        InlineBanner(
+                            .failure, title: "Could not load \(providerLabel(error.provider)) sessions"
+                        )
                     }
                     refreshButton
                 }
@@ -233,10 +222,7 @@ struct ImportSessionSheet: View {
                 }
             }
             if let error = store.actionError {
-                Text(error)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                InlineBanner(.failure, title: error)
             }
         }
     }
@@ -297,7 +283,7 @@ struct ImportSessionSheet: View {
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     if importing {
-                        ProgressView().controlSize(.small)
+                        InlineProgress()
                         Text("Importing…")
                     } else {
                         Text(providerLabel(entry.providerId))

@@ -27,8 +27,7 @@ public struct AddHostMethodsSheet: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Add connection") { dismiss() }
+        SheetScaffold("Add connection", detents: .large) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     methodRow(
@@ -49,10 +48,6 @@ public struct AddHostMethodsSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
     }
 
     private func methodRow(
@@ -113,8 +108,7 @@ public struct PairScanSheet: View {
     @State private var didAccept = false
 
     public var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Scan QR") { dismiss() }
+        SheetScaffold("Scan QR", detents: .large) {
             if permissionDenied {
                 concernContent(
                     title: "Camera permission",
@@ -145,10 +139,6 @@ public struct PairScanSheet: View {
                     .padding(.vertical, 10)
             }
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
         .onAppear {
             Task {
                 guard DataScannerViewController.isSupported else {
@@ -329,8 +319,7 @@ public struct PastePairingSheet: View {
     @State private var invalid = false
 
     public var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Paste pairing link") { dismiss() }
+        SheetScaffold("Paste pairing link", detents: .large) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Treat this pairing link like a password. Anyone with it can access this daemon.")
                     .font(.paseo(.footnote))
@@ -379,10 +368,6 @@ public struct PastePairingSheet: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
     }
 
     private func submit() {
@@ -422,8 +407,7 @@ public struct HostConfirmationPairingSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     public var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Connect to this host?") { dismiss() }
+        SheetScaffold("Connect to this host?", detents: .large) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(kind == .changedConnection
@@ -469,10 +453,6 @@ public struct HostConfirmationPairingSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
     }
 
     private func detailRow(label: String, value: String) -> some View {
@@ -517,8 +497,7 @@ public struct PairingPasswordSheet: View {
     @State private var password = ""
 
     public var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Password for \(host)") { dismiss() }
+        SheetScaffold("Password for \(host)", detents: .large) {
             VStack(alignment: .leading, spacing: 12) {
                 SecureField("Host password", text: $password)
                     .font(.paseo(.body))
@@ -556,10 +535,6 @@ public struct PairingPasswordSheet: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
     }
 
     private func submit() {

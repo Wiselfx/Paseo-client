@@ -23,7 +23,6 @@ struct WorkspaceTerminalFileSheet: View {
     let checkout: CheckoutStore
     let target: TerminalLinkedFile
 
-    @Environment(\.dismiss) private var dismiss
     @State private var text: String?
     @State private var failure: String?
     @State private var isLoading = false
@@ -32,21 +31,14 @@ struct WorkspaceTerminalFileSheet: View {
     private var files: WorkspaceFiles { checkout.files }
 
     var body: some View {
-        NavigationStack {
+        SheetScaffold(WorkspaceFileFormat.lastComponent(target.path), detents: .mediumLarge) {
             Group {
                 if let text {
                     linkedContent(text)
                 } else if let failure {
                     failureView(failure)
                 } else {
-                    ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .navigationTitle(WorkspaceFileFormat.lastComponent(target.path))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    LoadingState()
                 }
             }
         }
@@ -91,27 +83,12 @@ struct WorkspaceTerminalFileSheet: View {
     }
 
     private func failureView(_ message: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.glyph(.xlarge, weight: .light))
-                .foregroundStyle(Palette.tertiaryInk)
-            Text(message)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .multilineTextAlignment(.center)
-            Button {
-                Task { await load() }
-            } label: {
-                Text("Retry")
-                    .font(.paseo(.footnote, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 32)
-                    .background(Palette.chip, in: .capsule)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 32)
+        EmptyState(
+            systemImage: "exclamationmark.triangle",
+            title: message,
+            action: (title: "Retry", run: { Task { await load() } })
+        )
+        .padding(.horizontal, Space.xl)
     }
 
     private func load() async {
