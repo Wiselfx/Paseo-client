@@ -46,7 +46,7 @@ public enum ConnectionURI {
         }
         let path = components.path
         if !path.isEmpty, path != "/ws", path != "/ws/" {
-            return .invalid("The daemon lives at ws://…/ws (path is always /ws).")
+            return .invalid("The host listens at ws://…/ws (path is always /ws).")
         }
         let port = components.port ?? (isTLS ? 443 : 80)
 

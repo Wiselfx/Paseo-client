@@ -44,7 +44,7 @@ struct HelpPage: View {
             } header: {
                 Text("Community")
             } footer: {
-                Text(appVersion + (session.serverInfo?.version.map { " · Daemon \($0)" } ?? ""))
+                Text(appVersion + (session.serverInfo?.version.map { " · Host \($0)" } ?? ""))
             }
         }
         .inlinePageTitle("Help & support")

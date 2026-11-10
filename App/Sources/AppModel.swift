@@ -380,24 +380,24 @@ final class AppModel {
         switch error {
         case .rejected(let reason):
             switch reason {
-            case "password_required": "This daemon needs a password."
+            case "password_required": "This host needs a password."
             case "incorrect_password": "Wrong password."
-            case "incompatible_protocol": "This daemon's version isn't compatible. Update Paseo."
-            default: "The daemon refused the connection (\(reason))."
+            case "incompatible_protocol": "This host's version isn't compatible. Update Paseo."
+            default: "The host refused the connection (\(reason))."
             }
-        case .timeout: "The daemon didn't answer. Check the address and that it's running."
-        case .transport(let message): "Couldn't reach the daemon: \(message)"
+        case .timeout: "The host didn't answer. Check the address and that it's running."
+        case .transport(let message): "Couldn't reach the host: \(message)"
         case .closed(let code, let reason):
             switch code {
             case 4002:
                 // Terminal (R17): protected handshake failed — relinking the same way will fail again.
-                "The pairing link didn't work. Ask the daemon to show a new pairing code."
+                "The pairing link didn't work. Ask the host to show a new pairing code."
             case 4003:
                 "The encrypted connection failed. Check the pairing link and try again."
             default:
                 "Connection closed (\(code)) \(reason)"
             }
-        case .protocolViolation(let message): "Unexpected reply from the daemon: \(message)"
+        case .protocolViolation(let message): "Unexpected reply from the host: \(message)"
         case .disconnected: "Disconnected."
         }
     }

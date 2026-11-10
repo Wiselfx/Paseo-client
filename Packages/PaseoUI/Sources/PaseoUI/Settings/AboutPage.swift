@@ -18,7 +18,7 @@ struct AboutPage: View {
                     Text(versionLine)
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.secondaryInk)
-                    Text("A native client for the Paseo daemon.")
+                    Text("A native client for the Paseo host.")
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.secondaryInk)
                 }
@@ -33,7 +33,7 @@ struct AboutPage: View {
                 )
                 .panelRow()
                 ListRow(
-                    title: "Daemon version",
+                    title: "Host version",
                     accessory: ListRow.Accessory.value(session.serverInfo?.version ?? "Unknown")
                 )
                 .panelRow()
@@ -42,7 +42,7 @@ struct AboutPage: View {
             }
             Section {
                 linkRow(
-                    "Paseo daemon", detail: "github.com/getpaseo/paseo",
+                    "Paseo host", detail: "github.com/getpaseo/paseo",
                     url: URL(string: "https://github.com/getpaseo/paseo"))
                 linkRow(
                     "Paseo Client", detail: "github.com/Wiselfx/Paseo-client",

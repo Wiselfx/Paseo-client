@@ -80,11 +80,11 @@ struct DiagnosticsPage: View {
         VStack(alignment: .leading, spacing: Space.sm) {
             switch session.hostSettings.diagnosticsState {
             case .idle:
-                Text("Ask the daemon for its support bundle: versions, provider availability and runtime metrics.")
+                Text("Ask the host for its support bundle: versions, provider availability and runtime metrics.")
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.secondaryInk)
             case .unsupported:
-                Text("Not supported by this daemon.")
+                Text("Not supported by this host.")
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.secondaryInk)
             case .loading:
@@ -208,7 +208,7 @@ struct DiagnosticsPage: View {
         lines.append("Device: \(UIDevice.current.model)")
         lines.append("Connection: \(connectionLine(session))")
         lines.append("Host: \(hostDigest(session))")
-        lines.append("Daemon: \(session.serverInfo?.version ?? "unknown")")
+        lines.append("Host version: \(session.serverInfo?.version ?? "unknown")")
         lines.append("Protocol: \(session.serverInfo?.protocolVersion.map(String.init) ?? "unknown")")
         if let serverId = session.serverInfo?.serverId, !serverId.isEmpty {
             lines.append("Server ID: \(serverId)")

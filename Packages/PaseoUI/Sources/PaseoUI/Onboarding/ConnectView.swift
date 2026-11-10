@@ -273,7 +273,7 @@ public struct ConnectView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Use TLS (wss)")
                             .font(.paseo(.body))
-                        Text("For daemons behind a TLS terminator (Caddy, nginx).")
+                        Text("For hosts behind a TLS terminator (Caddy, nginx).")
                             .font(.paseo(.caption))
                             .foregroundStyle(Palette.secondaryInk)
                     }
