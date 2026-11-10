@@ -35,6 +35,14 @@ struct ChatOutlineRail: View {
     /// Everything but the panel-width rule comes from `rail.web.tsx:13-22`. The strip is the touch
     /// target; the pills sit at its trailing edge (upstream grows them rightward from the left).
     static let stripWidth: CGFloat = 24
+    /// Inset from the screen's trailing edge, so the ticks read as a layer over the content and
+    /// not as marks on the bubble's edge (D1 §4).
+    static let trailingInset: CGFloat = 6
+    /// The soft backing behind the ticks while the rail is revealed (D1 §4): it sits over the
+    /// content, so the ticks never look painted onto a bubble.
+    static let backingWidth: CGFloat = 26
+    static let backingPadding: CGFloat = 4
+    static let backingOpacity: Double = 0.85
     static let slotHeight: CGFloat = 8
     static let restingPillHeight: CGFloat = 2
     static let magnifiedPillHeight: CGFloat = 4
@@ -76,6 +84,7 @@ struct ChatOutlineRail: View {
 
     private var rail: some View {
         ZStack(alignment: .topTrailing) {
+            backing
             slots
             if let index = hoveredIndex, items.indices.contains(index) {
                 previewBubble(items[index].preview)
@@ -86,7 +95,7 @@ struct ChatOutlineRail: View {
         // The touch strip is exactly the tick column; the trailing padding only insets it from
         // the screen edge, so the transcript keeps the rest.
         .contentShape(.rect)
-        .padding(.trailing, 8)
+        .padding(.trailing, Self.trailingInset)
         .opacity(isRevealed || isTouching ? 1 : 0)
         // Hidden, the strip gives the edge back to scrolling (a right thumb lives there); it is
         // live whenever the ticks show, like grabbing the system scroll indicator.
@@ -102,6 +111,19 @@ struct ChatOutlineRail: View {
         .accessibilityIdentifier("transcript.turnRail")
         .accessibilityLabel("Jump to message")
         .accessibilityValue(accessibilityPosition)
+    }
+
+    /// The soft layer the ticks sit on while the rail is out: a background-coloured capsule over
+    /// the content, so the ticks never read as marks on the bubble's edge (D1 §4).
+    private var backing: some View {
+        Capsule(style: .continuous)
+            .fill(Palette.background.opacity(Self.backingOpacity))
+            .frame(
+                width: Self.backingWidth,
+                height: railHeight + Self.backingPadding * 2)
+            .offset(y: -Self.backingPadding)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private var slots: some View {

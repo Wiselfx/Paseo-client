@@ -40,35 +40,54 @@ public struct ChatScreen: View {
     }
 
     public var body: some View {
+        // D1 §1: the transcript is the screen's base layer; the chrome floats over it in
+        // safe-area bars and the system's scroll edge effect is the only background.
+        TranscriptView(store: store, controller: controller)
+            .safeAreaBar(edge: .top) { topChrome }
+            .safeAreaBar(edge: .bottom) { bottomChrome }
+            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+            // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so
+            // the corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).
+            .foregroundStyle(Palette.ink)
+            .tint(Palette.ink)
+            // File links in prose and in your bubbles (`paseo-file://…`) open the file viewer;
+            // ordinary links fall through to the host's handler unchanged.
+            .environment(\.openURL, controller.fileLinkAction(host: openURL))
+            .environment(\.chatActions, controller.actions)
+            .modifier(ChatInputWiring(store: store, controller: controller, focused: $focused))
+            .modifier(UserActivityWiring(store: store, controller: controller, focused: $focused))
+            .modifier(MascotDriver(store: store, session: session, controller: controller))
+            .modifier(ChatSheets(store: store, session: session, controller: controller))
+            .onAppear {
+                controller.toastCenter = toast
+                controller.reduceMotion = reduceMotion
+                controller.openURLFromEnvironment = { url in openURL(url) }
+            }
+            .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
+            .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }
+    }
+
+    // MARK: Chrome
+
+    /// The top bar: two glass buttons and the centred title. No band, and the find bar joins it
+    /// when find is open; content dissolves under them through the scroll edge effect (D1 §1).
+    private var topChrome: some View {
         VStack(spacing: 0) {
             ChatHeaderBar(store: store, controller: controller)
             if controller.find.isOpen {
                 ChatFindBarView(store: store, controller: controller)
             }
-            TranscriptView(store: store, controller: controller)
+        }
+    }
+
+    /// The bottom bar: the subagent pill and the composer, both clear behind their own cards, so
+    /// the transcript runs under them (D1 §1).
+    private var bottomChrome: some View {
+        VStack(spacing: 0) {
             SubagentPill(store: store, controller: controller)
             ComposerView(
                 mode: .conversation, store: store, controller: controller, focused: $focused)
         }
-        // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so the
-        // corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).
-        .foregroundStyle(Palette.ink)
-        .tint(Palette.ink)
-        // File links in prose and in your bubbles (`paseo-file://…`) open the file viewer;
-        // ordinary links fall through to the host's handler unchanged.
-        .environment(\.openURL, controller.fileLinkAction(host: openURL))
-        .environment(\.chatActions, controller.actions)
-        .modifier(ChatInputWiring(store: store, controller: controller, focused: $focused))
-        .modifier(UserActivityWiring(store: store, controller: controller, focused: $focused))
-        .modifier(MascotDriver(store: store, session: session, controller: controller))
-        .modifier(ChatSheets(store: store, session: session, controller: controller))
-        .onAppear {
-            controller.toastCenter = toast
-            controller.reduceMotion = reduceMotion
-            controller.openURLFromEnvironment = { url in openURL(url) }
-        }
-        .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
-        .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }
     }
 }
 
@@ -86,16 +105,21 @@ struct ChatInputWiring: ViewModifier {
     let controller: ChatController
     @FocusState.Binding var focused: Bool
 
+    /// Inline images decode at the screen's width in pixels; `UIScreen.main` is deprecated on
+    /// iOS 26, so the scale comes from the environment (D1 §4).
+    @Environment(\.displayScale) private var displayScale
+
     func body(content: Content) -> some View {
         content
             .task { await controller.loadSlashCommands() }
             .onChange(of: store.activeTurnId) { oldId, newId in
                 guard newId == nil, oldId != nil else { return }
-                controller.flushQueuedMessage()
                 // The anchor's job (hold your message at the top while the answer arrives) is
-                // done; hand back to the normal follow rules.
+                // done. Clearing it first lets a queued message arm its own runway.
                 controller.anchoringToAnswer = false
-                controller.isFollowing = true
+                controller.flushQueuedMessage()
+                // Follow comes back from the transcript's idle rule, not from here: the reader
+                // may have scrolled away from the end while the answer ran.
             }
             .draftObserver(
                 store: store,
@@ -106,8 +130,10 @@ struct ChatInputWiring: ViewModifier {
                 onMentionQueryChange: { query in controller.handleMentionQuery(query) })
             .onAppear {
                 controller.seedSavedDraft()
+                controller.displayScale = displayScale
                 controller.dictation.onDraft = { [store] text in store.draft = text }
             }
+            .onChange(of: displayScale) { _, scale in controller.displayScale = scale }
     }
 }
 

@@ -145,6 +145,9 @@ struct TranscriptJump: Equatable {
     // Follow and anchor.
     var isFollowing = true
     var anchoringToAnswer = false
+    /// "Back to the end" is on screen. Set by the transcript from its distance from the end: it
+    /// flips only when that distance crosses a viewport, never per scroll frame (D1 §3).
+    var showsBackToEnd = false
     /// A jump the transcript still owes (`jumpToPrompt` records it here).
     var pendingJump: TranscriptJump?
 
@@ -858,13 +861,32 @@ struct TranscriptJump: Equatable {
             file.kind == .image, file.encoding == .base64, let content = file.content,
             let data = Data(base64Encoded: content)
         else { return nil }
-        let maxPixel = Double(UIScreen.main.bounds.width * UIScreen.main.scale)
+        let maxPixel = Double(screenWidth * displayScale)
         let image = await Task.detached(priority: .userInitiated) {
             ComposerImageProcessor.thumbnail(data: data, maxPixelSize: maxPixel)
         }.value
         guard let image else { return nil }
         imageCache.setObject(image, forKey: key)
         return image
+    }
+
+    /// The scale of the screen this conversation is on, injected by `ChatScreen` from
+    /// `@Environment(\.displayScale)`.
+    var displayScale: CGFloat = 2
+
+    /// A phone's width in points, for the rare case where no window scene is attached (previews,
+    /// a scene-less snapshot).
+    private static let fallbackScreenWidth: CGFloat = 430
+
+    /// The width of the screen we are on, in points. `UIScreen.main` is deprecated on iOS 26, so
+    /// the screen comes from the attached window scene (D1 §4).
+    private var screenWidth: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        guard let width = scene?.screen.bounds.width, width > 0 else {
+            return Self.fallbackScreenWidth
+        }
+        return width
     }
 
     /// The prose image loader. One closure for the controller's life, so `ClaudeProse` keeps its
@@ -906,6 +928,15 @@ struct TranscriptJump: Equatable {
 
     func requestEndScroll() {
         endScrollRequest += 1
+    }
+
+    /// "Back to the end" (D1 §3): follow comes back at once and the transcript glides there, so
+    /// the button leaves the screen on touch-down instead of fading out under the finger.
+    func returnToEnd() {
+        anchoringToAnswer = false
+        isFollowing = true
+        showsBackToEnd = false
+        requestEndScroll()
     }
 
     func dismissKeyboard() {
