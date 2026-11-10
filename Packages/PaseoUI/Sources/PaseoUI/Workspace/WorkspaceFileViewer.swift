@@ -807,7 +807,7 @@ private enum ExitAction: Identifiable {
 }
 
 /// One file's decoded content. Built once per `(path, revision, theme)` off the main actor for
-/// the decode/split and on the main actor for the highlighter (JavaScriptCore is main-only).
+/// the decode/split, and on `CodeHighlighter` (an actor) for the highlighting.
 private struct FileRenderModel: @unchecked Sendable {
     enum Payload {
         case text(text: String, highlighted: AttributedString?, lines: [String])
@@ -836,9 +836,8 @@ private struct FileRenderModel: @unchecked Sendable {
         }.value
         switch decoded.payload {
         case .text(let text, let lines):
-            // Highlighting runs through JavaScriptCore, which must stay on the main thread.
             let highlighted = lines.count <= 500
-                ? highlightedText(text, language: language, theme: theme) : nil
+                ? await highlightedText(text, language: language, theme: theme) : nil
             return FileRenderModel(payload: .text(text: text, highlighted: highlighted, lines: lines))
         case .image(let data, let image):
             return FileRenderModel(payload: .image(data: data, image: image))
@@ -849,13 +848,11 @@ private struct FileRenderModel: @unchecked Sendable {
         }
     }
 
-    @MainActor
+    /// `CodeHighlighter` runs off the main actor (R9); nil means keep the plain text.
     private static func highlightedText(
         _ text: String, language: String?, theme: ClaudeCodeSyntaxTheme
-    ) -> AttributedString? {
-        let colored = ClaudeCodeHighlighter.shared.highlight(text, language: language, theme: theme)
-        // Same fallback behavior as the Markdown code blocks: plain text if the highlighter refuses.
-        return (try? AttributedString(colored, including: \.uiKit)) ?? AttributedString(text)
+    ) async -> AttributedString? {
+        await CodeHighlighter.shared.highlight(text, language: language, theme: theme)
     }
 }
 
@@ -975,9 +972,10 @@ struct WorkspaceCodeView: View {
         .codeTypeScale()
     }
 
+    /// One two-axis scroll view: a horizontal scroll ancestor would make the stack lay out every
+    /// row, so the lines scroll both ways from the same view.
     private var longContent: some View {
-        ScrollView(.vertical) {
-            ScrollView(.horizontal) {
+        ScrollView([.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                         HStack(alignment: .firstTextBaseline, spacing: Space.sm) {
@@ -995,8 +993,6 @@ struct WorkspaceCodeView: View {
                     }
                 }
                 .padding(.vertical, Space.sm)
-            }
-            .scrollBounceBehavior(.basedOnSize)
         }
         .scrollBounceBehavior(.basedOnSize)
         .codeTypeScale()

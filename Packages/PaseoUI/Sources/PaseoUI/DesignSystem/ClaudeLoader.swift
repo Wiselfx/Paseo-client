@@ -10,6 +10,8 @@ import SwiftUI
 /// exactly as the web row does) without affecting layout.
 struct ClaudeLoader: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
+    @Environment(\.scenePhase) private var scenePhase
     /// The lane in play when the loader mounts — at random, and never repeating itself.
     @State private var startLane = Int.random(in: 0..<3)
     @State private var start = Date()
@@ -36,9 +38,10 @@ struct ClaudeLoader: View {
             Color.clear
                 .frame(width: 18, height: 14)
                 .overlay {
-                    // No interval: the schedule follows the display (120 Hz on ProMotion), so
-                    // the dots are as smooth as the rest of the app (P3).
-                    TimelineView(.animation) { context in
+                    // 30 Hz is all the bounce needs, and the clock stops entirely while the
+                    // surface is covered, the app is backgrounded, or Reduce Motion is on
+                    // (R9 §3).
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: paused)) { context in
                         Canvas { canvas, _ in
                             draw(canvas, time: max(0, context.date.timeIntervalSince(start)))
                         }
@@ -47,6 +50,11 @@ struct ClaudeLoader: View {
                 }
                 .accessibilityHidden(true)
         }
+    }
+
+    /// Nothing off screen or in the background needs a 30 Hz clock.
+    private var paused: Bool {
+        reduceMotion || isSurfaceObscured || scenePhase != .active
     }
 
     // MARK: The 10 s clock and the 480 ms hand-over

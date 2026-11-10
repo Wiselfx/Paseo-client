@@ -121,8 +121,11 @@ struct SandboxedHTMLView: UIViewRepresentable {
 /// loads to data:/blob: URLs. Theme vars follow docs/research/05-rich-media-spec.md §2:
 /// `--viz-fg`, `--viz-bg`, `--viz-accent`.
 enum RichHTMLDocument {
+    /// Reports the document's height once per animation frame and only when it moved by half a
+    /// point or more (R9 §2). A `ResizeObserver` on the body replaces the whole-document
+    /// `MutationObserver` where it exists; the observer is only the fallback.
     private static let heightReporter = """
-        <script>(function(){function r(){var t=document.documentElement,b=document.body;var h=Math.max(t?t.scrollHeight:0,b?b.scrollHeight:0);if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vizHeight){window.webkit.messageHandlers.vizHeight.postMessage(h);}}new MutationObserver(r).observe(document.documentElement,{childList:true,subtree:true,attributes:true,characterData:true});window.addEventListener('load',r);r();})();</script>
+        <script>(function(){var last=-1,queued=false;function post(){queued=false;var t=document.documentElement,b=document.body;var h=Math.max(t?t.scrollHeight:0,b?b.scrollHeight:0);if(Math.abs(h-last)<0.5)return;last=h;if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vizHeight){window.webkit.messageHandlers.vizHeight.postMessage(h);}}function schedule(){if(queued)return;queued=true;requestAnimationFrame(post);}if(window.ResizeObserver){new ResizeObserver(schedule).observe(document.documentElement);if(document.body)new ResizeObserver(schedule).observe(document.body);if(document.documentElement.firstElementChild)new ResizeObserver(schedule).observe(document.documentElement.firstElementChild);}else{new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true,attributes:true,characterData:true});}window.addEventListener('load',schedule);schedule();})();</script>
         """
 
     /// The ` ```visualize ` fence: a self-contained HTML fragment in a sandboxed document.

@@ -53,9 +53,11 @@
         public var theme: ClaudeMarkdownTheme
         @State private var tableViewport: CGFloat = 0
         @State private var expandedCode: ExpandedCode?
-        @Environment(\.colorScheme) private var colorScheme
         private let codeContent: ((String?, String) -> AttributedString)?
         private let onAction: (MarkdownAction) -> Void
+        /// True while the producing turn runs: code blocks wait for their fence to close before
+        /// they ask the highlighter (R9 §1).
+        private let isStreaming: Bool
         private let imageContent: ((MarkdownImage) -> AnyView)?
         private let unsupportedContent: ((MarkdownUnsupportedKind, String) -> AnyView)?
         public init(
@@ -63,6 +65,7 @@
             imageContent: ((MarkdownImage) -> AnyView)? = nil,
             codeContent: ((String?, String) -> AttributedString)? = nil,
             unsupportedContent: ((MarkdownUnsupportedKind, String) -> AnyView)? = nil,
+            isStreaming: Bool = false,
             onAction: @escaping (MarkdownAction) -> Void = { _ in }
         ) {
             ClaudeFontResources.register()
@@ -71,12 +74,17 @@
             self.imageContent = imageContent
             self.codeContent = codeContent
             self.unsupportedContent = unsupportedContent
+            self.isStreaming = isStreaming
             self.onAction = onAction
         }
         public init(
-            _ source: String, theme: ClaudeMarkdownTheme = .init(),
+            _ source: String, theme: ClaudeMarkdownTheme = .init(), isStreaming: Bool = false,
             onAction: @escaping (MarkdownAction) -> Void = { _ in }
-        ) { self.init(document: .init(source: source), theme: theme, onAction: onAction) }
+        ) {
+            self.init(
+                document: .init(source: source), theme: theme, isStreaming: isStreaming,
+                onAction: onAction)
+        }
         public var body: some View {
             blocks(document.blocks).foregroundStyle(theme.foreground)
                 .onGeometryChange(for: CGFloat.self) {
@@ -319,15 +327,24 @@
                         alignment: alignment == .right ? .trailing : alignment == .center ? .center : .leading)
             }
         }
-        private func codeText(language: String?, content: String) -> some View {
-            Text(codeContent?(language, content) ?? defaultHighlightedCode(language: language, content: content)).font(
-                theme.codeFont
-            ).textSelection(.enabled).fixedSize(horizontal: true, vertical: false).codeTypeScale()
-        }
-        private func defaultHighlightedCode(language: String?, content: String) -> AttributedString {
-            let colored = ClaudeCodeHighlighter.shared.highlight(
-                content, language: language, theme: colorScheme == .dark ? .dark : .light)
-            return (try? AttributedString(colored, including: \.uiKit)) ?? AttributedString(content)
+        /// First paint is plain mono in ink; the highlighted tokens swap in from the actor with the
+        /// same font and metrics, so there is no layout jump (R9 §1).
+        @ViewBuilder private func codeText(language: String?, content: String) -> some View {
+            if let codeContent {
+                Text(codeContent(language, content))
+                    .font(theme.codeFont)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .codeTypeScale()
+            } else {
+                ClaudeHighlightedCode(
+                    language: language, content: content, theme: theme,
+                    isStreaming: isStreaming
+                )
+                .textSelection(.enabled)
+                .fixedSize(horizontal: true, vertical: false)
+                .codeTypeScale()
+            }
         }
         private func inlineText(
             _ children: [MarkdownInline], font: Font, bold: Bool = false, italic: Bool = false, strike: Bool = false,
@@ -514,6 +531,54 @@ private extension Array where Element == [MarkdownInline] {
     func hashStable(into hasher: inout Hasher) {
         hasher.combine(count)
         for row in self { row.hashStable(into: &hasher) }
+    }
+}
+
+/// One fenced code block, highlighted **after** first paint (R9 §1).
+///
+/// The plain mono text is what mounts; the actor's tokens arrive a moment later and replace it with
+/// the same font and metrics, so nothing moves. While the producing turn is still streaming the
+/// block waits — the last fence of a running answer is not closed yet — and highlights once the
+/// turn ends.
+struct ClaudeHighlightedCode: View {
+    let language: String?
+    let content: String
+    let theme: ClaudeMarkdownTheme
+    /// The reveal's "still arriving" signal: true while the producing turn runs.
+    let isStreaming: Bool
+
+    @State private var highlighted: AttributedString?
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var syntaxTheme: ClaudeCodeSyntaxTheme {
+        colorScheme == .dark ? .dark : .light
+    }
+
+    /// Identity of the request: language, theme and the text's length. The actor caches on the
+    /// source hash, so two revisions of different length are two entries, and a re-render of the
+    /// same block asks for the same one.
+    private var requestKey: String {
+        "\(syntaxTheme.rawValue)/\(language ?? "")/\(content.utf16.count)"
+    }
+
+    var body: some View {
+        Text(highlighted ?? AttributedString(content))
+            .font(theme.codeFont)
+            .foregroundStyle(theme.foreground)
+            .task(id: requestKey) {
+                guard !isStreaming else { return }
+                let result = await CodeHighlighter.shared.highlight(
+                    content, language: language, theme: syntaxTheme)
+                if highlighted != result { highlighted = result }
+            }
+            .onChange(of: isStreaming) { _, streaming in
+                guard !streaming else { return }
+                Task {
+                    let result = await CodeHighlighter.shared.highlight(
+                        content, language: language, theme: syntaxTheme)
+                    if highlighted != result { highlighted = result }
+                }
+            }
     }
 }
 #endif

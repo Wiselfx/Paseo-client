@@ -87,7 +87,8 @@ struct ClaudeRevealProse: View {
                     if !trimmed.isEmpty {
                         ClaudeMarkdownView(
                             document: .cached(trimmed), theme: theme,
-                            imageContent: imageContent, onAction: onAction)
+                            imageContent: imageContent, isStreaming: isStreaming,
+                            onAction: onAction)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .mask(sweepMask(active: ref.isTailMarkdown))
                     }

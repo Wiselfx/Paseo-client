@@ -174,6 +174,8 @@ struct ClaudeCrabView: View {
     var onBodyTap: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
+    @Environment(\.scenePhase) private var scenePhase
     /// The animation playing right now; restarts the frame clock when it changes.
     @State private var current: CrabAnimation
     @State private var startedAt = Date()
@@ -195,8 +197,11 @@ struct ClaudeCrabView: View {
                 frame(at: Date(timeIntervalSinceReferenceDate: 0), index: current.sheet.still)
             } else {
                 // The frame clock, not the display clock: the crab changes frame every 80 ms, so
-                // the timeline only needs to tick that often (finding #11).
-                TimelineView(.animation(minimumInterval: CrabAnimation.frameSeconds)) { context in
+                // the timeline only needs to tick that often (finding #11). It stops entirely
+                // while the crab is covered or the app is in the background (R9 §3).
+                TimelineView(
+                    .animation(minimumInterval: CrabAnimation.frameSeconds, paused: paused)
+                ) { context in
                     frame(at: context.date)
                 }
             }
@@ -208,6 +213,10 @@ struct ClaudeCrabView: View {
             current = newValue
             startedAt = Date()
         }
+    }
+
+    private var paused: Bool {
+        reduceMotion || isSurfaceObscured || scenePhase != .active
     }
 
     private func frame(at date: Date, index forced: Int? = nil) -> some View {
