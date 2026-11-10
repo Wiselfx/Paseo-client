@@ -30,15 +30,6 @@ final class ComposerQueueStore {
     }
 }
 
-/// Medium-weight impact for the long-press queue gesture (the one-place `Haptics` enum has no
-/// medium style).
-@MainActor enum QueueHaptics {
-    private static let medium = UIImpactFeedbackGenerator(style: .medium)
-    static func mediumImpact() {
-        medium.impactOccurred()
-    }
-}
-
 /// The send control: tap sends (steers a running turn); long-press queues the draft for after
 /// the turn (medium haptic). Matches the orange-circle look of the previous send button.
 struct QueueSendButton: View {
@@ -49,10 +40,10 @@ struct QueueSendButton: View {
 
     var body: some View {
         Image(systemName: "arrow.up")
-            .font(.system(size: 17, weight: .medium))
+            .font(.glyph(.regular, weight: .medium))
             .frame(width: 36, height: 36)
             .foregroundStyle(.white)
-            .background(ClaudePalette.orange, in: .circle)
+            .background(Palette.orange, in: .circle)
             .opacity(canSend ? 1 : 0.4)
             .contentShape(.rect)
             // exclusively(before:): the tap only fires when the long-press fails first, so a

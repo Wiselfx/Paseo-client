@@ -187,7 +187,6 @@ struct ComposerAttachmentPill: View {
     let onRetry: () -> Void
     let onTapImage: (UIImage) -> Void
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -216,7 +215,7 @@ struct ComposerAttachmentPill: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: 56, height: 56)
-                        .clipShape(.rect(cornerRadius: 10))
+                        .clipShape(.rect(cornerRadius: Radius.md))
                     if case .uploading = item.phase {
                         Circle().fill(Color.black.opacity(0.35))
                         Circle()
@@ -229,11 +228,11 @@ struct ComposerAttachmentPill: View {
                         ZStack {
                             Color.black.opacity(0.45)
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 17, weight: .medium))
+                                .font(.glyph(.regular, weight: .medium))
                                 .foregroundStyle(.white)
                         }
                         .frame(width: 56, height: 56)
-                        .clipShape(.rect(cornerRadius: 10))
+                        .clipShape(.rect(cornerRadius: Radius.md))
                     }
                 }
                 .contentShape(.rect)
@@ -244,12 +243,12 @@ struct ComposerAttachmentPill: View {
             HStack(spacing: 8) {
                 ZStack {
                     Image(systemName: "doc")
-                        .font(.system(size: 22, weight: .light))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.glyph(.large, weight: .light))
+                        .foregroundStyle(Palette.secondaryInk)
                     if case .uploading = item.phase {
                         Circle()
                             .trim(from: 0, to: max(0.05, uploadProgress))
-                            .stroke(ClaudePalette.ink.opacity(0.55),
+                            .stroke(Palette.ink.opacity(0.55),
                                     style: StrokeStyle(lineWidth: 2, lineCap: .round))
                             .frame(width: 32, height: 32)
                             .rotationEffect(.degrees(-90))
@@ -258,21 +257,21 @@ struct ComposerAttachmentPill: View {
                 .frame(width: 36, height: 36)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(item.fileName)
-                        .font(typography.sans(12, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.caption, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: 110, alignment: .leading)
                     if case .failed(let message) = item.phase {
                         Text(message)
-                            .font(typography.sans(10))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.caption2))
+                            .foregroundStyle(Palette.failureInk)
                             .lineLimit(1)
                             .frame(maxWidth: 110, alignment: .leading)
                     } else {
                         Text(ComposerImageProcessor.byteCountText(item.byteCount))
-                            .font(typography.sans(10))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.caption2))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .lineLimit(1)
                     }
                 }
@@ -281,8 +280,8 @@ struct ComposerAttachmentPill: View {
                         onRetry()
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.glyph(.small, weight: .medium))
+                            .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.plain)
@@ -292,9 +291,9 @@ struct ComposerAttachmentPill: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .frame(height: 56)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 12))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
             .overlay {
-                RoundedRectangle(cornerRadius: 12).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
             }
         }
     }
@@ -323,18 +322,18 @@ struct ComposerAttachmentPill: View {
     private func forgePill(_ attachment: AgentAttachment) -> some View {
         HStack(spacing: 8) {
             Image(systemName: forgeSymbol(attachment))
-                .font(.system(size: 17, weight: .light))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.regular, weight: .light))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(width: 36, height: 36)
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.fileName)
-                    .font(typography.sans(12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.caption, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .frame(maxWidth: 110, alignment: .leading)
                 Text(forgeKindWord(attachment))
-                    .font(typography.sans(10))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.paseo(.caption2))
+                    .foregroundStyle(Palette.tertiaryInk)
                     .lineLimit(1)
                     .frame(maxWidth: 110, alignment: .leading)
             }
@@ -342,9 +341,9 @@ struct ComposerAttachmentPill: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(height: 56)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 12))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: 12).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
         }
     }
 
@@ -370,7 +369,7 @@ struct ComposerAttachmentPill: View {
             onRemove()
         } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
+                .font(.glyph(.small, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
                 .background(Color.black.opacity(0.6), in: .circle)

@@ -15,7 +15,6 @@ struct SubagentTrackPill: View {
     var managed: [AgentSnapshot] = []
     let action: () -> Void
 
-    private let typography = ClaudeTypography()
 
     var running: Int {
         items.filter { $0.status == .running }.count + managed.filter { $0.status == .running }.count
@@ -50,18 +49,18 @@ struct SubagentTrackPill: View {
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: "person.2")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.glyph(.small, weight: .medium))
                 Text(text)
-                    .font(typography.sans(13))
+                    .font(.paseo(.footnote))
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
-            .foregroundStyle(failed > 0 ? ClaudePalette.failureInk : ClaudePalette.secondaryInk)
+            .foregroundStyle(failed > 0 ? Palette.failureInk : Palette.secondaryInk)
             .padding(.horizontal, 12)
             .frame(height: 32)
-            .background(ClaudePalette.chip, in: .capsule)
+            .background(Palette.chip, in: .capsule)
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
@@ -84,10 +83,10 @@ enum SubagentStatusWord {
 
     static func dot(_ status: ProviderSubagent.Status) -> Color {
         switch status {
-        case .running: ClaudePalette.orange
-        case .completed: ClaudePalette.successInk
-        case .failed: ClaudePalette.failureInk
-        case .canceled, .unknown: ClaudePalette.tertiaryInk
+        case .running: Palette.orange
+        case .completed: Palette.successInk
+        case .failed: Palette.failureInk
+        case .canceled, .unknown: Palette.tertiaryInk
         }
     }
 }
@@ -100,7 +99,6 @@ struct ChatSubagentsSheet: View {
     let session: HostSession
     let parentAgentId: String
     let subagents: ConversationSubagents
-    let typography: ClaudeTypography
     @Binding var hiddenIds: Set<String>
     /// Opens a managed subagent in the shell; the caller dismisses the sheet.
     var onOpenAgent: (String) -> Void
@@ -174,14 +172,14 @@ struct ChatSubagentsSheet: View {
                 } else if items.isEmpty && managed.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "person.2")
-                            .font(.system(size: 28, weight: .light))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.glyph(.xlarge, weight: .light))
+                            .foregroundStyle(Palette.tertiaryInk)
                         Text("No subagents")
-                            .font(typography.serif(19))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.title))
+                            .foregroundStyle(Palette.ink)
                         Text("Subagents your provider runs for this agent appear here.")
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                     }
@@ -203,8 +201,8 @@ struct ChatSubagentsSheet: View {
                             }
                             if let error = detachError ?? subagents.error {
                                 Text(error)
-                                    .font(typography.sans(12))
-                                    .foregroundStyle(ClaudePalette.failureInk)
+                                    .font(.paseo(.caption))
+                                    .foregroundStyle(Palette.failureInk)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 10)
                             }
@@ -213,7 +211,7 @@ struct ChatSubagentsSheet: View {
                     }
                 }
             }
-            .background(ClaudePalette.background)
+            .background(Palette.background)
             .navigationTitle("Subagents")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -228,17 +226,17 @@ struct ChatSubagentsSheet: View {
                         Button("Archive finished") {
                             confirmation = .archiveFinished
                         }
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.ink)
                         .frame(maxWidth: .infinity, minHeight: 48)
                         .contentShape(.rect)
                     }
-                    .background(ClaudePalette.panel)
+                    .background(Palette.panel)
                 }
             }
             .navigationDestination(item: $pushTarget) { subagent in
                 ChatSubagentTimelineView(
-                    subagents: subagents, subagent: subagent, typography: typography)
+                    subagents: subagents, subagent: subagent)
             }
             .confirmationDialog(
                 confirmation?.title ?? "",
@@ -282,23 +280,23 @@ struct ChatSubagentsSheet: View {
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(rowTitle(item))
-                        .font(typography.sans(15, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     if let subtitle = rowSubtitle(item) {
                         Text(subtitle)
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
                 Text(SubagentStatusWord.label(item.status))
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 16)
             .frame(height: 56)
@@ -318,12 +316,12 @@ struct ChatSubagentsSheet: View {
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(managedTitle(agent))
-                    .font(typography.sans(15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 Text(providerLabel(agent))
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
@@ -338,8 +336,8 @@ struct ChatSubagentsSheet: View {
                         confirmation = .detach(agent)
                     } label: {
                         Image(systemName: "person.badge.minus")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.glyph(.regular, weight: .medium))
+                            .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 28, height: 28)
                             .contentShape(.rect)
                     }
@@ -349,8 +347,8 @@ struct ChatSubagentsSheet: View {
                 }
             }
             Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.small, weight: .semibold))
+                .foregroundStyle(Palette.tertiaryInk)
         }
         .padding(.horizontal, 16)
         .frame(height: 56)
@@ -429,7 +427,6 @@ struct ChatSubagentsSheet: View {
 struct ChatSubagentTimelineView: View {
     let subagents: ConversationSubagents
     let subagent: ProviderSubagent
-    let typography: ClaudeTypography
 
     @State private var rows: [ProviderSubagentTimelineRequest.Response.Row] = []
     @State private var loading = true
@@ -445,22 +442,22 @@ struct ChatSubagentTimelineView: View {
                 } else if let error {
                     VStack(spacing: 10) {
                         Text(error)
-                            .font(typography.sans(14))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.failureInk)
                             .multilineTextAlignment(.center)
                         Button("Retry") { Task { await load() } }
-                            .font(typography.sans(15, weight: .medium))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.callout, weight: .medium))
+                            .foregroundStyle(Palette.ink)
                             .padding(.horizontal, 18)
-                            .frame(height: 36)
-                            .background(ClaudePalette.chip, in: .capsule)
+                            .frame(minHeight: 36)
+                            .background(Palette.chip, in: .capsule)
                     }
                     .padding(.top, 60)
                     .frame(maxWidth: .infinity)
                 } else if rows.isEmpty {
                     Text("No timeline rows yet.")
-                        .font(typography.sans(14))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.top, 60)
                         .frame(maxWidth: .infinity)
                 } else {
@@ -472,7 +469,7 @@ struct ChatSubagentTimelineView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 18)
         }
-        .background(ClaudePalette.background)
+        .background(Palette.background)
         .navigationTitle(rowTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
@@ -499,47 +496,47 @@ struct ChatSubagentTimelineView: View {
         case .userMessage(let message):
             VStack(alignment: .leading, spacing: 4) {
                 Text("TASK")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.paseo(.caption2, weight: .semibold))
                     .tracking(0.6)
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .foregroundStyle(Palette.tertiaryInk)
                 Text(message.text)
-                    .font(typography.serif(15))
-                    .foregroundStyle(ClaudePalette.primaryInk)
+                    .font(.paseo(.title))
+                    .foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
         case .assistantMessage(let message):
             Text(message.text)
-                .font(typography.serif(14))
-                .foregroundStyle(ClaudePalette.primaryInk)
+                .font(.paseo(.title))
+                .foregroundStyle(Palette.ink)
                 .lineSpacing(6)
                 .fixedSize(horizontal: false, vertical: true)
         case .reasoning(let reasoning):
             Text(reasoning.text.replacingOccurrences(of: "\n", with: " "))
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.tertiaryInk)
                 .lineLimit(2)
         case .toolCall(let call):
-            ToolCallLine(call: call, typography: typography)
+            ToolCallLine(call: call)
         case .todo(let list):
             Text("Todo · \(PaseoFormat.integer(list.items.count)) item\(list.items.count == 1 ? "" : "s")")
-                .font(typography.mono(12))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.codeSmall))
+                .foregroundStyle(Palette.tertiaryInk)
         case .error(let message):
             Text(message)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.failureInk)
         case .notification(let level, let message):
             Text("\(level) · \(message)")
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.tertiaryInk)
         case .compaction:
             Text("Compacted")
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.tertiaryInk)
         case .unknown:
             Text("Unknown item")
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.tertiaryInk)
         }
     }
 }
@@ -547,19 +544,18 @@ struct ChatSubagentTimelineView: View {
 /// A one-line `verb · argument` for a tool call, e.g. `Read · src/server.ts`.
 private struct ToolCallLine: View {
     let call: ToolCall
-    let typography: ClaudeTypography
 
     private var presentation: ToolCallPresentation { ToolCallPresentation(call) }
 
     var body: some View {
         HStack(spacing: 8) {
             Text(presentation.title)
-                .font(typography.mono(12))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.codeSmall))
+                .foregroundStyle(Palette.tertiaryInk)
             if let subtitle = presentation.subtitle {
                 Text(subtitle)
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.tertiaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }

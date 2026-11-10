@@ -18,7 +18,6 @@ struct ClaudeHeroSeats: View {
 
     @State private var appliedProfileId: String?
     @State private var applyingProfile = false
-    private let typography = ClaudeTypography()
 
     private var workspaces: [WorkspaceDescriptor] { session.workspaceDirectory.workspaces }
 
@@ -69,20 +68,20 @@ struct ClaudeHeroSeats: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "folder")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                 Text(currentWorkspace?.name ?? "Workspace")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 14)
             .frame(height: 32)
-            .background(ClaudePalette.chip, in: .capsule)
+            .background(Palette.chip, in: .capsule)
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
@@ -112,20 +111,20 @@ struct ClaudeHeroSeats: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                 Text(profileLabel)
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 14)
             .frame(height: 32)
-            .background(ClaudePalette.chip, in: .capsule)
+            .background(Palette.chip, in: .capsule)
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)

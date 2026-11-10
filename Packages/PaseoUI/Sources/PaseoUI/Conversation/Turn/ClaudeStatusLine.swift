@@ -134,7 +134,6 @@ extension Turn {
 /// the turn clock, and "No response yet" after 10 s of silence (doc 08 §2, §3).
 struct ClaudeLiveStatusLine: View {
     let turn: Turn
-    let typography: ClaudeTypography
     @State private var activity: ClaudeActivity
     @State private var wordingChangedAt = Date()
     /// A wording of the call's own words seen during a stand, held to be written first when it ends.
@@ -151,9 +150,8 @@ struct ClaudeLiveStatusLine: View {
     /// need more than this.
     private static let tick: TimeInterval = 1.0 / 30.0
 
-    init(turn: Turn, typography: ClaudeTypography = ClaudeTypography()) {
+    init(turn: Turn) {
         self.turn = turn
-        self.typography = typography
         _activity = State(initialValue: ClaudeActivity.current(for: turn))
     }
 
@@ -176,29 +174,29 @@ struct ClaudeLiveStatusLine: View {
     private func line(at date: Date) -> some View {
         HStack(spacing: 6) {
             ClaudeLoader()
-            sweepText(activity.text, font: typography.sans(14), at: date)
+            sweepText(activity.text, font: .paseo(.callout), at: date)
                 .id(activity)
                 .transition(.asymmetric(insertion: .claudeWordEntrance, removal: .claudeWordExit))
             Text(DurationText.short(elapsed(at: date)))
-                .font(typography.sans(13).monospacedDigit())
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.footnote).monospacedDigit())
+                .foregroundStyle(Palette.captionInk)
                 .padding(.leading, 2)
             if showsOvertime(at: date) {
                 Text("No response yet")
-                    .font(typography.sans(11, weight: .medium))
-                    .foregroundStyle(ClaudePalette.warning)
+                    .font(.paseo(.caption2, weight: .medium))
+                    .foregroundStyle(Palette.warning)
                     .padding(.horizontal, 6)
                     .padding(.leading, 2)
                     .frame(height: 16)
-                    .background(ClaudePalette.warning.opacity(0.16), in: .rect(cornerRadius: 5))
+                    .background(Palette.warning.opacity(0.16), in: .rect(cornerRadius: Radius.xs))
                     .transition(.offset(y: 4).combined(with: .scale(scale: 0.92)).combined(with: .opacity))
             }
             Spacer(minLength: 0)
         }
         .frame(height: 24)
-        .animation(reduceMotion ? nil : .easeInOut(duration: ClaudeMotion.swap), value: activity)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: activity)
         .animation(
-            reduceMotion ? nil : .spring(response: ClaudeMotion.open, dampingFraction: 0.62),
+            Motion.disclosure.resolved(reduceMotion: reduceMotion),
             value: showsOvertime(at: date))
         .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
         .accessibilityElement(children: .combine)
@@ -209,7 +207,7 @@ struct ClaudeLiveStatusLine: View {
     /// The band is a masked copy of the glyphs tinted the shimmer ink — never a coloured wash.
     @ViewBuilder
     private func sweepText(_ text: String, font: Font, at date: Date) -> some View {
-        let base = Text(text).font(font).foregroundStyle(ClaudePalette.secondaryInk)
+        let base = Text(text).font(font).foregroundStyle(Palette.secondaryInk)
         if reduceMotion {
             base
         } else {
@@ -217,7 +215,7 @@ struct ClaudeLiveStatusLine: View {
                 if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: date) {
                     Text(text)
                         .font(font)
-                        .foregroundStyle(ClaudePalette.shimmerInk)
+                        .foregroundStyle(Palette.ink)
                         .mask(ClaudeSweep.windowGradient(phase: phase))
                         .allowsHitTesting(false)
                 }

@@ -15,10 +15,10 @@ struct RichCard<Content: View>: View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 14))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
             }
     }
 }
@@ -100,25 +100,25 @@ struct RichMapCard: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         } else {
-                            Rectangle().fill(ClaudePalette.codeSurface)
+                            Rectangle().fill(Palette.codeSurface)
                                 .overlay {
                                     Image(systemName: "map")
                                         .font(.system(size: 24, weight: .light))
-                                        .foregroundStyle(ClaudePalette.secondaryInk)
+                                        .foregroundStyle(Palette.secondaryInk)
                                 }
                         }
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 150)
                     .clipped()
-                    .clipShape(.rect(cornerRadius: 12))
+                    .clipShape(.rect(cornerRadius: Radius.md))
                     HStack(spacing: 6) {
                         Image(systemName: "mappin")
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .foregroundStyle(Palette.secondaryInk)
                         Text(caption)
                             .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
                     }
                     .padding(.horizontal, 4)
@@ -255,22 +255,22 @@ struct RichLinkCard: View {
 
     private var placeholderCard: some View {
         HStack(alignment: .center, spacing: 10) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(ClaudePalette.chip)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                .fill(Palette.chip)
                 .frame(width: 32, height: 32)
                 .overlay {
                     Image(systemName: "link")
                         .font(.system(size: 15, weight: .regular))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(RichContentDetector.domain(for: url))
                     .font(typography.sans(13, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.primaryInk)
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 Text(RichContentDetector.displayURL(url))
                     .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -323,18 +323,18 @@ struct YouTubeRichCard: View {
                     AsyncImage(url: URL(string: RichContentDetector.youTubeThumbnailURL(id: reference.id))) { phase in
                         switch phase {
                         case .empty:
-                            Rectangle().fill(ClaudePalette.codeSurface)
+                            Rectangle().fill(Palette.codeSurface)
                         case .success(let image):
                             image.resizable().aspectRatio(contentMode: .fill)
                         case .failure:
-                            Rectangle().fill(ClaudePalette.codeSurface)
+                            Rectangle().fill(Palette.codeSurface)
                                 .overlay {
                                     Image(systemName: "photo")
                                         .font(.system(size: 24, weight: .light))
-                                        .foregroundStyle(ClaudePalette.secondaryInk)
+                                        .foregroundStyle(Palette.secondaryInk)
                                 }
                         @unknown default:
-                            Rectangle().fill(ClaudePalette.codeSurface)
+                            Rectangle().fill(Palette.codeSurface)
                         }
                     }
                     .frame(maxWidth: full ? .infinity : 320)
@@ -353,19 +353,19 @@ struct YouTubeRichCard: View {
                         .accessibilityHidden(true)
                 }
                 .frame(maxWidth: full ? .infinity : 320, alignment: .leading)
-                .clipShape(.rect(cornerRadius: 12))
+                .clipShape(.rect(cornerRadius: Radius.md))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                        .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
                 }
                 if full {
                     HStack(spacing: 6) {
                         Image(systemName: "play")
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .foregroundStyle(Palette.secondaryInk)
                         Text("youtube.com · \(reference.id)")
                             .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
                     }
                     .padding(.horizontal, 4)
@@ -406,8 +406,8 @@ struct RichRemoteImage: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity)
                     .frame(height: 320, alignment: .center)
-                    .background(ClaudePalette.codeSurface)
-                    .clipShape(.rect(cornerRadius: 14))
+                    .background(Palette.codeSurface)
+                    .clipShape(.rect(cornerRadius: Radius.md))
                     .contentShape(.rect)
                     .onTapGesture {
                         controlsVisible = true
@@ -439,12 +439,12 @@ struct RichRemoteImage: View {
 
     private var placeholder: some View {
         Rectangle()
-            .fill(ClaudePalette.codeSurface)
+            .fill(Palette.codeSurface)
             .frame(maxWidth: .infinity)
             .frame(height: 320)
-            .clipShape(.rect(cornerRadius: 14))
+            .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
-                ProgressView().controlSize(.small).tint(ClaudePalette.secondaryInk)
+                ProgressView().controlSize(.small).tint(Palette.secondaryInk)
             }
     }
 
@@ -452,19 +452,19 @@ struct RichRemoteImage: View {
         HStack(spacing: 10) {
             Image(systemName: "photo")
                 .font(.system(size: 18, weight: .light))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .foregroundStyle(Palette.secondaryInk)
             Text(urlString)
                 .font(ClaudeTypography().mono(11))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 14))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
         }
     }
 }
@@ -495,8 +495,8 @@ struct RichLocalImage: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity)
                     .frame(height: 320, alignment: .center)
-                    .background(ClaudePalette.codeSurface)
-                    .clipShape(.rect(cornerRadius: 14))
+                    .background(Palette.codeSurface)
+                    .clipShape(.rect(cornerRadius: Radius.md))
                     .contentShape(.rect)
                     .onTapGesture {
                         controlsVisible = true
@@ -506,12 +506,12 @@ struct RichLocalImage: View {
                 RichPathChip(path: path, glyph: "photo")
             } else {
                 Rectangle()
-                    .fill(ClaudePalette.codeSurface)
+                    .fill(Palette.codeSurface)
                     .frame(maxWidth: .infinity)
                     .frame(height: 320)
-                    .clipShape(.rect(cornerRadius: 14))
+                    .clipShape(.rect(cornerRadius: Radius.md))
                     .overlay {
-                        ProgressView().controlSize(.small).tint(ClaudePalette.secondaryInk)
+                        ProgressView().controlSize(.small).tint(Palette.secondaryInk)
                     }
             }
         }
@@ -607,23 +607,23 @@ struct RichPathChip: View {
             HStack(spacing: 8) {
                 Image(systemName: glyph)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .foregroundStyle(Palette.secondaryInk)
                 Text(path)
                     .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 8)
                 Image(systemName: "doc.on.doc")
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .foregroundStyle(Palette.secondaryInk)
             }
             .padding(.vertical, 10)
             .padding(.horizontal, 12)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 12))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
             }
             .contentShape(.rect)
         }
@@ -670,7 +670,7 @@ struct RichWebCard: View {
                 HStack {
                     Text(kind == .visualize ? "Visualization" : "SVG")
                         .font(typography.sans(12, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .foregroundStyle(Palette.secondaryInk)
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
                     Button {
@@ -678,11 +678,11 @@ struct RichWebCard: View {
                     } label: {
                         Text(showSource ? "Hide source" : "View source")
                             .font(typography.mono(11))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.vertical, 6)
                             .padding(.horizontal, 10)
                             .overlay(
-                                Capsule().strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5))
+                                Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(showSource ? "Hide source" : "View source")
@@ -691,7 +691,7 @@ struct RichWebCard: View {
                     ScrollView {
                         Text(code)
                             .font(typography.mono(11))
-                            .foregroundStyle(ClaudePalette.primaryInk)
+                            .foregroundStyle(Palette.ink)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -704,7 +704,7 @@ struct RichWebCard: View {
                         } label: {
                             Label("Copy source", systemImage: "doc.on.doc")
                                 .font(typography.sans(12, weight: .medium))
-                                .foregroundStyle(ClaudePalette.secondaryInk)
+                                .foregroundStyle(Palette.secondaryInk)
                         }
                         .buttonStyle(.plain)
                     }

@@ -17,7 +17,6 @@ struct ClaudePermissionCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var answering = false
     @State private var questionState = QuestionFormState()
-    private let typography = ClaudeTypography()
 
     private var isPlan: Bool { request.kind == .plan }
     /// Pi `ask_user`-style payloads parse; anything else degrades to the generic tool card.
@@ -36,16 +35,16 @@ struct ClaudePermissionCard: View {
             } else if isPlan {
                 planCard
                     .padding(14)
-                    .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+                    .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 16).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: Radius.lg).strokeBorder(Palette.cardBorder, lineWidth: 1)
                     }
             } else {
                 toolCard
                     .padding(14)
-                    .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+                    .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 16).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: Radius.lg).strokeBorder(Palette.cardBorder, lineWidth: 1)
                     }
             }
         }
@@ -57,19 +56,19 @@ struct ClaudePermissionCard: View {
     @ViewBuilder private var toolCard: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.small, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
             Text(title)
-                .font(typography.sans(15, weight: .semibold))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .semibold))
+                .foregroundStyle(Palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             if answering { ProgressView().controlSize(.mini) }
         }
         if let description = request.description, !description.isEmpty {
             Text(description)
-                .font(typography.sans(14))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         if let input = request.input {
@@ -127,24 +126,24 @@ struct ClaudePermissionCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "list.bullet.clipboard")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                 Text("Proposed plan")
-                    .font(typography.sans(15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                 Spacer(minLength: 0)
                 if answering { ProgressView().controlSize(.mini) }
             }
             Text(planText)
-                .font(typography.serif(14))
-                .foregroundStyle(ClaudePalette.primaryInk)
+                .font(.paseo(.title))
+                .foregroundStyle(Palette.ink)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let description = request.description, !description.isEmpty {
                 Text(description)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             HStack(spacing: 8) {
                 answerButton(title: "Reject", variant: .secondary, response: .denying())
@@ -176,16 +175,16 @@ struct ClaudePermissionCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .center, spacing: 8) {
                     Text("QUESTION")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.paseo(.caption2, weight: .semibold))
                         .tracking(0.8)
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .foregroundStyle(Palette.tertiaryInk)
                     Spacer(minLength: 0)
                     if answering { ProgressView().controlSize(.mini) }
                 }
                 ForEach(Array(form.questions.enumerated()), id: \.offset) { index, question in
                     Text(form.questions.count > 1 ? "\(index + 1). \(question.question)" : question.question)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -193,7 +192,7 @@ struct ClaudePermissionCard: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ClaudePalette.adaptive(light: 1, dark: 0.16))
+            .background(Palette.adaptive(light: 1, dark: 0.16))
             ClaudeDivider()
             // Options: one list, hairline rules, no per-row capsules.
             VStack(alignment: .leading, spacing: 0) {
@@ -220,15 +219,15 @@ struct ClaudePermissionCard: View {
                     response: submitResponse(form))
                 .disabled(!allAnswered)
                 .opacity(!allAnswered ? 0.45 : 1)
-                .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: allAnswered)
+                .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: allAnswered)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 14))
-        .clipShape(.rect(cornerRadius: 14))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
+        .clipShape(.rect(cornerRadius: Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
     }
@@ -263,22 +262,22 @@ struct ClaudePermissionCard: View {
             onAnswered(AnsweredPermission(id: requestId, line: line))
         } label: {
             Text(title)
-                .font(typography.sans(14, weight: .medium))
+                .font(.paseo(.callout, weight: .medium))
                 .lineLimit(1)
                 .padding(.horizontal, 14)
-                .frame(height: 36)
+                .frame(minHeight: 36)
                 .foregroundStyle(
                     filled
-                        ? ClaudePalette.background
-                        : danger ? ClaudePalette.failureInk : ClaudePalette.ink)
+                        ? Palette.background
+                        : danger ? Palette.failureInk : Palette.ink)
                 .background(
-                    filled ? ClaudePalette.ink : ClaudePalette.adaptive(light: 0.94, dark: 0.24),
+                    filled ? Palette.ink : Palette.adaptive(light: 0.94, dark: 0.24),
                     in: .capsule)
         }
         .buttonStyle(.plain)
         .disabled(answering)
         .opacity(answering ? 0.6 : 1)
-        .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: answering)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: answering)
         .accessibilityLabel(title)
     }
 }
@@ -404,9 +403,9 @@ private struct QuestionSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(question.header.uppercased())
-                .font(.system(size: 10, weight: .semibold))
+                .font(.paseo(.caption2, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .foregroundStyle(Palette.tertiaryInk)
                 .padding(.horizontal, 8)
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(question.options.enumerated()), id: \.offset) { optionIndex, option in
@@ -424,10 +423,10 @@ private struct QuestionSection: View {
                         set: { state.texts[index] = $0 }),
                     axis: .vertical
                 )
-                .font(.system(size: 14))
+                .font(.paseo(.callout))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(ClaudePalette.chip, in: .rect(cornerRadius: 10))
+                .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
                 .padding(.top, 4)
                 .padding(.horizontal, 8)
                 .accessibilityLabel("Other answer")
@@ -462,20 +461,20 @@ private struct QuestionSection: View {
             HStack(alignment: .top, spacing: 12) {
                 ZStack {
                     if segments {
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(selected ? ClaudePalette.ink : ClaudePalette.tertiaryInk, lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: Radius.xs)
+                            .stroke(selected ? Palette.ink : Palette.tertiaryInk, lineWidth: 1.5)
                             .frame(width: 16, height: 16)
                         if selected {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(ClaudePalette.ink)
+                                .font(.glyph(.small, weight: .bold))
+                                .foregroundStyle(Palette.ink)
                         }
                     } else {
                         Circle()
-                            .stroke(selected ? ClaudePalette.ink : ClaudePalette.tertiaryInk, lineWidth: 1.5)
+                            .stroke(selected ? Palette.ink : Palette.tertiaryInk, lineWidth: 1.5)
                             .frame(width: 16, height: 16)
                         if selected {
-                            Circle().fill(ClaudePalette.ink).frame(width: 8, height: 8)
+                            Circle().fill(Palette.ink).frame(width: 8, height: 8)
                         }
                     }
                 }
@@ -483,12 +482,12 @@ private struct QuestionSection: View {
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(option.label)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.primaryInk)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                     if let description = option.description, !description.isEmpty {
                         Text(description)
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -496,7 +495,7 @@ private struct QuestionSection: View {
             }
             .padding(.vertical, 10)
             .padding(.horizontal, 8)
-            .background(selected ? ClaudePalette.adaptive(light: 0.965, dark: 0.10) : .clear)
+            .background(selected ? Palette.adaptive(light: 0.965, dark: 0.10) : .clear)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

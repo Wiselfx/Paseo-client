@@ -29,7 +29,6 @@ public struct ClaudeChatView: View {
     /// M7i hero seats: open a freshly created agent (workspace chip). Nil disables the seat.
     var onOpenAgent: ((String) -> Void)?
 
-    let typography = ClaudeTypography()
 
     @State var sheet: ClaudeChatSheet?
     @State var toast: String?
@@ -199,8 +198,8 @@ public struct ClaudeChatView: View {
         } action: { height in
             surfaceHeight = height
         }
-        .foregroundStyle(ClaudePalette.ink)
-        .tint(ClaudePalette.ink)
+        .foregroundStyle(Palette.ink)
+        .tint(Palette.ink)
         // File links in prose and in your bubbles (`paseo-file://…`) open the file viewer;
         // ordinary links fall through to the host's handler unchanged.
         .environment(\.openURL, fileLinkAction)
@@ -224,13 +223,13 @@ public struct ClaudeChatView: View {
         case .subagents:
             ChatSubagentsSheet(
                 session: session, parentAgentId: store.agentId, subagents: store.subagents,
-                typography: typography, hiddenIds: $hiddenSubagentIds,
+                hiddenIds: $hiddenSubagentIds,
                 onOpenAgent: { agentId in
                     sheet = nil
                     onOpenAgent?(agentId)
                 })
         case .backgroundWork:
-            ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork, typography: typography)
+            ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork)
         case .turnNav:
             ChatTurnNavSheet(
                 store: store, items: outlineItems, activeSeq: store.promptOutline.activeSeq
@@ -260,17 +259,17 @@ public struct ClaudeChatView: View {
             // The agent's workspace isn't loaded (rare: directory fetch pending).
             VStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 24, weight: .light))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.large, weight: .light))
+                    .foregroundStyle(Palette.tertiaryInk)
                 Text("Workspace not available")
-                    .font(typography.sans(15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Button("Close") { openFilePath = nil }
-                    .font(typography.sans(15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .padding(.horizontal, 18)
-                    .frame(height: 36)
-                    .background(ClaudePalette.chip, in: .capsule)
+                    .frame(minHeight: 36)
+                    .background(Palette.chip, in: .capsule)
             }
             .presentationDetents([.height(240)])
         }
@@ -278,12 +277,12 @@ public struct ClaudeChatView: View {
 
     func withChatLifecycle(_ content: some View) -> some View {
         content
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFollowing)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: findOpen)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: isFollowing)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: findOpen)
         .overlay(alignment: .top) {
             if let toast {
                 Text(toast)
-                    .font(typography.sans(13))
+                    .font(.paseo(.footnote))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
                     .glassEffect()

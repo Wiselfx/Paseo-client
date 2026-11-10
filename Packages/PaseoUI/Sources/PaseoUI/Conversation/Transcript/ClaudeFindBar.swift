@@ -7,7 +7,6 @@ import UIKit
 /// chevrons to step matches, and a close button. The bar itself is stateless; `ClaudeChatView`
 /// owns the search session (`ConversationStore.search`) and the scroll target.
 struct ClaudeFindBar: View {
-    let typography: ClaudeTypography
     @Binding var query: String
     let isSearching: Bool
     /// Located messages, in timeline order; `currentIndex` is the one on screen.
@@ -28,11 +27,11 @@ struct ClaudeFindBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.regular))
+                .foregroundStyle(Palette.secondaryInk)
             TextField("Search in conversation", text: $query)
                 .focused($focused)
-                .font(typography.sans(15))
+                .font(.paseo(.callout))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .onKeyPress(.escape) {
@@ -46,15 +45,15 @@ struct ClaudeFindBar: View {
             }
             if let error, !error.isEmpty {
                 Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.failureInk)
                     .accessibilityLabel("Search failed")
                     .help(error)
             } else {
                 Text(position)
-                    .font(typography.mono(11))
+                    .font(.paseo(.codeCaption))
                     .monospacedDigit()
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .accessibilityLabel("Match \(currentIndex + 1) of \(resultCount)")
             }
@@ -69,8 +68,8 @@ struct ClaudeFindBar: View {
                 onCancel()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.glyph(.regular, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 30, height: 30)
                     .contentShape(.rect)
             }
@@ -80,7 +79,7 @@ struct ClaudeFindBar: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 44)
-        .background(ClaudePalette.chip, in: .rect(cornerRadius: 12))
+        .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 8)
@@ -94,8 +93,8 @@ struct ClaudeFindBar: View {
             action()
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(enabled ? ClaudePalette.ink : ClaudePalette.tertiaryInk)
+                .font(.glyph(.small, weight: .semibold))
+                .foregroundStyle(enabled ? Palette.ink : Palette.tertiaryInk)
                 .frame(width: 26, height: 30)
                 .contentShape(.rect)
         }

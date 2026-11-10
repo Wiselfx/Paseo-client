@@ -60,7 +60,6 @@ struct ChatOutlineRail: View {
     @State private var scrubbing = false
     @State private var lastTickAt: Date?
 
-    private let typography = ClaudeTypography()
 
     /// Upstream slots tile the rail with no gaps and shrink when they don't fit
     /// (`rail.web.tsx:204-212`): `flexBasis: 8`, `flexShrink: 1` over an 80% column.
@@ -92,8 +91,8 @@ struct ChatOutlineRail: View {
         // Hidden, the strip gives the edge back to scrolling (a right thumb lives there); it is
         // live whenever the ticks show, like grabbing the system scroll indicator.
         .allowsHitTesting(isRevealed || isTouching)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isRevealed)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hoveredIndex)
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: isRevealed)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: hoveredIndex)
         .gesture(scrub)
         // A cancelled touch ends here too, so nothing keeps ticking after the finger is gone.
         .onChange(of: isTouching) { _, touching in
@@ -126,7 +125,7 @@ struct ChatOutlineRail: View {
         return HStack(spacing: 0) {
             Spacer(minLength: 0)
             Capsule(style: .continuous)
-                .fill(magnification > 0 || isActive ? ClaudePalette.ink : ClaudePalette.tertiaryInk)
+                .fill(magnification > 0 || isActive ? Palette.ink : Palette.tertiaryInk)
                 .frame(width: width, height: height)
         }
         .frame(width: Self.stripWidth, height: slot)
@@ -134,13 +133,13 @@ struct ChatOutlineRail: View {
 
     private func previewBubble(_ text: String) -> some View {
         Text(text)
-            .font(typography.sans(13))
-            .foregroundStyle(ClaudePalette.ink)
+            .font(.paseo(.footnote))
+            .foregroundStyle(Palette.ink)
             .lineLimit(2)
             .truncationMode(.tail)
             .padding(.horizontal, 12)
             .frame(width: Self.previewWidth, height: Self.previewHeight, alignment: .leading)
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: 12))
+            .background(.ultraThinMaterial, in: .rect(cornerRadius: Radius.md))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -242,7 +241,6 @@ struct ChatTurnNavSheet: View {
     let onJump: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    private let typography = ClaudeTypography()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -265,7 +263,7 @@ struct ChatTurnNavSheet: View {
                 }
                 .padding(.vertical, 4)
             }
-            .background(ClaudePalette.background)
+            .background(Palette.background)
         }
         .presentationDetents([.medium, .large])
         .task { store.promptOutline.refresh(timelineEpoch: store.timeline.epoch) }
@@ -280,20 +278,20 @@ struct ChatTurnNavSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Text(PaseoFormat.integer(index + 1))
-                    .font(typography.mono(12, weight: isCurrent ? .semibold : .regular))
-                    .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
+                    .font(.paseo(.codeSmall, weight: isCurrent ? .semibold : .regular))
+                    .foregroundStyle(isCurrent ? Palette.ink : Palette.secondaryInk)
                     .frame(width: 32, height: 32)
-                    .background(isCurrent ? ClaudePalette.ink.opacity(0.10) : .clear, in: .circle)
+                    .background(isCurrent ? Palette.ink.opacity(0.10) : .clear, in: .circle)
                 Text(item.preview)
-                    .font(typography.sans(14))
-                    .foregroundStyle(isCurrent ? ClaudePalette.ink : ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(isCurrent ? Palette.ink : Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 8)
                 if isCurrent {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                 }
             }
             .padding(.horizontal, 16)

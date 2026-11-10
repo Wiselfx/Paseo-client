@@ -17,7 +17,7 @@ import PaseoStore
 ///   · `CRAB_SHEETS` — `frames`/`box`/`still` per animation. (sheets.ts:85-103)
 /// Frames per row is 8 for every crab sheet (sheets.ts:68); verified against the sheets'
 /// pixel dimensions. The ink mask is filled with the tertiary label ink, so it tints it here
-/// with `ClaudePalette.tertiaryInk` (doc 08 §7.2).
+/// with `Palette.tertiaryInk` (doc 08 §7.2).
 ///
 /// Placement contract (doc 08 §7.1): a 104 × 72 pt frame whose feet sit on the composer card's
 /// top edge, the right edge flush with the card's right edge, above the card. The resting body —
@@ -229,7 +229,7 @@ struct ClaudeCrabView: View {
                         .resizable()
                         .interpolation(.none)
                         .renderingMode(.template)
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .foregroundStyle(Palette.tertiaryInk)
                         .frame(width: frameSize.width, height: frameSize.height)
                 }
             }

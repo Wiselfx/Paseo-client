@@ -83,13 +83,13 @@ extension ClaudeChatView {
     func emptyState(title: String, detail: String?) -> some View {
         VStack(spacing: 10) {
             Text(title)
-                .font(typography.serif(25, relativeTo: .title))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.largeTitle))
+                .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
             if let detail {
                 Text(detail)
-                    .font(typography.sans(14))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                     .multilineTextAlignment(.center)
             }
         }
@@ -110,7 +110,7 @@ extension ClaudeChatView {
         let forkInFlight: ((ClaudeForkTarget) async -> Void)? =
             canFork ? { target in await forkInto(target, boundary: nil) } : nil
         return ClaudeTurnView(
-            turn: turn, typography: typography,
+            turn: turn,
             onMarkdown: handleMarkdown, localImageLoader: localImageLoader,
             highlightedSeq: findFlash,
             findTarget: findSeq,
@@ -177,7 +177,7 @@ extension ClaudeChatView {
                                 }
                             }
                             .animation(
-                                reduceMotion ? nil : .easeOut(duration: 0.22),
+                                Motion.disclosure.resolved(reduceMotion: reduceMotion),
                                 value: store.pendingPermissions.count)
                         }
                         if !permissionResolvedLines.isEmpty {
@@ -222,7 +222,7 @@ extension ClaudeChatView {
                 }
                 .onChange(of: store.pendingPermissions) { _, _ in
                     guard !findOpen, isFollowing else { return }
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { scrollToBottom(proxy) }
+                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { scrollToBottom(proxy) }
                 }
                 .onChange(of: focused) { _, isFocused in
                     if isFocused {
@@ -277,7 +277,7 @@ extension ClaudeChatView {
                     // stretch glides (DSH `turn-nav.ts:412-474`).
                     if let glide = pendingGlide {
                         pendingGlide = nil
-                        withAnimation(reduceMotion ? nil : .smooth(duration: Self.glideDuration)) {
+                        withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
                             proxy.scrollTo(glide.id, anchor: .top)
                         }
                     }
@@ -324,7 +324,7 @@ extension ClaudeChatView {
 
     func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool = true) {
         if animated {
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
         } else {
@@ -385,7 +385,7 @@ extension ClaudeChatView {
         if reduceMotion {
             proxy.scrollTo(target, anchor: .top)
         } else {
-            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .top) }
+            withAnimation(Motion.disclosure.animation) { proxy.scrollTo(target, anchor: .top) }
         }
     }
 
@@ -628,8 +628,8 @@ extension ClaudeChatView {
     var transcriptFade: some View {
         LinearGradient(
             stops: [
-                .init(color: ClaudePalette.background.opacity(0), location: 0),
-                .init(color: ClaudePalette.background, location: 1),
+                .init(color: Palette.background.opacity(0), location: 0),
+                .init(color: Palette.background, location: 1),
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -650,17 +650,17 @@ extension ClaudeChatView {
                     if reduceMotion {
                         scrollProxy.scrollTo("bottom", anchor: .bottom)
                     } else {
-                        withAnimation(.easeOut(duration: 0.3)) { scrollProxy.scrollTo("bottom", anchor: .bottom) }
+                        withAnimation(Motion.settle.animation) { scrollProxy.scrollTo("bottom", anchor: .bottom) }
                     }
                 }
             } label: {
                 Image(systemName: "arrow.down")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.glyph(.regular, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 34, height: 34)
-                    .background(ClaudePalette.panel, in: .circle)
+                    .background(Palette.panel, in: .circle)
                     .overlay {
-                        Circle().strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                        Circle().strokeBorder(Palette.cardBorder, lineWidth: 1)
                     }
                     .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
                     .frame(width: 44, height: 44)
@@ -775,7 +775,7 @@ extension ClaudeChatView {
         }
         let distance = targetY - scrollTrack.contentOffset
         guard abs(distance) > Self.glideLead else {
-            withAnimation(.smooth(duration: Self.glideDuration)) { proxy.scrollTo(id, anchor: .top) }
+            withAnimation(Motion.glide.animation) { proxy.scrollTo(id, anchor: .top) }
             return
         }
         let leadY = targetY - (distance > 0 ? Self.glideLead : -Self.glideLead)
@@ -799,11 +799,11 @@ extension ClaudeChatView {
     func resolvedPermissionLine(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle")
-                .font(.system(size: 11))
+                .font(.glyph(.small))
             Text(text)
-                .font(typography.sans(12))
+                .font(.paseo(.caption))
         }
-        .foregroundStyle(ClaudePalette.tertiaryInk)
+        .foregroundStyle(Palette.tertiaryInk)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityLabel(text)
     }
@@ -900,12 +900,12 @@ struct LandingLine: View {
     var body: some View {
         Group {
             if reduceMotion {
-                Rectangle().fill(ClaudePalette.ink).frame(height: 2)
+                Rectangle().fill(Palette.ink).frame(height: 2)
             } else {
                 TimelineView(.animation) { context in
                     let (opacity, scaleX) = phase(at: context.date)
                     Rectangle()
-                        .fill(ClaudePalette.ink)
+                        .fill(Palette.ink)
                         .frame(height: 2)
                         .scaleEffect(x: CGFloat(scaleX), y: 1, anchor: .center)
                         .opacity(opacity)

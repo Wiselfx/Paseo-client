@@ -11,7 +11,6 @@ struct BackgroundWorkRow: View {
     let items: [BackgroundWorkItem]
     let action: () -> Void
 
-    private let typography = ClaudeTypography()
 
     /// "2 background tasks" / "1 background task".
     private var text: String {
@@ -24,18 +23,18 @@ struct BackgroundWorkRow: View {
             action()
         } label: {
             HStack(spacing: 8) {
-                ClaudeGlyph(kind: .api, size: 13, color: ClaudePalette.tertiaryInk)
+                ClaudeGlyph(kind: .api, size: 13, color: Palette.tertiaryInk)
                 Text(text)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 12)
             .frame(height: 36)
-            .background(ClaudePalette.adaptive(light: 0.96, dark: 0.10), in: .rect(cornerRadius: 8))
+            .background(Palette.adaptive(light: 0.96, dark: 0.10), in: .rect(cornerRadius: Radius.sm))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -47,7 +46,6 @@ struct BackgroundWorkRow: View {
 /// The sheet that lists background work with a Stop affordance per stoppable item.
 struct ChatBackgroundWorkSheet: View {
     let backgroundWork: BackgroundWorkStore
-    let typography: ClaudeTypography
 
     @Environment(\.dismiss) private var dismiss
     @State private var pendingStop: BackgroundWorkItem?
@@ -59,13 +57,13 @@ struct ChatBackgroundWorkSheet: View {
             Group {
                 if backgroundWork.items.isEmpty {
                     VStack(spacing: 10) {
-                        ClaudeGlyph(kind: .api, size: 28, color: ClaudePalette.tertiaryInk)
+                        ClaudeGlyph(kind: .api, size: 28, color: Palette.tertiaryInk)
                         Text("No background tasks")
-                            .font(typography.serif(19))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.title))
+                            .foregroundStyle(Palette.ink)
                         Text("Background work your agent starts appears here.")
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                     }
@@ -81,8 +79,8 @@ struct ChatBackgroundWorkSheet: View {
                             }
                             if let error = backgroundWork.error {
                                 Text(error)
-                                    .font(typography.sans(12))
-                                    .foregroundStyle(ClaudePalette.failureInk)
+                                    .font(.paseo(.caption))
+                                    .foregroundStyle(Palette.failureInk)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 10)
                             }
@@ -91,7 +89,7 @@ struct ChatBackgroundWorkSheet: View {
                     }
                 }
             }
-            .background(ClaudePalette.background)
+            .background(Palette.background)
             .navigationTitle("Background Work")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -127,21 +125,21 @@ struct ChatBackgroundWorkSheet: View {
 
     private func backgroundWorkRow(_ item: BackgroundWorkItem) -> some View {
         HStack(spacing: 12) {
-            ClaudeGlyph(kind: glyph(for: item.kind), size: 15, color: ClaudePalette.tertiaryInk)
+            ClaudeGlyph(kind: glyph(for: item.kind), size: 15, color: Palette.tertiaryInk)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(rowTitle(item))
-                    .font(typography.sans(15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text(item.kind)
-                        .font(typography.mono(11))
+                        .font(.paseo(.codeCaption))
                     Text("·")
                     Text(startedText(item.startedAt))
                 }
-                .font(typography.mono(11))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.codeCaption))
+                .foregroundStyle(Palette.tertiaryInk)
             }
             Spacer(minLength: 8)
             if canStop && item.canStop == true, item.stopToken != nil {
@@ -153,11 +151,11 @@ struct ChatBackgroundWorkSheet: View {
                         performStop(item)
                     }
                 }
-                .font(typography.sans(13, weight: .medium))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.failureInk)
                 .padding(.horizontal, 14)
-                .frame(height: 32)
-                .background(ClaudePalette.adaptive(light: 0.96, dark: 0.18), in: .capsule)
+                .frame(minHeight: 32)
+                .background(Palette.adaptive(light: 0.96, dark: 0.18), in: .capsule)
                 .buttonStyle(.plain)
             }
         }

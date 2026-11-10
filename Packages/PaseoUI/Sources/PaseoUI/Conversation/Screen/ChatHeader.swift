@@ -11,7 +11,7 @@ extension ClaudeChatView {
             if let onOpenSidebar {
                 Button(action: onOpenSidebar) {
                     UnequalMenu().stroke(
-                        ClaudePalette.ink.opacity(0.8), style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
+                        Palette.ink.opacity(0.8), style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
                     )
                     .frame(width: 18, height: 17)
                     .frame(width: 44, height: 44)
@@ -20,7 +20,7 @@ extension ClaudeChatView {
                 .accessibilityLabel("Open sidebar")
             } else if let onBack {
                 Button(action: onBack) {
-                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .medium))
+                    Image(systemName: "chevron.left").font(.glyph(.regular, weight: .medium))
                         .frame(width: 44, height: 44)
                 }
                 .glassEffect(in: .circle)
@@ -52,12 +52,12 @@ extension ClaudeChatView {
             } label: {
                 VStack(alignment: .center, spacing: 1) {
                     Text(store.agent?.title ?? "Agent")
-                        .font(typography.serif(20, relativeTo: .headline))
+                        .font(.paseo(.title))
                         .lineLimit(1)
                     if let workspaceLine {
                         Text(workspaceLine)
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
                     }
                 }
@@ -67,7 +67,7 @@ extension ClaudeChatView {
             .accessibilityLabel("Agent menu, \(store.agent?.title ?? "Agent")")
             if let onOpenPanel {
                 Button(action: onOpenPanel) {
-                    Image(systemName: "sidebar.right").font(.system(size: 17, weight: .medium))
+                    Image(systemName: "sidebar.right").font(.glyph(.regular, weight: .medium))
                         .frame(width: 44, height: 44)
                 }
                 .glassEffect(in: .circle)
@@ -187,17 +187,17 @@ extension ClaudeChatView {
 
     func bannerRow(_ title: String, detail: String?) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "wifi.exclamationmark").font(.system(size: 13))
-            Text(title).font(typography.sans(13, weight: .medium))
+            Image(systemName: "wifi.exclamationmark").font(.glyph(.small))
+            Text(title).font(.paseo(.footnote, weight: .medium))
             if let detail {
-                Text(detail).font(typography.sans(13)).foregroundStyle(ClaudePalette.secondaryInk)
+                Text(detail).font(.paseo(.footnote)).foregroundStyle(Palette.secondaryInk)
             }
             Spacer(minLength: 0)
         }
-        .foregroundStyle(ClaudePalette.secondaryInk)
+        .foregroundStyle(Palette.secondaryInk)
         .padding(.horizontal, 12)
         .frame(height: 34)
-        .background(ClaudePalette.adaptive(light: 0.95, dark: 0.18), in: .rect(cornerRadius: 10))
+        .background(Palette.adaptive(light: 0.95, dark: 0.18), in: .rect(cornerRadius: Radius.md))
     }
 
 }

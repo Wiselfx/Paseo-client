@@ -141,7 +141,7 @@
                     rect.origin.x = left
                     rect.size.width = max(0, right - left)
                     color.setFill()
-                    UIBezierPath(roundedRect: rect, cornerRadius: 4).fill()
+                    UIBezierPath(roundedRect: rect, cornerRadius: Radius.xs).fill()
                 }
             }
             // UIKit's own backgrounds and selection remain above the decorative code pill.

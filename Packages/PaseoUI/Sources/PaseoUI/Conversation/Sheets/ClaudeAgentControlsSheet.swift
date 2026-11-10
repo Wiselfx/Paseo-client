@@ -70,11 +70,10 @@ struct ClaudeAgentControlsSheet: View {
             content
             Spacer(minLength: 0)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.height(430)])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .onAppear {
             let catalog = session.agentControl
             let providerMissing = store.agent.map { catalog.provider($0.provider) == nil } ?? true
@@ -98,8 +97,8 @@ struct ClaudeAgentControlsSheet: View {
             ProgressView().frame(maxWidth: .infinity).padding(.top, 24)
         case .failed(let message) where session.agentControl.providers.isEmpty:
             Text(message)
-                .font(.system(size: 14))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.failureInk)
                 .padding(.horizontal, 16)
         default:
             switch page {
@@ -182,8 +181,8 @@ struct ClaudeAgentControlsSheet: View {
                                 ? "Loading models from this provider…"
                                 : "No models reported by this provider"
                         )
-                        .font(.system(size: 14))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                     }
                     .padding(.top, 24)
                 } else {
@@ -206,8 +205,8 @@ struct ClaudeAgentControlsSheet: View {
                     }
                     .padding(.horizontal, 16)
                     Text("Model ids are provider-defined; the list comes from the host's catalogue.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.horizontal, 16)
                 }
             }
@@ -250,8 +249,8 @@ struct ClaudeAgentControlsSheet: View {
                             ? "Waiting for this provider's model list…"
                             : "This model reports no thinking levels."
                     )
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.horizontal, 16)
                 }
         }
@@ -266,8 +265,8 @@ struct ClaudeAgentControlsSheet: View {
             VStack(spacing: 12) {
                 if toggleableFeatures.isEmpty, selectableFeatures.isEmpty {
                     Text("This agent doesn't offer any features.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.top, 24)
                 } else {
                     RowGroup {
@@ -293,16 +292,16 @@ struct ClaudeAgentControlsSheet: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(toggle.label)
-                    .font(.system(size: 17))
+                    .font(.paseo(.body))
                 if let detail = toggle.description {
                     Text(detail)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if let tooltip = toggle.tooltip {
                     Text(tooltip)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(2)
                 }
             }
@@ -317,7 +316,7 @@ struct ClaudeAgentControlsSheet: View {
                     })
             )
             .labelsHidden()
-            .tint(.blue)
+            .tint(Palette.toggleTint)
             .accessibilityLabel(toggle.label)
         }
         .padding(.horizontal, 16)
@@ -358,8 +357,8 @@ struct ClaudeAgentControlsSheet: View {
                     .padding(.horizontal, 16)
                 } else {
                     Text("This feature is gone — the agent changed its feature set.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.top, 24)
                 }
             }
@@ -392,8 +391,8 @@ struct ClaudeAgentControlsSheet: View {
                 .padding(.horizontal, 16)
                 if modes.isEmpty {
                     Text("This agent reports no modes.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.horizontal, 16)
                 }
             }

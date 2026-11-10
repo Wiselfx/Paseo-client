@@ -12,7 +12,6 @@ struct ClaudeCodeBlock: View {
     var status: ToolCallPresentation.Status
     var maxHeight: CGFloat
 
-    private let typography = ClaudeTypography()
 
     init(
         title: String? = nil, command: String? = nil, output: String?,
@@ -31,12 +30,12 @@ struct ClaudeCodeBlock: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     ClaudeStatusDot(status: status)
                     if let title {
-                        Text(title).font(typography.mono(12.5)).foregroundStyle(
-                            ClaudePalette.secondaryInk)
+                        Text(title).font(.paseo(.codeSmall)).foregroundStyle(
+                            Palette.secondaryInk)
                     }
                     if let command {
-                        Text(command).font(typography.mono(12.5)).foregroundStyle(
-                            ClaudePalette.primaryInk
+                        Text(command).font(.paseo(.codeSmall)).foregroundStyle(
+                            Palette.ink
                         ).lineLimit(3)
                     }
                     Spacer(minLength: 8)
@@ -49,8 +48,8 @@ struct ClaudeCodeBlock: View {
             if hasOutput, let output {
                 ScrollView([.vertical, .horizontal]) {
                     Text(output)
-                        .font(typography.mono(12.5))
-                        .foregroundStyle(ClaudePalette.primaryInk.opacity(0.85))
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.ink.opacity(0.85))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: true, vertical: false)
                         .padding(12)
@@ -61,10 +60,11 @@ struct ClaudeCodeBlock: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .background(ClaudePalette.codeBackground, in: .rect(cornerRadius: 8))
+        .background(Palette.codeSurface, in: .rect(cornerRadius: Radius.sm))
         .overlay {
-            RoundedRectangle(cornerRadius: 8).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(Palette.cardBorder, lineWidth: 1)
         }
+        .codeTypeScale()
     }
 
     private var hasOutput: Bool { !(output ?? "").isEmpty }
@@ -77,9 +77,9 @@ struct ClaudeStatusDot: View {
     var body: some View {
         switch status {
         case .running: ProgressView().controlSize(.mini)
-        case .succeeded: Circle().fill(ClaudePalette.successInk).frame(width: 6, height: 6)
-        case .failed: Circle().fill(ClaudePalette.failureInk).frame(width: 6, height: 6)
-        case .canceled: Circle().strokeBorder(ClaudePalette.tertiaryInk, lineWidth: 1).frame(width: 6, height: 6)
+        case .succeeded: Circle().fill(Palette.successInk).frame(width: 6, height: 6)
+        case .failed: Circle().fill(Palette.failureInk).frame(width: 6, height: 6)
+        case .canceled: Circle().strokeBorder(Palette.tertiaryInk, lineWidth: 1).frame(width: 6, height: 6)
         }
     }
 }
@@ -111,8 +111,8 @@ struct ClaudeCopyButton: View {
             }
         } label: {
             Image(systemName: copied ? "checkmark" : "square.on.square")
-                .font(.system(size: 15, weight: .light))
-                .foregroundStyle(copied ? ClaudePalette.primaryInk : ClaudePalette.tertiaryInk)
+                .font(.glyph(.regular, weight: .light))
+                .foregroundStyle(copied ? Palette.ink : Palette.tertiaryInk)
                 .frame(width: 28, height: 28)
                 .contentShape(.rect)
         }
@@ -159,7 +159,6 @@ struct ClaudeUserBubble: View {
     @State private var showingText = false
 
     /// The bubble's shape, shared by the fill and the context-menu preview.
-    private static let bubbleRadius: CGFloat = 20
 
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
@@ -189,8 +188,8 @@ struct ClaudeUserBubble: View {
         .opacity(shownOpacity)
         .animation(
             reduceMotion
-                ? .easeOut(duration: 0.2)
-                : .timingCurve(0.22, 1, 0.36, 1, duration: 0.2),
+                ? Motion.fade.animation
+                : Motion.bubbleEnter.animation,
             value: entered)
         .onAppear { entered = true }
     }
@@ -198,19 +197,19 @@ struct ClaudeUserBubble: View {
     /// The filled bubble, and the thing the context-menu preview shows.
     private var bubble: some View {
         bodyText
-            .font(ClaudeTypography().sans(14))
-            .foregroundStyle(ClaudePalette.primaryInk)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.ink)
             .lineSpacing(8) // 14 / 22
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(
-                ClaudePalette.userBubble, in: .rect(cornerRadius: Self.bubbleRadius, style: .continuous)
+                Palette.userBubble, in: .rect(cornerRadius: Radius.bubble, style: .continuous)
             )
             .contentShape(
                 .contextMenuPreview,
-                RoundedRectangle(cornerRadius: Self.bubbleRadius, style: .continuous))
+                RoundedRectangle(cornerRadius: Radius.bubble, style: .continuous))
             .opacity(isPending ? 0.6 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isPending)
+            .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: isPending)
             .contextMenu { menuItems }
             .sheet(isPresented: $showingText) { MessageTextSheet(text: text) }
     }
@@ -267,7 +266,6 @@ struct ClaudeUserBubble: View {
 /// `isStreaming` lets DSH's new-text reveal fade in only what actually arrives while you watch.
 struct ClaudeProse: View {
     var markdown: String
-    var typography: ClaudeTypography
     var onAction: (MarkdownAction) -> Void
     /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
     var localImageLoader: ((String) async -> UIImage?)? = nil
@@ -276,7 +274,7 @@ struct ClaudeProse: View {
 
     var body: some View {
         ClaudeRevealProse(
-            markdown: markdown, theme: Self.theme(typography), onAction: onAction,
+            markdown: markdown, theme: Self.theme(), onAction: onAction,
             isStreaming: isStreaming, localImageLoader: localImageLoader,
             imageContent: proseImageContent)
     }
@@ -290,20 +288,18 @@ struct ClaudeProse: View {
         }
     }
 
-    static func theme(
-        _ typography: ClaudeTypography, bodySize: CGFloat = ClaudeTypography.chatBodySize
-    ) -> ClaudeMarkdownTheme {
+    static func theme(bodySize: CGFloat = ClaudeTypography.chatBodySize) -> ClaudeMarkdownTheme {
         // Claude iOS chats at a 17 pt serif body (V5); the markdown *file preview* keeps the
         // research document's 14 pt, because UX-SPEC §6 freezes those previews.
         let chat = bodySize >= ClaudeTypography.chatBodySize
-        var theme = ClaudeMarkdownTheme(serifName: typography.resolvedSerifName, bodySize: bodySize)
-        theme.foreground = ClaudePalette.primaryInk
-        theme.secondary = ClaudePalette.secondaryInk
-        theme.link = ClaudePalette.proseLink
-        theme.codeBackground = ClaudePalette.codeSurface
-        theme.inlineCodeBackground = ClaudePalette.inlineCodeFill
-        theme.inlineCodeForeground = ClaudePalette.primaryInk
-        theme.codeFont = typography.mono(chat ? 15 : 13, relativeTo: .body)
+        var theme = ClaudeMarkdownTheme(serifName: ProseFonts.serifName, bodySize: bodySize)
+        theme.foreground = Palette.ink
+        theme.secondary = Palette.secondaryInk
+        theme.link = Palette.proseLink
+        theme.codeBackground = Palette.codeSurface
+        theme.inlineCodeBackground = Palette.inlineCodeFill
+        theme.inlineCodeForeground = Palette.ink
+        theme.codeFont = ProseFonts.mono(size: chat ? 15 : 13)
         theme.blockSpacing = chat ? 14 : 12
         theme.lineSpacing = chat ? 8 : 9 // chat: 17 / ~25; previews: 14 / 23
         return theme

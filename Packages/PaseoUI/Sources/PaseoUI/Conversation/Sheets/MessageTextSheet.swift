@@ -10,15 +10,14 @@ struct MessageTextSheet: View {
     let text: String
 
     @Environment(\.dismiss) private var dismiss
-    private let typography = ClaudeTypography()
 
     var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Select text", close: { dismiss() })
             ScrollView {
                 Text(text)
-                    .font(typography.sans(15))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.ink)
                     .textSelection(.enabled)
                     .lineSpacing(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -26,7 +25,7 @@ struct MessageTextSheet: View {
                     .padding(.vertical, 16)
             }
         }
-        .background(ClaudePalette.background)
+        .background(Palette.background)
         .presentationDetents([.medium, .large])
     }
 }

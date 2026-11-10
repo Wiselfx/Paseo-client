@@ -10,7 +10,6 @@ import UIKit
 /// always renders in full. Find expands whatever holds a match automatically.
 struct ClaudeTurnView: View {
     let turn: Turn
-    let typography: ClaudeTypography
     let onMarkdown: (MarkdownAction) -> Void
     /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
     var localImageLoader: ((String) async -> UIImage?)? = nil
@@ -104,9 +103,9 @@ struct ClaudeTurnView: View {
     var bubbleAttributed: (String) -> AttributedString {
         { text in
             FilePathLinks.attributed(
-                text, font: typography.sans(ClaudeTypography.chatBodySize),
-                foreground: ClaudePalette.primaryInk,
-                linkColor: ClaudePalette.proseLink)
+                text, font: .paseo(.body),
+                foreground: Palette.ink,
+                linkColor: Palette.proseLink)
         }
     }
 
@@ -119,8 +118,8 @@ struct ClaudeTurnView: View {
     /// to `sender.title ?? sender.id` instead of resolving the agent's live title.
     @ViewBuilder func sentByLine(_ sender: TimelineItem.AgentMessage.Sender) -> some View {
         Text(TurnSummary.sentByLabel(name: TurnSummary.senderName(agentTitle: nil, senderTitle: sender.title, senderID: sender.id)))
-            .font(typography.mono(13))
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .font(.paseo(.code))
+            .foregroundStyle(Palette.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
@@ -159,29 +158,29 @@ struct ClaudeTurnView: View {
             // opens the turn's work.
             Button {
                 Haptics.selection()
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                     userExpandedTurn = true
                 }
             } label: {
                 HStack(spacing: 4) {
                     Text(turnSummaryLabel)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.glyph(.small, weight: .semibold))
                 }
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(turnSummaryLabel)
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader)
+                ClaudeProse(markdown: message.text, onAction: onMarkdown, localImageLoader: localImageLoader)
             } else {
                 // A turn with no answer section (all work / no prose): keep it honest.
                 Text("This turn ended without a reply.")
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
         }
     }
@@ -213,7 +212,7 @@ struct ClaudeTurnView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(bodySegments) { segment in
                         ClaudeSegmentView(
-                            segment: segment, turnIsRunning: isRunning, typography: typography,
+                            segment: segment, turnIsRunning: isRunning,
                             onMarkdown: onMarkdown, localImageLoader: localImageLoader,
                             highlightedSeq: highlightedSeq, findTarget: findTarget,
                             onOpenFile: onOpenFile)
@@ -222,7 +221,7 @@ struct ClaudeTurnView: View {
                 .transition(.opacity.combined(with: .offset(y: -2)))
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: isRunning)
+                ClaudeProse(markdown: message.text, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: isRunning)
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
             }
@@ -246,16 +245,16 @@ struct ClaudeTurnView: View {
         .onChange(of: turn.phase) { _, phase in
             // A finished turn folds itself away; the answer stays on the page.
             if phase != .running {
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { userExpanded = nil }
+                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { userExpanded = nil }
             }
         }
     }
 
     /// A brief wash on the matched row; `findHighlight` reads the view's flash parameter.
     func findHighlight(_ seqEnd: Int) -> some View {
-        RoundedRectangle(cornerRadius: 14)
-            .fill(ClaudePalette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: highlightedSeq)
+        RoundedRectangle(cornerRadius: Radius.md)
+            .fill(Palette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
+            .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
     }
 
     var copyText: String {
@@ -275,7 +274,7 @@ struct ClaudeTurnView: View {
             HStack(spacing: 8) {
                 Button { toggleWork() } label: {
                     HStack(spacing: 8) {
-                        ClaudeLiveStatusLine(turn: turn, typography: typography)
+                        ClaudeLiveStatusLine(turn: turn)
                         Spacer(minLength: 0)
                     }
                     .contentShape(.rect)
@@ -293,16 +292,16 @@ struct ClaudeTurnView: View {
                 HStack(spacing: 8) {
                     switch turn.phase {
                     case .running:
-                        ClaudeLiveStatusLine(turn: turn, typography: typography)
+                        ClaudeLiveStatusLine(turn: turn)
                     case .completed:
                         Text(turn.duration.map(DurationText.completed) ?? "Completed")
-                            .font(typography.sans(14))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.secondaryInk)
                         Spacer(minLength: 0)
                     case .failed(let message):
                         Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(typography.sans(14))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.failureInk)
                             .lineLimit(2)
                         Spacer(minLength: 0)
                     }
@@ -324,7 +323,7 @@ struct ClaudeTurnView: View {
 
     func toggleWork() {
         Haptics.selection()
-        withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
             userExpanded = !isExpanded
         }
     }
@@ -335,7 +334,6 @@ struct ClaudeTurnView: View {
 struct ClaudeSegmentView: View {
     let segment: Turn.Segment
     let turnIsRunning: Bool
-    let typography: ClaudeTypography
     let onMarkdown: (MarkdownAction) -> Void
     /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
     var localImageLoader: ((String) async -> UIImage?)? = nil
@@ -348,16 +346,16 @@ struct ClaudeSegmentView: View {
         switch segment {
         case .work(let group):
             ClaudeWorkGroupCell(
-                group: group, turnIsRunning: turnIsRunning, typography: typography,
+                group: group, turnIsRunning: turnIsRunning,
                 highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
-                ClaudeProse(markdown: message.text, typography: typography, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: turnIsRunning)
+                ClaudeProse(markdown: message.text, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: turnIsRunning)
                     .id("row:\(row.seqEnd)")
                     .background {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(ClaudePalette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
-                            .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: highlightedSeq)
+                        RoundedRectangle(cornerRadius: Radius.md)
+                            .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
+                            .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
                     }
             }
         case .todo(let row):
@@ -423,8 +421,8 @@ struct ClaudeTurnActionGlyph: View {
                 ProgressView().controlSize(.mini)
             } else {
                 Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .light))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.regular, weight: .light))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
         }
         .frame(width: 28, height: 28)

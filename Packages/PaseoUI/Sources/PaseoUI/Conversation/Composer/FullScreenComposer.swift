@@ -34,7 +34,6 @@ struct FullScreenComposer: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Bool
 
-    private let typography = ClaudeTypography()
 
     private var trimmedEmpty: Bool {
         draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -44,21 +43,21 @@ struct FullScreenComposer: View {
         VStack(spacing: 0) {
             HStack(alignment: .center) {
                 Button("Done") { dismiss() }
-                    .font(typography.sans(16))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.ink)
                     .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                     .accessibilityLabel("Done")
                 Spacer()
                 Text("Message")
-                    .font(typography.sans(16, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                 Spacer()
                 Button("Send") {
                     onSend()
                     dismiss()
                 }
-                .font(typography.sans(16, weight: .semibold))
-                .foregroundStyle(trimmedEmpty ? ClaudePalette.secondaryInk : ClaudePalette.orange)
+                .font(.paseo(.callout, weight: .semibold))
+                .foregroundStyle(trimmedEmpty ? Palette.secondaryInk : Palette.orange)
                 .disabled(trimmedEmpty)
                 .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
                 .accessibilityLabel(isRunning ? "Send and steer" : "Send message")
@@ -68,17 +67,17 @@ struct FullScreenComposer: View {
             .frame(height: 52)
             ClaudeDivider()
             TextEditor(text: $draft)
-                .font(typography.sans(17))
-                .foregroundStyle(ClaudePalette.ink)
-                .tint(ClaudePalette.orange)
+                .font(.paseo(.body))
+                .foregroundStyle(Palette.ink)
+                .tint(Palette.orange)
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 10)
                 .padding(.top, 8)
                 .focused($focused)
                 .accessibilityIdentifier("composer.fullscreen.editor")
         }
-        .background(ClaudePalette.background.ignoresSafeArea())
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background.ignoresSafeArea())
+        .foregroundStyle(Palette.ink)
         .onAppear { focused = true }
     }
 }

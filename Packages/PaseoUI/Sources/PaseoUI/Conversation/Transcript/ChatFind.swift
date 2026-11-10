@@ -15,7 +15,7 @@ extension ClaudeChatView {
 
     var findBar: some View {
         ClaudeFindBar(
-            typography: typography, query: $findQuery,
+            query: $findQuery,
             isSearching: store.search.isSearching,
             resultCount: store.search.locations.count, currentIndex: findIndex,
             error: store.search.error,
@@ -26,13 +26,13 @@ extension ClaudeChatView {
         Haptics.selection()
         guard !findOpen else { return }
         findAnchor = scrollTrack.lastTrackedTurn // restore at turn granularity; bottom stays bottom
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { findOpen = true }
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { findOpen = true }
         findFocused = true
     }
 
     func closeFind() {
         Haptics.selection()
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { findOpen = false }
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { findOpen = false }
         findQuery = ""
         findSearchTask?.cancel()
         findSearchTask = nil
@@ -54,7 +54,7 @@ extension ClaudeChatView {
         flash(seq)
         guard let scrollProxy else { return }
         if animated {
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                 scrollProxy.scrollTo("row:\(seq)", anchor: .center)
             }
         } else {
@@ -72,7 +72,7 @@ extension ClaudeChatView {
     }
 
     func restoreScroll(proxy: ScrollViewProxy) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
             if let findAnchor, store.turns.contains(where: { $0.id == findAnchor }) {
                 // The anchor belongs to this conversation (closing find on an agent switch may
                 // leave it pointing at garbage from the previous one).

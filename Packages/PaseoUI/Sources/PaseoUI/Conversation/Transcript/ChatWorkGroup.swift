@@ -6,7 +6,6 @@ import UIKit
 struct ClaudeWorkGroupCell: View {
     let group: Turn.WorkGroup
     let turnIsRunning: Bool
-    let typography: ClaudeTypography
     var highlightedSeq: Int?
     var findTarget: Int?
     var onOpenFile: ((String) -> Void)?
@@ -33,7 +32,7 @@ struct ClaudeWorkGroupCell: View {
     func checkFindTarget() {
         guard let seq = findTarget else { return }
         if group.rows.contains(where: { $0.seqEnd == seq }) {
-            withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) { userExpanded = true }
+            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { userExpanded = true }
         }
     }
 
@@ -61,7 +60,7 @@ struct ClaudeWorkGroupCell: View {
         return VStack(alignment: .leading, spacing: 8) {
             Button {
                 Haptics.selection()
-                withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                     userExpanded = !isExpanded
                 }
             } label: {
@@ -133,7 +132,7 @@ struct ClaudeWorkGroupCell: View {
 
     func summaryRuns(_ text: String, _ ink: Color) -> some View {
         Text(text)
-            .font(typography.serif(14, weight: .medium))
+            .font(.paseo(.title, weight: .medium))
             .tracking(-0.14)
             .foregroundStyle(ink)
     }
@@ -144,24 +143,24 @@ struct ClaudeWorkGroupCell: View {
                 // A capped rate, not display rate: the masked sweep is an offscreen pass
                 // (findings #11, #24). The band's 48 steps don't need more than this.
                 TimelineView(.animation(minimumInterval: Self.sweepTick)) { context in
-                    summaryRuns(text, ClaudePalette.tertiaryInk).overlay(alignment: .leading) {
+                    summaryRuns(text, Palette.tertiaryInk).overlay(alignment: .leading) {
                         if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: context.date) {
-                            summaryRuns(text, ClaudePalette.shimmerInk)
+                            summaryRuns(text, Palette.ink)
                                 .mask(ClaudeSweep.windowGradient(phase: phase))
                                 .allowsHitTesting(false)
                         }
                     }
                 }
             } else {
-                summaryRuns(text, ClaudePalette.tertiaryInk)
+                summaryRuns(text, Palette.tertiaryInk)
             }
         }
     }
 
     func findHighlight(_ seqEnd: Int) -> some View {
-        RoundedRectangle(cornerRadius: 10)
-            .fill(ClaudePalette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: highlightedSeq)
+        RoundedRectangle(cornerRadius: Radius.md)
+            .fill(Palette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
+            .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
     }
 
     var card: some View {
@@ -180,9 +179,9 @@ struct ClaudeWorkGroupCell: View {
         // Hugs its rows until they reach the host's cap, then scrolls inside the card.
         .frame(height: min(max(contentHeight, 1), processCap), alignment: .top)
         // The process card is transparent — the canvas shows through.
-        .clipShape(.rect(cornerRadius: 8))
+        .clipShape(.rect(cornerRadius: Radius.sm))
         .overlay {
-            RoundedRectangle(cornerRadius: 8).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(Palette.cardBorder, lineWidth: 1)
         }
     }
 
@@ -202,16 +201,16 @@ struct ClaudeWorkGroupCell: View {
     @ViewBuilder private func rowView(_ item: WorkRow, isLive: Bool) -> some View {
         switch item {
         case .thought(let row):
-            ClaudeStepRow(row: row, isLive: isLive, typography: typography)
+            ClaudeStepRow(row: row, isLive: isLive)
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
         case .tool(let row):
-            ClaudeStepRow(row: row, isLive: isLive, typography: typography)
+            ClaudeStepRow(row: row, isLive: isLive)
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
         case .fileCall(let call):
             ClaudeMergedFileRow(
-                call: call, isLive: isLive, typography: typography,
+                call: call, isLive: isLive,
                 onOpenFile: onOpenFile ?? { _ in },
                 highlightedSeq: highlightedSeq, findTarget: findTarget)
                 .id(call.id)
@@ -243,7 +242,6 @@ struct ClaudeStepRow: View {
     let row: TimelineRow
     /// The newest step of a running turn opens by default so you can watch it.
     let isLive: Bool
-    let typography: ClaudeTypography
 
     @State private var userExpanded: Bool?
     @AppStorage("paseo.reasoning.alwaysExpand") private var alwaysExpandReasoning = false
@@ -263,7 +261,7 @@ struct ClaudeStepRow: View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 Haptics.selection()
-                withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                     userExpanded = !isExpanded
                 }
             } label: {
@@ -292,13 +290,13 @@ struct ClaudeStepRow: View {
         case .reasoning(let reasoning):
             if isExpanded {
                 Text("Think")
-                    .font(typography.serif(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.paseo(.title, weight: .medium))
+                    .foregroundStyle(Palette.tertiaryInk)
             } else {
                 Text(reasoning.text.replacingOccurrences(of: "\n", with: " "))
-                    .font(typography.sans(13))
+                    .font(.paseo(.footnote))
                     .lineSpacing(7) // 13 / 20
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .foregroundStyle(Palette.tertiaryInk)
                     .lineLimit(1)
             }
         case .toolCall(let call):
@@ -306,13 +304,13 @@ struct ClaudeStepRow: View {
             HStack(spacing: 6) {
                 ClaudeToolSeat(call: call, symbol: presentation.symbol)
                 Text(presentation.title)
-                    .font(typography.serif(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.paseo(.title, weight: .medium))
+                    .foregroundStyle(Palette.tertiaryInk)
                 if let subtitle = presentation.subtitle {
-                    Circle().fill(ClaudePalette.captionInk).frame(width: 2, height: 2)
+                    Circle().fill(Palette.captionInk).frame(width: 2, height: 2)
                     Text(subtitle)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -329,9 +327,9 @@ struct ClaudeStepRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(reasoningParagraphs(reasoning.text), id: \.self) { paragraph in
                     Text(paragraph)
-                        .font(typography.serif(13))
+                        .font(.paseo(.title))
                         .lineSpacing(10) // 13 / 23
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .foregroundStyle(Palette.tertiaryInk)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -366,11 +364,11 @@ struct ClaudeToolSeat: View {
     var body: some View {
         Group {
             if case .shell = call.detail {
-                ClaudeGlyph(kind: .api, size: 14, color: ClaudePalette.tertiaryInk)
+                ClaudeGlyph(kind: .api, size: 14, color: Palette.tertiaryInk)
             } else {
                 Image(systemName: symbol)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
         }
         .frame(width: 16, height: 16)
@@ -389,11 +387,11 @@ struct ClaudeLeadingSeat: View {
     var body: some View {
         Group {
             if expanded {
-                ClaudeGlyph(kind: .chevronUp, size: 14, color: ClaudePalette.tertiaryInk)
+                ClaudeGlyph(kind: .chevronUp, size: 14, color: Palette.tertiaryInk)
             } else if pressed {
-                ClaudeGlyph(kind: .chevronDown, size: 14, color: ClaudePalette.tertiaryInk)
+                ClaudeGlyph(kind: .chevronDown, size: 14, color: Palette.tertiaryInk)
             } else {
-                ClaudeGlyph(kind: glyph, size: 14, color: ClaudePalette.tertiaryInk)
+                ClaudeGlyph(kind: glyph, size: 14, color: Palette.tertiaryInk)
             }
         }
         .frame(width: 16, height: 16)
