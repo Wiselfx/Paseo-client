@@ -188,8 +188,10 @@ struct ClaudeAgentControlsSheet: View {
                                 title: model.label,
                                 subtitle: model.description,
                                 accessory: store.agent?.model == model.id
-                                    ? .checkmark(true)
-                                    : (model.isDefault == true ? .badge("Default") : .none)
+                                    ? ListRow.Accessory.checkmark(true)
+                                    : (model.isDefault == true
+                                        ? ListRow.Accessory.badge("Default")
+                                        : ListRow.Accessory.none)
                             ) {
                                 Haptics.selection()
                                 Task {
@@ -234,8 +236,10 @@ struct ClaudeAgentControlsSheet: View {
                         ListRow(
                             title: option.label, subtitle: option.description,
                             accessory: effectiveThinkingId == option.id
-                                ? .checkmark(true)
-                                : (option.isDefault == true ? .badge("Default") : .none)
+                                ? ListRow.Accessory.checkmark(true)
+                                : (option.isDefault == true
+                                    ? ListRow.Accessory.badge("Default")
+                                    : ListRow.Accessory.none)
                         ) {
                             chooseThinking(option.id)
                         }
@@ -341,8 +345,10 @@ struct ClaudeAgentControlsSheet: View {
                             ListRow(
                                 title: option.label, subtitle: option.description,
                                 accessory: select.value == option.id
-                                    ? .checkmark(true)
-                                    : (option.isDefault == true ? .badge("Default") : .none)
+                                    ? ListRow.Accessory.checkmark(true)
+                                    : (option.isDefault == true
+                                        ? ListRow.Accessory.badge("Default")
+                                        : ListRow.Accessory.none)
                             ) {
                                 Haptics.selection()
                                 page = .features

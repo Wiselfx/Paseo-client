@@ -175,7 +175,7 @@ struct DraftControlsSheet: View {
         }
     }
 
-    /// Selected wins over the badge, like `SheetRow` did.
+    /// Selected wins over the badge.
     private func providerAccessory(_ provider: ProviderSnapshotEntry) -> ListRow.Accessory {
         if draft.providerId == provider.provider { return .checkmark(true) }
         if let badge = providerBadge(provider) { return .badge(badge) }
@@ -206,8 +206,10 @@ struct DraftControlsSheet: View {
                                 title: model.label,
                                 subtitle: model.description,
                                 accessory: draft.modelId == model.id
-                                    ? .checkmark(true)
-                                    : (model.isDefault == true ? .badge("Default") : .none)
+                                    ? ListRow.Accessory.checkmark(true)
+                                    : (model.isDefault == true
+                                        ? ListRow.Accessory.badge("Default")
+                                        : ListRow.Accessory.none)
                             ) {
                                 Haptics.selection()
                                 draft.selectModel(model.id, catalog: catalog)
