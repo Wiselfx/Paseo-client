@@ -246,7 +246,6 @@ struct ImportSessionSheet: View {
 
     private var refreshButton: some View {
         Button {
-            Haptics.selection()
             Task { await reload() }
         } label: {
             Label("Refresh sessions", systemImage: "arrow.clockwise")
@@ -263,7 +262,6 @@ struct ImportSessionSheet: View {
     private func sessionRow(_ entry: RecentProviderSessionDescriptor) -> some View {
         let importing = store.importingId == entry.id
         return Button {
-            Haptics.selection()
             Task { await importEntry(entry) }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
@@ -315,6 +313,7 @@ struct ImportSessionSheet: View {
         else { return }
         // The imported agent may live in another workspace; refresh so the shell can open it.
         await session.refreshAgents()
+        Haptics.success()
         dismiss()
         onImported(agent.id)
     }

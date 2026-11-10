@@ -61,7 +61,6 @@ struct AboutPage: View {
             accessory: ListRow.Accessory.chevron,
             action: {
                 guard let url else { return }
-                Haptics.selection()
                 openURL(url)
             }
         )

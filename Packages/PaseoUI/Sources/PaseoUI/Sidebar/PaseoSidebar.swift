@@ -347,7 +347,6 @@ struct PaseoSidebar: View {
         let resets = ClaudeUsageResets.short(afterISO: window.resetsAt)
         let percent = Int(min(max(used, 0), 100).rounded())
         return Button {
-            Haptics.selection()
             sheet = .usage
         } label: {
             HStack(spacing: 8) {
@@ -378,7 +377,6 @@ struct PaseoSidebar: View {
     private var footer: some View {
         HStack(spacing: 12) {
             Button {
-                Haptics.selection()
                 sheet = .settings
             } label: {
                 Text(initial)

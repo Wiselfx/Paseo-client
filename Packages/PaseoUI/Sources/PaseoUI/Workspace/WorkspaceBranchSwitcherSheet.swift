@@ -160,7 +160,6 @@ struct WorkspaceBranchSwitcherSheet: View {
     /// spinner until the switch lands (`isSwitchingBranch`).
     private func switchTo(_ name: String) {
         guard !isBusy, name != currentBranch else { return }
-        Haptics.selection()
         switchError = nil
         switchingTo = name
         Task {

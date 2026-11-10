@@ -140,7 +140,6 @@ struct VoicePage: View {
             subtitle: summaryLabel(summary),
             accessory: ListRow.Accessory.chevron,
             action: {
-                Haptics.selection()
                 openSite = siteID
             }
         )

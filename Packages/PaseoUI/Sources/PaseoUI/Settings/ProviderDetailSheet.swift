@@ -321,7 +321,7 @@ struct ProviderDetailSheet: View {
             }
             Spacer(minLength: 8)
             Button {
-                Haptics.selection()
+                Haptics.light()
                 removeCustomModel(model)
             } label: {
                 Image(systemName: "trash")
@@ -347,7 +347,7 @@ struct ProviderDetailSheet: View {
                 .submitLabel(.done)
                 .onSubmit { addCustomModel() }
             Button("Add") {
-                Haptics.selection()
+                Haptics.light()
                 addCustomModel()
             }
             .font(.paseo(.callout, weight: .semibold))

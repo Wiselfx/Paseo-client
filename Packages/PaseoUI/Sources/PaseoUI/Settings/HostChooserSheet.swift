@@ -70,7 +70,6 @@ public struct HostChooserSheet: View {
 
     private func row(_ host: DeepLinkHost) -> some View {
         Button {
-            Haptics.selection()
             onChoose(host)
         } label: {
             HStack(spacing: 12) {

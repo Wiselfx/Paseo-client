@@ -736,7 +736,6 @@ struct CommandCenterSheet: View {
 
     private func activate(_ row: SearchModel.Result) {
         selectedIndex = model.flatRows.firstIndex { $0.id == row.id } ?? selectedIndex
-        Haptics.selection()
         switch row.kind {
         case .agent:
             guard let agent = row.agent else { return }

@@ -401,7 +401,6 @@ struct ClaudeForkMenu: View {
     /// Starts one fork at a time and holds the button down until it lands.
     private func run(_ target: ClaudeForkTarget) {
         guard pending == nil else { return }
-        Haptics.selection()
         pending = target
         Task {
             await onFork(target)
@@ -438,7 +437,7 @@ struct ClaudeTurnActionButton: View {
 
     var body: some View {
         Button {
-            Haptics.selection()
+            Haptics.light()
             action()
         } label: {
             ClaudeTurnActionGlyph(systemImage: systemImage, busy: false)

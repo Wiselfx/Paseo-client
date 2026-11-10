@@ -164,14 +164,16 @@ struct AgentsPage: View {
 
     private func saveAppendPrompt() {
         guard let draft = appendPromptDraft else { return }
-        Haptics.selection()
         appendPromptSaving = true
         Task {
             var patch = DaemonConfigPatch()
             patch.appendSystemPrompt = draft
             let ok = await hostSettings.save(patch)
             appendPromptSaving = false
-            if ok { appendPromptDraft = nil }
+            if ok {
+                appendPromptDraft = nil
+                Haptics.success()
+            }
             appendPromptFocused = false
         }
     }
@@ -334,14 +336,16 @@ struct AgentsPage: View {
 
     private func saveResumePrompt() {
         guard let draft = resumePromptDraft else { return }
-        Haptics.selection()
         resumePromptSaving = true
         Task {
             var patch = DaemonConfigPatch()
             patch.resumePrompt = draft
             let ok = await hostSettings.save(patch)
             resumePromptSaving = false
-            if ok { resumePromptDraft = nil }
+            if ok {
+                resumePromptDraft = nil
+                Haptics.success()
+            }
             resumePromptFocused = false
             if ok { showResumePromptSheet = false }
         }

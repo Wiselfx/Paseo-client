@@ -522,7 +522,7 @@ struct WorkspacePanel: View {
             }
             Button("Copy agent ID", systemImage: "doc.on.doc") {
                 Clipboard.copy(agent.id, toast: toast)
-                Haptics.selection()
+                Haptics.light()
             }
             Divider()
             Button("Archive", systemImage: "archivebox", role: .destructive) {
@@ -560,7 +560,7 @@ struct WorkspacePanel: View {
         Task {
             await session.conversation(for: agent.id).archive()
             await session.refreshAgents()
-            Haptics.success()
+            Haptics.light()
             toast?.show(
                 "Agent archived",
                 undo: {

@@ -368,7 +368,6 @@ struct ScheduleEditorPage: View {
             title: "Provider",
             accessory: ListRow.Accessory.value(providerValue),
             action: {
-                Haptics.selection()
                 picker = .provider
             }
         )
@@ -377,7 +376,6 @@ struct ScheduleEditorPage: View {
             title: "Model",
             accessory: ListRow.Accessory.value(modelValue),
             action: {
-                Haptics.selection()
                 picker = .model
             }
         )
@@ -386,7 +384,6 @@ struct ScheduleEditorPage: View {
             title: "Mode",
             accessory: ListRow.Accessory.value(modeValue),
             action: {
-                Haptics.selection()
                 picker = .mode
             }
         )
@@ -395,7 +392,6 @@ struct ScheduleEditorPage: View {
             title: "Thinking",
             accessory: ListRow.Accessory.value(thinkingValue),
             action: {
-                Haptics.selection()
                 picker = .thinking
             }
         )
@@ -564,7 +560,6 @@ struct ScheduleEditorPage: View {
     // MARK: Save
 
     private func save() {
-        Haptics.selection()
         isSaving = true
         if let stored = seed.stored {
             Task {
@@ -572,6 +567,7 @@ struct ScheduleEditorPage: View {
                 if await schedules.update(stored.id, edits) {
                     toast?.show("Saved")
                     isSaving = false
+                    Haptics.success()
                     dismiss()
                     return
                 }
@@ -597,6 +593,7 @@ struct ScheduleEditorPage: View {
                 if await schedules.create(draft) != nil {
                     toast?.show("Schedule created")
                     isSaving = false
+                    Haptics.success()
                     dismiss()
                     return
                 }

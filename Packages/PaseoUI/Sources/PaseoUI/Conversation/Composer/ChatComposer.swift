@@ -548,7 +548,6 @@ struct ComposerView: View {
     @ViewBuilder private var contextMeter: some View {
         if let percent = contextPercent {
             Button {
-                Haptics.selection()
                 controller?.showContextSheet = true
             } label: {
                 ClaudeMeterRing(percent: percent, size: 24, lineWidth: 1.5)
@@ -1020,7 +1019,6 @@ struct ComposerView: View {
     @ViewBuilder private var expandComposerButton: some View {
         if isTall {
             Button {
-                Haptics.selection()
                 if controller != nil {
                     controller?.showFullScreenComposer = true
                 } else {
@@ -1107,7 +1105,6 @@ struct SlashMenu: View {
                 VStack(spacing: 0) {
                     ForEach(commands) { command in
                         Button {
-                            Haptics.selection()
                             onPick(command)
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
@@ -1176,7 +1173,7 @@ struct QueueRow: View {
                 .truncationMode(.tail)
             Spacer(minLength: 0)
             Button {
-                Haptics.selection()
+                Haptics.light()
                 onEdit()
             } label: {
                 Image(systemName: "pencil")
@@ -1189,7 +1186,6 @@ struct QueueRow: View {
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Edit queued message")
             Button {
-                Haptics.selection()
                 onSendNow()
             } label: {
                 Image(systemName: "arrow.up")

@@ -29,7 +29,6 @@ struct HostsPage: View {
                     }
                 }
                 ListRow(title: "Add host", systemImage: "plus") {
-                    Haptics.selection()
                     context?.addHost()
                 }
                 .panelRow()
@@ -109,7 +108,6 @@ struct HostsPage: View {
 
     /// Switching confirms first only while agents are running on this host.
     private func requestSwitch(_ host: HostSwitchEntry) {
-        Haptics.selection()
         guard !host.isCurrent else { return }
         if session.runningAgentCount > 0 {
             switchTarget = host
@@ -140,7 +138,6 @@ struct HostDetailPage: View {
                     ListRow(title: "Name", accessory: ListRow.Accessory.value(host.label))
                         .panelRow()
                     ListRow(title: "Rename") {
-                        Haptics.selection()
                         renameText = host.label
                         renaming = true
                     }

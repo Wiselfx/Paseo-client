@@ -103,7 +103,7 @@ struct ClaudeCopyButton: View {
     var body: some View {
         Button {
             UIPasteboard.general.string = text
-            Haptics.selection()
+            Haptics.light()
             copied = true
             Task {
                 try? await Task.sleep(for: .seconds(2.5))
@@ -219,7 +219,7 @@ struct ClaudeUserBubble: View {
     @ViewBuilder private var menuItems: some View {
         Button("Copy", systemImage: "doc.on.doc") {
             UIPasteboard.general.string = text
-            Haptics.selection()
+            Haptics.light()
         }
         Button("Select text", systemImage: "textformat.alt") {
             showingText = true

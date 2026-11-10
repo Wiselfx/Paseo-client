@@ -213,7 +213,6 @@ struct ClaudeHistoryView: View {
                 .accessibilityIdentifier("history.search")
             if !searchText.isEmpty {
                 Button {
-                    Haptics.selection()
                     searchText = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -397,7 +396,6 @@ struct ClaudeHistoryView: View {
 
     /// A live row opens at once; an archived one shows the row's progress while it unarchives.
     private func requestOpen(_ row: HistoryModel.Row) {
-        Haptics.selection()
         guard row.archived else {
             onOpenAgent(row.id)
             return
@@ -430,7 +428,7 @@ struct ClaudeHistoryView: View {
             return
         }
         await session.refreshAgents()
-        Haptics.success()
+        Haptics.light()
         toast?.show("Archived \(HistoryModel.title(for: agent))", undo: {
             Task {
                 if await lifecycle.unarchive(agentId: agent.id) {

@@ -138,7 +138,7 @@ struct DiagnosticsPage: View {
             }
             Spacer(minLength: Space.sm)
             Button {
-                Haptics.selection()
+                Haptics.light()
                 playTestTone()
             } label: {
                 Text(testAudioPlaying ? "Playing..." : "Play test")

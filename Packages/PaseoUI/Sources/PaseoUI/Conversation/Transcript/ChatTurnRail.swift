@@ -294,7 +294,6 @@ struct ChatTurnNavSheet: View {
     private func row(index: Int, item: ChatOutlineItem) -> some View {
         let isCurrent = item.seq == activeSeq
         return Button {
-            Haptics.selection()
             onJump(item.seq)
             dismiss()
         } label: {

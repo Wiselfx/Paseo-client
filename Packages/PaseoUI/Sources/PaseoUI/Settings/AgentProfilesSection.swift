@@ -131,7 +131,6 @@ struct AgentProfilesSection: View {
             moveButton(profile: profile, offset: -1, isFirst: index == 0)
             moveButton(profile: profile, offset: 1, isLast: index == profiles.count - 1)
             Button {
-                Haptics.selection()
                 editing = ProfileEditTarget(mode: .edit, profile: profile)
             } label: {
                 Image(systemName: "pencil")
@@ -143,7 +142,6 @@ struct AgentProfilesSection: View {
             .accessibilityLabel("Edit \(profile.name)")
             .accessibilityIdentifier("settings.profiles.edit.\(profile.id)")
             Button {
-                Haptics.selection()
                 pendingDelete = profile
             } label: {
                 Image(systemName: "trash")
@@ -160,7 +158,7 @@ struct AgentProfilesSection: View {
 
     private func moveButton(profile: AgentProfile, offset: Int, isFirst: Bool = false, isLast: Bool = false) -> some View {
         Button {
-            Haptics.selection()
+            Haptics.light()
             move(profile: profile, offset: offset)
         } label: {
             Image(systemName: offset < 0 ? "chevron.up" : "chevron.down")
@@ -177,7 +175,6 @@ struct AgentProfilesSection: View {
 
     private var addRow: some View {
         Button {
-            Haptics.selection()
             editing = ProfileEditTarget(mode: .create, profile: nil)
         } label: {
             HStack(spacing: 12) {

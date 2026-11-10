@@ -158,7 +158,6 @@ public struct ConnectView: View {
                     systemImage: host.isCurrent ? "checkmark.circle.fill" : "desktopcomputer",
                     accessory: connecting ? ListRow.Accessory.progress : ListRow.Accessory.chevron,
                     action: {
-                        Haptics.selection()
                         onConnectSaved(host.id)
                     }
                 )
@@ -186,7 +185,6 @@ public struct ConnectView: View {
                 .accessibilityIdentifier("connect.saved.\(host.id.uuidString)")
             }
             ListRow(title: "Add host", systemImage: "plus.circle") {
-                Haptics.selection()
                 showAddForm = true
             }
             .accessibilityIdentifier("connect.addHost")
@@ -230,7 +228,7 @@ public struct ConnectView: View {
     private func saveRename(_ target: HostSwitchEntry) {
         let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        Haptics.selection()
+        Haptics.light()
         onRenameSaved(target.id, trimmed)
         renameTarget = nil
     }
@@ -242,7 +240,6 @@ public struct ConnectView: View {
             if !hosts.isEmpty {
                 HStack {
                     Button {
-                        Haptics.selection()
                         showAddForm = false
                     } label: {
                         Label("Saved hosts", systemImage: "chevron.left")

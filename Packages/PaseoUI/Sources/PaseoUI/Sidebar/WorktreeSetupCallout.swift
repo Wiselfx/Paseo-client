@@ -19,7 +19,6 @@ extension PaseoSidebar {
         if shouldShowWorktreeSetupCallout(group) {
             HStack(spacing: 8) {
                 Button {
-                    Haptics.selection()
                     sheet = .project(group.project)
                 } label: {
                     HStack(spacing: 10) {
@@ -45,7 +44,6 @@ extension PaseoSidebar {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Set up worktree scripts. Opens the project page.")
                 Button {
-                    Haptics.selection()
                     dismissWorktreeSetupCallout(group.project.projectId)
                 } label: {
                     Image(systemName: "xmark")

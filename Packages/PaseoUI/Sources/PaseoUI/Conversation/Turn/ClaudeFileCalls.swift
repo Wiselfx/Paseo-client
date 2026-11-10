@@ -273,7 +273,6 @@ struct ClaudeMergedFileRow: View {
 
     private var fileButton: some View {
         Button {
-            Haptics.selection()
             onOpenFile(call.path)
         } label: {
             HStack(spacing: 6) {

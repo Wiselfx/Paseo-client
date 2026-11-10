@@ -49,7 +49,6 @@ struct HelpPage: View {
 
     private func linkRow(_ title: String, systemImage: String, url: String) -> some View {
         ListRow(title: title, systemImage: systemImage, action: {
-            Haptics.selection()
             if let target = URL(string: url) { openURL(target) }
         })
         .panelRow()

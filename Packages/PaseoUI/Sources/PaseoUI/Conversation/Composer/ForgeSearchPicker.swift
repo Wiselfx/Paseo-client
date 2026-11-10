@@ -222,7 +222,6 @@ struct ForgeSearchPicker: View {
     private func resultRow(_ item: ForgeSearchItem) -> some View {
         let selected = selectedIds.contains(item.id)
         return Button {
-            Haptics.selection()
             onPick(item)
         } label: {
             HStack(spacing: 10) {

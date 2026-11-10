@@ -314,7 +314,6 @@ struct TranscriptView: View {
     @ViewBuilder private var backgroundWorkRow: some View {
         if store.backgroundWork.hasRunningItems {
             BackgroundWorkRow(items: store.backgroundWork.items) {
-                Haptics.selection()
                 controller.sheet = .backgroundWork
             }
         }
@@ -655,7 +654,6 @@ struct TranscriptView: View {
     private var backToEnd: some View {
         let shows = controller.showsBackToEnd && !controller.find.isOpen
         return Button {
-            Haptics.selection()
             controller.returnToEnd()
         } label: {
             Image(systemName: "arrow.down")

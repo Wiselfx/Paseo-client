@@ -79,7 +79,6 @@ struct WorkspaceCommitDiffView: View {
     private func fileRow(_ file: CheckoutCommitFile) -> some View {
         let style = style(for: file.status)
         return Button {
-            Haptics.selection()
             Task { await openDiff(for: file) }
         } label: {
             HStack(spacing: 12) {

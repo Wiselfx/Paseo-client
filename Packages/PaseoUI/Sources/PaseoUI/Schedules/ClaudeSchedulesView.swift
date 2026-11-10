@@ -52,7 +52,6 @@ struct ClaudeSchedulesView: View {
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
-                            Haptics.selection()
                             editorRequest = .empty
                         } label: {
                             Image(systemName: "plus")

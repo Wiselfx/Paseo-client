@@ -307,7 +307,7 @@ struct RichSVGCard: View {
                 Spacer(minLength: 0)
                 Button {
                     UIPasteboard.general.string = code
-                    Haptics.selection()
+                    Haptics.light()
                 } label: {
                     Label("Copy source", systemImage: "doc.on.doc")
                         .font(ProseFonts.sans(size: 12, weight: .medium))

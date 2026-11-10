@@ -602,7 +602,7 @@ struct RichPathChip: View {
     var body: some View {
         Button {
             UIPasteboard.general.string = path
-            Haptics.selection()
+            Haptics.light()
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: glyph)
@@ -752,7 +752,7 @@ struct RichWebCard: View {
                 Spacer(minLength: 0)
                 Button {
                     UIPasteboard.general.string = code
-                    Haptics.selection()
+                    Haptics.light()
                 } label: {
                     Label("Copy source", systemImage: "doc.on.doc")
                         .font(typography.sans(12, weight: .medium))

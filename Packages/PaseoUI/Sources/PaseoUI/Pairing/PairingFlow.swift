@@ -54,7 +54,6 @@ public struct AddHostMethodsSheet: View {
         title: String, description: String, symbol: String, id: String, action: @escaping () -> Void
     ) -> some View {
         Button {
-            Haptics.selection()
             action()
         } label: {
             HStack(spacing: 12) {
@@ -431,7 +430,6 @@ public struct HostConfirmationPairingSheet: View {
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("pairing.confirm.cancel")
                         Button {
-                            Haptics.selection()
                             onConnect()
                         } label: {
                             if isAttempting {
