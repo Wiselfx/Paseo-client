@@ -20,6 +20,18 @@ struct AgentProfileEditSheet: View {
     @State private var saving = false
     @State private var saveError: String?
     @State private var didSeed = false
+    /// The values the sheet opened with, so it can tell an edit from a seed.
+    @State private var seeded = Seeded(
+        name: "", providerID: "", model: nil, modeId: nil, thinkingOptionId: nil, notes: "")
+
+    private struct Seeded: Equatable {
+        var name: String
+        var providerID: String
+        var model: String?
+        var modeId: String?
+        var thinkingOptionId: String?
+        var notes: String
+    }
 
 
     private var entries: [ProviderSnapshotEntry] { session.agentControl.providers }
@@ -61,11 +73,33 @@ struct AgentProfileEditSheet: View {
         return nil
     }
 
+    private var sheetTitle: String {
+        target.mode == .create ? "New profile" : "Edit profile"
+    }
+
+    /// The sheet asks before throwing edits away.
+    private var isDirty: Bool { didSeed && hasEdits }
+
+    private var hasEdits: Bool {
+        name != seeded.name || notes != seeded.notes || providerID != seeded.providerID
+            || model != seeded.model || modeId != seeded.modeId
+            || thinkingOptionId != seeded.thinkingOptionId
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: target.mode == .create ? "New profile" : "Edit profile", close: { dismiss() })
+        SheetScaffold(
+            sheetTitle,
+            detents: .large,
+            confirm: SheetConfirm(
+                "Save", isEnabled: canSave, isWorking: saving,
+                identifier: "settings.profiles.save"
+            ) {
+                Haptics.selection()
+                save()
+            }
+        ) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: Space.lg) {
                     sectionLabel("Name")
                     RowGroup { nameField }
                     sectionLabel("Provider")
@@ -83,21 +117,15 @@ struct AgentProfileEditSheet: View {
                         .foregroundStyle(Palette.secondaryInk)
                         .padding(.leading, 16)
                     if let saveError {
-                        Text(saveError)
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.failureInk)
-                            .padding(.leading, 16)
+                        InlineBanner(.failure, title: saveError)
+                            .padding(.horizontal, Space.lg)
                     }
                 }
-                .padding(.bottom, 24)
+                .padding(.bottom, Space.xxl)
+                .sheetDirty(isDirty)
             }
             .scrollIndicators(.hidden)
-            saveBar
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
         .onAppear(perform: seedIfNeeded)
     }
 
@@ -244,6 +272,9 @@ struct AgentProfileEditSheet: View {
         modeId = seed?.modeId
         thinkingOptionId = seed?.thinkingOptionId
         notes = seed?.notes ?? ""
+        seeded = Seeded(
+            name: name, providerID: providerID, model: model, modeId: modeId,
+            thinkingOptionId: thinkingOptionId, notes: notes)
         if session.agentControl.phase == .idle {
             Task { await session.agentControl.loadCatalog() }
         }
@@ -264,34 +295,6 @@ struct AgentProfileEditSheet: View {
 
     // MARK: Save
 
-    private var saveBar: some View {
-        HStack {
-            if let hint = catalogHint {
-                Text(hint)
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 8)
-            Button {
-                Haptics.selection()
-                save()
-            } label: {
-                Text(saving ? "Saving…" : "Save")
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(Palette.background)
-                    .padding(.horizontal, 22)
-                    .frame(minHeight: 44)
-                    .background(Palette.ink.opacity(canSave ? 1 : 0.3), in: .capsule)
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSave)
-            .accessibilityIdentifier("settings.profiles.save")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .overlay(alignment: .top) { Divider() }
-    }
 
     private func save() {
         let trimmed = trimmedName

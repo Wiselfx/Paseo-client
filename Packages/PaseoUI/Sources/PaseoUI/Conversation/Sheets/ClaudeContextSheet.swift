@@ -8,34 +8,26 @@ import SwiftUI
 struct ClaudeContextSheet: View {
     let store: ConversationStore
 
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Context", close: { dismiss() })
+        SheetScaffold("Context", detents: .mediumLarge) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: Space.lg) {
                     if let usage = store.contextUsage, let percent = usage.percentUsed {
                         meterRow(usage: usage, percent: percent)
                         detailsSection(usage: usage)
                         costByModelSection(usage: usage)
                     } else {
-                        Text("This agent's host does not report context usage yet.")
-                            .font(.paseo(.callout))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 32)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        EmptyState(
+                            title: "This agent's host does not report context usage yet."
+                        )
+                        .padding(.horizontal, Space.lg)
+                        .padding(.top, Space.xl)
                     }
                 }
-                .padding(.bottom, 20)
+                .padding(.bottom, Space.xl)
             }
             .scrollIndicators(.hidden)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.height(560)])
-        .presentationDragIndicator(.visible)
     }
 
     // MARK: Header row
@@ -55,8 +47,8 @@ struct ClaudeContextSheet: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 20)
+        .padding(.horizontal, Space.lg)
+        .padding(.top, Space.xl)
     }
 
     // MARK: Detail rows

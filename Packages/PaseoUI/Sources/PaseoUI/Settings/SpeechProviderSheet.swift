@@ -93,10 +93,19 @@ struct SpeechProviderSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: title, close: { dismiss() })
+        SheetScaffold(
+            title,
+            detents: .large,
+            confirm: SheetConfirm(
+                "Save", isEnabled: isChanged, isWorking: saving,
+                identifier: "settings.voice.save"
+            ) {
+                Haptics.selection()
+                save()
+            }
+        ) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: Space.lg) {
                     RowGroup {
                         HStack {
                             Text("Provider")
@@ -132,21 +141,14 @@ struct SpeechProviderSheet: View {
                     }
 
                     if let saveError {
-                        Text(saveError)
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.failureInk)
-                            .padding(.leading, 16)
+                        InlineBanner(.failure, title: saveError)
+                            .padding(.horizontal, Space.lg)
                     }
                 }
-                .padding(.bottom, 12)
+                .padding(.bottom, Space.md)
             }
             .scrollIndicators(.hidden)
-            footer
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
         .task {
             await voice.loadModels()
         }
@@ -405,33 +407,6 @@ struct SpeechProviderSheet: View {
 
     // MARK: Footer + save
 
-    private var footer: some View {
-        HStack {
-            Button("Cancel") { dismiss() }
-                .font(.paseo(.callout, weight: .semibold))
-                .foregroundStyle(Palette.ink)
-                .disabled(saving)
-                .accessibilityIdentifier("settings.voice.cancel")
-            Spacer()
-            Button {
-                Haptics.selection()
-                save()
-            } label: {
-                Text(saving ? "Saving…" : "Save")
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(Palette.background)
-                    .padding(.horizontal, 24)
-                    .frame(minHeight: 44)
-                    .background(Palette.ink, in: .capsule)
-                    .opacity(isChanged && !saving ? 1 : 0.5)
-            }
-            .disabled(!isChanged || saving)
-            .accessibilityIdentifier("settings.voice.save")
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .overlay(alignment: .top) { Divider() }
-    }
 
     private func save() {
         guard isChanged, !saving else { return }

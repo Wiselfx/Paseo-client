@@ -10,8 +10,6 @@ import UIKit
 public struct HostChooserSheet: View {
     private let hosts: [DeepLinkHost]
     private let onChoose: (DeepLinkHost) -> Void
-    @Environment(\.dismiss) private var dismiss
-
     @State private var query = ""
 
     public init(hosts: [DeepLinkHost], onChoose: @escaping (DeepLinkHost) -> Void) {
@@ -25,18 +23,13 @@ public struct HostChooserSheet: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Choose host") { dismiss() }
-            VStack(alignment: .leading, spacing: 12) {
+        SheetScaffold("Choose host", detents: .mediumLarge) {
+            VStack(alignment: .leading, spacing: Space.md) {
                 searchField
                 ScrollView {
                     LazyVStack(spacing: 4) {
                         if options.isEmpty {
-                            Text("No matching hosts")
-                                .font(.paseo(.callout))
-                                .foregroundStyle(Palette.secondaryInk)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 14)
+                            EmptyState(title: "No matching hosts")
                                 .padding(.vertical, 18)
                                 .accessibilityIdentifier("host-chooser.empty")
                         } else {
@@ -49,13 +42,9 @@ public struct HostChooserSheet: View {
                 }
                 .scrollIndicators(.hidden)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
+            .padding(.horizontal, Space.lg)
+            .padding(.bottom, Space.lg)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
     }
 
     private var searchField: some View {

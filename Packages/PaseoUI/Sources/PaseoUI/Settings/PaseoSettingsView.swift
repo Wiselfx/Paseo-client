@@ -351,34 +351,8 @@ struct PaseoSettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 sectionLabel("Appearance")
                 RowGroup {
-                    HStack(spacing: 10) {
-                        ForEach([ClaudeAppearance.light, .dark, .pureBlack, .system], id: \.self) { choice in
-                            Button {
-                                Haptics.selection()
-                                appearance = choice.rawValue
-                            } label: {
-                                VStack(spacing: 9) {
-                                    appearancePreview(choice)
-                                        .frame(height: 68)
-                                        .overlay {
-                                            RoundedRectangle(cornerRadius: Radius.md).stroke(
-                                                appearance == choice.rawValue ? Palette.selection : .clear,
-                                                lineWidth: 2)
-                                        }
-                                    Text(choice.rawValue)
-                                        .font(.paseo(.callout))
-                                        .foregroundStyle(
-                                            appearance == choice.rawValue ? Palette.selection : Palette.secondaryInk)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("\(choice.rawValue) appearance")
-                            .accessibilityAddTraits(
-                                appearance == choice.rawValue ? .isSelected : [])
-                            .accessibilityIdentifier("settings.appearance." + choice.rawValue)
-                        }
-                    }
-                    .padding(16)
+                    AppearancePicker()
+                        .padding(16)
                 }
                 sectionLabel("Fonts")
                 RowGroup {
@@ -606,42 +580,6 @@ struct PaseoSettingsView: View {
         .scrollIndicators(.hidden)
     }
 
-    @ViewBuilder private func appearancePreview(_ choice: ClaudeAppearance) -> some View {
-        switch choice {
-        case .light:
-            ZStack {
-                Palette.Swatch.light
-                previewBars(dark: true)
-            }
-            .clipShape(.rect(cornerRadius: Radius.md))
-            .frame(maxWidth: .infinity)
-        case .dark:
-            ZStack {
-                Palette.Swatch.dark
-                previewBars(dark: false)
-            }
-            .clipShape(.rect(cornerRadius: Radius.md))
-            .frame(maxWidth: .infinity)
-        case .system:
-            ZStack {
-                HStack(spacing: 0) {
-                    Palette.Swatch.light
-                    Palette.Swatch.dark
-                }
-                previewBars(dark: true)
-            }
-            .clipShape(.rect(cornerRadius: Radius.md))
-            .frame(maxWidth: .infinity)
-        case .pureBlack:
-            ZStack {
-                Palette.Swatch.pureBlack
-                previewBars(dark: false)
-            }
-            .clipShape(.rect(cornerRadius: Radius.md))
-            .frame(maxWidth: .infinity)
-        }
-    }
-
     /// A labeled menu row for an S/M/L/XL ladder (used by both font-size rows).
     @ViewBuilder private func scaleMenuRow<Option: CaseIterable & RawRepresentable & Equatable>(
         _ title: String, symbol: String, options: [Option], current: String,
@@ -682,19 +620,6 @@ struct PaseoSettingsView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
-    }
-
-    private func previewBars(dark: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Capsule()
-                .fill((dark ? Color.black : Color.white).opacity(dark ? 0.8 : 0.5))
-                .frame(width: 40, height: 5)
-            Capsule()
-                .fill((dark ? Color.black : Color.white).opacity(dark ? 0.4 : 0.3))
-                .frame(width: 26, height: 5)
-            Spacer(minLength: 0)
-        }
-        .padding(12)
     }
 
     // MARK: Host pages

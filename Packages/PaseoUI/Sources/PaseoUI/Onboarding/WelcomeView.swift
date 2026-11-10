@@ -194,7 +194,6 @@ public struct WelcomeView<DirectForm: View>: View {
 /// The pre-connect Settings entry: appearance and text sizes, using the same keys as the
 /// general settings page. The full Settings screen needs a host (it is host-scoped).
 private struct WelcomeAppearanceSheet: View {
-    @AppStorage(ClaudeAppearance.storageKey) private var appearance = ClaudeAppearance.system.rawValue
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
     @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
 
@@ -205,34 +204,7 @@ private struct WelcomeAppearanceSheet: View {
             SheetHeader(title: "Appearance", close: { dismiss() })
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 10) {
-                        ForEach([ClaudeAppearance.light, .dark, .pureBlack, .system], id: \.self) { choice in
-                            Button {
-                                Haptics.selection()
-                                appearance = choice.rawValue
-                            } label: {
-                                VStack(spacing: 8) {
-                                    tilePreview(choice)
-                                        .frame(height: 64)
-                                        .overlay {
-                                            RoundedRectangle(cornerRadius: Radius.md).stroke(
-                                                appearance == choice.rawValue ? Palette.selection : .clear,
-                                                lineWidth: 2)
-                                        }
-                                    Text(choice.rawValue)
-                                        .font(.paseo(.caption))
-                                        .foregroundStyle(
-                                            appearance == choice.rawValue
-                                                ? Palette.selection : Palette.secondaryInk)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("\(choice.rawValue) appearance")
-                            .accessibilityAddTraits(
-                                appearance == choice.rawValue ? .isSelected : [])
-                            .accessibilityIdentifier("welcome.appearance.\(choice.rawValue)")
-                        }
-                    }
+                    AppearancePicker(identifierPrefix: "welcome.appearance")
                     scaleRow("Content size", options: ClaudeTextScale.Content.allCases,
                              current: contentTextSize) { contentTextSize = $0.rawValue }
                     scaleRow("Code size", options: ClaudeTextScale.Code.allCases,
@@ -248,36 +220,6 @@ private struct WelcomeAppearanceSheet: View {
         .presentationDragIndicator(.visible)
     }
 
-    @ViewBuilder
-    private func tilePreview(_ choice: ClaudeAppearance) -> some View {
-        switch choice {
-        case .light:
-            ZStack { Palette.Swatch.light; bars(dark: true) }
-        case .dark:
-            ZStack { Palette.Swatch.dark; bars(dark: false) }
-        case .pureBlack:
-            ZStack { Palette.Swatch.pureBlack; bars(dark: false) }
-        case .system:
-            ZStack {
-                HStack(spacing: 0) { Palette.Swatch.light; Palette.Swatch.dark }
-                bars(dark: true)
-            }
-        }
-    }
-
-    private func bars(dark: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Capsule()
-                .fill((dark ? Color.black : Color.white).opacity(dark ? 0.8 : 0.5))
-                .frame(width: 44, height: 5)
-            Capsule()
-                .fill((dark ? Color.black : Color.white).opacity(dark ? 0.4 : 0.3))
-                .frame(width: 28, height: 5)
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .clipShape(.rect(cornerRadius: Radius.md))
-    }
 
     private func scaleRow<Option: CaseIterable & RawRepresentable & Equatable>(
         _ title: String, options: [Option], current: String,

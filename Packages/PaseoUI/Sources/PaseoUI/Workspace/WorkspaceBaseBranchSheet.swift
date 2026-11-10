@@ -23,23 +23,17 @@ struct WorkspaceBaseBranchSheet: View {
 
     /// The default remote's HEAD is out of scope; show the local branches and remote-only tips.
     var body: some View {
-        VStack(spacing: 14) {
-            SheetHeader(title: "Base branch", close: { dismiss() })
-            searchField
-            if let applyError {
-                Text(applyError)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
+        SheetScaffold("Base branch", detents: .mediumLarge) {
+            VStack(spacing: Space.md) {
+                searchField
+                if let applyError {
+                    InlineBanner(.failure, title: applyError)
+                        .padding(.horizontal, Space.lg)
+                }
+                content
+                    .frame(maxHeight: .infinity)
             }
-            content
-                .frame(maxHeight: .infinity)
-            Spacer(minLength: 8)
         }
-        .background(Palette.background)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
         .task {
             await extras.loadBranchSuggestions(limit: 50)
             hasLoaded = true
@@ -71,19 +65,14 @@ struct WorkspaceBaseBranchSheet: View {
 
     @ViewBuilder private var content: some View {
         if !hasLoaded && suggestions.isEmpty {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingState()
         } else if suggestions.isEmpty {
-            VStack(spacing: 8) {
-                Text(searchText.isEmpty ? "No branches" : "No matches")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                Text(searchText.isEmpty
+            EmptyState(
+                title: searchText.isEmpty ? "No branches" : "No matches",
+                message: searchText.isEmpty
                     ? "The daemon returned no branches."
-                    : "Nothing matches “\(searchText)”.")
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    : "Nothing matches “\(searchText)”."
+            )
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -109,7 +98,7 @@ struct WorkspaceBaseBranchSheet: View {
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 if isApplying {
-                                    ProgressView().controlSize(.small)
+                                    InlineProgress()
                                 }
                             }
                             .padding(.horizontal, 20)

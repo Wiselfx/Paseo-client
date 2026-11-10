@@ -56,6 +56,44 @@ enum PaseoFormat {
         return text + scaled.1
     }
 
+    /// `2m ago`, `yesterday`: one static formatter, the outputs the rows used to build per call.
+    /// Main-actor only, like the display callers it serves: `RelativeDateTimeFormatter` is not
+    /// Sendable.
+    @MainActor private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = displayLocale
+        formatter.dateTimeStyle = .named
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
+    @MainActor static func relative(_ date: Date) -> String {
+        relativeFormatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    /// Times and dates follow the device locale (UX-SPEC §0.2), unlike the grouping above.
+    @MainActor private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    @MainActor private static let dateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    @MainActor static func time(_ date: Date) -> String {
+        timeFormatter.string(from: date)
+    }
+
+    @MainActor static func dateTime(_ date: Date) -> String {
+        dateTimeFormatter.string(from: date)
+    }
+
     /// `42%` for a 0–100 percent value, rounded to a whole percent.
     static func percent(_ value: Double) -> String {
         integer(Int(value.rounded())) + "%"

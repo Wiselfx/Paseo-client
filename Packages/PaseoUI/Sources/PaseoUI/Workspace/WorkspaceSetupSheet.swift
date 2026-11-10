@@ -9,7 +9,6 @@ struct WorkspaceSetupSheet: View {
     let session: HostSession
     let workspace: WorkspaceDescriptor
 
-    @Environment(\.dismiss) private var dismiss
     @State private var isRerunning = false
 
     private var snapshot: WorkspaceSetupSnapshot? {
@@ -21,10 +20,9 @@ struct WorkspaceSetupSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Setup", close: { dismiss() })
+        SheetScaffold("Setup", detents: .mediumLarge) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: Space.md) {
                     statusRow
                     detailCard
                     if let log = snapshot?.detail.log, !log.isEmpty { logCard(log) }
@@ -33,28 +31,18 @@ struct WorkspaceSetupSheet: View {
                     }
                     if let blocked = snapshot?.blockedSource { blockedRow(blocked) }
                     if let error = snapshot?.error, !error.isEmpty {
-                        Text(error)
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.failureInk)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        InlineBanner(.failure, title: error)
                     }
                     if let message = session.setupObservation.error {
-                        Text(message)
-                            .font(.paseo(.caption))
-                            .foregroundStyle(Palette.failureInk)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        InlineBanner(.failure, title: message)
                     }
                     runAgainButton
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .padding(.horizontal, Space.lg)
+                .padding(.bottom, Space.lg)
             }
             .scrollIndicators(.hidden)
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
         .task { await session.setupObservation.refresh(workspace.id) }
     }
 
@@ -76,7 +64,7 @@ struct WorkspaceSetupSheet: View {
             }
             Spacer(minLength: 8)
             if snapshot?.status == .running {
-                ProgressView().controlSize(.small)
+                InlineProgress()
             }
         }
     }
@@ -180,33 +168,18 @@ struct WorkspaceSetupSheet: View {
     }
 
     private var runAgainButton: some View {
-        Button {
+        Button("Run setup again") {
             guard !isRerunning else { return }
             isRerunning = true
             Task {
                 _ = await session.setupObservation.runSetup(workspace.id)
                 isRerunning = false
             }
-        } label: {
-            if isRerunning {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            } else {
-                Text("Run setup again")
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(
-                        capabilities.run ? Palette.background : Palette.secondaryInk)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
-            }
         }
-        .background(
-            Palette.ink.opacity(capabilities.run ? 1 : 0.35), in: .capsule)
-        .disabled(!capabilities.run || isRerunning)
+        .buttonStyle(.paseoPrimary(isWorking: isRerunning))
+        .disabled(!capabilities.run)
         .accessibilityLabel("Run setup again")
-        .padding(.top, 4)
+        .padding(.top, Space.xs)
     }
 }
 

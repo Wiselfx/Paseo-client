@@ -16,14 +16,21 @@ struct WorkspaceChangesCommitSheet: View {
     @State private var message = ""
     @State private var failure: String?
 
-
     private var trimmedEmpty: Bool {
         message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            SheetHeader(title: "Commit", close: { dismiss() })
+        SheetScaffold(
+            "Commit",
+            detents: .mediumLarge,
+            confirm: SheetConfirm(
+                "Commit", isEnabled: !trimmedEmpty, isWorking: checkout.isCommitting,
+                identifier: "changes.commit.submit"
+            ) {
+                Task { await commit() }
+            }
+        ) {
             VStack(alignment: .leading, spacing: 10) {
                 ClaudeCard {
                     ZStack(alignment: .topLeading) {
@@ -48,52 +55,26 @@ struct WorkspaceChangesCommitSheet: View {
                     .foregroundStyle(Palette.secondaryInk)
                     .padding(.horizontal, 2)
                 if let failure {
-                    Text(failure)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.failureInk)
-                        .padding(.horizontal, 2)
+                    InlineBanner(.failure, title: failure)
                 }
             }
-            .padding(.horizontal, 16)
-            Spacer(minLength: 0)
-            Button {
-                Task {
-                    let committed = await checkout.commit(message: message)
-                    if committed {
-                        Haptics.success()
-                        onCommitted?()
-                        dismiss()
-                    } else {
-                        Haptics.failure()
-                        failure = checkout.actionError ?? "The commit failed."
-                    }
-                }
-            } label: {
-                if checkout.isCommitting {
-                    ProgressView().tint(Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                } else {
-                    Text("Commit")
-                        .font(.paseo(.callout, weight: .semibold))
-                        .foregroundStyle(Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 46)
-                }
-            }
-            .background(
-                Palette.ink.opacity(trimmedEmpty ? 0.35 : 1), in: .capsule
-            )
-            .disabled(trimmedEmpty || checkout.isCommitting)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 14)
-            .accessibilityIdentifier("changes.commit.submit")
+            .padding(.horizontal, Space.lg)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .sheetDirty(!trimmedEmpty)
+            .onAppear { focused = true }
         }
-        .background(Palette.background)
-        .foregroundStyle(Palette.ink)
-        .presentationDetents([.height(400)])
-        .presentationDragIndicator(.visible)
-        .onAppear { focused = true }
+    }
+
+    private func commit() async {
+        let committed = await checkout.commit(message: message)
+        if committed {
+            Haptics.success()
+            onCommitted?()
+            dismiss()
+        } else {
+            Haptics.failure()
+            failure = checkout.actionError ?? "The commit failed."
+        }
     }
 }
 #endif
