@@ -118,19 +118,15 @@ struct ClaudeHomeHero: View {
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
+            let settle = Motion.settle.resolved(reduceMotion: reduceMotion)
             if reduceMotion {
-                withAnimation(Motion.settle.animation) {
+                withAnimation(settle) {
                     markIn = true
                     greetingIn = true
                 }
             } else {
-                withAnimation(
-                    Motion.settle.animation
-                ) { markIn = true }
-                withAnimation(
-                    Motion.settle.animation
-                        .delay(ClaudeMotion.stagger)
-                ) { greetingIn = true }
+                withAnimation(settle) { markIn = true }
+                withAnimation(settle?.delay(ClaudeMotion.stagger)) { greetingIn = true }
             }
         }
     }

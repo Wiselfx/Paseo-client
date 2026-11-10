@@ -73,7 +73,7 @@ struct ProviderDetailSheet: View {
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 16)
-            .frame(height: 52)
+            .frame(minHeight: 52)
             RowDivider()
             statusRow(symbol: "shippingbox", title: "Source", detail: entry?.source ?? "builtin")
             RowDivider()
@@ -104,7 +104,7 @@ struct ProviderDetailSheet: View {
             Spacer(minLength: 8)
         }
         .padding(.horizontal, 16)
-        .frame(height: 52)
+        .frame(minHeight: 52)
     }
 
     private var dotKind: PaseoStatusDot.Kind {
@@ -177,7 +177,7 @@ struct ProviderDetailSheet: View {
                         .foregroundStyle(Palette.secondaryInk)
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 52)
+                .frame(minHeight: 52)
             case .ready(let text):
                 diagnosticPane(text, isFailure: false)
             case .failed(let message):
@@ -357,7 +357,7 @@ struct ProviderDetailSheet: View {
             .accessibilityIdentifier("settings.providers.custom.add")
         }
         .padding(.horizontal, 16)
-        .frame(height: 52)
+        .frame(minHeight: 52)
     }
 
     // MARK: Add / remove custom models

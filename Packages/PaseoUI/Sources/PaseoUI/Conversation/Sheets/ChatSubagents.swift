@@ -59,7 +59,7 @@ struct SubagentTrackPill: View {
             }
             .foregroundStyle(failed > 0 ? Palette.failureInk : Palette.secondaryInk)
             .padding(.horizontal, 12)
-            .frame(height: 32)
+            .frame(minHeight: 32)
             .background(Palette.chip, in: .capsule)
             .contentShape(.capsule)
         }
@@ -288,6 +288,7 @@ struct ChatSubagentsSheet: View {
                             .font(.glyph(.regular, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 28, height: 28)
+                            .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)

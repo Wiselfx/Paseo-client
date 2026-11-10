@@ -175,7 +175,7 @@ struct AgentProfileEditSheet: View {
             }
         }
         .padding(.horizontal, 16)
-        .frame(height: 52)
+        .frame(minHeight: 52)
     }
 
     private var providerRow: some View {

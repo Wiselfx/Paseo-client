@@ -114,6 +114,7 @@ struct ClaudeCopyButton: View {
                 .font(.glyph(.regular, weight: .light))
                 .foregroundStyle(copied ? Palette.ink : Palette.tertiaryInk)
                 .frame(width: 28, height: 28)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)

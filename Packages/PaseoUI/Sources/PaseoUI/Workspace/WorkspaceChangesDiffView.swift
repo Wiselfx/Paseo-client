@@ -141,6 +141,7 @@ struct WorkspaceChangesDiffView: View {
                             .font(.glyph(.small, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -153,6 +154,7 @@ struct WorkspaceChangesDiffView: View {
                             .font(.glyph(.small, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -200,7 +202,7 @@ struct WorkspaceChangesDiffView: View {
                     }
                     .foregroundStyle(Palette.background)
                     .padding(.horizontal, 14)
-                    .frame(height: 38)
+                    .frame(minHeight: 44)
                     .background(Palette.ink, in: .capsule)
                 }
                 .buttonStyle(.plain)
@@ -213,6 +215,7 @@ struct WorkspaceChangesDiffView: View {
                         .font(.glyph(.small, weight: .semibold))
                         .foregroundStyle(Palette.background)
                         .frame(width: 38, height: 38)
+                        .frame(width: 44, height: 44)
                         .background(Palette.ink.opacity(0.85), in: .circle)
                 }
                 .buttonStyle(.plain)

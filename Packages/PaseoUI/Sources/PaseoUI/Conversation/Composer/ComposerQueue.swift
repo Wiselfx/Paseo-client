@@ -44,8 +44,9 @@ struct QueueSendButton: View {
             .frame(width: 36, height: 36)
             .foregroundStyle(.white)
             .background(Palette.orange, in: .circle)
-            .opacity(canSend ? 1 : 0.4)
+            .frame(width: 44, height: 44)
             .contentShape(.rect)
+            .opacity(canSend ? 1 : 0.4)
             // exclusively(before:): the tap only fires when the long-press fails first, so a
             // long-press never also sends.
             .gesture(

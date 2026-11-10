@@ -433,7 +433,9 @@ struct TranscriptView: View {
         }
         let distance = targetY - scrollTrack.contentOffset
         guard abs(distance) > Self.glideLead else {
-            withAnimation(Motion.glide.animation) { proxy.scrollTo(id, anchor: .top) }
+            withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
+                proxy.scrollTo(id, anchor: .top)
+            }
             return
         }
         let leadY = targetY - (distance > 0 ? Self.glideLead : -Self.glideLead)
@@ -519,6 +521,7 @@ struct TranscriptView: View {
                     .font(.glyph(.regular, weight: .semibold))
                     .foregroundStyle(Palette.ink)
                     .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .background(Palette.panel, in: .circle)
                     .overlay {
                         Circle().strokeBorder(Palette.cardBorder, lineWidth: 1)

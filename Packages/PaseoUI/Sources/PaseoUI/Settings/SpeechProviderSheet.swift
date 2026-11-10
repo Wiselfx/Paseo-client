@@ -200,7 +200,7 @@ struct SpeechProviderSheet: View {
                         .font(.paseo(.callout, weight: .semibold))
                     }
                     .padding(.horizontal, 16)
-                    .frame(height: 52)
+                    .frame(minHeight: 52)
                     Text(error)
                         .font(.paseo(.footnote))
                         .foregroundStyle(Palette.failureInk)
@@ -517,7 +517,7 @@ struct SpeechProviderSheet: View {
             .accessibilityLabel("\(title), currently \(currentMenuValue(options: options, title: title))")
         }
         .padding(.horizontal, 16)
-        .frame(height: 52)
+        .frame(minHeight: 52)
     }
 
     private func currentMenuValue(options: [SpeechModelOption], title: String) -> String {

@@ -34,7 +34,7 @@ struct ShellHeader<Title: View, Trailing: View>: View {
             }
             .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
         }
-        .frame(height: 48)
+        .frame(minHeight: 48)
         .padding(.horizontal, Space.md)
     }
 

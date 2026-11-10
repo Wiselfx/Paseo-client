@@ -523,7 +523,7 @@ struct ComposerView: View {
                 }
                 .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 12)
-                .frame(height: 36)
+                .frame(minHeight: 44)
                 .background(Palette.chip, in: .capsule)
             }
             .accessibilityLabel("Fast mode on; turn off")
@@ -1051,7 +1051,7 @@ struct SlashMenu: View {
                             .foregroundStyle(Palette.secondaryInk)
                     }
                     .padding(.horizontal, 14)
-                    .frame(height: 46)
+                    .frame(minHeight: 46)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 case .ready:
                     readyRows
@@ -1117,7 +1117,7 @@ struct SlashMenu: View {
                                 }
                             }
                             .padding(.horizontal, 14)
-                            .frame(height: 46)
+                            .frame(minHeight: 46)
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
@@ -1160,6 +1160,7 @@ struct QueueRow: View {
                     .font(.glyph(.small, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -1172,12 +1173,13 @@ struct QueueRow: View {
                     .font(.glyph(.small, weight: .semibold))
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Send queued message now")
         }
-        .frame(height: 36)
+        .frame(minHeight: 44)
         .padding(.horizontal, 10)
         .contentShape(.rect)
     }
@@ -1388,6 +1390,8 @@ struct ComposerMicButton: View {
                 .frame(width: 36, height: 36)
                 .foregroundStyle(isListening ? Palette.background : Palette.ink)
                 .background(isListening ? Palette.ink : Palette.chip, in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
                 .scaleEffect(scale)
                 .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: level)
         }
@@ -1423,6 +1427,8 @@ struct DictationOverlay: View {
                     .frame(width: 36, height: 36)
                     .foregroundStyle(Palette.ink)
                     .background(Palette.chip, in: .circle)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Cancel dictation")
@@ -1470,6 +1476,8 @@ struct DictationOverlay: View {
                 .frame(width: 36, height: 36)
                 .foregroundStyle(Palette.background)
                 .background(Palette.ink, in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

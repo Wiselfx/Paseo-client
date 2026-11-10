@@ -33,7 +33,7 @@ struct BackgroundWorkRow: View {
                     .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 12)
-            .frame(height: 36)
+            .frame(minHeight: 36)
             .background(Palette.adaptive(light: 0.96, dark: 0.10), in: .rect(cornerRadius: Radius.sm))
             .contentShape(.rect)
         }

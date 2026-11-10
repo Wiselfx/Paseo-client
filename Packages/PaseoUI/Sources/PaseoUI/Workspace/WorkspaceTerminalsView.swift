@@ -573,6 +573,7 @@ struct WorkspaceTerminalsView: View {
                         .font(.glyph(.regular, weight: .regular))
                         .foregroundStyle(Palette.secondaryInk)
                         .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)

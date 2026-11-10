@@ -166,7 +166,7 @@ struct AgentProfilesSection: View {
             Image(systemName: offset < 0 ? "chevron.up" : "chevron.down")
                 .font(.glyph(.regular, weight: .regular))
                 .foregroundStyle((isFirst || isLast) ? Palette.tertiaryInk.opacity(0.4) : Palette.tertiaryInk)
-                .frame(width: 34, height: 44)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -190,7 +190,7 @@ struct AgentProfilesSection: View {
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 16)
-            .frame(height: 52)
+            .frame(minHeight: 52)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

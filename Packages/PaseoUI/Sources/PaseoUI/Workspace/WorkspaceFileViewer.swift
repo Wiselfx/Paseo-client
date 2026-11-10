@@ -670,7 +670,7 @@ struct WorkspaceFileViewer: View {
                     Label("Share", systemImage: "square.and.arrow.up")
                         .font(.paseo(.callout, weight: .medium))
                         .foregroundStyle(Palette.ink)
-                        .frame(minHeight: 36)
+                        .frame(minHeight: 44)
                         .padding(.horizontal, Space.lg)
                         .background(Palette.chip, in: .capsule)
                 }

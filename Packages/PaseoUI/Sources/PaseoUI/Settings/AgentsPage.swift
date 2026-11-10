@@ -377,6 +377,7 @@ struct SettingsInfoButton: View {
                 .font(.glyph(.small))
                 .foregroundStyle(Palette.tertiaryInk)
                 .frame(width: 28, height: 28)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)

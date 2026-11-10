@@ -293,7 +293,7 @@ struct WorkspaceChangesView: View {
                             .foregroundStyle(Palette.background)
                             .padding(.leading, 14)
                             .padding(.trailing, 12)
-                            .frame(height: 34)
+                            .frame(minHeight: 44)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(

@@ -14,11 +14,13 @@ struct CopyButton: View {
         self.label = label
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Button {
             Clipboard.copy(text)
             Haptics.selection()
-            withAnimation(Motion.feedback.animation) { copied = true }
+            withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) { copied = true }
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 .font(.glyph(.regular, weight: .medium))
@@ -32,7 +34,7 @@ struct CopyButton: View {
             guard copied else { return }
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
-            withAnimation(Motion.feedback.animation) { copied = false }
+            withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) { copied = false }
         }
     }
 }
