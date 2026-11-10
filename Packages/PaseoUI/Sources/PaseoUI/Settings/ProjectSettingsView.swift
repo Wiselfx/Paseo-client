@@ -188,7 +188,7 @@ struct ProjectSettingsView: View {
                     seed()
                 }
             } label: {
-                Text("Retry")
+                Text("Try again")
                     .font(.paseo(.callout, weight: .semibold))
                     .foregroundStyle(Palette.background)
                     .padding(.horizontal, 24)
@@ -544,7 +544,7 @@ struct ProjectSettingsView: View {
                 callout(
                     title: "The change couldn't be saved.",
                     detail: error.userMessage,
-                    actionLabel: "Retry") {
+                    actionLabel: "Try again") {
                         Task { await save() }
                     }
             } else if let sendError = store.sendError {

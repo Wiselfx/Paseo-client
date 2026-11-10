@@ -772,7 +772,7 @@ struct WorkspaceFileViewer: View {
                 Haptics.selection()
                 Task { await files.read(relativePath) }
             } label: {
-                Text("Retry")
+                Text("Try again")
                     .font(.paseo(.footnote, weight: .medium))
                     .foregroundStyle(Palette.ink)
                     .padding(.horizontal, Space.lg)

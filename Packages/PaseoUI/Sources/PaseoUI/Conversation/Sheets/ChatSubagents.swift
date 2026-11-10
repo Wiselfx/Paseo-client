@@ -390,9 +390,9 @@ struct ChatSubagentTimelineView: View {
                         .padding(.top, 60)
                 } else if let error {
                     VStack(spacing: Space.md) {
-                        InlineBanner(.failure, title: error)
-                        Button("Retry") { Task { await load() } }
-                            .buttonStyle(.paseoSecondary)
+                        InlineBanner(
+                            .failure, title: error,
+                            action: ("Try again", { Task { await load() } }))
                     }
                     .padding(.top, 60)
                     .frame(maxWidth: .infinity)

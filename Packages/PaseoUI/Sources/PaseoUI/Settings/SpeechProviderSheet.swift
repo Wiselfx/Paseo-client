@@ -193,7 +193,7 @@ struct SpeechProviderSheet: View {
                             .font(.paseo(.callout))
                             .foregroundStyle(Palette.secondaryInk)
                         Spacer(minLength: 8)
-                        Button("Retry") {
+                        Button("Try again") {
                             Haptics.selection()
                             Task { await voice.loadModels() }
                         }
