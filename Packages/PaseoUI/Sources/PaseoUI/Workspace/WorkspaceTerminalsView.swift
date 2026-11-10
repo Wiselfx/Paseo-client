@@ -66,6 +66,7 @@ struct WorkspaceTerminalsView: View {
         .background(ClaudePalette.background)
         .task {
             await store.open(workspaceId: workspaceId, cwd: workspace.cwd)
+            guard !Task.isCancelled else { return }
             markCurrentViewed()
         }
         .onAppear {

@@ -114,9 +114,12 @@ struct WorkspaceChangesView: View {
             }
             .task {
                 await checkout.loadStatus()
+                guard !Task.isCancelled else { return }
                 if checkout.status?.hasRemote == true { await extras.loadPrStatus() }
+                guard !Task.isCancelled else { return }
                 // The panel may open long after `checkout.load()` ran; only subscribe when idle.
                 if extras.diffPhase == .idle { await reloadDiff() }
+                guard !Task.isCancelled else { return }
                 if gitActions.supportsCommitsList { await gitActions.loadCommits() }
                 await loadTimeline()
             }

@@ -152,7 +152,7 @@ private struct WorkspaceFilesDirectoryList: View {
             ClaudeDivider()
             content
         }
-        .onAppear { Task { await refresh() } }
+        .task { await refresh() }
         .onChange(of: listing) { _, _ in syncReveal() }
         .onChange(of: revealTarget) { _, _ in syncReveal() }
         .overlay(alignment: .bottom) { toastView }
