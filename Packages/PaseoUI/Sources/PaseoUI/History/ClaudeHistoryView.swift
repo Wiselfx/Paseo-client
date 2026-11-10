@@ -61,7 +61,7 @@ import SwiftUI
                     title: title,
                     searchKey: title.lowercased(),
                     subtitle: parts.joined(separator: " · "),
-                    date: stamp.flatMap(PaseoDate.parse),
+                    date: PaseoDate.parse(stamp),
                     archived: agent.archivedAt != nil
                 ))
         }

@@ -166,6 +166,29 @@ struct DiagnosticsPage: View {
         }
     }
 
+    // MARK: Privacy scrubber
+
+    /// The privacy scrubber, byte-identical to the pre-split implementation: the home path and
+    /// any bearer token, password or key are replaced before the text is shown or copied.
+    private static func scrubHostDiagnostic(_ text: String) -> String {
+        var result = text
+        let home = FileManager.default.homeDirectoryForCurrentUser().path
+        if !home.isEmpty, home != "/" {
+            result = result.replacingOccurrences(of: home, with: "~")
+        }
+        result = Self.redact(pattern: #"(?i)\b(Bearer)\s+\S+"#, in: result, replacement: "$1 [redacted]")
+        result = Self.redact(
+            pattern: #"(?i)\b(token|password|passwd|secret|api[_-]?key|access[_-]?key)\s*[:=]\s*[^\s,;]+"#,
+            in: result, replacement: "$1: [redacted]")
+        return result
+    }
+
+    private static func redact(pattern: String, in text: String, replacement: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
+    }
+
     // MARK: Report
 
     static func makeReport(session: HostSession, now: Date = Date()) -> String {
