@@ -903,7 +903,7 @@ struct LandingLine: View {
                 Rectangle().fill(ClaudePalette.ink).frame(height: 2)
             } else {
                 TimelineView(.animation) { context in
-                    let (opacity, scaleX) = Self.phase(at: context.date)
+                    let (opacity, scaleX) = phase(at: context.date)
                     Rectangle()
                         .fill(ClaudePalette.ink)
                         .frame(height: 2)
@@ -918,7 +918,7 @@ struct LandingLine: View {
     }
 
     /// `0% opacity 0 scaleX .5 → 25% opacity 1 scaleX 1 → 70% opacity 1 → 100% opacity 0`.
-    static func phase(at date: Date) -> (opacity: Double, scaleX: Double) {
+    func phase(at date: Date) -> (opacity: Double, scaleX: Double) {
         let t = date.timeIntervalSince(startedAt) / ClaudeChatView.landingDuration
         if t <= 0 { return (0, 0.5) }
         if t < 0.25 {
