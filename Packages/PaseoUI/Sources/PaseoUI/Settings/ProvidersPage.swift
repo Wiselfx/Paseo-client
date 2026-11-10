@@ -70,9 +70,11 @@ struct ProvidersPage: View {
         }
     }
 
+    /// The row pushes the provider; the switch is a sibling so a tap on it flips the flag
+    /// instead of pushing (a control inside a NavigationLink label does not get its taps).
     private func providerRow(_ provider: ProviderSnapshotEntry) -> some View {
-        NavigationLink(value: SettingsRoute.provider(provider.provider)) {
-            HStack(spacing: 0) {
+        HStack(spacing: 0) {
+            NavigationLink(value: SettingsRoute.provider(provider.provider)) {
                 HStack(spacing: Space.md) {
                     PaseoStatusDot(kind: dotKind(provider))
                     VStack(alignment: .leading, spacing: 2) {
@@ -89,29 +91,30 @@ struct ProvidersPage: View {
                 }
                 .padding(.leading, Space.lg)
                 .padding(.vertical, Space.md)
-                if hostSettings.config != nil {
-                    Toggle(
-                        "",
-                        isOn: Binding(
-                            get: { hostSettings.isProviderEnabled(provider.provider) },
-                            set: { newValue in
-                                save { patch in
-                                    patch.providers = [provider.provider: .init(enabled: newValue)]
-                                }
-                            })
-                    )
-                    .labelsHidden()
-                    .tint(Palette.toggleTint)
-                    .disabled(hostSettings.isSaving)
-                    .padding(.trailing, Space.lg)
-                    .accessibilityLabel("Enable \(provider.label ?? provider.provider)")
-                }
+                .frame(minHeight: 44)
+                .contentShape(.rect)
             }
-            .frame(minHeight: 44)
-            .contentShape(.rect)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.providers.open.\(provider.provider)")
+            if hostSettings.config != nil {
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { hostSettings.isProviderEnabled(provider.provider) },
+                        set: { newValue in
+                            save { patch in
+                                patch.providers = [provider.provider: .init(enabled: newValue)]
+                            }
+                        })
+                )
+                .labelsHidden()
+                .tint(Palette.toggleTint)
+                .disabled(hostSettings.isSaving)
+                .padding(.trailing, Space.lg)
+                .accessibilityLabel("Enable \(provider.label ?? provider.provider)")
+            }
         }
         .panelRow()
-        .accessibilityIdentifier("settings.providers.open.\(provider.provider)")
     }
 
     private func save(_ build: (inout DaemonConfigPatch) -> Void) {
