@@ -40,12 +40,57 @@ public struct TimelineState: Sendable, Equatable {
     /// streamed token. Pending sends are excluded: they are not in the daemon's index yet.
     internal private(set) var latestPromptSeq: Int?
 
+    // MARK: Digest (R3): O(1) reads maintained alongside `rows`
+    //
+    // Every property below is exactly what a full scan of `rows` would give (see `rebuildDigest`).
+    // The live paths update them incrementally; only page merges and pending-message removal pay
+    // for a full recompute.
+
+    /// One failed tool call, in row order. `seq` is that row's `seqEnd`.
+    public struct FailedToolCall: Sendable, Equatable {
+        public var callId: String
+        public var seq: Int
+
+        public init(callId: String, seq: Int) {
+            self.callId = callId
+            self.seq = seq
+        }
+    }
+
+    /// The kind of the newest row, for the mascot's activity signal.
+    public enum RowKind: Sendable, Equatable {
+        case reasoning, toolCall, other
+    }
+
+    /// Rows with a `.toolCall` that failed with something other than an AbortError, in row order.
+    public private(set) var failedToolCalls: [FailedToolCall] = []
+    /// Rows whose tool call is `.running` with a `.subAgent` detail.
+    public private(set) var runningSubAgentCount = 0
+    /// `status` of the last `.compaction` row.
+    public private(set) var lastCompactionStatus: String?
+    /// Kind of `rows.last`.
+    public private(set) var latestRowKind: RowKind?
+    /// `id` of `rows.last`.
+    public private(set) var latestRowId: String?
+
+    /// `seqEnd` -> index of the first row with that `seqEnd`. Rows are the source of truth;
+    /// this only saves the scan. A pending send can briefly share a `seqEnd` with a live row.
+    private var rowIndexBySeqEnd: [Int: Int] = [:]
+    /// Row index of each entry in `failedToolCalls`, parallel to it, so an entry can be inserted in
+    /// row order without a scan of `rows`.
+    private var failedToolRowIndexes: [Int] = []
+    /// `seqEnd`s currently shared by more than one row. Only these need a repair scan when the
+    /// first occurrence moves; a plain row index is O(1) to keep.
+    private var duplicatedSeqEnds: Set<Int> = []
+    private var lastCompactionRowIndex: Int?
+
     public init() {
         epoch = nil
         rows = []
         nextSeq = nil
         hasOlder = false
         latestPromptSeq = nil
+        rebuildDigest()
     }
 
     public enum StreamResult: Sendable, Equatable {
@@ -62,6 +107,8 @@ public struct TimelineState: Sendable, Equatable {
 
     /// Merges a fetched page. See T2 for tail/before/after and reset semantics.
     public mutating func applyPage(_ page: FetchAgentTimelineRequest.Response) {
+        let signpost = PaseoSignpost.log.beginInterval("timeline page")
+        defer { PaseoSignpost.log.endInterval("timeline page", signpost) }
         var pageRows = page.entries.map { Self.row(from: $0) }
 
         // A page can already contain a message we still show as pending (sent, then the page
@@ -113,6 +160,8 @@ public struct TimelineState: Sendable, Equatable {
         // A page can rewrite or drop rows anywhere, so the newest prompt is recomputed from
         // the merged rows. This is not the per-token path.
         latestPromptSeq = Self.newestPromptSeq(in: rows)
+        // A page can rewrite or drop rows anywhere: recompute the digest from scratch.
+        rebuildDigest()
     }
 
     /// Applies one live event. See T2 for the merge rules.
@@ -139,12 +188,15 @@ public struct TimelineState: Sendable, Equatable {
         let seq = nextSeq ?? 0
         let item = TimelineItem.userMessage(TimelineItem.UserMessage(text: text, clientMessageId: clientMessageId))
         rows.append(TimelineRow(id: "local:\(clientMessageId)", turnId: nil, item: item, timestamp: timestamp, seqStart: seq, seqEnd: seq, isPending: true))
+        digestDidInsertRow(at: rows.count - 1)
     }
 
     /// Drops an optimistic user message that the daemon never accepted. A confirmed message is
     /// kept: only rows still marked pending are removed.
     public mutating func removePendingUserMessage(clientMessageId: String) {
         rows.removeAll { $0.isPending && $0.id == "local:\(clientMessageId)" }
+        // Removal can drop a row anywhere in the index map: recompute it.
+        rebuildDigest()
     }
 
     private mutating func merge(item: TimelineItem, turnId: String?, seq: Int, timestamp: String) {
@@ -155,19 +207,25 @@ public struct TimelineState: Sendable, Equatable {
             if appendText(seq: seq, turnId: turnId, text: assistantText(item), isReasoning: false) { return }
         case .toolCall(let call):
             if let index = rows.firstIndex(where: { $0.id == "tool:\(call.callId)" }) {
+                let oldItem = rows[index].item
+                let oldSeqEnd = rows[index].seqEnd
                 rows[index].item = Self.presentedItem(item)
                 rows[index].seqEnd = seq
+                digestDidChangeRow(at: index, from: oldItem, oldSeqEnd: oldSeqEnd)
                 return
             }
         case .userMessage(let message):
             if let clientMessageId = message.clientMessageId,
                let index = rows.firstIndex(where: { $0.isPending && $0.id == "local:\(clientMessageId)" }) {
+                let oldItem = rows[index].item
+                let oldSeqEnd = rows[index].seqEnd
                 rows[index].item = item
                 rows[index].isPending = false
                 rows[index].seqStart = seq
                 rows[index].seqEnd = seq
                 rows[index].turnId = turnId
                 rows[index].timestamp = timestamp
+                digestDidChangeRow(at: index, from: oldItem, oldSeqEnd: oldSeqEnd)
                 return
             }
         default:
@@ -189,7 +247,9 @@ public struct TimelineState: Sendable, Equatable {
     private mutating func appendText(seq: Int, turnId: String?, text: String?, isReasoning: Bool) -> Bool {
         guard let text, let index = rows.lastIndex(where: { !$0.isPending }) else { return false }
         guard rows[index].turnId == turnId else { return false }
-        switch (isReasoning, rows[index].item) {
+        let oldItem = rows[index].item
+        let oldSeqEnd = rows[index].seqEnd
+        switch (isReasoning, oldItem) {
         case (true, .reasoning(var reasoning)):
             reasoning.text += text
             rows[index].item = .reasoning(reasoning)
@@ -200,6 +260,7 @@ public struct TimelineState: Sendable, Equatable {
             return false
         }
         rows[index].seqEnd = seq
+        digestDidChangeRow(at: index, from: oldItem, oldSeqEnd: oldSeqEnd)
         return true
     }
 
@@ -211,10 +272,157 @@ public struct TimelineState: Sendable, Equatable {
             id = "seq:\(seq)"
         }
         let row = TimelineRow(id: id, turnId: turnId, item: Self.presentedItem(item), timestamp: timestamp, seqStart: seq, seqEnd: seq)
+        let index: Int
         if let lastNonPending = rows.lastIndex(where: { !$0.isPending }) {
-            rows.insert(row, at: lastNonPending + 1)
+            index = lastNonPending + 1
         } else {
-            rows.insert(row, at: 0)
+            index = 0
+        }
+        rows.insert(row, at: index)
+        digestDidInsertRow(at: index)
+    }
+
+    // MARK: Digest maintenance
+
+    /// Brings every digest property back to its full-scan value. O(rows); only page merges and the
+    /// removal of a pending message call it.
+    private mutating func rebuildDigest() {
+        failedToolCalls = []
+        failedToolRowIndexes = []
+        runningSubAgentCount = 0
+        lastCompactionStatus = nil
+        lastCompactionRowIndex = nil
+        rowIndexBySeqEnd = [:]
+        duplicatedSeqEnds = []
+        for (index, row) in rows.enumerated() {
+            if let entry = Self.failedCall(of: row) {
+                failedToolCalls.append(entry)
+                failedToolRowIndexes.append(index)
+            }
+            if Self.isRunningSubAgent(row.item) { runningSubAgentCount += 1 }
+            if case .compaction(let status, _, _) = row.item {
+                lastCompactionStatus = status
+                lastCompactionRowIndex = index
+            }
+            if rowIndexBySeqEnd[row.seqEnd] == nil {
+                rowIndexBySeqEnd[row.seqEnd] = index
+            } else {
+                duplicatedSeqEnds.insert(row.seqEnd)
+            }
+        }
+        refreshLatestRow()
+    }
+
+    /// A row was inserted at `index`. The live paths only insert after the last non-pending row, so
+    /// the rows that move are pending ones (none, or one in practice).
+    private mutating func digestDidInsertRow(at index: Int) {
+        guard index >= 0, index < rows.count else { return }
+        if index + 1 < rows.count {
+            // Backwards, so a `seqEnd` shared by several moved rows only shifts the one that owned
+            // the map (the first occurrence); a forward walk would shift it once per duplicate.
+            for moved in stride(from: rows.count - 1, through: index + 1, by: -1) {
+                let seqEnd = rows[moved].seqEnd
+                if rowIndexBySeqEnd[seqEnd] == moved - 1 {
+                    rowIndexBySeqEnd[seqEnd] = moved
+                }
+            }
+        }
+        let row = rows[index]
+        insertSeqIndex(seqEnd: row.seqEnd, index: index)
+        if let entry = Self.failedCall(of: row) {
+            insertFailedEntry(entry, rowIndex: index)
+        }
+        if Self.isRunningSubAgent(row.item) { runningSubAgentCount += 1 }
+        if case .compaction(let status, _, _) = row.item, index >= (lastCompactionRowIndex ?? -1) {
+            lastCompactionStatus = status
+            lastCompactionRowIndex = index
+        }
+        refreshLatestRow()
+    }
+
+    /// The item or `seqEnd` of the row at `index` changed in place.
+    private mutating func digestDidChangeRow(
+        at index: Int, from oldItem: TimelineItem, oldSeqEnd: Int
+    ) {
+        guard index >= 0, index < rows.count else { return }
+        let row = rows[index]
+        if let callId = Self.toolCallId(of: oldItem) { removeFailedEntry(callId: callId) }
+        if let entry = Self.failedCall(of: row) { insertFailedEntry(entry, rowIndex: index) }
+        if Self.isRunningSubAgent(oldItem) { runningSubAgentCount -= 1 }
+        if Self.isRunningSubAgent(row.item) { runningSubAgentCount += 1 }
+        // A compaction keeps its type when it changes in place, so only its status can move. A
+        // later compaction row keeps winning.
+        if case .compaction(let status, _, _) = row.item, index >= (lastCompactionRowIndex ?? -1) {
+            lastCompactionStatus = status
+            lastCompactionRowIndex = index
+        }
+        if oldSeqEnd != row.seqEnd {
+            removeSeqIndex(seqEnd: oldSeqEnd, owner: index)
+            insertSeqIndex(seqEnd: row.seqEnd, index: index)
+        }
+        refreshLatestRow()
+    }
+
+    private mutating func refreshLatestRow() {
+        latestRowId = rows.last?.id
+        latestRowKind = rows.last.map { Self.rowKind(of: $0.item) }
+    }
+
+    /// First row wins: the map holds the smallest index for a `seqEnd`.
+    private mutating func insertSeqIndex(seqEnd: Int, index: Int) {
+        guard let existing = rowIndexBySeqEnd[seqEnd] else {
+            rowIndexBySeqEnd[seqEnd] = index
+            return
+        }
+        duplicatedSeqEnds.insert(seqEnd)
+        if existing > index { rowIndexBySeqEnd[seqEnd] = index }
+    }
+
+    private mutating func removeSeqIndex(seqEnd: Int, owner: Int) {
+        guard rowIndexBySeqEnd[seqEnd] == owner else { return }
+        rowIndexBySeqEnd[seqEnd] = nil
+        // Only a shared `seqEnd` can have another owner; a plain one is done in O(1).
+        guard duplicatedSeqEnds.contains(seqEnd), owner + 1 < rows.count else { return }
+        if let next = rows[(owner + 1)...].firstIndex(where: { $0.seqEnd == seqEnd }) {
+            rowIndexBySeqEnd[seqEnd] = next
+        }
+    }
+
+    /// Inserts in row order, so the result matches a scan of `rows`.
+    private mutating func insertFailedEntry(_ entry: FailedToolCall, rowIndex: Int) {
+        let position =
+            failedToolRowIndexes.firstIndex(where: { $0 > rowIndex }) ?? failedToolRowIndexes.count
+        failedToolCalls.insert(entry, at: position)
+        failedToolRowIndexes.insert(rowIndex, at: position)
+    }
+
+    private mutating func removeFailedEntry(callId: String) {
+        guard let position = failedToolCalls.firstIndex(where: { $0.callId == callId }) else { return }
+        failedToolCalls.remove(at: position)
+        failedToolRowIndexes.remove(at: position)
+    }
+
+    private static func failedCall(of row: TimelineRow) -> FailedToolCall? {
+        guard case .toolCall(let call) = row.item, MascotToolError.isFailure(call) else { return nil }
+        return FailedToolCall(callId: call.callId, seq: row.seqEnd)
+    }
+
+    private static func toolCallId(of item: TimelineItem) -> String? {
+        guard case .toolCall(let call) = item else { return nil }
+        return call.callId
+    }
+
+    private static func isRunningSubAgent(_ item: TimelineItem) -> Bool {
+        guard case .toolCall(let call) = item, call.status == .running, case .subAgent = call.detail
+        else { return false }
+        return true
+    }
+
+    private static func rowKind(of item: TimelineItem) -> RowKind {
+        switch item {
+        case .reasoning: return .reasoning
+        case .toolCall: return .toolCall
+        default: return .other
         }
     }
 
@@ -287,6 +495,12 @@ public struct TimelineState: Sendable, Equatable {
         }
         guard candidate >= 0 else { return false }
         return intervals[candidate].1 >= start
+    }
+
+    /// The index of the first row whose `seqEnd` is `seq`, or nil. O(1): the map is maintained
+    /// alongside `rows`, so the transcript does not scan per visible turn.
+    public func rowIndex(forSeqEnd seq: Int) -> Int? {
+        rowIndexBySeqEnd[seq]
     }
 
     /// Cursor for `FetchAgentTimelineRequest(direction: .after)` after a gap.

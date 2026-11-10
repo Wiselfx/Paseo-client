@@ -15,6 +15,13 @@ public final class HostSession {
     public private(set) var serverInfo: ServerInfo?
     /// Newest activity first (`updatedAt` descending). Archived agents are excluded.
     public private(set) var agents: [AgentSnapshot] = []
+    /// Agents with status `.running`. Maintained on every `agents` change, so views observe one
+    /// number instead of scanning the list.
+    public private(set) var runningAgentCount = 0
+    /// Sum of `pendingPermissions.count` over `agents`.
+    public private(set) var pendingPermissionCount = 0
+    /// Agents with `requiresAttention == true`.
+    public private(set) var attentionCount = 0
     /// Project placement by agent id, for grouping and titles.
     public private(set) var projects: [String: ProjectPlacement] = [:]
     /// The sidebar's live project/workspace directory.
@@ -63,6 +70,9 @@ public final class HostSession {
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
+    /// Parsed `updatedAt` per agent id, kept in step with `agents`, so the sort comparator and the
+    /// binary-search insertion never parse a date string.
+    private var agentDates: [String: Date?] = [:]
     /// Per-agent live-delta coalescers, keyed like `conversations`. A `.timeline` payload is
     /// buffered here and committed once per display frame instead of on every delta.
     private var timelineCoalescers: [String: TimelineCommitCoalescer] = [:]
@@ -196,7 +206,7 @@ public final class HostSession {
             }
             let entries = response.entries
 
-            agents = sortedAgents(entries.filter { $0.agent.archivedAt == nil }.map(\.agent))
+            setAgents(sortedAgents(entries.filter { $0.agent.archivedAt == nil }.map(\.agent)))
 
             var placements: [String: ProjectPlacement] = [:]
             for entry in entries {
@@ -327,13 +337,70 @@ public final class HostSession {
             agentControl.handle(messageType: messageType, raw: raw, conversations: conversations)
             hostSettings.handle(messageType: messageType, raw: raw)
             setupObservation.handle(messageType: messageType, raw: raw)
-            for store in conversations.values { store.handleSubagentUpdate(messageType: messageType, raw: raw) }
-            for store in conversations.values { store.handleBackgroundWorkUpdate(messageType: messageType, raw: raw) }
+            handleConversationUpdate(messageType: messageType, raw: raw)
             await handleUnhandled(messageType: messageType, raw: raw)
 
         case .binaryFrame(let data):
             terminals.handle(binaryFrame: data)
             gitExtras.handle(binaryFrame: data)
+        }
+    }
+
+    /// One shared decoder per pushed payload type. `JSONDecoder` is safe for repeated sequential
+    /// use on the main actor, and decoding once here is what stops every open conversation from
+    /// decoding the same bytes again.
+    private static let subagentUpdateDecoder = JSONDecoder()
+    private static let backgroundWorkUpdateDecoder = JSONDecoder()
+
+    /// `agent.provider_subagents.update` and `agent.background_work.update` name their parent
+    /// agent, so they are decoded once and handed to that conversation only. A payload with no
+    /// parent id falls back to offering it to every open conversation, as before.
+    private func handleConversationUpdate(messageType: String, raw: Data) {
+        switch messageType {
+        case ConversationSubagents.messageType:
+            guard
+                let update = try? Self.subagentUpdateDecoder.decode(
+                    SessionPayloadEnvelope<ProviderSubagentUpdate>.self, from: raw
+                ).payload
+            else { return }
+            guard let parentAgentId = Self.parentAgentId(of: update) else {
+                for store in conversations.values {
+                    store.handleSubagentUpdate(messageType: messageType, raw: raw)
+                }
+                return
+            }
+            conversations[parentAgentId]?.handleSubagentUpdate(update)
+
+        case BackgroundWorkStore.messageType:
+            guard
+                let update = try? Self.backgroundWorkUpdateDecoder.decode(
+                    SessionPayloadEnvelope<BackgroundWorkUpdate>.self, from: raw
+                ).payload
+            else { return }
+            guard !update.agentId.isEmpty else {
+                for store in conversations.values {
+                    store.handleBackgroundWorkUpdate(messageType: messageType, raw: raw)
+                }
+                return
+            }
+            conversations[update.agentId]?.handleBackgroundWorkUpdate(update)
+
+        default:
+            break
+        }
+    }
+
+    /// The parent agent a pushed subagent update belongs to, or nil when the payload names none.
+    private static func parentAgentId(of update: ProviderSubagentUpdate) -> String? {
+        switch update.kind {
+        case .upsert(let subagent):
+            return subagent.parentAgentId
+        case .remove(let removal):
+            return removal.parentAgentId
+        case .timeline(let timeline):
+            return timeline.parentAgentId
+        case .unknown:
+            return nil
         }
     }
 
@@ -422,27 +489,73 @@ public final class HostSession {
     private func apply(_ update: AgentUpdate) {
         switch update {
         case .upsert(let agent, let project):
+            if let project { projects[agent.id] = project }
             if agent.archivedAt != nil {
-                agents.removeAll { $0.id == agent.id }
-                projects[agent.id] = nil
+                removeAgent(agent.id)
                 return
             }
+            let date = PaseoDate.parse(agent.updatedAt)
             if let index = agents.firstIndex(where: { $0.id == agent.id }) {
-                agents[index] = agent
-            } else {
-                agents.append(agent)
+                // An identical snapshot is the common case for a live socket chattering about an
+                // agent that did not change. Assigning `agents` would notify every observer, so
+                // return before touching it. The open conversation already holds this snapshot.
+                if agents[index] == agent { return }
+                agents.remove(at: index)
             }
-            agents = sortedAgents(agents)
-            if let project { projects[agent.id] = project }
+            // Re-insert only this agent, in its place in the existing order. No full sort.
+            agentDates[agent.id] = date
+            agents.insert(agent, at: insertionIndex(for: agent, updatedAt: date))
+            refreshAgentCounts()
             conversations[agent.id]?.applyAgent(agent)
 
         case .remove(let agentId):
-            agents.removeAll { $0.id == agentId }
-            projects[agentId] = nil
+            removeAgent(agentId)
 
         case .unknown:
             break
         }
+    }
+
+    /// Drops one agent (an `agent_update` removal or an archive) and keeps the counts in step.
+    private func removeAgent(_ agentId: String) {
+        projects[agentId] = nil
+        agentDates[agentId] = nil
+        guard agents.contains(where: { $0.id == agentId }) else { return }
+        agents.removeAll { $0.id == agentId }
+        refreshAgentCounts()
+    }
+
+    /// Recomputes the aggregate counters in one pass over `agents`.
+    private func refreshAgentCounts() {
+        var running = 0
+        var permissions = 0
+        var attention = 0
+        for agent in agents {
+            if agent.status == .running { running += 1 }
+            permissions += agent.pendingPermissions.count
+            if agent.requiresAttention == true { attention += 1 }
+        }
+        if runningAgentCount != running { runningAgentCount = running }
+        if pendingPermissionCount != permissions { pendingPermissionCount = permissions }
+        if attentionCount != attention { attentionCount = attention }
+    }
+
+    /// The index `agent` takes in `agents` (which is sorted and does not contain it): binary search
+    /// with the same comparator as a full sort. `agentDates` holds every cached date, so the search
+    /// never parses.
+    private func insertionIndex(for agent: AgentSnapshot, updatedAt date: Date?) -> Int {
+        var low = 0
+        var high = agents.count
+        while low < high {
+            let mid = (low + high) / 2
+            let other = agents[mid]
+            if isNewer(agent, date, than: other, agentDates[other.id] ?? nil) {
+                high = mid
+            } else {
+                low = mid + 1
+            }
+        }
+        return low
     }
 
     // MARK: Helpers
@@ -469,12 +582,21 @@ public final class HostSession {
 
     /// Newest `updatedAt` first, ties by id. Each timestamp is parsed once, before the sort:
     /// inside the comparator it ran twice per comparison, i.e. ~1,400 parses per update at a
-    /// hundred agents (P3). Same order and same tie-break as before.
+    /// hundred agents (P3). Same order and same tie-break as before. Also refreshes `agentDates`,
+    /// which the incremental upsert path relies on.
     private func sortedAgents(_ agents: [AgentSnapshot]) -> [AgentSnapshot] {
-        agents
-            .map { (agent: $0, date: PaseoDate.parse($0.updatedAt)) }
-            .sorted { isNewer($0.agent, $0.date, than: $1.agent, $1.date) }
-            .map { $0.agent }
+        let parsed = agents.map { (agent: $0, date: PaseoDate.parse($0.updatedAt)) }
+        let sorted = parsed.sorted { isNewer($0.agent, $0.date, than: $1.agent, $1.date) }
+        for entry in parsed { agentDates[entry.agent.id] = entry.date }
+        return sorted.map(\.agent)
+    }
+
+    /// Assigns a freshly fetched list and keeps the counts and the date cache in step.
+    private func setAgents(_ newAgents: [AgentSnapshot]) {
+        agents = newAgents
+        let ids = Set(newAgents.map(\.id))
+        agentDates = agentDates.filter { ids.contains($0.key) }
+        refreshAgentCounts()
     }
 
     private func isNewer(
@@ -1035,6 +1157,8 @@ internal final class TimelineCommitCoalescer {
         let payloads = pending
         pending = []
         lastFlushAt = ContinuousClock.now
+        let signpost = PaseoSignpost.log.beginInterval("stream commit")
+        defer { PaseoSignpost.log.endInterval("stream commit", signpost) }
         switch store.applyTimelineDeltas(payloads) {
         case .applied, .unchanged:
             break
