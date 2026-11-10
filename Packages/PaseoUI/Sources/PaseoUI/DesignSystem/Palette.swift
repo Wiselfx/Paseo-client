@@ -39,28 +39,48 @@ extension PureBlackKey: UITraitBridgedEnvironmentKey {
 /// The app's palette (ClaudeUI's tokens extended with the DSH turn tokens; see
 /// `docs/research/08-dsh-live-observation.md` §5, which overrides doc 06).
 enum Palette {
-    /// #141413 in dark, ClaudeUI's warm canvas in light.
+    /// The chat canvas: #151515 in dark, #FCFCFB in light (OCU §12.4, §12.5).
     static var background: Color {
         Color(uiColor: UIColor { traits in
             if traits[PureBlackTrait.self] {
                 return UIColor(white: 0, alpha: 1)
             }
             return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 1)
-                : UIColor(red: 0.976, green: 0.976, blue: 0.969, alpha: 1)
+                ? UIColor(red: 21 / 255, green: 21 / 255, blue: 21 / 255, alpha: 1)
+                : UIColor(red: 252 / 255, green: 252 / 255, blue: 251 / 255, alpha: 1)
         })
     }
-    static var panel: Color {
-        adaptive(light: 1, dark: 31 / 255, pureBlack: 15 / 255)
+    /// The sidebar's canvas, one step below the chat: #0B0B0B in dark, #F9F9F7 in light
+    /// (OCU §12.4, §12.5).
+    static var sidebar: Color {
+        Color(uiColor: UIColor { traits in
+            if traits[PureBlackTrait.self] {
+                return UIColor(white: 7 / 255, alpha: 1)
+            }
+            return traits.userInterfaceStyle == .dark
+                ? UIColor(red: 11 / 255, green: 11 / 255, blue: 11 / 255, alpha: 1)
+                : UIColor(red: 249 / 255, green: 249 / 255, blue: 247 / 255, alpha: 1)
+        })
     }
-    /// A lifted gray composer card, ~#262624 in dark.
+    /// Cards: #FFFFFF in light, #1A1A19 in dark (OCU §12.4).
+    static var panel: Color {
+        Color(uiColor: UIColor { traits in
+            if traits[PureBlackTrait.self] {
+                return UIColor(white: 15 / 255, alpha: 1)
+            }
+            return traits.userInterfaceStyle == .dark
+                ? UIColor(red: 26 / 255, green: 26 / 255, blue: 25 / 255, alpha: 1)
+                : UIColor(white: 1, alpha: 1)
+        })
+    }
+    /// A lifted gray composer card, #20201F in dark (OCU §12.4).
     static var composer: Color {
         Color(uiColor: UIColor { traits in
             if traits[PureBlackTrait.self] {
                 return UIColor(white: 18 / 255, alpha: 1)
             }
             return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 38 / 255, green: 38 / 255, blue: 36 / 255, alpha: 1)
+                ? UIColor(red: 32 / 255, green: 32 / 255, blue: 31 / 255, alpha: 1)
                 : UIColor(white: 0.99, alpha: 1)
         })
     }
@@ -83,19 +103,18 @@ enum Palette {
 
     // MARK: DSH tokens
 
-    /// `--dsw-alias-label-primary`: #161616 light / #FDFDFD dark. The ink the whole app paints
-    /// text with (`primaryInk` and `shimmerInk` merged in, keeping these values).
+    /// The ink the whole app paints text with: #0B0B0B light / #F0EFEC dark (OCU §12.1).
     static let ink = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
-                ? UIColor(red: 253 / 255, green: 253 / 255, blue: 253 / 255, alpha: 1)
-                : UIColor(red: 22 / 255, green: 22 / 255, blue: 22 / 255, alpha: 1)
+                ? UIColor(red: 240 / 255, green: 239 / 255, blue: 236 / 255, alpha: 1)
+                : UIColor(red: 11 / 255, green: 11 / 255, blue: 11 / 255, alpha: 1)
         })
-    /// The prose link colour, #184F95 light / #8AB4F8 dark (`--dsh-claude-link`).
+    /// The prose link colour, the accent blue: #184F95 light / #6DA7EC dark (OCU §12.2).
     static let proseLink = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
-                ? UIColor(red: 138 / 255, green: 180 / 255, blue: 248 / 255, alpha: 1)
+                ? UIColor(red: 109 / 255, green: 167 / 255, blue: 236 / 255, alpha: 1)
                 : UIColor(red: 24 / 255, green: 79 / 255, blue: 149 / 255, alpha: 1)
         })
     /// The code-block surface: #FFFFFF light / #212121 dark (`--dsw-alias-markdown-code-block`).
@@ -123,20 +142,15 @@ enum Palette {
                 ? UIColor(red: 250 / 255, green: 249 / 255, blue: 245 / 255, alpha: 0.06)
                 : UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 0.04)
         })
-    /// `--dsw-alias-label-secondary`: #70686A / #BEB6B8.
+    /// Secondary label: #52514E light / #C3C2B7 dark (OCU §12.1).
     static let secondaryInk = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.745, green: 0.714, blue: 0.722, alpha: 1)
-                : UIColor(red: 0.439, green: 0.408, blue: 0.416, alpha: 1)
+                ? UIColor(red: 195 / 255, green: 194 / 255, blue: 183 / 255, alpha: 1)
+                : UIColor(red: 82 / 255, green: 81 / 255, blue: 78 / 255, alpha: 1)
         })
-    /// `--dsw-alias-label-tertiary`: #91888A / #9C9395.
-    static let tertiaryInk = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.612, green: 0.576, blue: 0.584, alpha: 1)
-                : UIColor(red: 0.569, green: 0.533, blue: 0.541, alpha: 1)
-        })
+    /// Tertiary label: #898781 in both modes (OCU §12.1).
+    static let tertiaryInk = Color(red: 137 / 255, green: 135 / 255, blue: 129 / 255)
     /// `--dsw-alias-label-caption`: #B2ACAD / #776F71.
     static let captionInk = Color(
         uiColor: UIColor {
@@ -144,24 +158,24 @@ enum Palette {
                 ? UIColor(red: 0.467, green: 0.435, blue: 0.443, alpha: 1)
                 : UIColor(red: 0.698, green: 0.675, blue: 0.678, alpha: 1)
         })
-    /// `--dsh-claude-divider`, drawn at 0.5 pt.
+    /// 10 % black in light / 10 % white in dark, drawn at 0.5 pt (OCU §12.6).
     static let divider = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.06) : UIColor(white: 22 / 255, alpha: 0.05)
+                ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 0, alpha: 0.10)
         })
-    /// `--dsw-alias-border-l1` card edge: #E9E9E9 / translucent white highlight.
+    /// Card edge: 10 % black in light / 10 % white in dark (OCU §12.6).
     static let cardBorder = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.09) : UIColor(white: 233 / 255, alpha: 1)
+                ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 0, alpha: 0.10)
         })
-    /// `#F4F2F3` light / translucent white dark — DSH's `#F4F2F3` / `rgba(255,255,255,0.06)`.
+    /// #F0EFEC light / translucent white 6 % dark (OCU §12.7).
     static let userBubble = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
                 ? UIColor(white: 1, alpha: 0.06)
-                : UIColor(red: 244 / 255, green: 242 / 255, blue: 243 / 255, alpha: 1)
+                : UIColor(red: 240 / 255, green: 239 / 255, blue: 236 / 255, alpha: 1)
         })
     /// `--dsh-claude-chip`, the hover/pressed plate.
     static let chip = adaptive(light: 0.965, dark: 0.14)

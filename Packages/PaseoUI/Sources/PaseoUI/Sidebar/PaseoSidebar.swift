@@ -90,7 +90,7 @@ struct PaseoSidebar: View {
         .frame(maxHeight: .infinity, alignment: .top)
         // The sidebar canvas equals the conversation canvas (§1.1); only the card's hairline
         // and dim separate the two surfaces.
-        .background(Palette.background)
+        .background(Palette.sidebar)
         .foregroundStyle(Palette.ink)
         .onAppear {
             // R5's ⌘K hook: the sidebar owns the Search sheet, so it hands the route over here.
