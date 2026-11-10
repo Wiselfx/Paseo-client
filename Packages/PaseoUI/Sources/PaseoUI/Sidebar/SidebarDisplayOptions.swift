@@ -87,9 +87,9 @@ extension PaseoSidebar {
                 }
             }
             Divider()
-            Toggle("Show branch", isOn: $showBranch).tint(.blue)
-            Toggle("Show diff stats", isOn: $showDiffStats).tint(.blue)
-            Toggle("Show PR badge", isOn: $showPRBadge).tint(.blue)
+            Toggle("Show branch", isOn: $showBranch).tint(Palette.toggleTint)
+            Toggle("Show diff stats", isOn: $showDiffStats).tint(Palette.toggleTint)
+            Toggle("Show PR badge", isOn: $showPRBadge).tint(Palette.toggleTint)
             Picker(
                 "Group by",
                 selection: Binding(
@@ -100,7 +100,7 @@ extension PaseoSidebar {
                     Text(grouping.title).tag(grouping)
                 }
             }
-            Toggle("Active first", isOn: $activeFirst).tint(.blue)
+            Toggle("Active first", isOn: $activeFirst).tint(Palette.toggleTint)
             if session.labels.supportsLabels
                 && (!labelCatalog.isEmpty || !labelFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             {
@@ -111,8 +111,8 @@ extension PaseoSidebar {
             }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .font(.system(size: 21, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.large, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
                 .frame(width: 44, height: 44)
         }
         .accessibilityLabel("Sidebar options")

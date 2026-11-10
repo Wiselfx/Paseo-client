@@ -13,17 +13,17 @@ struct PaseoStatusDot: View {
         Group {
             switch kind {
             case .running:
-                Circle().fill(ClaudePalette.secondaryInk).frame(width: 6, height: 6)
+                Circle().fill(Palette.secondaryInk).frame(width: 6, height: 6)
                     .opacity(breathing ? 1 : 0.3)
                     .animation(
                         reduceMotion ? nil : .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
                         value: breathing)
                     .onAppear { breathing = true }
-            case .needsInput: Circle().fill(ClaudePalette.warning).frame(width: 6, height: 6)
-            case .failed: Circle().fill(ClaudePalette.failureInk).frame(width: 6, height: 6)
-            case .done: Circle().fill(ClaudePalette.successInk).frame(width: 6, height: 6)
-            case .unread: Circle().fill(ClaudePalette.unread).frame(width: 6, height: 6)
-            case .idle: Circle().strokeBorder(ClaudePalette.captionInk, lineWidth: 1).frame(width: 6, height: 6)
+            case .needsInput: Circle().fill(Palette.warning).frame(width: 6, height: 6)
+            case .failed: Circle().fill(Palette.failureInk).frame(width: 6, height: 6)
+            case .done: Circle().fill(Palette.successInk).frame(width: 6, height: 6)
+            case .unread: Circle().fill(Palette.unread).frame(width: 6, height: 6)
+            case .idle: Circle().strokeBorder(Palette.captionInk, lineWidth: 1).frame(width: 6, height: 6)
             }
         }
         .frame(width: 8, height: 8)

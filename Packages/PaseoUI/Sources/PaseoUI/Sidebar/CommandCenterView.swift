@@ -28,7 +28,6 @@ struct CommandCenterSheet: View {
     /// The agent open in the chat, if any; the Files group searches its workspace.
     let selectedAgentId: String?
 
-    private let typography = ClaudeTypography()
     @Environment(\.hostSwitch) private var hostSwitch
 
     @State private var query = ""
@@ -118,9 +117,9 @@ struct CommandCenterSheet: View {
             searchField
             resultsList
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
-        .tint(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
+        .tint(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
         .sheet(item: $fileViewer) { target in
@@ -143,13 +142,13 @@ struct CommandCenterSheet: View {
     private var header: some View {
         ZStack {
             Text("Search")
-                .font(typography.serif(19, relativeTo: .headline, weight: .semibold))
+                .font(.paseo(.title, weight: .semibold))
             HStack {
                 Button {
                     Haptics.selection()
                     onClose()
                 } label: {
-                    Image(systemName: "xmark").font(.system(size: 19, weight: .light))
+                    Image(systemName: "xmark").font(.glyph(.large, weight: .light))
                         .frame(width: 42, height: 42)
                 }
                 .glassEffect(in: .circle)
@@ -166,11 +165,11 @@ struct CommandCenterSheet: View {
     private var searchField: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.regular))
+                .foregroundStyle(Palette.secondaryInk)
             TextField("Search agents, workspaces, files, actions…", text: $query)
                 .focused($fieldFocused)
-                .font(typography.sans(15))
+                .font(.paseo(.callout))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .onSubmit { activateSelection() }
@@ -193,8 +192,8 @@ struct CommandCenterSheet: View {
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.glyph(.regular))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(width: 30, height: 30)
                 }
                 .accessibilityLabel("Clear search")
@@ -202,7 +201,7 @@ struct CommandCenterSheet: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .onChange(of: query) { _, _ in selectedIndex = 0 }
@@ -215,8 +214,8 @@ struct CommandCenterSheet: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if flatRows.isEmpty {
                     Text(noResultsText)
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 36)
                         .accessibilityIdentifier("search.noResults")
@@ -236,8 +235,8 @@ struct CommandCenterSheet: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(ClaudePalette.tertiaryInk)
+            .font(.paseo(.caption, weight: .semibold))
+            .foregroundStyle(Palette.tertiaryInk)
             .textCase(.uppercase)
             .padding(.top, 16)
             .padding(.bottom, 4)
@@ -549,13 +548,13 @@ struct CommandCenterSheet: View {
                 leading(row)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.title)
-                        .font(typography.sans(16, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     if let subtitle = row.subtitle {
                         Text(subtitle)
-                            .font(row.kind == .file ? typography.mono(11.5) : typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(row.kind == .file ? .paseo(.codeCaption) : .paseo(.caption))
+                            .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
@@ -565,7 +564,7 @@ struct CommandCenterSheet: View {
             }
             .padding(.horizontal, 16)
             .frame(minHeight: 46)
-            .background(isSelected ? ClaudePalette.chip : .clear, in: .rect(cornerRadius: 12))
+            .background(isSelected ? Palette.chip : .clear, in: .rect(cornerRadius: Radius.md))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -578,8 +577,8 @@ struct CommandCenterSheet: View {
             PaseoStatusDot(kind: dot)
         } else if let symbol = row.symbol {
             Image(systemName: symbol)
-                .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.regular, weight: .regular))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(width: 22)
         } else {
             Color.clear.frame(width: 22)
@@ -589,15 +588,15 @@ struct CommandCenterSheet: View {
     @ViewBuilder private func trailing(_ row: Result) -> some View {
         if row.archived {
             Text("Archived")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.caption2, weight: .medium))
+                .foregroundStyle(Palette.captionInk)
                 .padding(.horizontal, 8)
-                .frame(height: 20)
-                .background(ClaudePalette.chip, in: .rect(cornerRadius: 5))
+                .frame(minHeight: 20)
+                .background(Palette.chip, in: .rect(cornerRadius: Radius.xs))
         } else if row.kind == .action, row.action == .switchHost {
             Image(systemName: hostExpanded ? "chevron.up" : "chevron.down")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.small, weight: .semibold))
+                .foregroundStyle(Palette.tertiaryInk)
         } else if row.kind == .hostEntry {
             EmptyView()
         } else {

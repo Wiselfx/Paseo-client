@@ -17,7 +17,7 @@ extension PaseoSidebar {
                 PaseoStatusDot(kind: workspaceStatusKind(workspace, agents: rowAgents))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(workspaceTitle(workspace))
-                        .font(typography.sans(16, weight: .medium))
+                        .font(.paseo(.callout, weight: .medium))
                         .lineLimit(1)
                     metaRow(workspace, derivations: derivations)
                 }
@@ -29,7 +29,7 @@ extension PaseoSidebar {
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
             .contentShape(.rect)
-            .background(selected ? ClaudePalette.chip : Color.clear, in: .rect(cornerRadius: 8))
+            .background(selected ? Palette.chip : Color.clear, in: .rect(cornerRadius: Radius.sm))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -126,38 +126,38 @@ extension PaseoSidebar {
         HStack(spacing: 4) {
             if showBranch {
                 Text(workspace.branch ?? workspaceKindLabel(workspace))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
             }
             if showDiffStats, let stat = workspace.diffStat, stat.additions > 0 || stat.deletions > 0 {
-                if showBranch { Text("·").foregroundStyle(ClaudePalette.captionInk) }
+                if showBranch { Text("·").foregroundStyle(Palette.captionInk) }
                 if stat.additions > 0 {
                     Text("+\(PaseoFormat.integer(stat.additions))")
-                        .foregroundStyle(ClaudePalette.successInk.opacity(0.75))
+                        .foregroundStyle(Palette.successInk.opacity(0.75))
                 }
                 if stat.deletions > 0 {
                     Text("−\(PaseoFormat.integer(stat.deletions))")
-                        .foregroundStyle(ClaudePalette.failureInk.opacity(0.75))
+                        .foregroundStyle(Palette.failureInk.opacity(0.75))
                 }
             }
             if let stamp = activityStamp {
                 if showBranch || hasVisibleDiffStat(workspace) {
-                    Text("·").foregroundStyle(ClaudePalette.captionInk)
+                    Text("·").foregroundStyle(Palette.captionInk)
                 }
                 Text(relativeAge(stamp))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .foregroundStyle(Palette.secondaryInk)
             }
             let rowLabels = labelDefinitions(for: workspace)
             if !rowLabels.isEmpty {
                 if showBranch || hasVisibleDiffStat(workspace) || activityStamp != nil {
-                    Text("·").foregroundStyle(ClaudePalette.captionInk)
+                    Text("·").foregroundStyle(Palette.captionInk)
                 }
                 labelChips(for: workspace)
             }
             Spacer(minLength: 6)
             if showPRBadge, let pullRequest = pullRequest(workspace), let number = pullRequest.number {
                 Text(verbatim: "#\(number)")
-                    .font(typography.sans(11, weight: .semibold))
+                    .font(.paseo(.caption2, weight: .semibold))
                     .foregroundStyle(pullRequestTint(workspace))
             }
             if case let dots = scriptDots(workspace), !dots.isEmpty {
@@ -170,7 +170,7 @@ extension PaseoSidebar {
                 .accessibilityLabel(scriptDotsLabel(workspace, count: dots.count))
             }
         }
-        .font(typography.sans(12))
+        .font(.paseo(.caption))
         .lineLimit(1)
     }
 
@@ -186,13 +186,13 @@ extension PaseoSidebar {
     }
 
     func pullRequestTint(_ workspace: WorkspaceDescriptor) -> Color {
-        guard let pr = pullRequest(workspace) else { return ClaudePalette.secondaryInk }
-        if pr.isMerged { return ClaudePalette.unread }
-        if pr.isDraft == true { return ClaudePalette.tertiaryInk }
+        guard let pr = pullRequest(workspace) else { return Palette.secondaryInk }
+        if pr.isMerged { return Palette.unread }
+        if pr.isDraft == true { return Palette.tertiaryInk }
         switch pr.state.lowercased() {
-        case "open": return ClaudePalette.successInk
-        case "closed": return ClaudePalette.failureInk
-        default: return ClaudePalette.secondaryInk
+        case "open": return Palette.successInk
+        case "closed": return Palette.failureInk
+        default: return Palette.secondaryInk
         }
     }
 
@@ -204,9 +204,9 @@ extension PaseoSidebar {
         var dots: [Color] = []
         for script in scripts {
             if script.lifecycle == .running {
-                dots.append(ClaudePalette.successInk)
+                dots.append(Palette.successInk)
             } else if let code = script.exitCode, code != 0 {
-                dots.append(ClaudePalette.failureInk)
+                dots.append(Palette.failureInk)
             }
         }
         return Array(dots.prefix(3))

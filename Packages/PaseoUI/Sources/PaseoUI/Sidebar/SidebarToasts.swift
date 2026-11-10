@@ -105,7 +105,7 @@ extension PaseoSidebar {
         let name = workspaceTitle(workspace)
         let token = UUID()
         undoToastToken = token
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
             undoToast = (workspace.id, name)
         }
         Haptics.selection()
@@ -113,17 +113,17 @@ extension PaseoSidebar {
         Task {
             try? await Task.sleep(for: .seconds(5))
             guard undoToastToken == token else { return }
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                 undoToast = nil
             }
         }
     }
 
     func showToast(_ text: String) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = text }
+        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = text }
         Task {
             try? await Task.sleep(for: .seconds(1.5))
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = nil }
+            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = nil }
         }
     }
 }

@@ -13,8 +13,8 @@ struct SidebarDerivations {
 extension PaseoSidebar {
     func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(ClaudePalette.tertiaryInk)
+            .font(.paseo(.caption, weight: .semibold))
+            .foregroundStyle(Palette.tertiaryInk)
             .textCase(.uppercase)
             .lineLimit(1)
             .padding(.top, 18)
@@ -83,7 +83,7 @@ extension PaseoSidebar {
                         }
                         // Animated reorder (active-first); None under Reduce Motion.
                         .animation(
-                            reduceMotion ? nil : .easeInOut(duration: 0.3),
+                            Motion.settle.resolved(reduceMotion: reduceMotion),
                             value: group.workspaces.map(\.id))
                     }
                 }
@@ -114,7 +114,7 @@ extension PaseoSidebar {
                         }
                         // Animated reorder (active-first); None under Reduce Motion.
                         .animation(
-                            reduceMotion ? nil : .easeInOut(duration: 0.3),
+                            Motion.settle.resolved(reduceMotion: reduceMotion),
                             value: bucket.workspaces.map(\.id))
                     }
                 }
@@ -128,15 +128,15 @@ extension PaseoSidebar {
         let collapsed = isDateGroupCollapsed(bucket.id)
         return Button {
             Haptics.selection()
-            withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                 toggleDateGroupCollapsed(bucket.id)
             }
         } label: {
             HStack(spacing: 6) {
                 ClaudeChevron(expanded: !collapsed)
                 Text(bucket.title)
-                    .font(typography.sans(15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -161,7 +161,7 @@ extension PaseoSidebar {
                 }
             }
             .animation(
-                reduceMotion ? nil : .easeInOut(duration: 0.3),
+                Motion.settle.resolved(reduceMotion: reduceMotion),
                 value: pinned.map(\.id))
         }
     }
@@ -177,17 +177,17 @@ extension PaseoSidebar {
     var hiddenWorkspacesRow: some View {
         Button {
             Haptics.selection()
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { showHidden.toggle() }
+            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { showHidden.toggle() }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: showHidden ? "eye" : "eye.slash")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 24, height: 24)
-                    .background(ClaudePalette.chip, in: .circle)
+                    .background(Palette.chip, in: .circle)
                 Text("Hidden workspaces (\(PaseoFormat.integer(hiddenWorkspacesSet.count)))")
-                    .font(typography.sans(15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                 Spacer(minLength: 0)
                 ClaudeChevron(expanded: showHidden)
             }
@@ -212,9 +212,9 @@ extension PaseoSidebar {
                     ? "No workspaces with this label."
                     : (error ?? "No workspaces on this host yet."))
         )
-        .font(typography.sans(14))
+        .font(.paseo(.callout))
         .foregroundStyle(
-            error == nil || filtered ? ClaudePalette.secondaryInk : ClaudePalette.failureInk
+            error == nil || filtered ? Palette.secondaryInk : Palette.failureInk
         )
         .padding(.vertical, 24)
     }
