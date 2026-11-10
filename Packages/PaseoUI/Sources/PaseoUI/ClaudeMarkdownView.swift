@@ -119,12 +119,16 @@
                         return .handled
                     })
         }
-        private func blocks(_ blocks: [MarkdownBlock]) -> some View {
-            VStack(alignment: .leading, spacing: theme.blockSpacing) {
-                ForEach(identifiedBlocks(blocks)) { identified in
-                    render(identified.value)
-                }
-            }.frame(maxWidth: .infinity, alignment: .leading)
+        // Quotes and lists call back into `blocks`, so the opaque type would be defined in
+        // terms of itself; one `AnyView` per container level breaks the cycle while every leaf
+        // block keeps its concrete type.
+        private func blocks(_ blocks: [MarkdownBlock]) -> AnyView {
+            AnyView(
+                VStack(alignment: .leading, spacing: theme.blockSpacing) {
+                    ForEach(identifiedBlocks(blocks)) { identified in
+                        render(identified.value)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading))
         }
 
         /// One block plus a stable identity for `ForEach` (P5-B).
