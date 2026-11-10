@@ -321,7 +321,7 @@ struct AgentProfileEditSheet: View {
             if ok {
                 dismiss()
             } else {
-                saveError = session.hostSettings.error ?? "The daemon rejected that profile."
+                saveError = session.hostSettings.error ?? "The host rejected that profile."
             }
         }
     }

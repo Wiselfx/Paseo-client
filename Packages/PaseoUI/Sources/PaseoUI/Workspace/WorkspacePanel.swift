@@ -520,7 +520,7 @@ struct WorkspacePanel: View {
                 renameText = agent.title ?? ""
                 renamingAgent = agent
             }
-            Button("Copy agent ID", systemImage: "doc.on.doc") {
+            Button("Copy agent id", systemImage: "doc.on.doc") {
                 Clipboard.copy(agent.id, toast: toast)
                 Haptics.selection()
             }

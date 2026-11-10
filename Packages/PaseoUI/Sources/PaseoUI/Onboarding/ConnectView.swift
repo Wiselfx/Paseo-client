@@ -90,7 +90,7 @@ public struct ConnectView: View {
                 Spacer(minLength: 12)
                 VStack(spacing: 6) {
                     Text("Paseo").font(.paseo(.largeTitle))
-                    Text("Connect to your daemon")
+                    Text("Connect to your host")
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.secondaryInk)
                 }
@@ -143,7 +143,7 @@ public struct ConnectView: View {
             }
             Button("Cancel", role: .cancel) { forgetTarget = nil }
         } message: {
-            Text("The password stored on this device for this host is removed too. The daemon itself is not changed.")
+            Text("The password stored on this device for this host is removed too. The host itself isn't changed.")
         }
     }
 
@@ -267,7 +267,7 @@ public struct ConnectView: View {
                     errorCaption(hostError)
                 }
                 RowDivider()
-                secureField("Password", text: $password, prompt: "Daemon password")
+                secureField("Password", text: $password, prompt: "Host password")
                 RowDivider()
                 Toggle(isOn: $useTLS) {
                     VStack(alignment: .leading, spacing: 2) {

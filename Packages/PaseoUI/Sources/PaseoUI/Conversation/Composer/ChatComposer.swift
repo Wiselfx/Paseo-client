@@ -444,7 +444,7 @@ struct ComposerView: View {
     private var composerAddMenu: some View {
         Menu {
             PhotosPicker(selection: $photoSelection, maxSelectionCount: 10, matching: .images) {
-                Label("Photo Library", systemImage: "photo.on.rectangle")
+                Label("Photo library", systemImage: "photo.on.rectangle")
             }
             if cameraAvailable {
                 Button("Camera", systemImage: "camera") { showCameraPicker = true }
@@ -465,7 +465,7 @@ struct ComposerView: View {
             Button("New agent", systemImage: "plus.bubble") {
                 controller?.newAgent(draft: text)
             }
-            Button("Copy agent ID", systemImage: "doc.on.doc") {
+            Button("Copy agent id", systemImage: "doc.on.doc") {
                 controller?.copyAgentId()
             }
         } label: {

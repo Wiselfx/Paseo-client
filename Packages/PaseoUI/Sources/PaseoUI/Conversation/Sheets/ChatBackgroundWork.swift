@@ -52,7 +52,7 @@ struct ChatBackgroundWorkSheet: View {
     private var canStop: Bool { backgroundWork.canStop }
 
     var body: some View {
-        SheetScaffold("Background Work", detents: .mediumLarge) {
+        SheetScaffold("Background work", detents: .mediumLarge) {
             Group {
                 if backgroundWork.items.isEmpty {
                     EmptyState(

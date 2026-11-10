@@ -106,7 +106,7 @@ import SwiftUI
 }
 
 /// The History screen: every agent on this host — live and archived — grouped by day, with a
-/// debounced title filter. Row verbs follow PLAN §RH: Open, Rename…, Copy agent ID, then the
+/// debounced title filter. Row verbs follow PLAN §RH: Open, Rename…, Copy agent id, then the
 /// destructive verb.
 struct ClaudeHistoryView: View {
     let session: HostSession
@@ -373,9 +373,9 @@ struct ClaudeHistoryView: View {
         }
         Button {
             Clipboard.copy(row.agent.id)
-            toast?.show("Agent ID copied")
+            toast?.show("Agent id copied")
         } label: {
-            Label("Copy agent ID", systemImage: "doc.on.doc")
+            Label("Copy agent id", systemImage: "doc.on.doc")
         }
         Divider()
         if row.archived {

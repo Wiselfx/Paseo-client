@@ -447,7 +447,7 @@ struct WorkspaceChangesDiffView: View {
             centeredMessage(
                 symbol: "doc.text",
                 title: "File too large",
-                subtitle: "The diff for this file was omitted by the daemon.")
+                subtitle: "The diff for this file was omitted by the host.")
         default:
             if let render {
                 if render.sections.isEmpty {

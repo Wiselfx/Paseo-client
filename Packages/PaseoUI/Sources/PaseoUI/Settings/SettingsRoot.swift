@@ -134,7 +134,7 @@ struct SettingsRoot: View {
                 }
                 Section {
                     routeRow(
-                        .overview, value: session.serverInfo?.hostname ?? "Paseo daemon",
+                        .overview, value: session.serverInfo?.hostname ?? "Paseo host",
                         identifier: "settings.route.overview")
                     routeRow(.hosts, value: hostsSummary, identifier: "settings.route.hosts")
                     if hostSettings.supportsPairingOffer {
@@ -187,7 +187,7 @@ struct SettingsRoot: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The connection to the daemon will be closed. Your settings are kept.")
+            Text("The connection to the host will be closed. Your settings are kept.")
         }
         .task {
             if hostSettings.config == nil, hostSettings.phase != .loading {

@@ -510,7 +510,7 @@ struct WorkspaceFileViewer: View {
         } else {
             unsupportedView(
                 icon: "doc.text", title: "No content",
-                detail: "The daemon returned no text for this file.")
+                detail: "The host returned no text for this file.")
         }
     }
 
@@ -574,7 +574,7 @@ struct WorkspaceFileViewer: View {
         } else {
             unsupportedView(
                 icon: "doc.text", title: "No content",
-                detail: "The daemon returned no text for this file.")
+                detail: "The host returned no text for this file.")
         }
     }
 
@@ -596,7 +596,7 @@ struct WorkspaceFileViewer: View {
         } else {
             unsupportedView(
                 icon: "doc.text", title: "No content",
-                detail: "The daemon returned no text for this file.")
+                detail: "The host returned no text for this file.")
         }
     }
 
@@ -621,7 +621,7 @@ struct WorkspaceFileViewer: View {
         } else {
             unsupportedView(
                 icon: "photo", title: "Image can't be shown",
-                detail: "The daemon sent SVG bytes this view can't decode.")
+                detail: "The host sent SVG bytes this view can't decode.")
         }
     }
 
@@ -642,7 +642,7 @@ struct WorkspaceFileViewer: View {
         } else {
             unsupportedView(
                 icon: "photo", title: "Image can't be shown",
-                detail: "The daemon sent image bytes this view can't decode.")
+                detail: "The host sent image bytes this view can't decode.")
         }
     }
 

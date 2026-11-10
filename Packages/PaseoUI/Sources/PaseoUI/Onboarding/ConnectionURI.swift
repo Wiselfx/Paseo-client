@@ -32,7 +32,7 @@ public enum ConnectionURI {
         let isTLS = trimmed.hasPrefix("wss://")
 
         guard var components = URLComponents(string: trimmed), let host = components.host else {
-            return .invalid("That doesn't look like a daemon address.")
+            return .invalid("That doesn't look like a host address.")
         }
         let displayHost = host
         guard !displayHost.isEmpty else {
@@ -55,7 +55,7 @@ public enum ConnectionURI {
         components.query = nil
         components.fragment = nil
         guard let url = components.url else {
-            return .invalid("That doesn't look like a daemon address.")
+            return .invalid("That doesn't look like a host address.")
         }
         return .valid(
             Parsed(url: url, host: displayHost, port: port, isTLS: isTLS, displayHost: displayHost))

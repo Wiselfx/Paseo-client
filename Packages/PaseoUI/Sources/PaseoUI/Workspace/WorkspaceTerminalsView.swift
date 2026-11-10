@@ -393,7 +393,7 @@ struct WorkspaceTerminalsView: View {
             if !store.isSupported {
                 statusMessage(
                     "Update the host to view terminals.",
-                    detail: "This daemon predates the terminal replay protocol.")
+                    detail: "This host predates the terminal replay protocol.")
             } else if let selectedTerminalId, terminals.contains(where: { $0.id == selectedTerminalId }) {
                 PaseoTerminalView(
                     store: store,

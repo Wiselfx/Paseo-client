@@ -33,7 +33,7 @@ struct ProvidersPage: View {
                     }
                 } footer: {
                     Text(
-                        "Enable switches are stored in the daemon's config; status and models come from the host's catalogue."
+                        "Enable switches are stored in the host's config; status and models come from its catalogue."
                     )
                 }
             }
@@ -42,7 +42,7 @@ struct ProvidersPage: View {
                     InlineBanner(
                         .info,
                         title:
-                            "Daemon config is unavailable — pull to refresh on a Host page to enable toggles."
+                            "Host config is unavailable — pull to refresh on a Host page to enable toggles."
                     )
                     .panelRow(Palette.background)
                 }

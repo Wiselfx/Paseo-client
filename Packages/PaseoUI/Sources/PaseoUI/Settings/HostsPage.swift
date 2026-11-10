@@ -72,7 +72,7 @@ struct HostsPage: View {
             Button("Cancel", role: .cancel) { switchTarget = nil }
         } message: {
             // The existing disconnect wording: switching closes this host's connection.
-            Text("The connection to the daemon will be closed. Your settings are kept.")
+            Text("The connection to the host will be closed. Your settings are kept.")
         }
     }
 

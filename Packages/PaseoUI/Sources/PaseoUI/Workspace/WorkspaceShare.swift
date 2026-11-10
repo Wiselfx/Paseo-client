@@ -21,7 +21,7 @@ enum WorkspaceShare {
         let files = checkout.files
         await files.read(path, maxBytes: maxBytes)
         guard files.phase == .ready, let file = files.file else {
-            throw ShareError.unreadable(files.error ?? "The daemon returned no file.")
+            throw ShareError.unreadable(files.error ?? "The host returned no file.")
         }
         return file
     }
@@ -67,7 +67,7 @@ enum WorkspaceShare {
         } else if file.kind == .binary {
             throw ShareError.unreadable("This file can't be saved from here.")
         } else {
-            throw ShareError.unreadable("The daemon sent no bytes for this file.")
+            throw ShareError.unreadable("The host sent no bytes for this file.")
         }
         let displayName = name ?? file.path.split(separator: "/").last.map(String.init) ?? "file"
         let ext = (displayName as NSString).pathExtension

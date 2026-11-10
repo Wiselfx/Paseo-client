@@ -112,7 +112,7 @@ public struct PairScanSheet: View {
             if permissionDenied {
                 concernContent(
                     title: "Camera permission",
-                    body: "Allow camera access to scan the pairing QR code from your daemon.",
+                    body: "Allow camera access to scan the pairing QR code from your host.",
                     pasteHint: "Or paste the pairing link instead.")
             } else if failed {
                 concernContent(
@@ -321,7 +321,7 @@ public struct PastePairingSheet: View {
     public var body: some View {
         SheetScaffold("Paste pairing link", detents: .large) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Treat this pairing link like a password. Anyone with it can access this daemon.")
+                Text("Treat this pairing link like a password. Anyone with it can access this host.")
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.secondaryInk)
                 // Prompt-free PasteButton (system label): reads the pasteboard on tap.

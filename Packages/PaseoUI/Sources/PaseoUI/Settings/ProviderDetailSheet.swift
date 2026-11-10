@@ -189,7 +189,7 @@ struct ProviderDetailSheet: View {
     private func diagnosticPane(_ text: String, isFailure: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             ScrollView {
-                Text(text.isEmpty ? "The daemon returned an empty diagnostic." : text)
+                Text(text.isEmpty ? "The host returned an empty diagnostic." : text)
                     .font(.paseo(.codeCaption))
                     .foregroundStyle(isFailure ? Palette.failureInk : Palette.ink)
                     .textSelection(.enabled)
@@ -225,7 +225,7 @@ struct ProviderDetailSheet: View {
                 }
             }
         }
-        Text("Models the daemon probes for this provider. Read-only; the daemon owns the catalogue.")
+        Text("Models the host probes for this provider. Read-only; the host owns the catalogue.")
             .font(.paseo(.footnote))
             .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
@@ -301,7 +301,7 @@ struct ProviderDetailSheet: View {
             InlineBanner(.failure, title: modelError)
                 .padding(.horizontal, Space.lg)
         }
-        Text("Custom models live in the daemon's config, merged into this provider's catalogue.")
+        Text("Custom models live in the host's config, merged into this provider's catalogue.")
             .font(.paseo(.footnote))
             .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
@@ -393,7 +393,7 @@ struct ProviderDetailSheet: View {
             if ok {
                 await session.agentControl.refreshCatalog()
             } else {
-                modelError = session.hostSettings.error ?? "The daemon rejected that change."
+                modelError = session.hostSettings.error ?? "The host rejected that change."
             }
         }
     }

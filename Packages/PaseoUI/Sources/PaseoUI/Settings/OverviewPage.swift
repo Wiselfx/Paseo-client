@@ -10,55 +10,68 @@ struct OverviewPage: View {
 
     private var hostSettings: HostSettingsStore { session.hostSettings }
 
+    /// The developer facts (server id, protocol, terminal hooks) sit behind one collapsed
+    /// "Advanced" disclosure; the page opens on the connection itself (R11 §3).
+    @State private var showAdvanced = false
+
     var body: some View {
         PageList {
             Section {
                 connectionRow
                 ListRow(
-                    title: "Server ID",
-                    accessory: ListRow.Accessory.value(session.serverInfo?.serverId ?? "Not connected")
-                )
-                .panelRow()
-                ListRow(
-                    title: "Daemon version",
+                    title: "Host version",
                     accessory: ListRow.Accessory.value(session.serverInfo?.version ?? "Unknown")
-                )
-                .panelRow()
-                ListRow(
-                    title: "Protocol version",
-                    accessory: ListRow.Accessory.value(
-                        session.serverInfo?.protocolVersion.map { String($0) } ?? "Unknown")
                 )
                 .panelRow()
             } header: {
                 Text("Connection")
             }
             Section {
-                ListRow(
-                    title: "Terminal agent hooks",
-                    accessory: ListRow.Accessory.toggle(
-                        configBinding(
-                            get: { $0.enableTerminalAgentHooks },
-                            set: { $0.enableTerminalAgentHooks = $1 }))
-                )
-                .panelRow()
-                .disabled(configControlsDisabled)
-                .accessibilityIdentifier("settings.config.Terminal agent hooks")
-                ListRow(
-                    title: "Usage tracking",
-                    accessory: ListRow.Accessory.toggle(
-                        configBinding(
-                            get: { $0.usage?.enabled ?? false },
-                            set: { $0.usage = .init(enabled: $1) }))
-                )
-                .panelRow()
-                .disabled(configControlsDisabled)
-                .accessibilityIdentifier("settings.config.Usage tracking")
-            } header: {
-                Text("Advanced")
+                DisclosureGroup(isExpanded: $showAdvanced) {
+                    ListRow(
+                        title: "Server ID",
+                        accessory: ListRow.Accessory.value(
+                            session.serverInfo?.serverId ?? "Not connected")
+                    )
+                    .panelRow()
+                    ListRow(
+                        title: "Protocol version",
+                        accessory: ListRow.Accessory.value(
+                            session.serverInfo?.protocolVersion.map { String($0) } ?? "Unknown")
+                    )
+                    .panelRow()
+                    ListRow(
+                        title: "Terminal agent hooks",
+                        accessory: ListRow.Accessory.toggle(
+                            configBinding(
+                                get: { $0.enableTerminalAgentHooks },
+                                set: { $0.enableTerminalAgentHooks = $1 }))
+                    )
+                    .panelRow()
+                    .disabled(configControlsDisabled)
+                    .accessibilityIdentifier("settings.config.Terminal agent hooks")
+                    ListRow(
+                        title: "Usage tracking",
+                        accessory: ListRow.Accessory.toggle(
+                            configBinding(
+                                get: { $0.usage?.enabled ?? false },
+                                set: { $0.usage = .init(enabled: $1) }))
+                    )
+                    .panelRow()
+                    .disabled(configControlsDisabled)
+                    .accessibilityIdentifier("settings.config.Usage tracking")
+                } label: {
+                    Text("Advanced")
+                        .font(.paseo(.body))
+                        .foregroundStyle(Palette.ink)
+                }
+                .tint(Palette.secondaryInk)
+                .padding(.horizontal, Space.lg)
+                .padding(.vertical, Space.sm)
+                .listRowBackground(Palette.panel)
             } footer: {
                 Text(
-                    "Unset toggles show as off. Changes apply immediately; the effective config comes back from the daemon."
+                    "Unset toggles show as off. Changes apply immediately; the effective config comes back from the host."
                 )
             }
             if let error = hostSettings.error {
@@ -82,7 +95,7 @@ struct OverviewPage: View {
                 .padding(.leading, Space.lg)
             ListRow(
                 title: "Connection",
-                subtitle: session.serverInfo?.hostname ?? "Paseo daemon",
+                subtitle: session.serverInfo?.hostname ?? "Paseo host",
                 accessory: ListRow.Accessory.value(connectionLabel(session.connection))
             )
         }
