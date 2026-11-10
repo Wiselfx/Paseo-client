@@ -672,7 +672,6 @@ struct ProjectSettingsView: View {
         await store.load(repoRoot: project.projectRootPath)
         store.clearErrors()
         seed()
-        Haptics.selection()
     }
 
     private func save() async {
