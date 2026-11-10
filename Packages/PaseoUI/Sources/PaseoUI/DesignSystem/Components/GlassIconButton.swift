@@ -16,6 +16,7 @@ struct GlassIconButton<Label: View>: View {
     var body: some View {
         Button(action: action) {
             content()
+                .font(.glyph(.regular, weight: .medium))
                 .frame(width: 44, height: 44)
                 .contentShape(.circle)
         }
@@ -27,7 +28,7 @@ struct GlassIconButton<Label: View>: View {
 extension GlassIconButton where Label == Image {
     init(systemName: String, label: String, action: @escaping () -> Void) {
         self.init(label: label, action: action) {
-            Image(systemName: systemName).font(.glyph(.regular, weight: .medium))
+            Image(systemName: systemName)
         }
     }
 }
