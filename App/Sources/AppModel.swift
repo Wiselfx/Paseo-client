@@ -76,7 +76,6 @@ final class AppModel {
         }
         migrateLegacyHostIfNeeded()
         wireHostContext()
-        hostContext.loadAppearances()
         refreshHostContext()
         if let last = savedHosts.mostRecent {
             // Startup: straight to the last host. On failure the connect screen shows with this
@@ -313,7 +312,6 @@ final class AppModel {
             relaySecrets.savePassword("", serverID: serverID)
         }
         forgetSavedHost(id)
-        hostContext.removeAppearance(for: id)
         guard wasCurrent else { return }
         if let other = savedHosts.mostRecent {
             Task { await connectToSaved(other.id) }
