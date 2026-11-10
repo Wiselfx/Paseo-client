@@ -201,7 +201,7 @@ struct ClaudeLiveStatusLine: View {
             Spacer(minLength: 0)
         }
         .frame(height: 24)
-        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: activity)
+        .animation(Motion.swap.resolved(reduceMotion: reduceMotion), value: activity)
         // OCU §12: the overtime badge settles critically damped, like every surface.
         .animation(
             Motion.settle.resolved(reduceMotion: reduceMotion),
@@ -279,13 +279,13 @@ private struct ClaudeBlurSwap: ViewModifier {
 extension AnyTransition {
     static var claudeWordEntrance: AnyTransition {
         .modifier(
-            active: ClaudeBlurSwap(blur: 2, y: 8, alpha: 0),
+            active: ClaudeBlurSwap(blur: 2, y: 6, alpha: 0),
             identity: ClaudeBlurSwap(blur: 0, y: 0, alpha: 1))
     }
 
     static var claudeWordExit: AnyTransition {
         .modifier(
-            active: ClaudeBlurSwap(blur: 2, y: -8, alpha: 0),
+            active: ClaudeBlurSwap(blur: 2, y: -4, alpha: 0),
             identity: ClaudeBlurSwap(blur: 0, y: 0, alpha: 1))
     }
 }
