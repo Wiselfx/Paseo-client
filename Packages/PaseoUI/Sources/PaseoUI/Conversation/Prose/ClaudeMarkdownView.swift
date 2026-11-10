@@ -9,8 +9,8 @@
         public var bodyFont: Font
         public var headingFonts: [Font]
         public var codeFont: Font
-        public var foreground: Color = .primary
-        public var secondary: Color = .secondary
+        public var foreground: Color = Palette.ink
+        public var secondary: Color = Palette.secondaryInk
         public var link: Color = Palette.proseLink
         public var inlineCodeForeground: Color = Palette.ink
         /// The blockquote's wash: rgba(20,20,19,0.04) light / rgba(250,249,245,0.06) dark.
@@ -25,15 +25,14 @@
         public var tableColumnWidth: CGFloat = 150
         public init(serifName: String = "Newsreader16pt-Regular", bodySize: CGFloat = 20) {
             foreground = Palette.ink
-            // `ClaudeTypography.serif` multiplies by the text-size setting; the theme builds its
-            // fonts directly, so without this prose would ignore Settings → Appearance.
-            let size = bodySize
-            bodyFont = ProseFonts.serif(size: size)
+            // Dynamic Type (shifted by Content size in `RootView`) scales prose; the theme no
+            // longer multiplies sizes by hand.
+            bodyFont = ProseFonts.serif(size: bodySize)
             // The Claude ladder as ratios of the body: h1 1.5, h2 1.29, h3 1.14, h4 1, h5 0.93,
             // h6 0.86 (the sizes measured at 14 pt: 21 / 18 / 16 / 14 / 13 / 12).
             let headingRatios: [CGFloat] = [1.5, 1.286, 1.143, 1, 0.929, 0.857]
             headingFonts = headingRatios.enumerated().map { index, ratio in
-                ProseFonts.serif(size: size * ratio, relativeTo: index < 3 ? .headline : .body)
+                ProseFonts.serif(size: bodySize * ratio, relativeTo: index < 3 ? .headline : .body)
                     .weight(index < 3 ? .bold : .semibold)
             }
             // ~0.88 of the body: 15 pt at the 17 pt Claude body. The code-size step is applied by

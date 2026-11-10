@@ -13,13 +13,6 @@ extension UITraitCollection {
     var pureBlack: Bool { self[PureBlackTrait.self] }
 }
 
-extension UIMutableTraits {
-    var pureBlack: Bool {
-        get { self[PureBlackTrait.self] }
-        set { self[PureBlackTrait.self] = newValue }
-    }
-}
-
 /// The SwiftUI side of the trait: `RootView` sets `\.pureBlack`, and SwiftUI bridges it into the
 /// UIKit trait collections its hosting views see.
 struct PureBlackKey: EnvironmentKey {
@@ -38,8 +31,8 @@ extension PureBlackKey: UITraitBridgedEnvironmentKey {
         traitCollection.pureBlack
     }
 
-    static func write(to mutableTraits: inout UIMutableTraits, value: Bool) {
-        mutableTraits.pureBlack = value
+    static func write(to mutableTraits: inout any UIMutableTraits, value: Bool) {
+        mutableTraits[PureBlackTrait.self] = value
     }
 }
 
