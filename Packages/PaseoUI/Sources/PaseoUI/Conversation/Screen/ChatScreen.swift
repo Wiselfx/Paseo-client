@@ -37,7 +37,6 @@ public struct ChatScreen: View {
                 session: session, store: store, onOpenSidebar: onOpenSidebar,
                 onOpenPanel: onOpenPanel, onBack: onBack, onNewAgent: onNewAgent,
                 onForkAgent: onForkAgent, onOpenAgent: onOpenAgent))
-        ClaudeFontResources.register()
     }
 
     public var body: some View {

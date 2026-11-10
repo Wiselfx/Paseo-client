@@ -68,7 +68,6 @@
             isStreaming: Bool = false,
             onAction: @escaping (MarkdownAction) -> Void = { _ in }
         ) {
-            ClaudeFontResources.register()
             self.document = document
             self.theme = theme
             self.imageContent = imageContent

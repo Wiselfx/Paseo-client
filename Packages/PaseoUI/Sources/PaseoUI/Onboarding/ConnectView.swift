@@ -53,7 +53,6 @@ public struct ConnectView: View {
         let failed: Bool
         if case .failed = status { failed = true } else { failed = false }
         _showAddForm = State(initialValue: hosts.isEmpty || failed)
-        ClaudeFontResources.register()
     }
 
     private var connecting: Bool { status == .connecting }

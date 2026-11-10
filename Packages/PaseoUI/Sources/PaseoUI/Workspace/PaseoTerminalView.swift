@@ -43,7 +43,6 @@ struct PaseoTerminalView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> TerminalView {
-        ClaudeFontResources.register()
         let view = TerminalView(frame: .zero, font: PaseoTerminalFont.current())
         view.terminalDelegate = context.coordinator
         let scrollback = PaseoTerminalScrollback.current()
