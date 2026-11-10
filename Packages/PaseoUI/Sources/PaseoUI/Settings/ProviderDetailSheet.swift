@@ -32,11 +32,14 @@ struct ProviderDetailSheet: View {
                 diagnosticSection
                 discoveredSection
                 customModelsSection
-                refreshBar
             }
             .padding(.bottom, Space.xxl)
         }
         .scrollIndicators(.hidden)
+        .refreshable {
+            await session.agentControl.refreshCatalog()
+            _ = await session.hostSettings.providerDiagnostic(providerID)
+        }
         .navigationTitle(entry?.label ?? providerID)
         .navigationBarTitleDisplayMode(.inline)
         .background(Palette.background)
@@ -197,15 +200,6 @@ struct ProviderDetailSheet: View {
             HStack {
                 CopyButton(text: text, label: "Copy diagnostic")
                     .accessibilityIdentifier("settings.providers.diagnostic.copy")
-                Button {
-                    Haptics.selection()
-                    Task { _ = await session.hostSettings.providerDiagnostic(providerID) }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                        .font(.paseo(.footnote, weight: .medium))
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("settings.providers.diagnostic.refresh")
                 Spacer(minLength: 0)
             }
         }
@@ -402,22 +396,6 @@ struct ProviderDetailSheet: View {
                 modelError = session.hostSettings.error ?? "The daemon rejected that change."
             }
         }
-    }
-
-    // MARK: Refresh bar
-
-    private var refreshBar: some View {
-        HStack {
-            Spacer()
-            Button("Refresh") {
-                Haptics.selection()
-                Task { await session.agentControl.refreshCatalog() }
-            }
-            .buttonStyle(.paseoPrimary(isWorking: session.agentControl.phase == .loading))
-            .accessibilityIdentifier("settings.providers.refresh")
-            Spacer()
-        }
-        .padding(.vertical, Space.md)
     }
 
     // MARK: Shared bits

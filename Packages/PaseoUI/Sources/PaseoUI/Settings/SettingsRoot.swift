@@ -304,9 +304,9 @@ struct SettingsRoot: View {
     }
 }
 
-/// The old entry point, kept so the sidebar's call site compiles while Shell moves to
-/// `SettingsRoot`. Same sheet, same arguments.
-@available(*, deprecated, message: "Use SettingsRoot")
+/// The old entry point, kept so the sidebar's call site (`PaseoSidebar.swift`) compiles while
+/// Shell moves to `SettingsRoot`. Same sheet, same arguments; it is not deprecated on purpose,
+/// so the call site does not warn.
 struct PaseoSettingsView: View {
     let session: HostSession
     var onDisconnect: () -> Void

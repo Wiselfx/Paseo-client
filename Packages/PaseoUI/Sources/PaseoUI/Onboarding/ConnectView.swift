@@ -151,88 +151,51 @@ public struct ConnectView: View {
     // MARK: Saved hosts
 
     private var savedHostsList: some View {
-        VStack(spacing: 10) {
-            List {
-                ForEach(hosts) { host in
-                    Button {
+        List {
+            ForEach(hosts) { host in
+                ListRow(
+                    title: host.label,
+                    subtitle: host.urlLine,
+                    systemImage: host.isCurrent ? "checkmark.circle.fill" : "desktopcomputer",
+                    accessory: connecting ? ListRow.Accessory.progress : ListRow.Accessory.chevron,
+                    action: {
                         Haptics.selection()
                         onConnectSaved(host.id)
+                    }
+                )
+                .disabled(connecting)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        forgetTarget = host
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: host.isCurrent ? "checkmark.circle.fill" : "desktopcomputer")
-                                .font(.glyph(.large, weight: .light))
-                                .foregroundStyle(host.isCurrent ? Palette.ink : Palette.secondaryInk)
-                                .frame(width: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(host.label)
-                                    .font(.paseo(.body, weight: .medium))
-                                    .foregroundStyle(Palette.ink)
-                                    .lineLimit(1)
-                                Text(host.urlLine)
-                                    .font(.paseo(.codeCaption))
-                                    .foregroundStyle(Palette.secondaryInk)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            Spacer(minLength: 8)
-                            if connecting {
-                                ProgressView().controlSize(.small).tint(Palette.ink)
-                            } else {
-                                Image(systemName: "chevron.right")
-                                    .font(.glyph(.regular))
-                                    .foregroundStyle(Palette.secondaryInk)
-                            }
-                        }
-                        .contentShape(.rect)
+                        Label("Forget", systemImage: "trash")
                     }
-                    .buttonStyle(.plain)
-                    .disabled(connecting)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
-                            forgetTarget = host
-                        } label: {
-                            Label("Forget", systemImage: "trash")
-                        }
-                    }
-                    .contextMenu {
-                        Button {
-                            renameText = host.label
-                            renameTarget = host
-                        } label: {
-                            Label("Rename", systemImage: "pencil")
-                        }
-                        Button(role: .destructive) {
-                            forgetTarget = host
-                        } label: {
-                            Label("Forget", systemImage: "trash")
-                        }
-                    }
-                    .accessibilityIdentifier("connect.saved.\(host.id.uuidString)")
                 }
-                Button {
-                    Haptics.selection()
-                    showAddForm = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "plus.circle")
-                            .font(.glyph(.large, weight: .light))
-                            .foregroundStyle(Palette.ink)
-                            .frame(width: 24)
-                        Text("Add host")
-                            .font(.paseo(.body))
-                            .foregroundStyle(Palette.ink)
-                        Spacer(minLength: 8)
+                .contextMenu {
+                    Button {
+                        renameText = host.label
+                        renameTarget = host
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
                     }
-                    .contentShape(.rect)
+                    Button(role: .destructive) {
+                        forgetTarget = host
+                    } label: {
+                        Label("Forget", systemImage: "trash")
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("connect.addHost")
+                .accessibilityIdentifier("connect.saved.\(host.id.uuidString)")
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .frame(height: min(64 * CGFloat(hosts.count + 1) + 8, 380))
+            ListRow(title: "Add host", systemImage: "plus.circle") {
+                Haptics.selection()
+                showAddForm = true
+            }
+            .accessibilityIdentifier("connect.addHost")
         }
-        .padding(.horizontal, 16)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .frame(height: min(60 * CGFloat(hosts.count + 1) + 8, 380))
+        .padding(.horizontal, Space.lg)
     }
 
     private func renameSheet(_ target: HostSwitchEntry) -> some View {
@@ -252,16 +215,10 @@ public struct ConnectView: View {
                 saveRename(target)
             } label: {
                 Text("Save")
-                    .font(.paseo(.callout, weight: .medium))
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 48)
-                    .foregroundStyle(Palette.background)
-                    .background(Palette.ink, in: .capsule)
-                    .opacity(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.paseoPrimary())
             .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Space.lg)
             .accessibilityIdentifier("connect.rename.save")
             Spacer(minLength: 0)
         }
@@ -382,25 +339,17 @@ public struct ConnectView: View {
             .padding(.bottom, 10)
     }
 
+    /// The one primary action: `PrimaryButtonStyle` keeps its width and shows the spinner while
+    /// connecting (PLAN §RH, async actions).
     private var connectButton: some View {
         Button(action: onConnect) {
-            HStack(spacing: 8) {
-                if connecting {
-                    ProgressView().controlSize(.small).tint(Palette.background)
-                    Text("Connecting…").font(.paseo(.callout, weight: .medium))
-                } else {
-                    Text(status.isFailed ? "Retry" : "Connect").font(.paseo(.callout, weight: .medium))
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .foregroundStyle(Palette.background)
-            .background(Palette.ink, in: .capsule)
-            .opacity(canConnect ? 1 : 0.4)
+            Text(
+                connecting
+                    ? "Connecting…" : (status.isFailed ? "Retry" : "Connect"))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.paseoPrimary(isWorking: connecting))
         .disabled(!canConnect)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Space.lg)
         .accessibilityIdentifier("connect.submit")
     }
 
