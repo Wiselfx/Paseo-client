@@ -92,18 +92,20 @@ final class AppModel {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
+        // Raised before the Keychain read, so the very first frame after the skeleton starts is
+        // the shell, not the connect form.
+        launchConnecting = savedHosts.mostRecent != nil
         password = Keychain.read(account: Keys.passwordAccount) ?? ""
         migrateLegacyHostIfNeeded()
         refreshHostContext()
         if let last = savedHosts.mostRecent {
             // Startup: straight to the last host. On failure the connect screen shows with this
             // host preselected and the error inline.
-            launchConnecting = true
             await connectToSaved(last.id)
-            launchConnecting = false
         } else if !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             await connect()
         }
+        launchConnecting = false
     }
 
     // MARK: Connecting
