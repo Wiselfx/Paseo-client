@@ -26,9 +26,22 @@ struct ComposerView: View {
     let store: ConversationStore?
     /// The open agent's controller; nil in draft mode.
     let controller: ChatController?
+    /// Draft mode: the session's stores (catalogue for create, the upload channel, agents).
+    let draftHost: HostSession?
+    /// Draft mode: the shell swaps its conversation in once the agent exists.
+    let onCreated: ((String) -> Void)?
 
     @Binding var text: String
     @FocusState.Binding var focused: Bool
+
+    /// Draft mode's own tray: there is no agent id to key the shared store by yet, and a draft
+    /// uploads through the session's channel before the create request.
+    @State private var localTray: [ComposerAttachmentItem] = []
+    @State private var uploadPumpRunning = false
+    @State private var localAttachmentError: String?
+    @State private var draftDictation = DictationController()
+    @State private var showDraftControls = false
+    @State private var showDraftFullScreen = false
 
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var showCameraPicker = false
@@ -49,19 +62,38 @@ struct ComposerView: View {
         self.mode = mode
         self.store = store
         self.controller = controller
+        self.draftHost = nil
+        self.onCreated = nil
         self._text = Binding(
             get: { store.draft }, set: { store.draft = $0 })
         self._focused = focused
     }
 
+    /// The draft screen's composer: the same card, before its agent exists (R6 §5).
+    init(
+        draft: DraftSession, session: HostSession, onCreated: @escaping (String) -> Void,
+        focused: FocusState<Bool>.Binding
+    ) {
+        self.mode = .draft(draft)
+        self.store = nil
+        self.controller = nil
+        self.draftHost = session
+        self.onCreated = onCreated
+        self._text = Binding(
+            get: { draft.text }, set: { draft.text = $0 })
+        self._focused = focused
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            slashMenu
-            mentionMenu
-            queueStack
+            if !isDraft {
+                slashMenu
+                mentionMenu
+                queueStack
+            }
             composerCard
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, isDraft && !composerExpanded ? 16 : 8)
         .onGeometryChange(for: CGFloat.self) { geometry in
             geometry.size.height
         } action: { height in
@@ -71,6 +103,18 @@ struct ComposerView: View {
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: mentionQuery != nil)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: queueIsEmpty == false)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: fastModeActive)
+        .onChange(of: photoSelection) { _, items in
+            guard !items.isEmpty else { return }
+            handlePickedPhotos(items)
+        }
+        .onAppear {
+            guard isDraft else { return }
+            draftDictation.onDraft = { text = $0 }
+        }
+        .onDisappear {
+            guard isDraft else { return }
+            draftDictation.stop(keepingDraft: true)
+        }
     }
 
     // MARK: Derived (all local to the composer)
@@ -84,6 +128,29 @@ struct ComposerView: View {
         DraftMetrics.isTall(text)
     }
 
+    private var isDraft: Bool {
+        if case .draft = mode { return true }
+        return false
+    }
+
+    private var draftSession: DraftSession? {
+        if case .draft(let draft) = mode { return draft }
+        return nil
+    }
+
+    /// §4.1: the draft's one-line pill at rest becomes the two-row card once focused, holding
+    /// text, an attachment, an error or dictation. A live conversation is always the card (V5 §4.4).
+    private var composerExpanded: Bool {
+        guard isDraft else { return true }
+        return focused || !trimmedText.isEmpty || !trayItems.isEmpty || errorText != nil
+            || (activeDictation?.isListening ?? false)
+    }
+
+    /// The dictation controller that belongs to this composer: the conversation's or a draft's own.
+    private var activeDictation: DictationController? {
+        controller?.dictation ?? draftDictation
+    }
+
     private var slashQuery: String? {
         controller?.slashQuery(in: text)
     }
@@ -93,13 +160,13 @@ struct ComposerView: View {
     }
 
     private var trayItems: [ComposerAttachmentItem] {
-        controller?.trayItems ?? []
+        controller?.trayItems ?? localTray
     }
 
     private var hasUploadingAttachment: Bool {
         trayItems.contains { item in
             switch item.phase {
-            case .pending, .uploading: true
+            case .decoding, .pending, .uploading: true
             case .done, .attached, .failed: false
             }
         }
@@ -110,7 +177,7 @@ struct ComposerView: View {
             switch item.phase {
             case .done(let attachment): .uploadedFile(attachment)
             case .attached(let attachment): attachment
-            case .pending, .uploading, .failed: nil
+            case .decoding, .pending, .uploading, .failed: nil
             }
         }
     }
@@ -119,8 +186,17 @@ struct ComposerView: View {
     /// upload is in flight.
     private var canSend: Bool {
         guard !hasUploadingAttachment else { return false }
+        if let draft = draftSession {
+            return draft.canSend(hasAttachments: !readyAttachments.isEmpty)
+        }
         if !trimmedText.isEmpty { return true }
         return !readyAttachments.isEmpty
+    }
+
+    /// What the card shows under the field when something went wrong.
+    private var errorText: String? {
+        if let store { return store.actionError }
+        return localAttachmentError ?? draftSession?.error
     }
 
     private var cameraAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
@@ -134,6 +210,13 @@ struct ComposerView: View {
     }
 
     private var modelLabel: String? {
+        if let draft = draftSession {
+            guard let catalog = draftHost?.agentControl, let modelId = draft.modelId else {
+                return nil
+            }
+            return catalog.models(forProvider: draft.providerId ?? "")
+                .first(where: { $0.id == modelId })?.label ?? modelId
+        }
         guard let store, let agent = store.agent else { return nil }
         let catalog = controller?.session.agentControl
         if let id = agent.model,
@@ -145,6 +228,13 @@ struct ComposerView: View {
     }
 
     private var thinkingLabel: String? {
+        if let draft = draftSession, let thinkingId = draft.thinkingOptionId,
+            let modelId = draft.modelId
+        {
+            return draftHost?.agentControl
+                .thinkingOptions(forProvider: draft.providerId ?? "", modelId: modelId)
+                .first(where: { $0.id == thinkingId })?.label
+        }
         guard let store, let agent = store.agent,
             let model = agent.effectiveThinkingOptionId ?? agent.thinkingOptionId,
             let modelId = agent.model
@@ -196,27 +286,28 @@ struct ComposerView: View {
     // MARK: Card
 
     private var composerCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let dictation = controller?.dictation, dictation.isListening {
+        VStack(alignment: .leading, spacing: composerExpanded ? 8 : 0) {
+            if let dictation = activeDictation, dictation.isListening {
                 dictationOverlay(dictation)
             } else {
-                attachmentTray
-                dictationDeniedBanner
-                if let error = store?.actionError {
+                if composerExpanded { attachmentTray }
+                if composerExpanded { dictationDeniedBanner }
+                if composerExpanded, let error = errorText {
                     Text(error)
                         .font(.paseo(.footnote))
                         .foregroundStyle(Palette.failureInk)
                         .padding(.horizontal, 8)
                         .transition(.opacity)
                 }
-                composerTextField
-                if voiceActiveForAgent || voice?.phase == .starting {
+                fieldRow
+                if composerExpanded, voiceActiveForAgent || voice?.phase == .starting {
                     voiceBar
                 }
-                composerControlRow
+                if composerExpanded { composerControlRow }
             }
         }
-        .composerCardChrome(expanded: true)
+        .composerCardChrome(expanded: composerExpanded)
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: composerExpanded)
         .onChange(of: composerFocusRequested.wrappedValue) { _, requested in
             guard requested else { return }
             focused = true
@@ -229,6 +320,11 @@ struct ComposerView: View {
         .overlay(alignment: .topTrailing) { expandComposerButton }
         // The crab stands on the card's top edge, flush with its trailing edge.
         .overlay(alignment: .topTrailing) { mascotCrab }
+        .sheet(isPresented: $showDraftControls) {
+            if let draft = draftSession, let session = draftHost {
+                DraftControlsSheet(session: session, draft: draft)
+            }
+        }
         .fullScreenCover(isPresented: fullScreenComposerBinding) {
             FullScreenComposer(
                 draft: $text,
@@ -245,7 +341,7 @@ struct ComposerView: View {
             forgeIsGitLab: forgeIsGitLab,
             onFileURLs: attachFileURLs,
             onCameraImage: { data in
-                controller?.attachImageData(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
+                attachImage(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
             },
             onForgePick: { item in
                 toggleForgeAttachment(item)
@@ -263,8 +359,31 @@ struct ComposerView: View {
 
     private var fullScreenComposerBinding: Binding<Bool> {
         Binding(
-            get: { controller?.showFullScreenComposer ?? false },
-            set: { controller?.showFullScreenComposer = $0 })
+            get: { controller?.showFullScreenComposer ?? showDraftFullScreen },
+            set: { value in
+                if controller != nil {
+                    controller?.showFullScreenComposer = value
+                } else {
+                    showDraftFullScreen = value
+                }
+            })
+    }
+
+    /// The draft overlays its add button on the field's leading edge at rest, so the field keeps
+    /// one structural position and the keyboard holds when the pill grows (§4.1).
+    @ViewBuilder private var fieldRow: some View {
+        if isDraft {
+            HStack(spacing: 8) {
+                composerTextField
+                    .padding(.leading, composerExpanded ? 0 : 44)
+                    .overlay(alignment: .leading) {
+                        if !composerExpanded { composerAddMenu }
+                    }
+                if !composerExpanded { dictateButton }
+            }
+        } else {
+            composerTextField
+        }
     }
 
     private var composerTextField: some View {
@@ -293,7 +412,7 @@ struct ComposerView: View {
     }
 
     @ViewBuilder private var dictationDeniedBanner: some View {
-        if let controller, controller.dictation.isDenied {
+        if activeDictation?.isDenied == true {
             InlineBanner(
                 .failure, title: "Dictation is off.",
                 message: "Enable Microphone and Speech Recognition in Settings.",
@@ -362,10 +481,32 @@ struct ComposerView: View {
     }
 
     private var composerModelChip: some View {
-        ComposerModelChip(modelLabel: modelChipTitle, thinkingLabel: thinkingLabel) {
+        ComposerModelChip(
+            modelLabel: modelChipTitle,
+            thinkingLabel: thinkingLabel,
+            providerLabel: draftSession?.providerId == nil ? nil : draftProviderLabel,
+            providerIconSvg: draftSession?.providerId == nil ? nil : draftProviderIconSvg
+        ) {
             focused = false
-            controller?.sheet = .controls
+            if controller != nil {
+                controller?.sheet = .controls
+            } else {
+                showDraftControls = true
+            }
         }
+    }
+
+    /// Draft only: the provider's label and brand mark in the model chip (§3.1).
+    private var draftProviderLabel: String? {
+        guard let providerId = draftSession?.providerId, let catalog = draftHost?.agentControl
+        else { return nil }
+        return catalog.provider(providerId)?.label ?? providerId
+    }
+
+    private var draftProviderIconSvg: String? {
+        guard let providerId = draftSession?.providerId, let catalog = draftHost?.agentControl
+        else { return nil }
+        return catalog.provider(providerId)?.iconSvg
     }
 
     @ViewBuilder private var fastModeChip: some View {
@@ -435,15 +576,16 @@ struct ComposerView: View {
     }
 
     private var dictateButton: some View {
-        ComposerMicButton(
-            isListening: controller?.dictation.isListening ?? false,
-            level: Double(controller?.dictation.level ?? 0)
+        let dictation = activeDictation
+        return ComposerMicButton(
+            isListening: dictation?.isListening ?? false,
+            level: Double(dictation?.level ?? 0)
         ) {
-            guard let controller else { return }
-            if controller.dictation.isListening {
-                controller.dictation.stop(keepingDraft: true)
+            guard let dictation else { return }
+            if dictation.isListening {
+                dictation.stop(keepingDraft: true)
             } else {
-                controller.dictation.toggle(currentDraft: text)
+                dictation.toggle(currentDraft: text)
             }
         }
     }
@@ -518,8 +660,26 @@ struct ComposerView: View {
     }
 
     private func send(behavior: String? = nil) {
-        controller?.dictation.stop(keepingDraft: true)
         focused = false
+        if let draft = draftSession, let session = draftHost {
+            guard canSend else { return }
+            draftDictation.stop(keepingDraft: true)
+            localAttachmentError = nil
+            draft.clearError()
+            Haptics.send()
+            let attachments = readyAttachments
+            Task {
+                guard
+                    let agentId = await draft.create(
+                        using: session.agentControl, attachments: attachments)
+                else { return }
+                localTray = []
+                await session.refreshAgents()
+                onCreated?(agentId)
+            }
+            return
+        }
+        controller?.dictation.stop(keepingDraft: true)
         controller?.send(behavior: behavior, attachments: readyAttachments)
     }
 
@@ -538,9 +698,9 @@ struct ComposerView: View {
                     ForEach(trayItems) { item in
                         ComposerAttachmentPill(
                             item: item,
-                            uploadProgress: store?.uploads.progress ?? 0,
-                            onRemove: { controller?.removeAttachment(item.id) },
-                            onRetry: { controller?.retryAttachment(item.id) },
+                            uploadProgress: uploadProgress,
+                            onRemove: { removeAttachment(item.id) },
+                            onRetry: { retryAttachment(item.id) },
                             onTapImage: { image in attachmentViewerImage = image })
                     }
                 }
@@ -550,8 +710,39 @@ struct ComposerView: View {
         }
     }
 
+    private var uploadProgress: Double {
+        if let store { return store.uploads.progress }
+        return draftHost?.fileUploader.progress ?? 0
+    }
+
     private func attachFileURLs(_ urls: [URL]) {
-        controller?.attachFileURLs(urls)
+        if let controller {
+            controller.attachFileURLs(urls)
+            return
+        }
+        for url in urls {
+            let name = url.lastPathComponent
+            guard url.startAccessingSecurityScopedResource() else {
+                localAttachmentError = "Couldn't open \(name)."
+                continue
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+            guard let data = try? Data(contentsOf: url) else {
+                localAttachmentError = "Couldn't read \(name)."
+                continue
+            }
+            guard data.count <= ConversationUpload.maxBytes else {
+                localAttachmentError = "\(name) is too large (50 MB max)."
+                continue
+            }
+            let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+                ?? "application/octet-stream"
+            localTray.append(
+                ComposerAttachmentItem(
+                    fileName: name, mimeType: mimeType, byteCount: data.count, data: data,
+                    thumbnail: nil))
+        }
+        pumpLocalUploads()
     }
 
     private func handlePickedPhotos(_ selection: [PhotosPickerItem]) {
@@ -560,15 +751,100 @@ struct ComposerView: View {
                 guard let data = try? await picked.loadTransferable(type: Data.self) else {
                     continue
                 }
-                controller?.attachImageData(
-                    data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
+                attachImage(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
             }
             photoSelection = []
         }
     }
 
+    /// A picked or pasted image: the conversation hands it to its controller (which decodes off
+    /// main into the shared tray); a draft shows the `.decoding` tile and does the same here.
+    private func attachImage(_ data: Data, fileName: String) {
+        if let controller {
+            controller.attachImageData(data, fileName: fileName)
+            return
+        }
+        let item = ComposerAttachmentItem(
+            fileName: fileName, mimeType: "image/jpeg", byteCount: data.count, data: Data(),
+            thumbnail: nil, phase: .decoding)
+        localTray.append(item)
+        Task {
+            let processed = await Task.detached(priority: .userInitiated) {
+                ComposerImageProcessor.downscaledJPEG(data: data)
+            }.value
+            guard let index = localTray.firstIndex(where: { $0.id == item.id }) else { return }
+            guard let processed else {
+                localTray[index].phase = .failed("Couldn't read that image.")
+                return
+            }
+            localTray[index].data = processed.data
+            localTray[index].thumbnail = processed.image
+            localTray[index].byteCount = processed.data.count
+            localTray[index].phase = .pending
+            pumpLocalUploads()
+        }
+    }
+
+    /// Draft only: one upload at a time through the session's shared channel; the files ride the
+    /// create request as `uploadedFile`s.
+    private func pumpLocalUploads() {
+        guard let session = draftHost, !uploadPumpRunning else { return }
+        uploadPumpRunning = true
+        Task {
+            defer { uploadPumpRunning = false }
+            while let pending = localTray.first(where: { item in
+                if case .pending = item.phase { true } else { false }
+            }) {
+                markLocal(pending.id, .uploading)
+                let result = await session.fileUploader.upload(
+                    data: pending.data, fileName: pending.fileName, mimeType: pending.mimeType)
+                guard let index = localTray.firstIndex(where: { $0.id == pending.id }) else {
+                    continue
+                }
+                if let result {
+                    localTray[index].phase = .done(result)
+                } else {
+                    localTray[index].phase = .failed(
+                        session.fileUploader.error ?? "The upload failed.")
+                }
+            }
+        }
+    }
+
+    private func markLocal(_ id: UUID, _ phase: ComposerAttachmentPhase) {
+        guard let index = localTray.firstIndex(where: { $0.id == id }) else { return }
+        localTray[index].phase = phase
+    }
+
+    private func removeAttachment(_ id: UUID) {
+        if let controller {
+            controller.removeAttachment(id)
+            return
+        }
+        localTray.removeAll { $0.id == id }
+    }
+
+    private func retryAttachment(_ id: UUID) {
+        if let controller {
+            controller.retryAttachment(id)
+            return
+        }
+        markLocal(id, .pending)
+        pumpLocalUploads()
+    }
+
     private func pasteImageFromClipboard() {
-        controller?.pasteImageFromClipboard()
+        if let controller {
+            controller.pasteImageFromClipboard()
+            return
+        }
+        guard let image = UIPasteboard.general.image,
+            let data = image.jpegData(compressionQuality: 1.0)
+        else {
+            localAttachmentError = "Failed to paste image"
+            return
+        }
+        attachImage(data, fileName: "pasted-\(UUID().uuidString.prefix(8)).jpg")
     }
 
     private func mentionFile() {
@@ -725,7 +1001,11 @@ struct ComposerView: View {
         if isTall {
             Button {
                 Haptics.selection()
-                controller?.showFullScreenComposer = true
+                if controller != nil {
+                    controller?.showFullScreenComposer = true
+                } else {
+                    showDraftFullScreen = true
+                }
             } label: {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .font(.glyph(.small, weight: .medium))

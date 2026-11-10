@@ -473,7 +473,9 @@ struct TurnRow: View, Equatable {
 
     @State private var landingStartedAt = Date()
 
-    static func == (lhs: TurnRow, rhs: TurnRow) -> Bool {
+    /// Compared off the main actor, so the conformance does not cross isolation: every compared
+    /// input is a plain value (`Turn` is `Sendable`), and `actions` is not part of `==`.
+    nonisolated static func == (lhs: TurnRow, rhs: TurnRow) -> Bool {
         lhs.turn == rhs.turn && lhs.isLatest == rhs.isLatest && lhs.findSeq == rhs.findSeq
             && lhs.flashSeq == rhs.flashSeq && lhs.isLanding == rhs.isLanding
     }

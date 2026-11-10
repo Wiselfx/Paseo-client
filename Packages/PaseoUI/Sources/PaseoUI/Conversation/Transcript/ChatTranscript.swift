@@ -50,9 +50,16 @@ struct TranscriptView: View {
     @State private var lastRailTick = Date.distantPast
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.shellDrawer) private var shellDrawer
 
     var body: some View {
         content
+            .onAppear { shellDrawer?.trailingEdgeReserved = turnNavVisible }
+            .onChange(of: turnNavVisible) { _, shown in
+                shellDrawer?.trailingEdgeReserved = shown
+            }
+            // Leaving the transcript hands the trailing edge back to the panel.
+            .onDisappear { shellDrawer?.trailingEdgeReserved = false }
             // Opening the conversation is deliberate focus: refresh the track list now (list
             // events aren't replayed), exactly like a reconnect does.
             .task {

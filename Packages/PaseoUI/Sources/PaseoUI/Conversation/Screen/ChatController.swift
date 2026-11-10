@@ -773,13 +773,11 @@ struct TranscriptJump: Equatable {
         attachmentStore.items(for: store.agentId)
     }
 
+    /// Hands the image to the tray: the pill appears at once in its `.decoding` phase while the
+    /// decode/resize/encode pass runs off main (§6). A decode failure lands on the pill, retryable.
     func attachImageData(_ data: Data, fileName: String) {
-        Task { [weak self] in
-            guard let self else { return }
-            let ok = await self.attachmentStore.addImage(
-                data: data, fileName: fileName, to: self.store.agentId, store: self.store)
-            if !ok { self.showToast("Couldn't read that image.") }
-        }
+        attachmentStore.addImage(
+            data: data, fileName: fileName, to: store.agentId, store: store)
     }
 
     func attachFileURLs(_ urls: [URL]) {

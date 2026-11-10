@@ -1,9 +1,6 @@
 #if canImport(UIKit)
 import PaseoStore
-import PhotosUI
 import SwiftUI
-import UIKit
-import UniformTypeIdentifiers
 
 /// A session that does not exist yet (UX-SPEC §3). It is the conversation surface, not a sheet:
 /// the workspace name in the header, the DSH mark over a serif greeting while nothing has been
@@ -18,35 +15,14 @@ struct DraftChatView: View {
     var onAddProject: () -> Void
     var onCreated: (String) -> Void
 
-    @State private var showControls = false
     @FocusState private var focused: Bool
-    @State private var tray: [ComposerAttachmentItem] = []
-    @State private var uploadPumpRunning = false
-    @State private var photoSelection: [PhotosPickerItem] = []
-    @State private var showFileImporter = false
-    @State private var showCameraPicker = false
-    @State private var viewerImage: UIImage?
-    @State private var attachmentError: String?
-    /// The draft page's height — what is left above the keyboard. Caps the composer field
-    /// (V5 §3).
-    @State private var surfaceHeight: CGFloat = 0
-    @State private var dictation = DictationController()
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
-        withDraftPickers(column)
+        column
             .task { await loadCatalogue() }
             .onChange(of: session.agentControl.providers) { _, _ in seedIfNeeded() }
-            .onChange(of: photoSelection) { _, items in
-                guard !items.isEmpty else { return }
-                handlePickedPhotos(items)
-            }
-            .onAppear {
-                dictation.onDraft = { text in draft.text = text }
-            }
-            .onDisappear { dictation.stop(keepingDraft: true) }
     }
 
     /// The draft's page: header, then the greeting or the pending bubble, then the workspace line
@@ -63,55 +39,8 @@ struct DraftChatView: View {
             }
         }
         // No background here: the shell's rounded card is the canvas (UX-SPEC §1.1).
-        .onGeometryChange(for: CGFloat.self) { geometry in
-            geometry.size.height
-        } action: { height in
-            surfaceHeight = height
-        }
         .foregroundStyle(Palette.ink)
         .tint(Palette.ink)
-    }
-
-    private func withDraftPickers(_ content: some View) -> some View {
-        content
-            .sheet(isPresented: $showControls) {
-                DraftControlsSheet(session: session, draft: draft)
-            }
-            .sheet(isPresented: $showCameraPicker) {
-                cameraSheet
-            }
-            .fileImporter(
-                isPresented: $showFileImporter, allowedContentTypes: [.item],
-                allowsMultipleSelection: true
-            ) { result in
-                switch result {
-                case .success(let urls): attachFileURLs(urls)
-                case .failure(let error): attachmentError = error.localizedDescription
-                }
-            }
-            .fullScreenCover(
-                isPresented: Binding(
-                    get: { viewerImage != nil },
-                    set: { if !$0 { viewerImage = nil } })
-            ) {
-                if let image = viewerImage {
-                    AttachmentImageViewer(image: image)
-                }
-            }
-    }
-
-    private var cameraSheet: some View {
-        CameraCaptureView(
-            onCapture: { image in
-                showCameraPicker = false
-                guard let data = image.jpegData(compressionQuality: 1.0) else {
-                    attachmentError = "Couldn't read that photo."
-                    return
-                }
-                attachImageData(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
-            },
-            onCancel: { showCameraPicker = false })
-        .ignoresSafeArea()
     }
 
     // MARK: Header
@@ -226,6 +155,12 @@ struct DraftChatView: View {
         }
     }
 
+    /// No workspaces at all: nothing can be created yet, so the hero asks for a project instead
+    /// of offering a composer (§3.1).
+    private var needsProject: Bool {
+        session.workspaceDirectory.hasLoaded && session.workspaceDirectory.workspaces.isEmpty
+    }
+
     private var workspaceTitle: String {
         guard let workspaceId = draft.workspaceId,
             let workspace = session.workspaceDirectory.workspace(id: workspaceId)
@@ -250,276 +185,14 @@ struct DraftChatView: View {
 
     // MARK: Composer
 
-    /// §4.1: a one-line pill at rest, the two-row card once focused or holding text, an
-    /// attachment or an error.
-    private var composerExpanded: Bool {
-        focused || !trimmedText.isEmpty || !tray.isEmpty || errorText != nil
-            || dictation.isListening
-    }
-
-    /// No workspaces at all: nothing can be created yet, so the hero asks for a project instead
-    /// of offering a composer (§3.1).
-    private var needsProject: Bool {
-        session.workspaceDirectory.hasLoaded && session.workspaceDirectory.workspaces.isEmpty
-    }
-
-    private var trimmedText: String {
-        draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var errorText: String? {
-        attachmentError ?? draft.error
-    }
-
+    /// The one composer (R6 §5): the draft's card is `ComposerView` in `.draft` mode — a one-line
+    /// pill at rest, the two-row card once it has focus, text, an attachment or an error. Send
+    /// creates the agent and hands its id back to the shell.
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            composerCard
-        }
-        .padding(.horizontal, composerExpanded ? 8 : 16)
-        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: composerExpanded)
-        .padding(.bottom, 8)
-    }
-
-    private var composerCard: some View {
-        VStack(alignment: .leading, spacing: composerExpanded ? 8 : 0) {
-            if dictation.isListening {
-                dictationOverlay
-            } else {
-                if composerExpanded { attachmentTray }
-                if composerExpanded { dictationDeniedNote }
-                if composerExpanded, let message = errorText { errorNote(message) }
-                fieldRow
-                if composerExpanded { controlRow }
-            }
-        }
-        .composerCardChrome(expanded: composerExpanded)
-        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: composerExpanded)
-    }
-
-    /// While the mic is live the row is the dictation overlay: cancel, meter, timer, insert,
-    /// insert-and-send (upstream `dictation-controls.tsx`).
-    private var dictationOverlay: some View {
-        DictationOverlay(
-            level: Double(dictation.level),
-            duration: dictation.duration,
-            onCancel: { dictation.cancel() },
-            onAccept: { dictation.stop(keepingDraft: true) },
-            onAcceptAndSend: {
-                dictation.stop(keepingDraft: true)
-                send()
-            })
-    }
-
-    /// The add button overlays the field's leading edge at rest instead of being its sibling, so
-    /// the field keeps one structural position and the keyboard holds when the pill grows.
-    private var fieldRow: some View {
-        HStack(spacing: 8) {
-            textField
-                .padding(.leading, composerExpanded ? 0 : 44)
-                .overlay(alignment: .leading) {
-                    if !composerExpanded { addMenu }
-                }
-            if !composerExpanded { micButton }
-        }
-    }
-
-    private var controlRow: some View {
-        HStack(spacing: 8) {
-            addMenu
-            ComposerModelChip(
-                modelLabel: modelLabel,
-                thinkingLabel: thinkingLabel,
-                providerLabel: draft.providerId == nil ? nil : providerLabel,
-                providerIconSvg: draft.providerId == nil ? nil : providerIconSvg
-            ) {
-                focused = false
-                showControls = true
-            }
-            Spacer(minLength: 0)
-            micButton
-            sendButton
-        }
-    }
-
-    private var textField: some View {
-        TextField(
-            "", text: $draft.text,
-            // Upstream `composer.placeholders.mobile` (en.ts:117).
-            prompt: Text("Message, @files, /commands")
-                .foregroundStyle(Palette.secondaryInk),
-            axis: .vertical
-        )
-        .font(.paseo(.body))
-        // V5 §3: grow to the cap, then scroll inside the field; the controls row always stays
-        // above the keyboard.
-        .lineLimit(
-            composerExpanded
-                ? 1...ComposerFieldLimit.lines(availableHeight: surfaceHeight) : 1...1)
-        .fixedSize(horizontal: false, vertical: true)
-        .focused($focused)
-        .tint(Palette.orange)
-        .padding(.horizontal, composerExpanded ? 6 : 2)
-        .padding(.top, composerExpanded ? 7 : 0)
-        .accessibilityIdentifier("draft.draft")
-    }
-
-    private var addMenu: some View {
-        Menu {
-            PhotosPicker(selection: $photoSelection, maxSelectionCount: 10, matching: .images) {
-                Label("Photo Library", systemImage: "photo.on.rectangle")
-            }
-            if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                Button("Camera", systemImage: "camera") { showCameraPicker = true }
-            }
-            Button("Files", systemImage: "folder") { showFileImporter = true }
-            if UIPasteboard.general.hasImages {
-                Button("Paste image", systemImage: "doc.on.clipboard") { pasteImage() }
-            }
-        } label: {
-            Image(systemName: "plus")
-                .font(.glyph(.regular, weight: .regular))
-                .frame(width: 36, height: 36)
-                .foregroundStyle(Palette.ink)
-                .background(Palette.chip, in: .circle)
-        }
-        .accessibilityLabel("Add attachment")
-    }
-
-    private var micButton: some View {
-        ComposerMicButton(isListening: dictation.isListening, level: Double(dictation.level)) {
-            if dictation.isListening {
-                dictation.stop(keepingDraft: true)
-            } else {
-                dictation.toggle(currentDraft: draft.text)
-            }
-        }
-    }
-
-    @ViewBuilder private var sendButton: some View {
-        if draft.isCreating {
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: 36, height: 36)
-                .accessibilityLabel("Creating…")
-        } else {
-            Button(action: send) {
-                Image(systemName: "arrow.up")
-                    .font(.glyph(.regular, weight: .medium))
-                    .frame(width: 36, height: 36)
-                    .foregroundStyle(.white)
-                    .background(Palette.orange, in: .circle)
-                    .opacity(canSend ? 1 : 0.4)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
-            .accessibilityLabel("Send message")
-            .accessibilityIdentifier("draft.send")
-        }
-    }
-
-    private func errorNote(_ text: String) -> some View {
-        Text(text)
-            .font(.paseo(.footnote))
-            .foregroundStyle(Palette.failureInk)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder private var dictationDeniedNote: some View {
-        if dictation.isDenied {
-            HStack(spacing: 8) {
-                Image(systemName: "mic.slash")
-                    .font(.glyph(.small))
-                    .foregroundStyle(Palette.failureInk)
-                Text("Dictation is off. Enable Microphone and Speech Recognition in Settings.")
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.failureInk)
-                    .lineLimit(2)
-                Spacer(minLength: 4)
-                Button("Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        openURL(url)
-                    }
-                }
-                .font(.paseo(.caption, weight: .semibold))
-                .foregroundStyle(Palette.orange)
-                .accessibilityLabel("Open Settings")
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-        }
-    }
-
-    private var modelLabel: String {
-        guard let modelId = draft.modelId else { return "Model" }
-        return session.agentControl.models(forProvider: draft.providerId ?? "")
-            .first(where: { $0.id == modelId })?.label ?? modelId
-    }
-
-    private var providerLabel: String {
-        guard let providerId = draft.providerId else { return "" }
-        return session.agentControl.provider(providerId)?.label ?? providerId
-    }
-
-    /// The provider's brand mark, straight from its catalogue entry (`iconSvg`).
-    private var providerIconSvg: String? {
-        guard let providerId = draft.providerId else { return nil }
-        return session.agentControl.provider(providerId)?.iconSvg
-    }
-
-    private var thinkingLabel: String? {
-        guard let thinkingId = draft.thinkingOptionId, let modelId = draft.modelId else {
-            return nil
-        }
-        return session.agentControl.thinkingOptions(
-            forProvider: draft.providerId ?? "", modelId: modelId
-        ).first(where: { $0.id == thinkingId })?.label
-    }
-
-    // MARK: Sending
-
-    private var hasUploadingAttachment: Bool {
-        tray.contains { item in
-            switch item.phase {
-            case .pending, .uploading: true
-            case .done, .attached, .failed: false
-            }
-        }
-    }
-
-    private var readyAttachments: [AgentAttachment] {
-        tray.compactMap { item -> AgentAttachment? in
-            switch item.phase {
-            case .done(let file): .uploadedFile(file)
-            case .attached(let attachment): attachment
-            case .pending, .uploading, .failed: nil
-            }
-        }
-    }
-
-    private var canSend: Bool {
-        guard !draft.isCreating, !hasUploadingAttachment else { return false }
-        return draft.canSend(hasAttachments: !readyAttachments.isEmpty)
-    }
-
-    private func send() {
-        guard canSend else { return }
-        dictation.stop(keepingDraft: true)
-        attachmentError = nil
-        draft.clearError()
-        focused = false
-        Haptics.send()
-        let attachments = readyAttachments
-        Task {
-            guard
-                let agentId = await draft.create(
-                    using: session.agentControl, attachments: attachments)
-            else { return }
-            tray = []
-            await session.refreshAgents()
+        ComposerView(draft: draft, session: session, focused: $focused) { agentId in
             onCreated(agentId)
         }
+        .padding(.bottom, 8)
     }
 
     // MARK: Catalogue
@@ -549,130 +222,6 @@ struct DraftChatView: View {
         if draft.modelId == nil, catalog.defaultModel(forProvider: providerId) != nil {
             draft.seed(catalog: catalog)
         }
-    }
-
-    // MARK: Attachments
-
-    private var attachmentTray: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(tray) { item in
-                    ComposerAttachmentPill(
-                        item: item,
-                        uploadProgress: session.fileUploader.progress,
-                        onRemove: { tray.removeAll { $0.id == item.id } },
-                        onRetry: {
-                            retry(item.id)
-                        },
-                        onTapImage: { image in viewerImage = image })
-                }
-            }
-            .padding(.vertical, 2)
-            .padding(.horizontal, 1)
-        }
-    }
-
-    private func attachImageData(_ data: Data, fileName: String) {
-        guard let processed = ComposerImageProcessor.downscaledJPEG(data: data) else {
-            attachmentError = "Couldn't read that image."
-            return
-        }
-        add(
-            ComposerAttachmentItem(
-                fileName: fileName, mimeType: "image/jpeg", byteCount: processed.data.count,
-                data: processed.data, thumbnail: processed.image))
-    }
-
-    private func handlePickedPhotos(_ selection: [PhotosPickerItem]) {
-        Task {
-            for picked in selection {
-                guard let data = try? await picked.loadTransferable(type: Data.self) else {
-                    continue
-                }
-                attachImageData(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
-            }
-            photoSelection = []
-        }
-    }
-
-    private func attachFileURLs(_ urls: [URL]) {
-        for url in urls {
-            let name = url.lastPathComponent
-            guard url.startAccessingSecurityScopedResource() else {
-                attachmentError = "Couldn't open \(name)."
-                continue
-            }
-            defer { url.stopAccessingSecurityScopedResource() }
-            guard let data = try? Data(contentsOf: url) else {
-                attachmentError = "Couldn't read \(name)."
-                continue
-            }
-            guard data.count <= ConversationUpload.maxBytes else {
-                attachmentError = "\(name) is too large (50 MB max)."
-                continue
-            }
-            let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
-                ?? "application/octet-stream"
-            add(
-                ComposerAttachmentItem(
-                    fileName: name, mimeType: mimeType, byteCount: data.count, data: data,
-                    thumbnail: nil))
-        }
-    }
-
-    private func pasteImage() {
-        guard let image = UIPasteboard.general.image,
-            let data = image.jpegData(compressionQuality: 1.0)
-        else {
-            attachmentError = "Failed to paste image"
-            return
-        }
-        attachImageData(data, fileName: "pasted-\(UUID().uuidString.prefix(8)).jpg")
-    }
-
-    private func add(_ item: ComposerAttachmentItem) {
-        attachmentError = nil
-        tray.append(item)
-        pumpUploads()
-    }
-
-    private func retry(_ itemId: UUID) {
-        guard let index = tray.firstIndex(where: { $0.id == itemId }) else { return }
-        tray[index].phase = .pending
-        pumpUploads()
-    }
-
-    /// One upload at a time through the session's shared channel; a draft has no agent yet, so
-    /// the files are uploaded before the create request and ride it as `uploadedFile`s.
-    private func pumpUploads() {
-        guard !uploadPumpRunning else { return }
-        uploadPumpRunning = true
-        Task {
-            defer { uploadPumpRunning = false }
-            while let pending = firstPending() {
-                markUploading(pending.id)
-                let result = await session.fileUploader.upload(
-                    data: pending.data, fileName: pending.fileName, mimeType: pending.mimeType)
-                guard let index = tray.firstIndex(where: { $0.id == pending.id }) else { continue }
-                if let result {
-                    tray[index].phase = .done(result)
-                } else {
-                    tray[index].phase = .failed(
-                        session.fileUploader.error ?? "The upload failed.")
-                }
-            }
-        }
-    }
-
-    private func firstPending() -> ComposerAttachmentItem? {
-        tray.first { item in
-            if case .pending = item.phase { true } else { false }
-        }
-    }
-
-    private func markUploading(_ itemId: UUID) {
-        guard let index = tray.firstIndex(where: { $0.id == itemId }) else { return }
-        tray[index].phase = .uploading
     }
 }
 #endif

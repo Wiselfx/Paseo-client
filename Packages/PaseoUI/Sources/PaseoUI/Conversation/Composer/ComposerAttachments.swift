@@ -16,6 +16,9 @@ import PaseoStore
 // MARK: - Model
 
 enum ComposerAttachmentPhase: Equatable {
+    /// Picked but not decoded yet: the tray shows a progress tile (audit B N7/N8 — decoding an
+    /// image is off main, so the pill exists before its thumbnail does).
+    case decoding
     /// Waiting its turn in the upload pump.
     case pending
     /// Bytes are on the wire; progress comes from the store (`store.uploads.progress`).
@@ -108,9 +111,13 @@ final class ComposerAttachmentStore {
         items[id]?.removeAll { item in
             switch item.phase {
             case .done, .attached: return true
-            case .pending, .uploading, .failed: return false
+            case .decoding, .pending, .uploading, .failed: return false
             }
         }
+    }
+
+    func resumePump(_ id: String, store: ConversationStore) {
+        pump(id, store: store)
     }
 
     private func pump(_ id: String, store: ConversationStore) {
@@ -145,20 +152,43 @@ final class ComposerAttachmentStore {
 
 
 extension ComposerAttachmentStore {
-    /// Attach an image the user picked: decode, downscale and JPEG-encode **off main** (audit B
-    /// N7/N8), then add the finished item and let the pump upload it. Returns false when the data
-    /// doesn't decode, so the caller can say so.
+    /// Attach an image the user picked. The pill exists immediately in the `.decoding` phase and
+    /// the decode/resize/JPEG pass runs **off main** (audit B N7/N8); the item flips to `.pending`
+    /// when the bytes are ready and the pump uploads it. A decode failure lands on the pill as a
+    /// retryable `.failed`.
+    func addImage(data: Data, fileName: String, to id: String, store: ConversationStore) {
+        let item = ComposerAttachmentItem(
+            fileName: fileName, mimeType: "image/jpeg", byteCount: data.count, data: Data(),
+            thumbnail: nil, phase: .decoding)
+        add(item, to: id, store: store)
+        Task { @MainActor [weak self] in
+            let processed = await Task.detached(priority: .userInitiated) {
+                ComposerImageProcessor.downscaledJPEG(data: data)
+            }.value
+            guard let self else { return }
+            guard let processed else {
+                self.setPhase(.failed("Couldn't read that image."), for: item.id, in: id)
+                return
+            }
+            guard self.replaceData(processed.data, thumbnail: processed.image, for: item.id, in: id)
+            else { return }
+            self.setPhase(.pending, for: item.id, in: id)
+            self.resumePump(id, store: store)
+        }
+    }
+
+    /// Fills in the decoded bytes for a `.decoding` item. False when the pill was removed.
     @discardableResult
-    func addImage(data: Data, fileName: String, to id: String, store: ConversationStore) async -> Bool {
-        let processed = await Task.detached(priority: .userInitiated) {
-            ComposerImageProcessor.downscaledJPEG(data: data)
-        }.value
-        guard let processed else { return false }
-        add(
-            ComposerAttachmentItem(
-                fileName: fileName, mimeType: "image/jpeg", byteCount: processed.data.count,
-                data: processed.data, thumbnail: processed.image),
-            to: id, store: store)
+    private func replaceData(
+        _ data: Data, thumbnail: UIImage?, for itemId: UUID, in id: String
+    ) -> Bool {
+        guard var list = items[id], let index = list.firstIndex(where: { $0.id == itemId }) else {
+            return false
+        }
+        list[index].data = data
+        list[index].thumbnail = thumbnail
+        list[index].byteCount = data.count
+        items[id] = list
         return true
     }
 }
@@ -239,6 +269,8 @@ struct ComposerAttachmentPill: View {
     @ViewBuilder private var pill: some View {
         if case .attached(let attachment) = item.phase {
             forgePill(attachment)
+        } else if case .decoding = item.phase {
+            decodingTile
         } else if item.isImage, let thumbnail = item.thumbnail {
             Button {
                 if case .failed = item.phase {
@@ -337,6 +369,7 @@ struct ComposerAttachmentPill: View {
 
     private var accessibilityText: String {
         switch item.phase {
+        case .decoding: "\(item.fileName), preparing"
         case .pending: "\(item.fileName), waiting to upload"
         case .uploading: "\(item.fileName), uploading"
         case .done: "\(item.fileName), uploaded"
@@ -356,6 +389,17 @@ struct ComposerAttachmentPill: View {
     }
 
     /// A forge issue/change-request pill: kind icon, "#42" and the kind word.
+    /// The placeholder while the image is decoded: a tile with the app's inline spinner.
+    private var decodingTile: some View {
+        ZStack {
+            Palette.chip
+            InlineProgress()
+        }
+        .frame(width: 56, height: 56)
+        .clipShape(.rect(cornerRadius: Radius.md))
+        .accessibilityLabel("Preparing \(item.fileName)")
+    }
+
     private func forgePill(_ attachment: AgentAttachment) -> some View {
         HStack(spacing: 8) {
             Image(systemName: forgeSymbol(attachment))
