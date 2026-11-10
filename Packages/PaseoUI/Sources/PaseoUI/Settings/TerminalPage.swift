@@ -25,7 +25,7 @@ struct TerminalPage: View {
     }
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 SettingsMenuRow("Scrollback", value: selectedLabel) {
                     ForEach(options, id: \.value) { option in
@@ -61,7 +61,7 @@ struct TerminalPage: View {
                 Text("Applies to new and already-open terminal views on this device.")
             }
         }
-        .settingsPage("Terminal")
+        .inlinePageTitle("Terminal")
     }
 }
 #endif

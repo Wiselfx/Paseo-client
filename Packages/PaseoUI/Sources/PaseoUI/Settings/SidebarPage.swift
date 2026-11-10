@@ -13,7 +13,7 @@ struct SidebarPage: View {
     @AppStorage("paseo.usage.showInSidebar") private var showUsage = false
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 ListRow(
                     title: "History",
@@ -21,7 +21,7 @@ struct SidebarPage: View {
                     systemImage: "clock.arrow.2.circlepath",
                     accessory: ListRow.Accessory.toggle($showHistory)
                 )
-                .settingsListRow()
+                .panelRow()
                 .accessibilityIdentifier("settings.sidebar.showHistory")
                 ListRow(
                     title: "Schedules",
@@ -29,7 +29,7 @@ struct SidebarPage: View {
                     systemImage: "clock",
                     accessory: ListRow.Accessory.toggle($showSchedules)
                 )
-                .settingsListRow()
+                .panelRow()
                 .accessibilityIdentifier("settings.sidebar.showSchedules")
             } header: {
                 Text("Header")
@@ -44,7 +44,7 @@ struct SidebarPage: View {
                     systemImage: "chart.bar",
                     accessory: ListRow.Accessory.toggle($showUsage)
                 )
-                .settingsListRow()
+                .panelRow()
                 .accessibilityIdentifier("settings.sidebar.showUsage")
             } header: {
                 Text("Footer")
@@ -52,7 +52,7 @@ struct SidebarPage: View {
                 Text("Hidden by default. Toggling this applies immediately.")
             }
         }
-        .settingsPage("Sidebar")
+        .inlinePageTitle("Sidebar")
     }
 }
 #endif

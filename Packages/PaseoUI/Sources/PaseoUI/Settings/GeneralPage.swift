@@ -44,11 +44,11 @@ struct GeneralPage: View {
     }
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 AppearancePicker()
                     .padding(Space.lg)
-                    .settingsListRow()
+                    .panelRow()
             } header: {
                 Text("Appearance")
             }
@@ -101,7 +101,7 @@ struct GeneralPage: View {
                 }
                 .padding(.horizontal, Space.lg)
                 .frame(minHeight: 44)
-                .settingsListRow()
+                .panelRow()
             } header: {
                 Text("You")
             } footer: {
@@ -109,18 +109,18 @@ struct GeneralPage: View {
             }
             Section {
                 ListRow(title: "Haptic feedback", systemImage: "iphone.gen3.radiowaves.left.and.right", accessory: ListRow.Accessory.toggle($haptics))
-                    .settingsListRow()
+                    .panelRow()
                     .accessibilityIdentifier("settings.haptics")
                     .onChange(of: haptics) { _, enabled in Haptics.setEnabled(enabled) }
                 ListRow(title: "Show mascot", systemImage: "sparkles", accessory: ListRow.Accessory.toggle($mascot))
-                    .settingsListRow()
+                    .panelRow()
                     .accessibilityIdentifier("settings.mascot")
             } header: {
                 Text("Feedback")
             }
             Section {
                 ListRow(title: "Agent notifications", systemImage: "bell", accessory: ListRow.Accessory.toggle($notificationsEnabled))
-                    .settingsListRow()
+                    .panelRow()
                     .accessibilityIdentifier("settings.notifications.enabled")
                     .onChange(of: notificationsEnabled) { _, enabled in
                         if enabled { requestNotificationPermission() }
@@ -165,7 +165,7 @@ struct GeneralPage: View {
                     title: "Always expand reasoning",
                     accessory: ListRow.Accessory.toggle($alwaysExpandReasoning)
                 )
-                .settingsListRow()
+                .panelRow()
                 .accessibilityIdentifier("settings.alwaysExpandReasoning")
                 SettingsMenuRow("When the agent is running", value: defaultSendBehavior.label) {
                     ForEach(DefaultSendBehavior.allCases, id: \.self) { option in
@@ -188,7 +188,7 @@ struct GeneralPage: View {
                 )
             }
         }
-        .settingsPage("General")
+        .inlinePageTitle("General")
         .alert(
             testNotificationSent == true
                 ? "Test notification sent" : "Unable to send test notification",
@@ -222,7 +222,7 @@ struct GeneralPage: View {
             .padding(.trailing, Space.lg)
             .accessibilityIdentifier("settings.notifications.test")
         }
-        .settingsListRow()
+        .panelRow()
     }
 
     private func sendTestNotification() {

@@ -18,7 +18,7 @@ struct AgentsPage: View {
     private var hostSettings: HostSettingsStore { session.hostSettings }
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 configToggleRow(
                     "Enable Paseo tools",
@@ -46,7 +46,7 @@ struct AgentsPage: View {
                 ) {
                     saveAppendPrompt()
                 }
-                .settingsListRow()
+                .panelRow()
             } header: {
                 Text("System prompt")
             }
@@ -57,7 +57,7 @@ struct AgentsPage: View {
                         subtitle: "Installed on the host for orchestrating agents",
                         accessory: ListRow.Accessory.value(skills.label)
                     )
-                    .settingsListRow()
+                    .panelRow()
                 } header: {
                     Text("Orchestration skills")
                 }
@@ -67,7 +67,7 @@ struct AgentsPage: View {
             if hostSettings.supportsResumeOnStartup {
                 Section {
                     resumeOnStartupRow
-                        .settingsListRow()
+                        .panelRow()
                 } header: {
                     Text("Restart recovery")
                 }
@@ -83,7 +83,7 @@ struct AgentsPage: View {
                         isOn: configBinding(
                             get: { $0.idleRuntimeCleanup != false },
                             set: { $0.idleRuntimeCleanup = $1 }))
-                    .settingsListRow()
+                    .panelRow()
                 } header: {
                     Text("Idle agents")
                 }
@@ -92,16 +92,16 @@ struct AgentsPage: View {
                 VStack(alignment: .leading, spacing: Space.sm) {
                     AgentProfilesSection(session: session)
                 }
-                .settingsListRow(Palette.background)
+                .panelRow(Palette.background)
             }
             if let error = hostSettings.error {
                 Section {
                     InlineBanner(.failure, title: error)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             }
         }
-        .settingsPage("Agents")
+        .inlinePageTitle("Agents")
         .refreshable { await hostSettings.load() }
         .sheet(isPresented: $showResumePromptSheet) { resumePromptSheet }
         .toolbar {
@@ -142,7 +142,7 @@ struct AgentsPage: View {
 
     private func configToggleRow(_ title: String, subtitle: String? = nil, isOn: Binding<Bool>) -> some View {
         ListRow(title: title, subtitle: subtitle, accessory: ListRow.Accessory.toggle(isOn))
-            .settingsListRow()
+            .panelRow()
             .disabled(configControlsDisabled)
             .accessibilityIdentifier("settings.config." + title)
     }

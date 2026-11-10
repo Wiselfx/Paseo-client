@@ -18,18 +18,18 @@ struct VoicePage: View {
     }
 
     var body: some View {
-        SettingsList {
+        PageList {
             if !isConnected {
                 Section {
                     EmptyState(title: "Connect to this host to configure voice.")
                         .frame(minHeight: 180)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             } else if !voice.supportsSpeechSettings {
                 Section {
                     EmptyState(title: "Update the host to configure voice.")
                         .frame(minHeight: 180)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             } else if let speech {
                 dictationSection(speech)
@@ -37,18 +37,18 @@ struct VoicePage: View {
                 if let error = voice.error {
                     Section {
                         InlineBanner(.failure, title: error)
-                            .settingsListRow(Palette.background)
+                            .panelRow(Palette.background)
                     }
                 }
             } else {
                 Section {
                     LoadingState("Loading…")
                         .frame(height: 160)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             }
         }
-        .settingsPage("Voice")
+        .inlinePageTitle("Voice")
         .refreshable { await session.hostSettings.load() }
         .sheet(
             isPresented: Binding(
@@ -124,7 +124,7 @@ struct VoicePage: View {
                         onChange(newValue)
                     }))
         )
-        .settingsListRow()
+        .panelRow()
         .disabled(envVar != nil || session.hostSettings.isSaving)
         .accessibilityIdentifier(identifier)
     }
@@ -142,7 +142,7 @@ struct VoicePage: View {
                 openSite = siteID
             }
         )
-        .settingsListRow()
+        .panelRow()
         .disabled(disabled)
         .accessibilityIdentifier("settings.voice.site." + siteID.accessibilityID)
     }

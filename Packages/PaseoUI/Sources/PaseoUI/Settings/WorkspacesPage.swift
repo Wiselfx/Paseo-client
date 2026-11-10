@@ -10,7 +10,7 @@ struct WorkspacesPage: View {
     private var hostSettings: HostSettingsStore { session.hostSettings }
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 ListRow(
                     title: "Auto-archive after merge",
@@ -21,7 +21,7 @@ struct WorkspacesPage: View {
                             get: { $0.autoArchiveAfterMerge },
                             set: { $0.autoArchiveAfterMerge = $1 }))
                 )
-                .settingsListRow()
+                .panelRow()
                 .disabled(hostSettings.isSaving || hostSettings.config == nil)
                 .accessibilityIdentifier("settings.config.Auto-archive after merge")
             } header: {
@@ -30,11 +30,11 @@ struct WorkspacesPage: View {
             if let error = hostSettings.error {
                 Section {
                     InlineBanner(.failure, title: error)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             }
         }
-        .settingsPage("Workspaces")
+        .inlinePageTitle("Workspaces")
         .refreshable { await hostSettings.load() }
     }
 

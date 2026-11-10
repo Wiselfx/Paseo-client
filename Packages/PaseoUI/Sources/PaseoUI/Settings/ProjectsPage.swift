@@ -28,7 +28,7 @@ struct ProjectsPage: View {
     }
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 if projects.isEmpty {
                     EmptyState(
@@ -36,7 +36,7 @@ struct ProjectsPage: View {
                         message: "Add a project from the sidebar."
                     )
                     .frame(minHeight: 180)
-                    .settingsListRow(Palette.background)
+                    .panelRow(Palette.background)
                 } else {
                     ForEach(projects) { project in
                         projectRow(project, count: counts[project.id] ?? 0)
@@ -50,11 +50,11 @@ struct ProjectsPage: View {
             if let error = directory.actionError {
                 Section {
                     InlineBanner(.failure, title: error)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             }
         }
-        .settingsPage("Projects")
+        .inlinePageTitle("Projects")
         .refreshable { await session.hostSettings.load() }
     }
 
@@ -67,7 +67,7 @@ struct ProjectsPage: View {
                     count == 1 ? "1 workspace" : "\(count) workspaces")
             )
         }
-        .settingsListRow()
+        .panelRow()
         .accessibilityIdentifier("settings.projects.open.\(project.projectId)")
     }
 }

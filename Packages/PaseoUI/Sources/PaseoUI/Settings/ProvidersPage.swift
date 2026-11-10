@@ -12,17 +12,17 @@ struct ProvidersPage: View {
     private var hostSettings: HostSettingsStore { session.hostSettings }
 
     var body: some View {
-        SettingsList {
+        PageList {
             if let actionError = catalog.actionError {
                 Section {
                     InlineBanner(.failure, title: actionError)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             }
             if catalog.providers.isEmpty {
                 Section {
                     stateRow
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             } else {
                 Section {
@@ -42,11 +42,11 @@ struct ProvidersPage: View {
                         title:
                             "Daemon config is unavailable — pull to refresh on a Host page to enable toggles."
                     )
-                    .settingsListRow(Palette.background)
+                    .panelRow(Palette.background)
                 }
             }
         }
-        .settingsPage("Providers")
+        .inlinePageTitle("Providers")
         .refreshable { await catalog.refreshCatalog() }
         .task {
             if catalog.phase == .idle { await catalog.loadCatalog() }
@@ -110,7 +110,7 @@ struct ProvidersPage: View {
             .frame(minHeight: 44)
             .contentShape(.rect)
         }
-        .settingsListRow()
+        .panelRow()
         .accessibilityIdentifier("settings.providers.open.\(provider.provider)")
     }
 

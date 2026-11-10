@@ -20,7 +20,7 @@ struct DiagnosticsPage: View {
 
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 VStack(alignment: .leading, spacing: Space.sm) {
                     ScrollView {
@@ -39,7 +39,7 @@ struct DiagnosticsPage: View {
                     }
                 }
                 .padding(Space.md)
-                .settingsListRow()
+                .panelRow()
             } header: {
                 Text("App report")
             } footer: {
@@ -58,7 +58,7 @@ struct DiagnosticsPage: View {
                 Text("Audio")
             }
         }
-        .settingsPage("Diagnostics")
+        .inlinePageTitle("Diagnostics")
         .onAppear {
             if report.isEmpty { report = Self.makeReport(session: session) }
         }
@@ -118,7 +118,7 @@ struct DiagnosticsPage: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Space.md)
-        .settingsListRow()
+        .panelRow()
     }
 
     // MARK: Test audio (M15: upstream plays the thinking-tone PCM here)
@@ -150,7 +150,7 @@ struct DiagnosticsPage: View {
         .padding(.horizontal, Space.lg)
         .padding(.vertical, Space.md)
         .frame(minHeight: 44)
-        .settingsListRow()
+        .panelRow()
     }
 
     private func playTestTone() {

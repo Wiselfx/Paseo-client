@@ -26,19 +26,19 @@ struct PairDevicePage: View {
 
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 VStack(alignment: .leading, spacing: Space.md) {
                     content
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Space.lg)
-                .settingsListRow()
+                .panelRow()
             } header: {
                 Text("Pair devices") // en.ts:2915 pairDevices.title
             }
         }
-        .settingsPage("Pair a device")
+        .inlinePageTitle("Pair a device")
         .task {
             if case .idle = session.hostSettings.pairingOfferState {
                 await session.hostSettings.loadPairingOffer()

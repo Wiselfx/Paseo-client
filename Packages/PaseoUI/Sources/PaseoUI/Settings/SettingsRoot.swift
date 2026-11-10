@@ -79,39 +79,6 @@ enum SettingsRoute: Hashable {
     }
 }
 
-/// One settings page: the inset-grouped list restyled onto the palette (PLAN §RE).
-struct SettingsList<Content: View>: View {
-    private let content: () -> Content
-
-    init(@ViewBuilder content: @escaping () -> Content) {
-        self.content = content
-    }
-
-    var body: some View {
-        List {
-            content()
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Palette.background)
-    }
-}
-
-extension View {
-    /// A page row: the panel fill, with the row keeping its own inner padding.
-    func settingsListRow(_ background: Color = Palette.panel) -> some View {
-        listRowBackground(background)
-            .listRowInsets(EdgeInsets())
-    }
-
-    /// A pushed page's chrome: inline title, palette background. The root keeps its large title.
-    func settingsPage(_ title: String) -> some View {
-        navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .background(Palette.background)
-    }
-}
-
 /// A settings row whose trailing value opens a menu (font sizes, scrollback, chat display).
 /// The menu's tap target is the whole R4 row.
 struct SettingsMenuRow<MenuContent: View>: View {
@@ -131,7 +98,7 @@ struct SettingsMenuRow<MenuContent: View>: View {
         } label: {
             ListRow(title: title, accessory: ListRow.Accessory.value(value))
         }
-        .settingsListRow()
+        .panelRow()
         .accessibilityLabel("\(title), currently \(value)")
     }
 }
@@ -153,7 +120,7 @@ struct SettingsRoot: View {
 
     var body: some View {
         SheetScaffold("Settings", detents: .large) {
-            SettingsList {
+            PageList {
                 Section {
                     routeRow(
                         .general, value: appearance,
@@ -201,7 +168,7 @@ struct SettingsRoot: View {
                             .frame(minHeight: 44)
                             .contentShape(.rect)
                     }
-                    .settingsListRow()
+                    .panelRow()
                     .accessibilityIdentifier("settings.disconnect")
                 }
             }
@@ -268,7 +235,7 @@ struct SettingsRoot: View {
                 accessory: routeAccessory(value)
             )
         }
-        .settingsListRow()
+        .panelRow()
         .accessibilityIdentifier(identifier)
     }
 

@@ -18,11 +18,11 @@ struct HostsPage: View {
     private var hosts: [HostSwitchEntry] { context?.hosts ?? [] }
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 if hosts.isEmpty {
                     ListRow(title: "No saved hosts yet.")
-                        .settingsListRow()
+                        .panelRow()
                 } else {
                     ForEach(hosts) { host in
                         hostRow(host)
@@ -32,7 +32,7 @@ struct HostsPage: View {
                     Haptics.selection()
                     context?.addHost()
                 }
-                .settingsListRow()
+                .panelRow()
                 .accessibilityIdentifier("settings.hosts.add")
             } header: {
                 Text("Saved hosts")
@@ -42,7 +42,7 @@ struct HostsPage: View {
                 )
             }
         }
-        .settingsPage("Hosts")
+        .inlinePageTitle("Hosts")
         .confirmationDialog(
             "Remove host?",
             isPresented: Binding(
@@ -97,7 +97,7 @@ struct HostsPage: View {
             .accessibilityLabel("Details for \(host.label)")
             .accessibilityIdentifier("settings.hosts.details.\(host.id.uuidString)")
         }
-        .settingsListRow()
+        .panelRow()
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
                 removeTarget = host
@@ -134,28 +134,28 @@ struct HostDetailPage: View {
     }
 
     var body: some View {
-        SettingsList {
+        PageList {
             if let host {
                 Section {
                     ListRow(title: "Name", accessory: ListRow.Accessory.value(host.label))
-                        .settingsListRow()
+                        .panelRow()
                     ListRow(title: "Rename") {
                         Haptics.selection()
                         renameText = host.label
                         renaming = true
                     }
-                    .settingsListRow()
+                    .panelRow()
                     .accessibilityIdentifier("settings.hosts.rename")
                 } header: {
                     Text("Label")
                 }
                 Section {
                     ListRow(title: "Endpoint", accessory: ListRow.Accessory.value(host.urlLine))
-                        .settingsListRow()
+                        .panelRow()
                     ListRow(title: "Connection", accessory: ListRow.Accessory.value(connectionKind(host)))
-                        .settingsListRow()
+                        .panelRow()
                     ListRow(title: "Last connected", accessory: ListRow.Accessory.value(lastConnected(host)))
-                        .settingsListRow()
+                        .panelRow()
                 } header: {
                     Text("Connection")
                 }
@@ -168,17 +168,17 @@ struct HostDetailPage: View {
                             .frame(minHeight: 44)
                             .contentShape(.rect)
                     }
-                    .settingsListRow()
+                    .panelRow()
                     .accessibilityIdentifier("settings.hosts.remove")
                 } footer: {
                     Text("Removes this host and its saved connections from this device")
                 }
             } else {
                 EmptyState(title: "Host not found")
-                    .settingsListRow(Palette.background)
+                    .panelRow(Palette.background)
             }
         }
-        .settingsPage(host?.label ?? "Host")
+        .inlinePageTitle(host?.label ?? "Host")
         .alert("Rename host", isPresented: $renaming) {
             TextField("Label", text: $renameText)
                 .textInputAutocapitalization(.words)

@@ -24,15 +24,15 @@ struct MetadataPage: View {
     }
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 ListRow(
                     title: "Model selection",
                     accessory: ListRow.Accessory.value(isAutomatic ? "Automatic" : "Manual")
                 )
-                .settingsListRow()
+                .panelRow()
                 modeRow
-                    .settingsListRow()
+                    .panelRow()
             } header: {
                 Text("Metadata generation")
             } footer: {
@@ -49,7 +49,7 @@ struct MetadataPage: View {
                             accessory: ListRow.Accessory.chevron
                         )
                     }
-                    .settingsListRow()
+                    .panelRow()
                     .accessibilityIdentifier("settings.metadata.model")
                 } header: {
                     Text("Model")
@@ -58,11 +58,11 @@ struct MetadataPage: View {
             if let error = hostSettings.error {
                 Section {
                     InlineBanner(.failure, title: error)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             }
         }
-        .settingsPage("Metadata")
+        .inlinePageTitle("Metadata")
         .refreshable { await hostSettings.load() }
     }
 
@@ -124,12 +124,12 @@ struct MetadataModelPage: View {
     }
 
     var body: some View {
-        SettingsList {
+        PageList {
             if catalog.phase == .loading, catalog.providers.isEmpty {
                 Section {
                     LoadingState("Loading providers…")
                         .frame(height: 120)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             } else if catalog.readyProviders.isEmpty {
                 Section {
@@ -137,7 +137,7 @@ struct MetadataModelPage: View {
                         title: "No usable models on this host",
                         message: "Enable a provider on the Providers page first."
                     )
-                    .settingsListRow(Palette.background)
+                    .panelRow(Palette.background)
                 }
             } else {
                 ForEach(catalog.readyProviders) { provider in
@@ -154,7 +154,7 @@ struct MetadataModelPage: View {
                 }
             }
         }
-        .settingsPage("Model")
+        .inlinePageTitle("Model")
         .refreshable { await catalog.refreshCatalog() }
         .task {
             if catalog.phase == .idle { await catalog.loadCatalog() }
@@ -174,7 +174,7 @@ struct MetadataModelPage: View {
                 select(provider: provider, modelId: model.id)
             }
         )
-        .settingsListRow()
+        .panelRow()
     }
 
     private func isModelSelected(provider: String, modelId: String) -> Bool {

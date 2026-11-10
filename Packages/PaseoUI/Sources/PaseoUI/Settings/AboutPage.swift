@@ -9,7 +9,7 @@ struct AboutPage: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 VStack(alignment: .leading, spacing: Space.xs) {
                     Text("Paseo Client")
@@ -24,19 +24,19 @@ struct AboutPage: View {
                 }
                 .padding(.horizontal, Space.lg)
                 .padding(.vertical, Space.md)
-                .settingsListRow()
+                .panelRow()
             }
             Section {
                 ListRow(
                     title: "Host",
                     accessory: ListRow.Accessory.value(session.serverInfo?.hostname ?? "Not connected")
                 )
-                .settingsListRow()
+                .panelRow()
                 ListRow(
                     title: "Daemon version",
                     accessory: ListRow.Accessory.value(session.serverInfo?.version ?? "Unknown")
                 )
-                .settingsListRow()
+                .panelRow()
             } header: {
                 Text("This host")
             }
@@ -51,7 +51,7 @@ struct AboutPage: View {
                 Text("Links")
             }
         }
-        .settingsPage("About")
+        .inlinePageTitle("About")
     }
 
     private func linkRow(_ title: String, detail: String, url: URL?) -> some View {
@@ -65,7 +65,7 @@ struct AboutPage: View {
                 openURL(url)
             }
         )
-        .settingsListRow()
+        .panelRow()
         .accessibilityLabel("\(title), opens in browser")
     }
 

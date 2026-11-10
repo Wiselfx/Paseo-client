@@ -11,25 +11,25 @@ struct OverviewPage: View {
     private var hostSettings: HostSettingsStore { session.hostSettings }
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 connectionRow
                 ListRow(
                     title: "Server ID",
                     accessory: ListRow.Accessory.value(session.serverInfo?.serverId ?? "Not connected")
                 )
-                .settingsListRow()
+                .panelRow()
                 ListRow(
                     title: "Daemon version",
                     accessory: ListRow.Accessory.value(session.serverInfo?.version ?? "Unknown")
                 )
-                .settingsListRow()
+                .panelRow()
                 ListRow(
                     title: "Protocol version",
                     accessory: ListRow.Accessory.value(
                         session.serverInfo?.protocolVersion.map(String.init) ?? "Unknown")
                 )
-                .settingsListRow()
+                .panelRow()
             } header: {
                 Text("Connection")
             }
@@ -41,7 +41,7 @@ struct OverviewPage: View {
                             get: { $0.enableTerminalAgentHooks },
                             set: { $0.enableTerminalAgentHooks = $1 }))
                 )
-                .settingsListRow()
+                .panelRow()
                 .disabled(configControlsDisabled)
                 .accessibilityIdentifier("settings.config.Terminal agent hooks")
                 ListRow(
@@ -51,7 +51,7 @@ struct OverviewPage: View {
                             get: { $0.usage?.enabled ?? false },
                             set: { $0.usage = .init(enabled: $1) }))
                 )
-                .settingsListRow()
+                .panelRow()
                 .disabled(configControlsDisabled)
                 .accessibilityIdentifier("settings.config.Usage tracking")
             } header: {
@@ -64,11 +64,11 @@ struct OverviewPage: View {
             if let error = hostSettings.error {
                 Section {
                     InlineBanner(.failure, title: error)
-                        .settingsListRow(Palette.background)
+                        .panelRow(Palette.background)
                 }
             }
         }
-        .settingsPage("Overview")
+        .inlinePageTitle("Overview")
         .refreshable { await hostSettings.load() }
     }
 
@@ -84,7 +84,7 @@ struct OverviewPage: View {
                 accessory: ListRow.Accessory.value(connectionLabel(session.connection))
             )
         }
-        .settingsListRow()
+        .panelRow()
     }
 
     private var configControlsDisabled: Bool {

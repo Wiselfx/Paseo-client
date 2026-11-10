@@ -16,12 +16,12 @@ struct HelpPage: View {
     private static let discordURL = "https://discord.gg/jz8T2uahpH"
 
     var body: some View {
-        SettingsList {
+        PageList {
             Section {
                 NavigationLink(value: SettingsRoute.diagnostics) {
                     ListRow(title: "Run diagnostics", systemImage: "stethoscope")
                 }
-                .settingsListRow()
+                .panelRow()
                 .accessibilityIdentifier("help.diagnostics")
                 linkRow("What's new", systemImage: "gift", url: Self.changelogURL)
                     .accessibilityIdentifier("help.whatsNew")
@@ -47,7 +47,7 @@ struct HelpPage: View {
                 Text(appVersion + (session.serverInfo?.version.map { " · Daemon \($0)" } ?? ""))
             }
         }
-        .settingsPage("Help & support")
+        .inlinePageTitle("Help & support")
     }
 
     private func linkRow(_ title: String, systemImage: String, url: String) -> some View {
@@ -55,7 +55,7 @@ struct HelpPage: View {
             Haptics.selection()
             if let target = URL(string: url) { openURL(target) }
         })
-        .settingsListRow()
+        .panelRow()
     }
 
     private var appVersion: String {
