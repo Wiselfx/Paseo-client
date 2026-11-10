@@ -25,7 +25,7 @@ struct AgentProfilesSection: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Not available on this host")
                             .font(.paseo(.body))
-                        Text("Profiles need the daemon's agentProfiles feature.")
+                        Text("This host runs a daemon that does not support agent profiles yet.")
                             .font(.paseo(.footnote))
                             .foregroundStyle(Palette.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
@@ -89,7 +89,7 @@ struct AgentProfilesSection: View {
                 .foregroundStyle(Palette.failureInk)
                 .padding(.leading, 16)
         }
-        Text("Stored host-wide on this daemon, not on this device.")
+        Text("Stored on this host, not on this device.")
             .font(.paseo(.footnote))
             .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
@@ -166,7 +166,7 @@ struct AgentProfilesSection: View {
             Image(systemName: offset < 0 ? "chevron.up" : "chevron.down")
                 .font(.glyph(.regular, weight: .regular))
                 .foregroundStyle((isFirst || isLast) ? Palette.tertiaryInk.opacity(0.4) : Palette.tertiaryInk)
-                .frame(width: 34, height: 44)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -190,7 +190,7 @@ struct AgentProfilesSection: View {
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 16)
-            .frame(height: 52)
+            .frame(minHeight: 52)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

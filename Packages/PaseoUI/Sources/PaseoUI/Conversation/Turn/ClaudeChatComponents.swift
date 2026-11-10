@@ -114,6 +114,7 @@ struct ClaudeCopyButton: View {
                 .font(.glyph(.regular, weight: .light))
                 .foregroundStyle(copied ? Palette.ink : Palette.tertiaryInk)
                 .frame(width: 28, height: 28)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -289,10 +290,10 @@ struct ClaudeProse: View {
         }
     }
 
-    static func theme(bodySize: CGFloat = ClaudeTypography.chatBodySize) -> ClaudeMarkdownTheme {
+    static func theme(bodySize: CGFloat = Typography.chatBodySize) -> ClaudeMarkdownTheme {
         // Claude iOS chats at a 17 pt serif body (V5); the markdown *file preview* keeps the
         // research document's 14 pt, because UX-SPEC §6 freezes those previews.
-        let chat = bodySize >= ClaudeTypography.chatBodySize
+        let chat = bodySize >= Typography.chatBodySize
         var theme = ClaudeMarkdownTheme(serifName: ProseFonts.serifName, bodySize: bodySize)
         theme.foreground = Palette.ink
         theme.secondary = Palette.secondaryInk

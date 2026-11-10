@@ -284,6 +284,7 @@ struct WorkspacePRSection: View {
                             .font(.glyph(.small, weight: .medium))
                             .foregroundStyle(Palette.tertiaryInk)
                             .frame(width: 28, height: 28)
+                            .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -344,7 +345,7 @@ struct WorkspacePRSection: View {
                 .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(2)
             Spacer(minLength: 8)
-            Button("Retry") {
+            Button("Try again") {
                 Task { if let status { await loadTimeline(status) } }
             }
             .font(.paseo(.caption, weight: .medium))

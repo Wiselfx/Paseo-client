@@ -22,7 +22,6 @@ struct ClaudeRevealProse: View {
     /// the local loader. `nil` renders images as text.
     var imageContent: ((MarkdownImage) -> AnyView)? = nil
 
-    static let fadeDuration: Double = 0.12
     static let minOpacity: Double = 0.2
     /// Width of the transition band between fully-shown and faded text, as a fraction of a piece.
     static let sweepRamp: CGFloat = 0.18
@@ -98,7 +97,8 @@ struct ClaudeRevealProse: View {
                             content.opacity(
                                 reduceMotion || !isStreaming || ref.id != refs.count - 1 ? 1 : phase)
                         } animation: { _ in
-                            .easeOut(duration: Self.fadeDuration)
+                            // R-4: the design system's fade, which Reduce Motion allows.
+                            Motion.fade.animation
                         }
                 }
             }
@@ -113,7 +113,7 @@ struct ClaudeRevealProse: View {
         }
         .task(id: revealTick) {
             guard revealTick > 0 else { return }
-            withAnimation(.easeOut(duration: Self.fadeDuration)) { sweepBoundary = 1 }
+            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { sweepBoundary = 1 }
         }
     }
 

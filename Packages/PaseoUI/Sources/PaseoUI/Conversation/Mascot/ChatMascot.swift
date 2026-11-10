@@ -182,6 +182,7 @@ struct MascotCrab: View {
     @Bindable var controller: ChatController
     let store: ConversationStore?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(PaseoSettingsKeys.mascot) private var mascotEnabled = true
 
     var body: some View {
@@ -207,7 +208,10 @@ struct MascotCrab: View {
                             }
                     }
                 }
-                .animation(Motion.disclosure.animation, value: controller.showCostBubble)
+                .animation(
+                    Motion.disclosure.resolved(reduceMotion: reduceMotion),
+                    value: controller.showCostBubble
+                )
                 .offset(y: -72)
         }
     }

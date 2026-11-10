@@ -6,6 +6,7 @@ import SwiftUI
 struct PrimaryButtonStyle: ButtonStyle {
     var isWorking = false
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         ZStack {
@@ -22,7 +23,7 @@ struct PrimaryButtonStyle: ButtonStyle {
         .background(Palette.ink, in: .capsule)
         .opacity(isEnabled ? 1 : 0.4)
         .opacity(configuration.isPressed ? 0.85 : 1)
-        .animation(Motion.feedback.animation, value: configuration.isPressed)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: configuration.isPressed)
         .allowsHitTesting(!isWorking)
     }
 }
@@ -30,6 +31,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 /// The chip capsule: the same shape and metrics, `Palette.chip` fill and ink text.
 struct SecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -40,13 +42,15 @@ struct SecondaryButtonStyle: ButtonStyle {
             .background(Palette.chip, in: .capsule)
             .opacity(isEnabled ? 1 : 0.4)
             .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(Motion.feedback.animation, value: configuration.isPressed)
+            .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }
 
 /// Full-width rows: a `Palette.chip` wash over the row's own shape while the finger is down,
 /// and `\.claudeRowPressed` published for rows that follow the press.
 struct PressableRowStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
@@ -54,7 +58,7 @@ struct PressableRowStyle: ButtonStyle {
                 in: .rect(cornerRadius: Radius.md)
             )
             .environment(\.claudeRowPressed, configuration.isPressed)
-            .animation(Motion.feedback.animation, value: configuration.isPressed)
+            .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }
 

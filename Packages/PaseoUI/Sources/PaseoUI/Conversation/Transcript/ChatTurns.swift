@@ -442,6 +442,7 @@ struct ClaudeTurnActionButton: View {
             action()
         } label: {
             ClaudeTurnActionGlyph(systemImage: systemImage, busy: false)
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)

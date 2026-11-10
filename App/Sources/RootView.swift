@@ -95,7 +95,10 @@ struct RootView: View {
         Group {
             switch model.phase {
             case .setup(let status):
-                if !welcomeCompleted, model.savedHostsSnapshot.isEmpty, case .idle = status {
+                if model.showsLaunchSkeleton {
+                    // A saved host is connecting: the shell's first frame, never the form (§1).
+                    LaunchSkeleton()
+                } else if !welcomeCompleted, model.savedHostsSnapshot.isEmpty, case .idle = status {
                     WelcomeView(
                         onScan: { pairingSheet = .scan },
                         onPaste: { pairingSheet = .paste(error: nil) }
@@ -166,6 +169,9 @@ struct RootView: View {
                 }
             }
         }
+        // Launch's expensive half: the Keychain, the host migration, the snapshot, the first
+        // connect. `init` stays cheap so this frame is on screen first (§1).
+        .task { await model.start() }
         .onOpenURL { url in
             handleDeepLink(url)
         }

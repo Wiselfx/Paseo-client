@@ -68,7 +68,6 @@
             isStreaming: Bool = false,
             onAction: @escaping (MarkdownAction) -> Void = { _ in }
         ) {
-            ClaudeFontResources.register()
             self.document = document
             self.theme = theme
             self.imageContent = imageContent
@@ -253,13 +252,19 @@
                         Button {
                             onAction(.copyCode(content))
                         } label: {
-                            Image(systemName: "square.on.square").frame(width: 28, height: 28)
+                            Image(systemName: "square.on.square")
+                                .frame(width: 28, height: 28)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.rect)
                         }.accessibilityLabel("Copy code").accessibilityIdentifier("markdown.code.copy")
                         Button {
                             expandedCode = .init(language: language, content: content)
                             onAction(.expandCode(language: language, content: content))
                         } label: {
-                            Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 28, height: 28)
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .frame(width: 28, height: 28)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.rect)
                         }.accessibilityLabel("Expand code").accessibilityIdentifier("markdown.code.expand")
                     }.foregroundStyle(theme.secondary).padding(.horizontal, 16).padding(.vertical, 8)
                     Rectangle().fill(theme.rule).frame(height: 0.5)

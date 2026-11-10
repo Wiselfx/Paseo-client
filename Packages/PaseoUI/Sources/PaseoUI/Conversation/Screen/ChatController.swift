@@ -302,7 +302,7 @@ struct TranscriptJump: Equatable {
     func copyAgentId() {
         Clipboard.copy(store.agentId)
         Haptics.selection()
-        showToast("Agent ID copied")
+        showToast("Agent id copied")
     }
 
     /// Archive at once when idle; while running, ask first (the existing confirmation text).
@@ -522,7 +522,7 @@ struct TranscriptJump: Equatable {
             return nil
         }
         if !directory.supportsWorkspaceCreate {
-            showToast("This daemon cannot create worktree workspaces.")
+            showToast("This host can't create worktree workspaces.")
             return nil
         }
         let base = forkBaseBranch(in: project)

@@ -53,7 +53,6 @@ public struct ConnectView: View {
         let failed: Bool
         if case .failed = status { failed = true } else { failed = false }
         _showAddForm = State(initialValue: hosts.isEmpty || failed)
-        ClaudeFontResources.register()
     }
 
     private var connecting: Bool { status == .connecting }
@@ -91,7 +90,7 @@ public struct ConnectView: View {
                 Spacer(minLength: 12)
                 VStack(spacing: 6) {
                     Text("Paseo").font(.paseo(.largeTitle))
-                    Text("Connect to your daemon")
+                    Text("Connect to your host")
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.secondaryInk)
                 }
@@ -144,7 +143,7 @@ public struct ConnectView: View {
             }
             Button("Cancel", role: .cancel) { forgetTarget = nil }
         } message: {
-            Text("The password stored on this device for this host is removed too. The daemon itself is not changed.")
+            Text("The password stored on this device for this host is removed too. The host itself isn't changed.")
         }
     }
 
@@ -268,13 +267,13 @@ public struct ConnectView: View {
                     errorCaption(hostError)
                 }
                 RowDivider()
-                secureField("Password", text: $password, prompt: "Daemon password")
+                secureField("Password", text: $password, prompt: "Host password")
                 RowDivider()
                 Toggle(isOn: $useTLS) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Use TLS (wss)")
                             .font(.paseo(.body))
-                        Text("For daemons behind a TLS terminator (Caddy, nginx).")
+                        Text("For hosts behind a TLS terminator (Caddy, nginx).")
                             .font(.paseo(.caption))
                             .foregroundStyle(Palette.secondaryInk)
                     }

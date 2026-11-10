@@ -325,7 +325,7 @@ struct LabelsManageSheet: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.glyph(.large, weight: .light))
-                        .frame(width: 42, height: 42)
+                        .frame(width: 44, height: 44)
                 }
                 .glassEffect(in: .circle)
                 .accessibilityLabel("Close")
@@ -385,6 +385,7 @@ struct LabelsManageSheet: View {
                         .font(.glyph(.regular, weight: .regular))
                         .foregroundStyle(Palette.failureInk)
                         .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -591,7 +592,7 @@ struct NewLabelSheet: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.glyph(.large, weight: .light))
-                        .frame(width: 42, height: 42)
+                        .frame(width: 44, height: 44)
                 }
                 .glassEffect(in: .circle)
                 .accessibilityLabel("Close")

@@ -323,10 +323,13 @@ struct ClaudeNoticeRow: View {
         case .compaction(let status, let trigger, let preTokens):
             ClaudeCompactionMarker(status: status, trigger: trigger, preTokens: preTokens)
         case .unknown(let type, _):
+            // A debugging aid: a host may send item types this build doesn't know yet (§20).
+            #if DEBUG
             Text("Unsupported item: \(type)")
                 .font(.paseo(.footnote))
                 .foregroundStyle(Palette.tertiaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            #endif
         default:
             EmptyView()
         }

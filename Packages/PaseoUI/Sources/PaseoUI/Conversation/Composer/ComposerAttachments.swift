@@ -454,6 +454,8 @@ struct ComposerAttachmentPill: View {
                 .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
                 .background(Color.black.opacity(0.6), in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .offset(x: 6, y: -6)

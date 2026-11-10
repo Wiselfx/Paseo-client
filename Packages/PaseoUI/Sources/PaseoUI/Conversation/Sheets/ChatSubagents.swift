@@ -59,7 +59,7 @@ struct SubagentTrackPill: View {
             }
             .foregroundStyle(failed > 0 ? Palette.failureInk : Palette.secondaryInk)
             .padding(.horizontal, 12)
-            .frame(height: 32)
+            .frame(minHeight: 32)
             .background(Palette.chip, in: .capsule)
             .contentShape(.capsule)
         }
@@ -261,7 +261,7 @@ struct ChatSubagentsSheet: View {
     /// menu carries the same action for a long press.
     private func managedRow(_ agent: AgentSnapshot) -> some View {
         HStack(spacing: 12) {
-            PaseoStatusDot(kind: managedStatus(agent))
+            StatusDot(managedStatus(agent))
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(managedTitle(agent))
@@ -288,6 +288,7 @@ struct ChatSubagentsSheet: View {
                             .font(.glyph(.regular, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 28, height: 28)
+                            .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -328,9 +329,9 @@ struct ChatSubagentsSheet: View {
     }
 
     /// The same dot the panel's agent rows use: attention first, then the lifecycle status.
-    private func managedStatus(_ agent: AgentSnapshot) -> PaseoStatusDot.Kind {
+    private func managedStatus(_ agent: AgentSnapshot) -> StatusDot.State {
         switch agent.attention {
-        case .permission: return .needsInput
+        case .permission: return .attention
         case .error: return .failed
         case .finished: return .unread
         case .unknown, nil: break
@@ -389,9 +390,9 @@ struct ChatSubagentTimelineView: View {
                         .padding(.top, 60)
                 } else if let error {
                     VStack(spacing: Space.md) {
-                        InlineBanner(.failure, title: error)
-                        Button("Retry") { Task { await load() } }
-                            .buttonStyle(.paseoSecondary)
+                        InlineBanner(
+                            .failure, title: error,
+                            action: ("Try again", { Task { await load() } }))
                     }
                     .padding(.top, 60)
                     .frame(maxWidth: .infinity)

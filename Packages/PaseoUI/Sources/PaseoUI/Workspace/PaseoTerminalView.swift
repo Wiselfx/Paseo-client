@@ -43,7 +43,6 @@ struct PaseoTerminalView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> TerminalView {
-        ClaudeFontResources.register()
         let view = TerminalView(frame: .zero, font: PaseoTerminalFont.current())
         view.terminalDelegate = context.coordinator
         let scrollback = PaseoTerminalScrollback.current()
@@ -73,7 +72,7 @@ struct PaseoTerminalView: UIViewRepresentable {
 }
 
 /// The terminal's mono font. The base is 13 pt, scaled by the Settings → General → Code size
-/// step (`ClaudeTextScale.codeMultiplier()`, the same multiplier `ClaudeTypography.mono`
+/// step (`ClaudeTextScale.codeMultiplier()`, the same multiplier `Typography`
 /// applies to code text elsewhere), so the terminal follows the user's code-size choice.
 enum PaseoTerminalFont {
     static let baseSize: CGFloat = 13
@@ -83,7 +82,7 @@ enum PaseoTerminalFont {
     }
 
     static func current() -> UIFont {
-        UIFont(name: ClaudeTypography.anthropicMono, size: size())
+        UIFont(name: ClaudeFontResources.anthropicMono, size: size())
             ?? UIFont.monospacedSystemFont(ofSize: size(), weight: .regular)
     }
 }

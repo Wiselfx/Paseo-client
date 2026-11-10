@@ -3,7 +3,7 @@ import SwiftUI
 
 /// One page in a sheet's stack: the inset-grouped list restyled onto the palette (PLAN §RE).
 /// Shared by Settings, Schedules, History and Search, which all present lists the same way.
-/// R-5: one component, not a copy per screen. It belongs in DesignSystem once R4 accepts it.
+/// R-5: one component, not a copy per screen.
 struct PageList<Content: View>: View {
     private let content: () -> Content
 

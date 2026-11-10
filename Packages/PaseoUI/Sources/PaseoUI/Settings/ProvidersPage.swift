@@ -15,7 +15,9 @@ struct ProvidersPage: View {
         PageList {
             if let actionError = catalog.actionError {
                 Section {
-                    InlineBanner(.failure, title: actionError)
+                    InlineBanner(
+                        .failure, title: actionError,
+                        action: ("Try again", { Task { await catalog.refreshCatalog() } }))
                         .panelRow(Palette.background)
                 }
             }
@@ -31,7 +33,7 @@ struct ProvidersPage: View {
                     }
                 } footer: {
                     Text(
-                        "Enable switches are stored in the daemon's config; status and models come from the host's catalogue."
+                        "Enable switches are stored in the host's config; status and models come from its catalogue."
                     )
                 }
             }
@@ -40,7 +42,7 @@ struct ProvidersPage: View {
                     InlineBanner(
                         .info,
                         title:
-                            "Daemon config is unavailable — pull to refresh on a Host page to enable toggles."
+                            "Host config is unavailable — pull to refresh on a Host page to enable toggles."
                     )
                     .panelRow(Palette.background)
                 }
@@ -76,7 +78,7 @@ struct ProvidersPage: View {
         HStack(spacing: 0) {
             NavigationLink(value: SettingsRoute.provider(provider.provider)) {
                 HStack(spacing: Space.md) {
-                    PaseoStatusDot(kind: dotKind(provider))
+                    StatusDot(dotKind(provider))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(provider.label ?? provider.provider)
                             .font(.paseo(.body))
@@ -139,9 +141,9 @@ struct ProvidersPage: View {
         }
     }
 
-    private func statusKind(_ status: ProviderStatus) -> PaseoStatusDot.Kind {
+    private func statusKind(_ status: ProviderStatus) -> StatusDot.State {
         switch status {
-        case .ready: .done
+        case .ready: .idle
         case .loading: .running
         case .error: .failed
         case .unavailable: .idle
@@ -150,7 +152,7 @@ struct ProvidersPage: View {
     }
 
     /// Hollow dot when the provider is config-disabled; otherwise its catalogue status.
-    private func dotKind(_ provider: ProviderSnapshotEntry) -> PaseoStatusDot.Kind {
+    private func dotKind(_ provider: ProviderSnapshotEntry) -> StatusDot.State {
         if hostSettings.config != nil, !hostSettings.isProviderEnabled(provider.provider) {
             return .idle
         }

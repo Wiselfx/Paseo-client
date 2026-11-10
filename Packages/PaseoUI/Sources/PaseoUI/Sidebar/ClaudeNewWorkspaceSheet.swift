@@ -200,7 +200,7 @@ struct ClaudeNewWorkspaceSheet: View {
             .padding(3)
             .background(Palette.chip, in: .capsule)
             if !directory.supportsWorkspaceCreate {
-                Text("This daemon cannot create worktrees; new sessions open the project root.")
+                Text("This host can't create worktrees; new sessions open the project root.")
                     .font(.paseo(.caption))
                     .foregroundStyle(Palette.captionInk)
                     .padding(.leading, 4)
@@ -231,7 +231,7 @@ struct ClaudeNewWorkspaceSheet: View {
                 .padding(.horizontal, 16)
                 .frame(height: 52)
             }
-            Text("The new worktree forks from this branch. The daemon reports no branch list here; type one.")
+            Text("The new worktree forks from this branch. The host reports no branch list here; type one.")
                 .font(.paseo(.caption))
                 .foregroundStyle(Palette.captionInk)
                 .padding(.horizontal, 4)

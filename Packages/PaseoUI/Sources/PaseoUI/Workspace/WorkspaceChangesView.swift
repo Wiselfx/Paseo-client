@@ -293,7 +293,7 @@ struct WorkspaceChangesView: View {
                             .foregroundStyle(Palette.background)
                             .padding(.leading, 14)
                             .padding(.trailing, 12)
-                            .frame(height: 34)
+                            .frame(minHeight: 44)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(
@@ -585,7 +585,7 @@ struct WorkspaceChangesView: View {
         case .failed(let message):
             InlineBanner(
                 .failure, title: message,
-                action: ("Retry", { Task { await reloadDiff() } })
+                action: ("Try again", { Task { await reloadDiff() } })
             )
             .padding(.horizontal, Space.xl)
             .padding(.top, Space.xl)

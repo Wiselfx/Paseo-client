@@ -239,7 +239,7 @@ struct SchedulesListPage: View {
             systemImage: "exclamationmark.triangle",
             title: message,
             message: nil,
-            action: (title: "Retry", run: {
+            action: (title: "Try again", run: {
                 Haptics.selection()
                 Task { await schedules.load() }
             })

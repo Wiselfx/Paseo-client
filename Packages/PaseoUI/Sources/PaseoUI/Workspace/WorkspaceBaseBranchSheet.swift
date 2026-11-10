@@ -70,7 +70,7 @@ struct WorkspaceBaseBranchSheet: View {
             EmptyState(
                 title: searchText.isEmpty ? "No branches" : "No matches",
                 message: searchText.isEmpty
-                    ? "The daemon returned no branches."
+                    ? "The host returned no branches."
                     : "Nothing matches “\(searchText)”."
             )
         } else {
@@ -132,7 +132,7 @@ struct WorkspaceBaseBranchSheet: View {
             } else {
                 Haptics.failure()
                 applyError = session.workspaceDirectory.actionError
-                    ?? "The daemon rejected the base branch."
+                    ?? "The host rejected the base branch."
             }
         }
     }

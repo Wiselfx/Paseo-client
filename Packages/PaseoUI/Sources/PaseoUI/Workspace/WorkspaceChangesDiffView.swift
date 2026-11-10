@@ -141,6 +141,7 @@ struct WorkspaceChangesDiffView: View {
                             .font(.glyph(.small, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -153,6 +154,7 @@ struct WorkspaceChangesDiffView: View {
                             .font(.glyph(.small, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -200,7 +202,7 @@ struct WorkspaceChangesDiffView: View {
                     }
                     .foregroundStyle(Palette.background)
                     .padding(.horizontal, 14)
-                    .frame(height: 38)
+                    .frame(minHeight: 44)
                     .background(Palette.ink, in: .capsule)
                 }
                 .buttonStyle(.plain)
@@ -213,6 +215,7 @@ struct WorkspaceChangesDiffView: View {
                         .font(.glyph(.small, weight: .semibold))
                         .foregroundStyle(Palette.background)
                         .frame(width: 38, height: 38)
+                        .frame(width: 44, height: 44)
                         .background(Palette.ink.opacity(0.85), in: .circle)
                 }
                 .buttonStyle(.plain)
@@ -332,7 +335,7 @@ struct WorkspaceChangesDiffView: View {
     /// detached build).
     private static func characterWidth() -> CGFloat {
         let size = TextRole.code.size
-        let font = UIFont(name: ClaudeTypography.anthropicMono, size: size)
+        let font = UIFont(name: ClaudeFontResources.anthropicMono, size: size)
             ?? .monospacedSystemFont(ofSize: size, weight: .regular)
         return ("M" as NSString).size(withAttributes: [.font: font]).width
     }
@@ -447,7 +450,7 @@ struct WorkspaceChangesDiffView: View {
             centeredMessage(
                 symbol: "doc.text",
                 title: "File too large",
-                subtitle: "The diff for this file was omitted by the daemon.")
+                subtitle: "The diff for this file was omitted by the host.")
         default:
             if let render {
                 if render.sections.isEmpty {

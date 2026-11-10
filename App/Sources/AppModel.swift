@@ -43,6 +43,11 @@ final class AppModel {
     let hostContext = HostSwitchContext()
     /// Published snapshot for SwiftUI (phase and forms are observed directly).
     private(set) var savedHostsSnapshot: [HostSwitchEntry] = []
+    /// Cold launch to a saved host, from `start()` until that connect settles. `RootView` shows
+    /// the shell skeleton for it instead of the connect form (R11 §1).
+    private(set) var launchConnecting = false
+    /// One `start()` per app, however often the root re-appears.
+    private(set) var hasStarted = false
 
     private let defaults = UserDefaults.standard
     private var connection: DaemonConnection?
@@ -67,23 +72,47 @@ final class AppModel {
         port = defaults.string(forKey: Keys.port) ?? "6767"
         useTLS = defaults.bool(forKey: Keys.useTLS)
         connectionURI = defaults.string(forKey: Keys.connectionURI) ?? ""
-        password = Keychain.read(account: Keys.passwordAccount) ?? ""
+        // The Keychain read, the legacy-host migration, the host refresh and the first connect
+        // are all deferred to `start()` (R11 §1): the first frame must not wait on them.
+        password = ""
         if let id = defaults.string(forKey: Keys.clientId) {
             clientId = id
         } else {
             clientId = "ios-" + UUID().uuidString.lowercased()
             defaults.set(clientId, forKey: Keys.clientId)
         }
-        migrateLegacyHostIfNeeded()
         wireHostContext()
+    }
+
+    /// The shell skeleton instead of the connect form (R11 §1): while a saved host connects, and
+    /// on the frames between mount and `.task`. `savedHosts` is loaded in `init`, so the first
+    /// frame can already answer.
+    var showsLaunchSkeleton: Bool {
+        launchConnecting || (savedHosts.mostRecent != nil && !hasStarted)
+    }
+
+    /// The expensive half of launch, run once from `RootView`'s `.task`: the saved password, the
+    /// pre-M1b host migration, the host snapshot and the first connect (R11 §1).
+    ///
+    /// Behaviour is the init's old sequence unchanged — Keychain, then migration, then the
+    /// snapshot, then the connect — so the saved host and its password migrate exactly as before.
+    func start() async {
+        guard !hasStarted else { return }
+        hasStarted = true
+        password = Keychain.read(account: Keys.passwordAccount) ?? ""
+        migrateLegacyHostIfNeeded()
         refreshHostContext()
+        // After the migration, so a legacy host the migration created gets the skeleton too. No
+        // suspension point since `hasStarted`, so the flag is set before any frame is drawn.
+        launchConnecting = savedHosts.mostRecent != nil
         if let last = savedHosts.mostRecent {
             // Startup: straight to the last host. On failure the connect screen shows with this
             // host preselected and the error inline.
-            Task { await connectToSaved(last.id) }
-        } else if !host.isEmpty {
-            Task { await connect() }
+            await connectToSaved(last.id)
+        } else if !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            await connect()
         }
+        launchConnecting = false
     }
 
     // MARK: Connecting
@@ -358,24 +387,24 @@ final class AppModel {
         switch error {
         case .rejected(let reason):
             switch reason {
-            case "password_required": "This daemon needs a password."
+            case "password_required": "This host needs a password."
             case "incorrect_password": "Wrong password."
-            case "incompatible_protocol": "This daemon's version isn't compatible. Update Paseo."
-            default: "The daemon refused the connection (\(reason))."
+            case "incompatible_protocol": "This host's version isn't compatible. Update Paseo."
+            default: "The host refused the connection (\(reason))."
             }
-        case .timeout: "The daemon didn't answer. Check the address and that it's running."
-        case .transport(let message): "Couldn't reach the daemon: \(message)"
+        case .timeout: "The host didn't answer. Check the address and that it's running."
+        case .transport(let message): "Couldn't reach the host: \(message)"
         case .closed(let code, let reason):
             switch code {
             case 4002:
                 // Terminal (R17): protected handshake failed — relinking the same way will fail again.
-                "The pairing link didn't work. Ask the daemon to show a new pairing code."
+                "The pairing link didn't work. Ask the host to show a new pairing code."
             case 4003:
                 "The encrypted connection failed. Check the pairing link and try again."
             default:
                 "Connection closed (\(code)) \(reason)"
             }
-        case .protocolViolation(let message): "Unexpected reply from the daemon: \(message)"
+        case .protocolViolation(let message): "Unexpected reply from the host: \(message)"
         case .disconnected: "Disconnected."
         }
     }

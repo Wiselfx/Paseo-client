@@ -64,7 +64,7 @@ public struct HostChooserSheet: View {
             .accessibilityIdentifier("host-chooser.search")
         }
         .padding(.horizontal, 12)
-        .frame(height: 42)
+        .frame(minHeight: 42)
         .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
     }
 

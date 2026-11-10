@@ -188,7 +188,7 @@ struct ProjectSettingsView: View {
                     seed()
                 }
             } label: {
-                Text("Retry")
+                Text("Try again")
                     .font(.paseo(.callout, weight: .semibold))
                     .foregroundStyle(Palette.background)
                     .padding(.horizontal, 24)
@@ -315,7 +315,7 @@ struct ProjectSettingsView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 51)
+                .frame(minHeight: 51)
                 RowDivider()
                 HStack(spacing: 8) {
                     PhotosPicker(selection: $photoItem, matching: .images) {
@@ -370,7 +370,7 @@ struct ProjectSettingsView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 51)
+                .frame(minHeight: 51)
                 if !icons.supportsCustomIcon {
                     Text("This host can't set project icons.")
                         .font(.paseo(.caption))
@@ -461,6 +461,7 @@ struct ProjectSettingsView: View {
                         .font(.glyph(.regular, weight: .medium))
                         .foregroundStyle(Palette.ink)
                         .frame(width: 30, height: 30)
+                        .frame(width: 44, height: 44)
                         .background(Palette.chip, in: .circle)
                 }
                 .padding(.trailing, 16)
@@ -543,7 +544,7 @@ struct ProjectSettingsView: View {
                 callout(
                     title: "The change couldn't be saved.",
                     detail: error.userMessage,
-                    actionLabel: "Retry") {
+                    actionLabel: "Try again") {
                         Task { await save() }
                     }
             } else if let sendError = store.sendError {
@@ -671,7 +672,6 @@ struct ProjectSettingsView: View {
         await store.load(repoRoot: project.projectRootPath)
         store.clearErrors()
         seed()
-        Haptics.selection()
     }
 
     private func save() async {

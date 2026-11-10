@@ -36,7 +36,9 @@ struct VoicePage: View {
                 voiceModeSection(speech)
                 if let error = voice.error {
                     Section {
-                        InlineBanner(.failure, title: error)
+                        InlineBanner(
+                            .failure, title: error,
+                            action: ("Try again", { Task { await session.hostSettings.load() } }))
                             .panelRow(Palette.background)
                     }
                 }

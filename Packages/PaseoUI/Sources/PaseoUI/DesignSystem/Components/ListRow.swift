@@ -107,37 +107,6 @@ struct ListRow: View {
     }
 }
 
-/// The old name for `ListRow`; unconverted call sites keep working.
-@available(*, deprecated, message: "Use ListRow")
-struct SheetRow: View {
-    let title: String
-    var symbol: String?
-    var detail: String?
-    var value: String?
-    var checked = false
-    var chevron = false
-    var badge: String?
-    var action: () -> Void
-
-    var body: some View {
-        ListRow(
-            title: title,
-            subtitle: detail,
-            systemImage: symbol,
-            accessory: accessory,
-            action: action
-        )
-    }
-
-    private var accessory: ListRow.Accessory {
-        if let value { return .value(value) }
-        if checked { return .checkmark(true) }
-        if let badge { return .badge(badge) }
-        if chevron { return .chevron }
-        return .none
-    }
-}
-
 #Preview("Light") {
     VStack(spacing: 0) {
         ListRow(title: "Title", subtitle: "Subtitle line", systemImage: "person")

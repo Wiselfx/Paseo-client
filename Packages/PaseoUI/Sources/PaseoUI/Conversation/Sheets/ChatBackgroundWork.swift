@@ -33,7 +33,7 @@ struct BackgroundWorkRow: View {
                     .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 12)
-            .frame(height: 36)
+            .frame(minHeight: 36)
             .background(Palette.adaptive(light: 0.96, dark: 0.10), in: .rect(cornerRadius: Radius.sm))
             .contentShape(.rect)
         }
@@ -52,7 +52,7 @@ struct ChatBackgroundWorkSheet: View {
     private var canStop: Bool { backgroundWork.canStop }
 
     var body: some View {
-        SheetScaffold("Background Work", detents: .mediumLarge) {
+        SheetScaffold("Background work", detents: .mediumLarge) {
             Group {
                 if backgroundWork.items.isEmpty {
                     EmptyState(

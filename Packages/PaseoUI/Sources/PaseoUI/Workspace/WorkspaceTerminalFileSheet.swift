@@ -86,7 +86,7 @@ struct WorkspaceTerminalFileSheet: View {
         EmptyState(
             systemImage: "exclamationmark.triangle",
             title: message,
-            action: (title: "Retry", run: { Task { await load() } })
+            action: (title: "Try again", run: { Task { await load() } })
         )
         .padding(.horizontal, Space.xl)
     }

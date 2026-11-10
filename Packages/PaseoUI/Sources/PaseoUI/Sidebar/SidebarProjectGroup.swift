@@ -34,6 +34,7 @@ extension PaseoSidebar {
                     .font(.glyph(.small, weight: .semibold))
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 30, height: 30)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)

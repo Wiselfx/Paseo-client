@@ -157,7 +157,7 @@ struct PairDevicePage: View {
                 .accessibilityIdentifier("pairDevice.copy")
             }
             // en.ts:1987-1988 securityWarning
-            Text("Treat this pairing link like a password. Anyone with it can access this daemon.")
+            Text("Treat this pairing link like a password. Anyone with it can access this host.")
                 .font(.paseo(.footnote))
                 .foregroundStyle(Palette.secondaryInk)
         }

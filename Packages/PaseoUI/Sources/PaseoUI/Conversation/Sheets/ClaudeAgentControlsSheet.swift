@@ -128,23 +128,19 @@ struct ClaudeAgentControlsSheet: View {
     private var root: some View {
         VStack(spacing: 12) {
             RowGroup {
-                SheetRow(
-                    title: "Model", detail: providerDetail,
-                    value: modelLabel(store.agent?.model), chevron: true
+                ListRow(
+                    title: "Model", subtitle: providerDetail,
+                    accessory: .value(modelLabel(store.agent?.model))
                 ) { page = .models }
                 RowDivider()
-                SheetRow(
-                    title: "Thinking", value: thinkingLabel, chevron: true
-                ) { page = .thinking }
+                ListRow(title: "Thinking", accessory: .value(thinkingLabel)) { page = .thinking }
                 RowDivider()
-                SheetRow(
-                    title: "Mode", value: modeLabel, chevron: true
-                ) { page = .modes }
+                ListRow(title: "Mode", accessory: .value(modeLabel)) { page = .modes }
                 if !toggleableFeatures.isEmpty || !selectableFeatures.isEmpty {
                     RowDivider()
-                    SheetRow(
-                        title: "Features", value: featuresSummary, chevron: true
-                    ) { page = .features }
+                    ListRow(title: "Features", accessory: .value(featuresSummary)) {
+                        page = .features
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -188,11 +184,14 @@ struct ClaudeAgentControlsSheet: View {
                 } else {
                     RowGroup {
                         ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
-                            SheetRow(
+                            ListRow(
                                 title: model.label,
-                                detail: model.description,
-                                checked: store.agent?.model == model.id,
-                                badge: model.isDefault == true ? "Default" : nil
+                                subtitle: model.description,
+                                accessory: store.agent?.model == model.id
+                                    ? ListRow.Accessory.checkmark(true)
+                                    : (model.isDefault == true
+                                        ? ListRow.Accessory.badge("Default")
+                                        : ListRow.Accessory.none)
                             ) {
                                 Haptics.selection()
                                 Task {
@@ -225,18 +224,22 @@ struct ClaudeAgentControlsSheet: View {
     private var plainThinkingList: some View {
         VStack(spacing: 12) {
                 RowGroup {
-                    SheetRow(
-                        title: "Default", detail: "Use the provider's level for this model",
-                        checked: effectiveThinkingId == nil
+                    ListRow(
+                        title: "Default",
+                        subtitle: "Use the provider's level for this model",
+                        accessory: .checkmark(effectiveThinkingId == nil)
                     ) {
                         chooseThinking(nil)
                     }
                     ForEach(thinkingOptions) { option in
                         RowDivider()
-                        SheetRow(
-                            title: option.label, detail: option.description,
-                            checked: effectiveThinkingId == option.id,
-                            badge: option.isDefault == true ? "Default" : nil
+                        ListRow(
+                            title: option.label, subtitle: option.description,
+                            accessory: effectiveThinkingId == option.id
+                                ? ListRow.Accessory.checkmark(true)
+                                : (option.isDefault == true
+                                    ? ListRow.Accessory.badge("Default")
+                                    : ListRow.Accessory.none)
                         ) {
                             chooseThinking(option.id)
                         }
@@ -275,9 +278,9 @@ struct ClaudeAgentControlsSheet: View {
                             if index < toggleableFeatures.count - 1 || !selectableFeatures.isEmpty { RowDivider() }
                         }
                         ForEach(Array(selectableFeatures.enumerated()), id: \.element.id) { index, select in
-                            SheetRow(
-                                title: select.label, detail: select.description,
-                                value: selectValueLabel(select), chevron: true
+                            ListRow(
+                                title: select.label, subtitle: select.description,
+                                accessory: .value(selectValueLabel(select))
                             ) { page = .feature(select.id) }
                             if index < selectableFeatures.count - 1 { RowDivider() }
                         }
@@ -331,7 +334,7 @@ struct ClaudeAgentControlsSheet: View {
                 if let select = selectFeature {
                     RowGroup {
                         if select.value != nil {
-                            SheetRow(title: "None") {
+                            ListRow(title: "None") {
                                 Haptics.selection()
                                 page = .features
                                 Task { await store.setFeatureSelection(featureId: select.id, value: nil) }
@@ -339,10 +342,13 @@ struct ClaudeAgentControlsSheet: View {
                             RowDivider()
                         }
                         ForEach(Array(select.options.enumerated()), id: \.element.id) { index, option in
-                            SheetRow(
-                                title: option.label, detail: option.description,
-                                checked: select.value == option.id,
-                                badge: option.isDefault == true ? "Default" : nil
+                            ListRow(
+                                title: option.label, subtitle: option.description,
+                                accessory: select.value == option.id
+                                    ? ListRow.Accessory.checkmark(true)
+                                    : (option.isDefault == true
+                                        ? ListRow.Accessory.badge("Default")
+                                        : ListRow.Accessory.none)
                             ) {
                                 Haptics.selection()
                                 page = .features
@@ -375,9 +381,9 @@ struct ClaudeAgentControlsSheet: View {
             VStack(spacing: 12) {
                 RowGroup {
                     ForEach(Array(modes.enumerated()), id: \.element.id) { index, mode in
-                        SheetRow(
-                            title: mode.label, detail: mode.description,
-                            checked: store.agent?.currentModeId == mode.id
+                        ListRow(
+                            title: mode.label, subtitle: mode.description,
+                            accessory: .checkmark(store.agent?.currentModeId == mode.id)
                         ) {
                             Haptics.selection()
                             Task {

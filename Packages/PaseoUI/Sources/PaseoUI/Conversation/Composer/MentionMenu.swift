@@ -135,7 +135,7 @@ struct MentionMenu: View {
                         .foregroundStyle(Palette.secondaryInk)
                 }
                 .padding(.horizontal, 14)
-                .frame(height: 46)
+                .frame(minHeight: 46)
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ScrollView(.vertical) {
@@ -173,7 +173,7 @@ struct MentionMenu: View {
                 }
             }
             .padding(.horizontal, 14)
-            .frame(height: 38)
+            .frame(minHeight: 38)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

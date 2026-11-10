@@ -61,7 +61,7 @@ struct ProviderDetailSheet: View {
         sectionLabel("Status")
         RowGroup {
             HStack(spacing: 12) {
-                PaseoStatusDot(kind: dotKind)
+                StatusDot(dotKind)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(statusTitle)
                         .font(.paseo(.body))
@@ -73,7 +73,7 @@ struct ProviderDetailSheet: View {
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 16)
-            .frame(height: 52)
+            .frame(minHeight: 52)
             RowDivider()
             statusRow(symbol: "shippingbox", title: "Source", detail: entry?.source ?? "builtin")
             RowDivider()
@@ -104,16 +104,16 @@ struct ProviderDetailSheet: View {
             Spacer(minLength: 8)
         }
         .padding(.horizontal, 16)
-        .frame(height: 52)
+        .frame(minHeight: 52)
     }
 
-    private var dotKind: PaseoStatusDot.Kind {
+    private var dotKind: StatusDot.State {
         if session.hostSettings.config != nil, !session.hostSettings.isProviderEnabled(providerID) {
             return .idle
         }
         guard let status = entry?.status else { return .idle }
         switch status {
-        case .ready: return .done
+        case .ready: return .idle
         case .loading: return .running
         case .error: return .failed
         case .unavailable: return .idle
@@ -177,7 +177,7 @@ struct ProviderDetailSheet: View {
                         .foregroundStyle(Palette.secondaryInk)
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 52)
+                .frame(minHeight: 52)
             case .ready(let text):
                 diagnosticPane(text, isFailure: false)
             case .failed(let message):
@@ -189,7 +189,7 @@ struct ProviderDetailSheet: View {
     private func diagnosticPane(_ text: String, isFailure: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             ScrollView {
-                Text(text.isEmpty ? "The daemon returned an empty diagnostic." : text)
+                Text(text.isEmpty ? "The host returned an empty diagnostic." : text)
                     .font(.paseo(.codeCaption))
                     .foregroundStyle(isFailure ? Palette.failureInk : Palette.ink)
                     .textSelection(.enabled)
@@ -225,7 +225,7 @@ struct ProviderDetailSheet: View {
                 }
             }
         }
-        Text("Models the daemon probes for this provider. Read-only; the daemon owns the catalogue.")
+        Text("Models the host probes for this provider. Read-only; the host owns the catalogue.")
             .font(.paseo(.footnote))
             .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
@@ -301,7 +301,7 @@ struct ProviderDetailSheet: View {
             InlineBanner(.failure, title: modelError)
                 .padding(.horizontal, Space.lg)
         }
-        Text("Custom models live in the daemon's config, merged into this provider's catalogue.")
+        Text("Custom models live in the host's config, merged into this provider's catalogue.")
             .font(.paseo(.footnote))
             .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
@@ -357,7 +357,7 @@ struct ProviderDetailSheet: View {
             .accessibilityIdentifier("settings.providers.custom.add")
         }
         .padding(.horizontal, 16)
-        .frame(height: 52)
+        .frame(minHeight: 52)
     }
 
     // MARK: Add / remove custom models
@@ -393,7 +393,7 @@ struct ProviderDetailSheet: View {
             if ok {
                 await session.agentControl.refreshCatalog()
             } else {
-                modelError = session.hostSettings.error ?? "The daemon rejected that change."
+                modelError = session.hostSettings.error ?? "The host rejected that change."
             }
         }
     }

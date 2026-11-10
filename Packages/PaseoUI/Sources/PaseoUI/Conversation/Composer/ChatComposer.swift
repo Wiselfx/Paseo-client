@@ -444,7 +444,7 @@ struct ComposerView: View {
     private var composerAddMenu: some View {
         Menu {
             PhotosPicker(selection: $photoSelection, maxSelectionCount: 10, matching: .images) {
-                Label("Photo Library", systemImage: "photo.on.rectangle")
+                Label("Photo library", systemImage: "photo.on.rectangle")
             }
             if cameraAvailable {
                 Button("Camera", systemImage: "camera") { showCameraPicker = true }
@@ -465,7 +465,7 @@ struct ComposerView: View {
             Button("New agent", systemImage: "plus.bubble") {
                 controller?.newAgent(draft: text)
             }
-            Button("Copy agent ID", systemImage: "doc.on.doc") {
+            Button("Copy agent id", systemImage: "doc.on.doc") {
                 controller?.copyAgentId()
             }
         } label: {
@@ -523,7 +523,7 @@ struct ComposerView: View {
                 }
                 .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 12)
-                .frame(height: 36)
+                .frame(minHeight: 44)
                 .background(Palette.chip, in: .capsule)
             }
             .accessibilityLabel("Fast mode on; turn off")
@@ -1051,7 +1051,7 @@ struct SlashMenu: View {
                             .foregroundStyle(Palette.secondaryInk)
                     }
                     .padding(.horizontal, 14)
-                    .frame(height: 46)
+                    .frame(minHeight: 46)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 case .ready:
                     readyRows
@@ -1117,7 +1117,7 @@ struct SlashMenu: View {
                                 }
                             }
                             .padding(.horizontal, 14)
-                            .frame(height: 46)
+                            .frame(minHeight: 46)
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
@@ -1160,6 +1160,7 @@ struct QueueRow: View {
                     .font(.glyph(.small, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -1172,12 +1173,13 @@ struct QueueRow: View {
                     .font(.glyph(.small, weight: .semibold))
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Send queued message now")
         }
-        .frame(height: 36)
+        .frame(minHeight: 44)
         .padding(.horizontal, 10)
         .contentShape(.rect)
     }
@@ -1251,7 +1253,7 @@ enum ComposerFieldLimit {
     /// (≈ 8 lines on an iPhone in portrait). Clamped so an unmeasured pass still leaves a usable
     /// field, and a tall screen can never take more than a third of the card.
     static func lines(
-        availableHeight: CGFloat, fontSize: CGFloat = ClaudeTypography.chatBodySize
+        availableHeight: CGFloat, fontSize: CGFloat = Typography.chatBodySize
     ) -> Int {
         guard availableHeight > 0 else { return 9 }
         let lineHeight = fontSize * 1.4
@@ -1388,6 +1390,8 @@ struct ComposerMicButton: View {
                 .frame(width: 36, height: 36)
                 .foregroundStyle(isListening ? Palette.background : Palette.ink)
                 .background(isListening ? Palette.ink : Palette.chip, in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
                 .scaleEffect(scale)
                 .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: level)
         }
@@ -1423,6 +1427,8 @@ struct DictationOverlay: View {
                     .frame(width: 36, height: 36)
                     .foregroundStyle(Palette.ink)
                     .background(Palette.chip, in: .circle)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Cancel dictation")
@@ -1470,6 +1476,8 @@ struct DictationOverlay: View {
                 .frame(width: 36, height: 36)
                 .foregroundStyle(Palette.background)
                 .background(Palette.ink, in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

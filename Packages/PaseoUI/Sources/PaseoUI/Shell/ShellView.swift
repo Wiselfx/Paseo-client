@@ -70,7 +70,6 @@ public struct ShellView: View {
         self.onDisconnect = onDisconnect
         _notificationTarget = notificationTarget
         _deepLinkTarget = deepLinkTarget
-        ClaudeFontResources.register()
     }
 
     public var body: some View {

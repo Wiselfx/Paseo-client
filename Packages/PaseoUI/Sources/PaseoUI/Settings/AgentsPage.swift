@@ -96,7 +96,9 @@ struct AgentsPage: View {
             }
             if let error = hostSettings.error {
                 Section {
-                    InlineBanner(.failure, title: error)
+                    InlineBanner(
+                        .failure, title: error,
+                        action: ("Try again", { Task { await hostSettings.load() } }))
                         .panelRow(Palette.background)
                 }
             }
@@ -375,6 +377,7 @@ struct SettingsInfoButton: View {
                 .font(.glyph(.small))
                 .foregroundStyle(Palette.tertiaryInk)
                 .frame(width: 28, height: 28)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
