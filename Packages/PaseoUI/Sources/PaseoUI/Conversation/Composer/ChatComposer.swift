@@ -397,22 +397,18 @@ struct ComposerView: View {
     }
 
     private var composerTextField: some View {
-        TextField(
-            "", text: $text,
-            prompt: Text(placeholder)
-                .foregroundStyle(Palette.secondaryInk),
-            axis: .vertical
-        )
-        .font(.paseo(.body))
-        // V5 §3: grow to the cap, then scroll inside the field — the controls row below always
-        // stays above the keyboard.
-        .lineLimit(1...composerFieldLineLimit)
-        .fixedSize(horizontal: false, vertical: true)
-        .focused($focused)
-        // Audit C: the cursor is ink, not orange.
-        .tint(Palette.ink)
-        .padding(.horizontal, 6)
-        .padding(.top, 7)
+        // D2 §2: a `UITextView` under SwiftUI, so a pasted image has somewhere to land. The face,
+        // the ink tint, the placeholder, the grow-to-cap height and the focus binding are all
+        // applied there; ⌘↩ still belongs to the send button.
+        ComposerTextView(
+            text: $text,
+            isFocused: focused,
+            focus: $focused,
+            placeholder: placeholder,
+            lineLimit: composerFieldLineLimit
+        ) { images in
+            attachPastedImages(images)
+        }
         .accessibilityIdentifier("composer.draft")
     }
 
@@ -445,10 +441,12 @@ struct ComposerView: View {
             fastModeChip
             Spacer(minLength: 0)
             contextMeter
-            voiceModeButton
             dictateButton
-            composerSendControl
+            composerPrimary
         }
+        // The ring appears at 70 %: the row moves into place instead of snapping.
+        .animation(
+            Motion.feedback.resolved(reduceMotion: reduceMotion), value: contextPercent == nil)
     }
 
     private var composerAddMenu: some View {
@@ -460,7 +458,8 @@ struct ComposerView: View {
                 Button("Camera", systemImage: "camera") { showCameraPicker = true }
             }
             Button("Files", systemImage: "folder") { showFileImporter = true }
-            // iOS has no paste command for views; offer the clipboard image explicitly.
+            // The field takes ⌘V; the menu offers the same thing for discovery, and attaches
+            // every image on the pasteboard (D2 §2).
             if UIPasteboard.general.hasImages {
                 Button("Paste image", systemImage: "doc.on.clipboard") { pasteImageFromClipboard() }
             }
@@ -536,53 +535,48 @@ struct ComposerView: View {
                 .frame(minHeight: 44)
                 .background(Palette.chip, in: .capsule)
             }
+            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Fast mode on; turn off")
             .accessibilityIdentifier("composer.fastmode")
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
         }
     }
 
+    /// The ring is noise at low usage (it reads as a spinner on device), so it only exists where
+    /// it says something: from 70 % up, with the number inside (D2 §1). Below 90 % it is ink at
+    /// 60 %, above it is full ink.
     @ViewBuilder private var contextMeter: some View {
-        if let usage = store?.contextUsage, let percent = usage.percentUsed,
-            usage.usedTokens != nil, usage.maxTokens != nil
-        {
+        if let percent = contextPercent {
             Button {
                 Haptics.selection()
                 controller?.showContextSheet = true
             } label: {
-                ClaudeMeterRing(percent: percent, size: 16, lineWidth: 1.5)
+                ClaudeMeterRing(percent: percent, size: 24, lineWidth: 1.5)
+                    .overlay {
+                        Text(PaseoFormat.integer(Int(percent.rounded())))
+                            .font(.paseo(.caption2, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(Palette.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .opacity(percent >= 90 ? 1 : 0.6)
                     .frame(width: 36, height: 36)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
+            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Context window, \(Int(percent.rounded())) percent used")
             .accessibilityIdentifier("composer.contextMeter")
         }
     }
 
-    @ViewBuilder private var voiceModeButton: some View {
-        if let voice, voice.isVoiceAvailable {
-            Button {
-                toggleVoiceMode()
-            } label: {
-                Image(
-                    systemName: voiceActiveForAgent && voice.isMuted
-                        ? "mic.slash.fill" : "waveform.and.mic"
-                )
-                .font(.glyph(.regular, weight: .medium))
-                .frame(width: 36, height: 36)
-                .foregroundStyle(voiceActiveForAgent ? .white : Palette.ink)
-                .background(voiceActiveForAgent ? Palette.orange : Palette.chip, in: .circle)
-                .frame(width: 44, height: 44)
-                .contentShape(.rect)
-            }
-            .accessibilityLabel(
-                voiceActiveForAgent
-                    ? (voice.isMuted ? "Unmute voice mode" : "Mute Voice mode")
-                    : "Enable Voice mode")
-            .accessibilityIdentifier("composer.voiceMode")
-            .disabled(voice.isVoiceSwitching)
-        }
+    /// The ring's reason to exist is the reading, and below 70 % there isn't one (D2 §1).
+    private var contextPercent: Double? {
+        guard let usage = store?.contextUsage, let percent = usage.percentUsed,
+            usage.usedTokens != nil, usage.maxTokens != nil, percent >= 70
+        else { return nil }
+        return percent
     }
 
     private var dictateButton: some View {
@@ -602,7 +596,7 @@ struct ComposerView: View {
 
     private func dictationOverlay(_ dictation: DictationController) -> some View {
         DictationOverlay(
-            level: Double(dictation.level),
+            buffer: dictation.waveform,
             duration: dictation.duration,
             onCancel: { dictation.cancel() },
             onAccept: { dictation.stop(keepingDraft: true) },
@@ -618,33 +612,46 @@ struct ComposerView: View {
         }
     }
 
-    @ViewBuilder private var composerSendControl: some View {
-        if store?.isRunning == true && trimmedText.isEmpty {
-            Button {
-                Task { await store?.cancel() }
-            } label: {
-                Image(systemName: "stop.fill")
-                    .font(.glyph(.regular, weight: .medium))
-                    .frame(width: 36, height: 36)
-                    .foregroundStyle(Palette.background)
-                    .background(Palette.ink, in: .circle)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Stop response")
-            .accessibilityIdentifier("composer.stop")
-        } else {
-            QueueSendButton(
-                isRunning: store?.isRunning ?? false, canSend: canSend
-            ) {
-                tapSend()
-            } onQueue: {
-                longPressSend()
-            }
-            // ⌘↩ sends, whatever tap would have done.
-            .keyboardShortcut(.return, modifiers: .command)
-            .accessibilityIdentifier("composer.send")
+    // MARK: The primary
+
+    /// Voice mode first (it owns the lane), then anything to send, then a running turn, then the
+    /// idle states. A truncated draft still sends: only `canSend` decides that it can.
+    private var primaryState: ComposerPrimaryState {
+        if voiceActiveForAgent { return .voiceActive }
+        if !trimmedText.isEmpty || !readyAttachments.isEmpty { return .send }
+        if store?.isRunning == true { return .stop }
+        if voice?.isVoiceAvailable == true { return .voice }
+        return .unavailable
+    }
+
+    private var primaryIsEnabled: Bool {
+        switch primaryState {
+        case .unavailable: return false
+        case .send: return canSend
+        case .voice, .voiceActive: return voice?.isVoiceSwitching != true
+        case .stop: return true
+        }
+    }
+
+    private var composerPrimary: some View {
+        ComposerPrimaryButton(
+            state: primaryState,
+            isEnabled: primaryIsEnabled,
+            isMuted: voice?.isMuted ?? false,
+            waveform: controller?.voiceEngine.waveform,
+            reduceMotion: reduceMotion,
+            onTap: primaryTap,
+            onQueue: controller == nil ? nil : longPressSend)
+    }
+
+    private func primaryTap() {
+        switch primaryState {
+        case .voice, .voiceActive:
+            toggleVoiceMode()
+        case .stop:
+            Task { await store?.cancel() }
+        case .send, .unavailable:
+            tapSend()
         }
     }
 
@@ -841,17 +848,19 @@ struct ComposerView: View {
     }
 
     private func pasteImageFromClipboard() {
-        if let controller {
-            controller.pasteImageFromClipboard()
-            return
-        }
-        guard let image = UIPasteboard.general.image,
-            let data = image.jpegData(compressionQuality: 1.0)
-        else {
+        // Every image on the pasteboard, not just the first (D2 §2).
+        Task { attachPastedImages(await PasteImageLoader.loadAll()) }
+    }
+
+    /// Pasted and dropped images, in pasteboard order, through the same path a picked photo takes.
+    private func attachPastedImages(_ images: [Data]) {
+        guard !images.isEmpty else {
             localAttachmentError = "Failed to paste image"
             return
         }
-        attachImage(data, fileName: "pasted-\(UUID().uuidString.prefix(8)).jpg")
+        for data in images {
+            attachImage(data, fileName: "pasted-\(UUID().uuidString.prefix(8)).jpg")
+        }
     }
 
     private func mentionFile() {
@@ -1022,6 +1031,7 @@ struct ComposerView: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
+            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .padding(.trailing, 104)
             .padding(.top, 1)
             .accessibilityLabel("Expand composer")
@@ -1148,6 +1158,8 @@ struct QueueRow: View {
     let onEdit: () -> Void
     let onSendNow: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "clock")
@@ -1170,7 +1182,7 @@ struct QueueRow: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Edit queued message")
             Button {
                 Haptics.selection()
@@ -1183,7 +1195,7 @@ struct QueueRow: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Send queued message now")
         }
         .frame(minHeight: 44)
@@ -1192,10 +1204,12 @@ struct QueueRow: View {
     }
 }
 
-/// The live voice row: mute toggle, volume meter, stop/interrupt (upstream wording).
+/// The live voice row: mute toggle, live level, stop/interrupt (upstream wording).
 struct VoiceBar: View {
     let voice: VoiceModeSession
     let engine: VoiceAudioEngine
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1211,21 +1225,14 @@ struct VoiceBar: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
+            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel(voice.isMuted ? "Unmute voice" : "Mute voice")
             .accessibilityIdentifier("composer.voice.mute")
 
-            HStack(spacing: 3) {
-                ForEach(0..<5, id: \.self) { index in
-                    let height = [8.0, 13.0, 18.0, 13.0, 8.0][index]
-                    Capsule()
-                        .fill(Palette.ink.opacity(0.85))
-                        .frame(width: 4, height: height * CGFloat(max(0.15, voice.volume) + 0.05))
-                        .scaleEffect(y: voice.isMuted ? 0.3 : 1, anchor: .center)
-                }
-            }
-            .frame(width: 52, height: 20)
-            .accessibilityLabel("Voice volume, \(Int((voice.volume * 100).rounded())) percent")
-            .accessibilityIdentifier("composer.voice.volume")
+            LiveWaveform(
+                buffer: engine.waveform, isActive: !voice.isMuted,
+                accessibilityText: "Voice volume, \(Int((voice.volume * 100).rounded())) percent")
+                .accessibilityIdentifier("composer.voice.volume")
 
             Spacer(minLength: 0)
 
@@ -1241,6 +1248,7 @@ struct VoiceBar: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
+            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Stop realtime voice and interrupt turn")
             .accessibilityIdentifier("composer.voice.stop")
             .disabled(voice.phase == .stopping)
@@ -1310,28 +1318,57 @@ struct ComposerModelChip: View {
     var providerIconSvg: String?
     var action: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                if let providerLabel {
-                    ProviderGlyph(label: providerLabel, iconSvg: providerIconSvg)
-                }
-                Text(modelLabel)
-                if let thinkingLabel {
-                    Text(thinkingLabel).foregroundStyle(Palette.secondaryInk)
-                }
-            }
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.ink)
-            .lineLimit(1)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 36)
-            .background(Palette.chip, in: .capsule)
+            chipLabels
+                .padding(.horizontal, 14)
+                // 36 pt at the default type size; taller type grows it rather than clipping.
+                .frame(minHeight: 36)
+                .background(Palette.chip, in: .capsule)
+                // Hit area: the capsule stays 36 pt tall, the touch target is 44.
+                .frame(minHeight: 44)
+                .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
+        // The chip wins its space before the fixed-size controls take theirs, so it shrinks
+        // rather than pushing the mic and the primary off the row.
+        .layoutPriority(1)
         .accessibilityLabel("Model, thinking and mode")
         .accessibilityIdentifier("composer.model")
+    }
+
+    /// D2 §1: the chip must never read "Bea… Me…". The thinking label is dropped first, then the
+    /// model name truncates in the middle — losing the middle of a name is readable, losing both
+    /// ends is not.
+    private var chipLabels: some View {
+        ViewThatFits(in: .horizontal) {
+            labelRow(model: modelLabel, thinking: thinkingLabel, truncation: .tail)
+            labelRow(model: modelLabel, thinking: nil, truncation: .tail)
+            labelRow(model: modelLabel, thinking: nil, truncation: .middle)
+        }
+    }
+
+    private func labelRow(
+        model: String, thinking: String?, truncation: Text.TruncationMode
+    ) -> some View {
+        HStack(spacing: 4) {
+            if let providerLabel {
+                ProviderGlyph(label: providerLabel, iconSvg: providerIconSvg)
+            }
+            Text(model)
+                .lineLimit(1)
+                .truncationMode(truncation)
+            if let thinking {
+                Text(thinking)
+                    .foregroundStyle(Palette.secondaryInk)
+                    .lineLimit(1)
+                    .truncationMode(truncation)
+            }
+        }
+        .font(.paseo(.callout))
+        .foregroundStyle(Palette.ink)
     }
 }
 
@@ -1404,6 +1441,7 @@ struct ComposerMicButton: View {
                 .scaleEffect(scale)
                 .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: level)
         }
+        .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
         .accessibilityLabel(isListening ? "Stop dictation" : "Dictate")
         .accessibilityIdentifier("composer.dictate")
     }
@@ -1419,14 +1457,15 @@ struct ComposerMicButton: View {
 /// insert-and-send. It replaces the field rather than sitting beside it, the way upstream swaps
 /// the whole input surface. Wording is en.ts `message.dictation` (:362-371).
 struct DictationOverlay: View {
-    /// 0…1 input level.
-    let level: Double
+    /// The dictation's live levels.
+    let buffer: LiveWaveformBuffer
     /// Seconds since recording started.
     let duration: TimeInterval
     let onCancel: () -> Void
     let onAccept: () -> Void
     let onAcceptAndSend: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1439,7 +1478,7 @@ struct DictationOverlay: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Cancel dictation")
             .accessibilityIdentifier("composer.dictation.cancel")
 
@@ -1462,18 +1501,9 @@ struct DictationOverlay: View {
         .frame(height: 52)
     }
 
-    /// Ink bars on the card; the same meter the voice bar draws.
+    /// The live level, the same waveform the voice bar draws (D2 §4).
     private var meter: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<5, id: \.self) { index in
-                let height = [8.0, 13.0, 18.0, 13.0, 8.0][index]
-                Capsule()
-                    .fill(Palette.ink.opacity(0.85))
-                    .frame(width: 4, height: height * CGFloat(max(0.15, level) + 0.05))
-            }
-        }
-        .frame(width: 52, height: 20)
-        .accessibilityHidden(true)
+        LiveWaveform(buffer: buffer, isActive: true, barCount: 18)
     }
 
     private func actionButton(
@@ -1488,7 +1518,7 @@ struct DictationOverlay: View {
                 .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
@@ -1598,6 +1628,13 @@ struct ComposerVoiceWiring: ViewModifier {
                     // The composer can appear while the lane is already waiting; `.onChange`
                     // never fires for the initial value.
                     if voice.isThinkingToneExpected { controller.voiceEngine.startThinkingTone() }
+                    // Same reason: capture is started from the same place the callbacks are
+                    // bound, so a composer opened on a live lane still records (D2 §4).
+                    if voice.isVoiceMode { await startCapture() }
+                }
+                .onChange(of: voice.isMuted) { _, muted in
+                    // Muting clears the meter, like the store's own telemetry reset.
+                    if muted { controller.voiceEngine.waveform.reset() }
                 }
                 .onChange(of: voice.phase) { _, phase in
                     switch phase {

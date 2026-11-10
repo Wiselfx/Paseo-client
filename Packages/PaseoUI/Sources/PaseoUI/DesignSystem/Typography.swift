@@ -215,6 +215,26 @@ enum Typography {
         let face = UIFont(descriptor: descriptor, size: size)
         return Font(UIFontMetrics(forTextStyle: style.uiTextStyle).scaledFont(for: face))
     }
+
+    /// The same face and size a role's `Font` draws with, as a `UIFont`, for the UIKit views that
+    /// have to set a font themselves (the composer's text view). Scaled through `UIFontMetrics`
+    /// for the role's text style, so `adjustsFontForContentSizeCategory` keeps working.
+    static func uiFont(_ role: TextRole, weight: Font.Weight = .regular) -> UIFont {
+        let resolvedWeight = role.bakedWeight ?? weight
+        let base: UIFont
+        switch role.face {
+        case .sans:
+            base = sansName.flatMap { UIFont(name: $0, size: role.size) }
+                ?? UIFont.systemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
+        case .serif:
+            base = serifName.flatMap { UIFont(name: $0, size: role.size) }
+                ?? UIFont.systemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
+        case .mono:
+            base = monoName.flatMap { UIFont(name: $0, size: role.size) }
+                ?? UIFont.monospacedSystemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
+        }
+        return UIFontMetrics(forTextStyle: role.relativeTo.uiTextStyle).scaledFont(for: base)
+    }
 }
 
 extension Font.Weight {

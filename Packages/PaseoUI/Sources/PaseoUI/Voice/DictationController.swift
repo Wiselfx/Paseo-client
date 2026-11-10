@@ -16,6 +16,8 @@ final class DictationController: NSObject {
     private(set) var isDenied = false
     /// Smoothed 0…1 from the input tap; drives the quiet mic pulse and the overlay meter.
     private(set) var level: Float = 0
+    /// The dictation's live levels (D2 §4), drawn by `LiveWaveform` in the overlay.
+    let waveform = LiveWaveformBuffer()
     /// Seconds since recording started; the overlay's `mm:ss` timer.
     private(set) var duration: TimeInterval = 0
 
@@ -158,6 +160,7 @@ final class DictationController: NSObject {
         recognition = nil
         isListening = false
         level = 0
+        waveform.reset()
         duration = 0
         // Off-main, like activation: `setActive(false)` waits on the audio server too.
         pendingDeactivation = Task { await Self.deactivateSession() }
@@ -169,13 +172,17 @@ final class DictationController: NSObject {
         pendingDeactivation = Task { await Self.deactivateSession() }
         isListening = false
         level = 0
+        waveform.reset()
         duration = 0
     }
 
     private func updateLevel(_ raw: Float) {
-        // Noise floor + scale, then ease: quiet, no jitter.
-        let normalized = min(1, max(0, (raw - 0.008) * 22))
-        level = level * 0.7 + normalized * 0.3
+        // `measurement` mode has AGC off, so raw RMS sits around 0.005–0.03: map it into the
+        // speech band, then ease it (attack 0.6, release 0.15) so the bars move with the words
+        // instead of creeping along the floor (D2 §4).
+        let target = AudioLevel.normalized(rms: raw)
+        level = AudioLevel.smoothed(level, towards: target)
+        waveform.push(level)
         if raw > 0.012 { lastHeard = Date() }
     }
 

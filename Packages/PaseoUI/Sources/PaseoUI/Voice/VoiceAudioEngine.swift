@@ -14,10 +14,15 @@ import PaseoStore
 final class VoiceAudioEngine {
     /// Fired per converted mic chunk, in capture order.
     var onCapturePCM: (Data) -> Void = { _ in }
-    /// Fired per input buffer with the sample level; the store smooths/publishes it.
+    /// Fired per input buffer with the eased 0…1 mic level; the store smooths/publishes it.
     var onVolumeLevel: (Double) -> Void = { _ in }
     /// Fired when the OS interrupts the audio route (call, route change, Siri).
     var onInterruption: () -> Void = {}
+
+    /// Voice mode's levels (D2 §4): the composer's bars read it, and the store's 0…1 telemetry
+    /// is fed from the same eased value, so the meter and the accessibility percentage agree.
+    let waveform = LiveWaveformBuffer()
+    private var smoothedLevel: Double = 0
 
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
@@ -59,9 +64,19 @@ final class VoiceAudioEngine {
     private lazy var capturePipeline = VoiceCapturePipeline { [weak self] level, pcm in
         Task { @MainActor in
             guard let self else { return }
-            self.onVolumeLevel(level)
+            self.publishLevel(level)
             if !pcm.isEmpty { self.onCapturePCM(pcm) }
         }
+    }
+
+    /// One raw RMS per captured buffer: mapped into the speech band, eased once, then fanned out
+    /// to the store and to the waveform (D2 §4). Raw RMS in `.voiceChat` mode sits around
+    /// 0.005–0.03, so a linear meter would never leave its floor.
+    private func publishLevel(_ rms: Double) {
+        let mapped = AudioLevel.normalized(rms: Float(rms))
+        smoothedLevel = Double(AudioLevel.smoothed(Float(smoothedLevel), towards: mapped))
+        waveform.push(Float(smoothedLevel))
+        onVolumeLevel(smoothedLevel)
     }
 
     // MARK: Permissions + session
@@ -170,6 +185,8 @@ final class VoiceAudioEngine {
     func stopCapture() {
         guard isCapturing else { return }
         isCapturing = false
+        smoothedLevel = 0
+        waveform.reset()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         // Capture ending takes playback with it: `engine.stop()` fires the in-flight
