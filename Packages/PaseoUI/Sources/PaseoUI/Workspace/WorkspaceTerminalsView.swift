@@ -753,9 +753,14 @@ struct WorkspaceTerminalsView: View {
 
     // MARK: Errors
 
+    /// An error is a banner with a retry (PLAN §RI 22); reopening the directory clears it on
+    /// success, so dismiss and retry do the same thing on the store side.
     private func errorBanner(_ message: String) -> some View {
         InlineBanner(
             .failure, title: message,
+            action: ("Try again", {
+                Task { await store.open(workspaceId: workspaceId, cwd: workspace.cwd) }
+            }),
             onDismiss: { store.clearError() })
         .padding(.horizontal, Space.lg)
         .padding(.vertical, Space.xs)

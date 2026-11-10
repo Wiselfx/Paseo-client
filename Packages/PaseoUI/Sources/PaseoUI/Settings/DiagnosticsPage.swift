@@ -110,9 +110,10 @@ struct DiagnosticsPage: View {
                     Spacer(minLength: 0)
                 }
             case .failed(let message):
-                Text(message)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
+                InlineBanner(
+                    .failure, title: message,
+                    action: ("Try again", { Task { _ = await session.hostSettings.loadDiagnostics() } })
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
