@@ -235,6 +235,6 @@ Unverified on device:
 - the paste overrides;
 - the voice meters.
 
-D5 (haptics) is in flight: agent 53a8c622, branch `d5-haptics`, visible in the sidebar.
+D5 haptics merged: selection() 213→84, light() 1→47, success() is now a soft tap and fires only on awaited completions.
 Notes from the D5 planning: Today there are 212 `selection()` calls and 34 `success()` notification buzzes. Plan: none on plain navigation taps, copy gets a light tick rather than success, and success is kept for awaited completions only.
 Waiting on the user: the device crash log for the draft-send crash.
