@@ -202,8 +202,9 @@ struct ClaudeLiveStatusLine: View {
         }
         .frame(height: 24)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: activity)
+        // OCU §12: the overtime badge settles critically damped, like every surface.
         .animation(
-            Motion.disclosure.resolved(reduceMotion: reduceMotion),
+            Motion.settle.resolved(reduceMotion: reduceMotion),
             value: showsOvertime(at: date))
         .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
         .accessibilityElement(children: .combine)
