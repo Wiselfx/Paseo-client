@@ -3,46 +3,6 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// The "Base: <branch>" meta row for the Changes page (gate: `features.workspaceBaseBranch`).
-/// One line, mono, opens the searchable picker sheet.
-struct WorkspaceBaseBranchRow: View {
-    let baseRef: String?
-    var action: () -> Void
-
-    private let typography = ClaudeTypography()
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
-                Text("Base: \(displayBase)")
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.captionInk)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 6)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Base branch, currently \(displayBase)")
-    }
-
-    private var displayBase: String {
-        guard let baseRef, !baseRef.isEmpty else { return "main" }
-        if baseRef.hasPrefix("refs/heads/") { return String(baseRef.dropFirst("refs/heads/".count)) }
-        if baseRef.hasPrefix("refs/remotes/") { return String(baseRef.dropFirst("refs/remotes/".count)) }
-        return baseRef
-    }
-}
-
 /// Searchable base-branch picker backed by the T11 branch suggestions. Applies with a full ref
 /// (`refs/heads/<name>` for local, `refs/remotes/<name>` for remote-only) and calls `onApplied`
 /// so the page can refresh diff and ahead/behind.

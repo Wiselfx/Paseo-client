@@ -96,10 +96,6 @@ enum ClaudePalette {
                 : UIColor(red: 0.976, green: 0.976, blue: 0.969, alpha: 1)
         })
     }
-    /// The drawer sits a touch darker than the content panel in dark mode.
-    static var sidebarBackground: Color {
-        adaptive(light: 0.96, dark: 16 / 255, pureBlack: 7 / 255)
-    }
     static var codeBackground: Color {
         adaptive(light: 0.98, dark: 0.04, pureBlack: 0.02)
     }
@@ -269,8 +265,6 @@ enum ClaudeMotion {
     static let feedback: Double = 0.12
     /// `--dsh-claude-duration-move`: the height roll on a disclosure.
     static let move: Double = 0.20
-    /// `--dsh-claude-duration-roll`: the counted digits.
-    static let roll: Double = 0.16
     /// The wording swap: 150 ms per half with a 50 ms gap.
     static let swap: Double = 0.15
     /// `--dsh-claude-duration-open`: the overtime badge.
@@ -287,8 +281,6 @@ enum ClaudeMotion {
     static let dotMorph: Double = 0.48
     /// `WORD_LOCK_MS`: a wording stands for at least a second.
     static let wordLock: Double = 1.0
-    /// `TICK_MS`: the status line's clock.
-    static let tick: Double = 0.25
     /// 10 s of silence before "No response yet".
     static let overtime: Double = 10
     /// `--dsh-claude-duration-rise`: the home greeting rising into place.

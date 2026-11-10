@@ -9,11 +9,6 @@ import VisionKit
 /// Wording is upstream's `en.ts` `pairing.*` verbatim (cited per string); the fingerprint
 /// rule is upstream `runtime/host-confirmation.ts` (`HostConfirmation.keyFingerprint`).
 /// The offer rides in the link fragment — the app never logs or stores it.
-public enum PairingConnectOutcome {
-    case connected
-    case passwordRequired
-    case failed(String)
-}
 
 // MARK: - Add host methods
 
