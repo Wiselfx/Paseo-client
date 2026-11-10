@@ -38,26 +38,26 @@
                 HStack(spacing: 12) {
                     if let symbol {
                         Image(systemName: symbol).font(.system(size: 20, weight: .light)).frame(width: 23)
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .foregroundStyle(Palette.tertiaryInk)
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 5) {
                             Text(title).font(.system(size: 17))
                             if let badge {
                                 Text(badge).font(.system(size: 11, weight: .semibold)).foregroundStyle(
-                                    ClaudePalette.ink
+                                    Palette.ink
                                 ).padding(.horizontal, 8).padding(.vertical, 5).background(
-                                    ClaudePalette.chip,
+                                    Palette.chip,
                                     in: .capsule)
                             }
                         }
                         if let detail {
-                            Text(detail).font(.system(size: 13)).foregroundStyle(ClaudePalette.secondaryInk).fixedSize(
+                            Text(detail).font(.system(size: 13)).foregroundStyle(Palette.secondaryInk).fixedSize(
                                 horizontal: false, vertical: true)
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     if let value {
-                        Text(value).font(.system(size: 16)).foregroundStyle(ClaudePalette.secondaryInk).lineLimit(1)
+                        Text(value).font(.system(size: 16)).foregroundStyle(Palette.secondaryInk).lineLimit(1)
                     }
                     if checked {
                         Image(systemName: "checkmark").font(.system(size: 19, weight: .semibold))
@@ -66,7 +66,7 @@
                     }
                     if chevron {
                         Image(systemName: "chevron.right").font(.system(size: 15)).foregroundStyle(
-                            ClaudePalette.secondaryInk)
+                            Palette.secondaryInk)
                     }
                 }.padding(.horizontal, 16).padding(.vertical, detail == nil ? 14 : 14).contentShape(.rect)
             }
@@ -77,7 +77,7 @@
     struct RowGroup<Content: View>: View {
         @ViewBuilder var content: () -> Content
         var body: some View {
-            VStack(spacing: 0, content: content).background(ClaudePalette.panel, in: .rect(cornerRadius: 28))
+            VStack(spacing: 0, content: content).background(Palette.panel, in: .rect(cornerRadius: 28))
         }
     }
     struct RowDivider: View {

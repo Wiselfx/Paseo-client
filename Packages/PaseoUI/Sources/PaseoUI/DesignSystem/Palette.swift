@@ -201,7 +201,4 @@ enum Palette {
         static let pureBlack = Color(white: 0)
     }
 }
-
-/// The pre-R2 name. Delete once every call site reads `Palette`.
-typealias ClaudePalette = Palette
 #endif

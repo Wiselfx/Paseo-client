@@ -156,7 +156,7 @@ struct ClaudeUsageReportsSheet: View {
                 .font(.paseo(.caption2))
                 .foregroundStyle(Palette.secondaryInk)
             Text(value)
-                .font(.paseo(.body, weight: .semibold))
+                .font(.paseo(.headline))
                 .foregroundStyle(Palette.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

@@ -167,7 +167,7 @@ struct PaseoSettingsView: View {
     private var header: some View {
         ZStack {
             Text(page?.title ?? "Settings")
-                .font(.paseo(.body, weight: .semibold))
+                .font(.paseo(.headline))
                 .lineLimit(1)
             HStack {
                 Button {
