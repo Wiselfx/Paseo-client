@@ -48,6 +48,7 @@ struct WorkspacePanel: View {
     var dismissDrag: PanelDismissDrag?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.toast) private var toast
     @AppStorage private var pageRaw: String
     @State private var checkout: CheckoutStore?
     @State private var gitExtras: WorkspaceGitExtras?
@@ -102,6 +103,16 @@ struct WorkspacePanel: View {
             case .files: "Files"
             case .changes: "Changes"
             case .terminal: "Terminal"
+            }
+        }
+
+        /// UX-SPEC §0.3.
+        var symbol: String {
+            switch self {
+            case .agents: "bubble.left.and.bubble.right"
+            case .files: "folder"
+            case .changes: "plus.forwardslash.minus"
+            case .terminal: "apple.terminal"
             }
         }
     }
@@ -214,10 +225,7 @@ struct WorkspacePanel: View {
             Button("Archive", role: .destructive) {
                 guard let agent = agentPendingArchive else { return }
                 agentPendingArchive = nil
-                Task {
-                    await session.conversation(for: agent.id).archive()
-                    await session.refreshAgents()
-                }
+                archive(agent)
             }
             Button("Cancel", role: .cancel) { agentPendingArchive = nil }
         } message: {
@@ -228,34 +236,39 @@ struct WorkspacePanel: View {
     // MARK: Header
 
     /// The panel header (§1.3): a back chevron leading, the workspace name centered, and the
-    /// tabs below. The whole header is a horizontal drag surface that dismisses the panel.
+    /// page's secondary actions trailing. The whole header is a horizontal drag surface that
+    /// dismisses the panel.
     private var header: some View {
-        ZStack {
+        ShellHeader(leading: .back({ onClose() })) {
             Text(workspaceTitle)
                 .font(.paseo(.title))
                 .foregroundStyle(Palette.ink)
                 .lineLimit(1)
-                .padding(.horizontal, 56)
-            HStack(spacing: 0) {
-                Button {
-                    onClose()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.glyph(.regular, weight: .medium))
-                        .foregroundStyle(Palette.ink)
-                        .frame(width: 44, height: 44)
+        } trailing: {
+            Menu {
+                if session.agentControl.isSupported {
+                    Button("Import session", systemImage: "square.and.arrow.down") {
+                        showImportSheet = true
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
-                Spacer(minLength: 0)
-                Color.clear
+                if let workspace {
+                    Button("Setup…", systemImage: "wrench.and.screwdriver") {
+                        showSetupSheet = true
+                    }
+                    Button("Copy path", systemImage: "doc.on.doc") {
+                        Clipboard.copy(workspace.cwd, toast: toast)
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.glyph(.regular, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 44, height: 44)
-                    .accessibilityHidden(true)
+                    .contentShape(.rect)
             }
-            .padding(.horizontal, 12)
+            .accessibilityLabel("Workspace actions")
         }
-        .frame(height: 48)
-        .padding(.top, 6)
+        .padding(.top, Space.xs)
         .contentShape(.rect)
     }
 
@@ -401,26 +414,18 @@ struct WorkspacePanel: View {
     // MARK: Page switcher
 
     private var segmented: some View {
-        HStack(spacing: 2) {
+        Picker(
+            "Workspace page",
+            selection: Binding(
+                get: { currentPage },
+                set: { select($0) })
+        ) {
             ForEach(Page.allCases, id: \.self) { page in
-                Button {
-                    select(page)
-                } label: {
-                    Text(page.title)
-                        .font(.paseo(.callout, weight: page == currentPage ? .medium : .regular))
-                        .foregroundStyle(
-                            page == currentPage ? Palette.background : Palette.ink)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 32)
-                        .background(
-                            page == currentPage ? Palette.ink : Color.clear, in: .capsule)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(page == currentPage ? .isSelected : [])
+                Label(page.title, systemImage: page.symbol)
+                    .tag(page)
             }
         }
-        .padding(3)
-        .background(Palette.chip, in: .capsule)
+        .pickerStyle(.segmented)
     }
 
     private func select(_ page: Page) {
@@ -472,23 +477,13 @@ struct WorkspacePanel: View {
     }
 
     private var loadingPage: some View {
-        ProgressView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityLabel("Loading \(currentPage.title.lowercased())")
+        LoadingState()
     }
 
     private var unavailable: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Text("No workspace selected")
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-            Text("Open a workspace from the sidebar to fill this panel.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
+        EmptyState(
+            title: "No workspace selected",
+            message: "Open a workspace from the sidebar to fill this panel.")
     }
 
     // MARK: Agents page
@@ -496,134 +491,73 @@ struct WorkspacePanel: View {
     private func agentsPage(workspace: WorkspaceDescriptor) -> some View {
         let agents = session.agents.filter { $0.workspaceId == workspace.id }
         return ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
-                newAgentRow(workspace: workspace)
-                if session.agentControl.isSupported {
-                    importSessionRow
-                }
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ListRow(
+                    title: "New session",
+                    systemImage: "plus",
+                    action: { onNewAgent(workspace) }
+                )
                 if agents.isEmpty {
-                    Text("No agents in this workspace yet.")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.vertical, 24)
-                        .frame(maxWidth: .infinity)
+                    EmptyState(
+                        systemImage: "bubble.left.and.bubble.right",
+                        title: "No agents in this workspace yet.")
+                    .padding(.vertical, Space.xxl)
                 } else {
                     ForEach(agents) { agent in
+                        RowDivider()
                         agentRow(agent)
                     }
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 16)
+            .padding(.horizontal, Space.md)
+            .padding(.top, Space.sm)
+            .padding(.bottom, Space.lg)
         }
         .scrollIndicators(.hidden)
     }
 
-    private func newAgentRow(workspace: WorkspaceDescriptor) -> some View {
-        Button {
-            Haptics.selection()
-            onNewAgent(workspace)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "plus")
-                    .font(.glyph(.regular, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                    .frame(width: 30, height: 30)
-                    .background(Palette.chip, in: .circle)
-                Text("New agent")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 52)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("New agent")
-    }
-
-    private var importSessionRow: some View {
-        Button {
-            Haptics.selection()
-            showImportSheet = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "square.and.arrow.down")
-                    .font(.glyph(.regular, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                    .frame(width: 30, height: 30)
-                    .background(Palette.chip, in: .circle)
-                Text("Import session")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 52)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Import session")
-    }
-
     private func agentRow(_ agent: AgentSnapshot) -> some View {
         let current = agent.id == currentAgentId
-        return Button {
-            Haptics.selection()
-            onSelectAgent(agent.id)
-        } label: {
-            HStack(spacing: 12) {
-                PaseoStatusDot(kind: agentStatusKind(agent))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(agent.title ?? "New agent")
-                        .font(.paseo(.callout, weight: current ? .medium : .regular))
-                        .lineLimit(1)
-                    Text(agentMeta(agent))
-                        .font(.paseo(.caption))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if let stamp = activityDate(agent) {
-                    Text(relativeAge(stamp))
-                        .font(.paseo(.caption))
-                        .foregroundStyle(Palette.tertiaryInk)
-                }
-                if current {
-                    Image(systemName: "checkmark")
-                        .font(.glyph(.small, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                        .accessibilityLabel("Current agent")
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
-            .contentShape(.rect)
-            .background(current ? Palette.chip : Color.clear, in: .rect(cornerRadius: Radius.md))
+        let subtitle: String = {
+            let meta = agentMeta(agent)
+            guard let stamp = activityDate(agent) else { return meta }
+            return "\(meta) · \(PaseoFormat.relative(stamp))"
+        }()
+        return HStack(spacing: 0) {
+            StatusDot(agentStatusState(agent))
+                .padding(.leading, Space.lg)
+            ListRow(
+                title: agent.title ?? "New agent",
+                subtitle: subtitle,
+                accessory: current ? .checkmark(true) : .none,
+                action: { onSelectAgent(agent.id) }
+            )
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(current ? "Current agent" : "")
+        .contentShape(.rect)
         .contextMenu {
-            Button("Rename", systemImage: "pencil") {
+            Button("Open", systemImage: "arrow.up.right") {
+                onSelectAgent(agent.id)
+            }
+            Button("Rename…", systemImage: "pencil") {
                 renameText = agent.title ?? ""
                 renamingAgent = agent
             }
             Button("Copy agent ID", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = agent.id
+                Clipboard.copy(agent.id, toast: toast)
                 Haptics.selection()
             }
+            Divider()
             Button("Archive", systemImage: "archivebox", role: .destructive) {
-                agentPendingArchive = agent
+                requestArchive(agent)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(current ? "Current agent" : "")
     }
 
-    private func agentStatusKind(_ agent: AgentSnapshot) -> PaseoStatusDot.Kind {
+    private func agentStatusState(_ agent: AgentSnapshot) -> StatusDot.State {
         switch agent.attention {
-        case .permission: return .needsInput
+        case .permission: return .attention
         case .error: return .failed
         case .finished: return .unread
         case .unknown, nil: break
@@ -632,6 +566,31 @@ struct WorkspacePanel: View {
         case .running: return .running
         case .error: return .failed
         case .initializing, .idle, .closed, .unknown: return .idle
+        }
+    }
+
+    /// Confirm only while the agent is running; otherwise archive at once with an Undo toast.
+    private func requestArchive(_ agent: AgentSnapshot) {
+        if agent.status == .running {
+            agentPendingArchive = agent
+        } else {
+            archive(agent)
+        }
+    }
+
+    private func archive(_ agent: AgentSnapshot) {
+        Task {
+            await session.conversation(for: agent.id).archive()
+            await session.refreshAgents()
+            Haptics.success()
+            toast?.show(
+                "Agent archived",
+                undo: {
+                    Task {
+                        _ = await session.agentLifecycle.unarchive(agentId: agent.id)
+                        await session.refreshAgents()
+                    }
+                })
         }
     }
 
@@ -650,19 +609,6 @@ struct WorkspacePanel: View {
             if let stamp, let date = PaseoDate.parse(stamp) { return date }
         }
         return nil
-    }
-
-    /// "now", "5m", "3h", "2d", "4mo" — compact ages for the activity column.
-    private func relativeAge(_ date: Date, now: Date = Date()) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(date)))
-        if seconds < 60 { return "now" }
-        let minutes = seconds / 60
-        if minutes < 60 { return "\(minutes)m" }
-        let hours = minutes / 60
-        if hours < 24 { return "\(hours)h" }
-        let days = hours / 24
-        if days < 30 { return "\(days)d" }
-        return "\(days / 30)mo"
     }
 
     private func archiveMessage(for agent: AgentSnapshot?) -> String {

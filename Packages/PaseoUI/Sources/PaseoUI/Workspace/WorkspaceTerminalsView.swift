@@ -39,10 +39,9 @@ struct WorkspaceTerminalsView: View {
     @State private var showAttachMenu = false
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
-    @State private var toast: String?
 
     @Environment(\.openURL) private var openURL
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.toast) private var toast
 
 
     private var store: TerminalsStore { session.terminals }
@@ -113,7 +112,6 @@ struct WorkspaceTerminalsView: View {
                 await attach(data: data, fileName: url.lastPathComponent, mimeType: mimeType)
             }
         }
-        .overlay(alignment: .bottom) { toastView }
         .alert("Rename terminal", isPresented: Binding(
             get: { renameTarget != nil },
             set: { if !$0 { renameTarget = nil } })) {
@@ -223,26 +221,8 @@ struct WorkspaceTerminalsView: View {
         "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    private var toastView: some View {
-        Group {
-            if let toast {
-                Text(toast)
-                    .font(.paseo(.footnote))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .glassEffect()
-                    .padding(.bottom, 18)
-                    .transition(.opacity)
-            }
-        }
-    }
-
     private func showToast(_ text: String) {
-        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = text }
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = nil }
-        }
+        toast?.show(text)
     }
 
     // MARK: Terminals
@@ -302,8 +282,8 @@ struct WorkspaceTerminalsView: View {
                     .foregroundStyle(isSelected ? Palette.ink : Palette.secondaryInk)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 12)
-            .frame(height: 32)
+            .padding(.horizontal, Space.md)
+            .frame(minHeight: 44)
             .background(isSelected ? Palette.chip : Color.clear, in: .capsule)
             .overlay(
                 Capsule().strokeBorder(
@@ -396,8 +376,8 @@ struct WorkspaceTerminalsView: View {
                 }
                 Text("New").font(.paseo(.footnote))
             }
-            .padding(.horizontal, 12)
-            .frame(height: 32)
+            .padding(.horizontal, Space.md)
+            .frame(minHeight: 44)
             .foregroundStyle(Palette.ink)
             .overlay(
                 Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
@@ -435,22 +415,18 @@ struct WorkspaceTerminalsView: View {
                 emptyState
             } else {
                 // The selected id is stale during the same frame the data refreshes.
-                ProgressView().tint(Palette.secondaryInk)
+                LoadingState()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Text("No terminals yet")
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-            Text("Start one to run commands in this workspace.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .multilineTextAlignment(.center)
-            Button {
+        EmptyState(
+            systemImage: "apple.terminal",
+            title: "No terminals yet",
+            message: "Start one to run commands in this workspace.",
+            action: (title: "New terminal", run: {
                 Haptics.selection()
                 guard !isCreating else { return }
                 isCreating = true
@@ -462,18 +438,8 @@ struct WorkspaceTerminalsView: View {
                         exitMessage = nil
                     }
                 }
-            } label: {
-                Text("New terminal")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.background)
-                    .padding(.horizontal, 20)
-                    .frame(minHeight: 40)
-                    .background(Palette.ink, in: .capsule)
-            }
-            .buttonStyle(.plain)
-            .disabled(isCreating)
-        }
-        .padding(.horizontal, 32)
+            }))
+        .padding(.horizontal, Space.xxxl)
     }
 
     private func statusMessage(_ title: String, detail: String?) -> some View {
@@ -787,27 +753,11 @@ struct WorkspaceTerminalsView: View {
     // MARK: Errors
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Text(message)
-                .font(.paseo(.caption))
-                .foregroundStyle(Palette.failureInk)
-                .lineLimit(2)
-            Spacer(minLength: 8)
-            Button {
-                store.clearError()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.glyph(.small, weight: .medium))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(width: 28, height: 28)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss error")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Palette.failureInk.opacity(0.08))
+        InlineBanner(
+            .failure, title: message,
+            onDismiss: { store.clearError() })
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.xs)
     }
 }
 

@@ -19,9 +19,7 @@ struct WorkspaceCommitDiffView: View {
 
     private var relativeAge: String {
         guard let date = PaseoDate.parse(commit.authorDate) else { return commit.authorDate }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return PaseoFormat.relative(date)
     }
 
     var body: some View {
@@ -29,12 +27,9 @@ struct WorkspaceCommitDiffView: View {
             header
             ClaudeDivider()
             if let loadError {
-                Text(loadError)
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.failureInk)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                InlineBanner(.failure, title: loadError)
+                    .padding(.horizontal, Space.lg)
+                    .padding(.vertical, Space.xs)
             }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -101,12 +96,7 @@ struct WorkspaceCommitDiffView: View {
                         .truncationMode(.middle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text("+\(PaseoFormat.integer(file.additions))")
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.successInk)
-                Text("−\(PaseoFormat.integer(file.deletions))")
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.failureInk)
+                DiffStat(added: file.additions, removed: file.deletions)
                 if loadingPath == file.path {
                     ProgressView().controlSize(.small)
                 } else {
@@ -142,8 +132,8 @@ struct WorkspaceCommitDiffView: View {
 
     private func style(for status: CheckoutCommitFileStatus?) -> (letter: String, tint: Color, word: String) {
         switch status {
-        case .added: return ("A", Palette.successInk, "Added")
-        case .deleted: return ("D", Palette.failureInk, "Deleted")
+        case .added: return ("A", Palette.diffAddedInk, "Added")
+        case .deleted: return ("D", Palette.diffRemovedInk, "Deleted")
         case .renamed: return ("R", Palette.unread, "Renamed")
         case .modified, .unknown, .none: return ("M", Palette.warning, "Modified")
         }

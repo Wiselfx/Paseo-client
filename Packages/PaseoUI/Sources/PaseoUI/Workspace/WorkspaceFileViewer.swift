@@ -1,4 +1,6 @@
 #if canImport(UIKit)
+import Foundation
+import ImageIO
 import PaseoStore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -7,6 +9,9 @@ import UIKit
 /// The Files page's file viewer: text with syntax highlighting and a line-number gutter, an image
 /// renderer, and calm messages for binary or too-large files. Top row: back to the folder, the
 /// file's name, a copy button when there is something to copy.
+///
+/// Decoding, image downscaling and the line split happen off the main actor into a
+/// `FileRenderModel`; nothing decodes in `body`.
 struct WorkspaceFileViewer: View {
     let checkout: CheckoutStore
     let relPath: String
@@ -35,6 +40,10 @@ struct WorkspaceFileViewer: View {
     @State private var exportType: UTType?
     @State private var exportName: String?
     @State private var saveSuccessFlash = false
+    /// The decoded/highlighted file, built once per path + revision.
+    @State private var render: FileRenderModel?
+    /// Where the dirty-edit dialog should go if the reader confirms.
+    @State private var pendingExit: ExitAction?
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -86,15 +95,33 @@ struct WorkspaceFileViewer: View {
         return nil
     }
 
+    /// Edits are unsaved when the text differs from the version the editor opened with.
+    private var isDirty: Bool {
+        guard isEditing else { return false }
+        return (editText ?? "") != (editableFile?.textContent ?? "")
+    }
+
+    private var renderKey: FileRenderKey? {
+        guard let file else { return nil }
+        return FileRenderKey(
+            path: file.path,
+            revision: file.revision ?? file.modifiedAt,
+            dark: colorScheme == .dark)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             topRow
             ClaudeDivider()
             if let saveFailure {
-                saveFailureBanner(saveFailure)
+                InlineBanner(.failure, title: saveFailure, onDismiss: { self.saveFailure = nil })
+                    .padding(.horizontal, Space.md)
+                    .padding(.vertical, Space.xs)
             }
             if let shareFailure {
-                saveFailureBanner(shareFailure)
+                InlineBanner(.failure, title: shareFailure, onDismiss: { self.shareFailure = nil })
+                    .padding(.horizontal, Space.md)
+                    .padding(.vertical, Space.xs)
             }
             if isEditing {
                 editingContent
@@ -104,6 +131,19 @@ struct WorkspaceFileViewer: View {
             } else {
                 content
             }
+        }
+        // `topRow` is the header (back, title, actions); the system bar would duplicate it.
+        .toolbar(.hidden, for: .navigationBar)
+        .interactiveDismissDisabled(isDirty)
+        .confirmationDialog(
+            "Discard changes?",
+            isPresented: Binding(
+                get: { pendingExit != nil },
+                set: { if !$0 { pendingExit = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { performExit() }
+            Button("Keep editing", role: .cancel) {}
         }
         .onAppear {
             Task {
@@ -120,6 +160,9 @@ struct WorkspaceFileViewer: View {
         .onDisappear {
             guard let gitExtras else { return }
             Task { await gitExtras.stopWatchingFile() }
+        }
+        .task(id: renderKey) {
+            await buildRender()
         }
         .sheet(item: $shareTarget) { target in
             ActivityView(items: [target.url])
@@ -156,6 +199,24 @@ struct WorkspaceFileViewer: View {
         }
     }
 
+    // MARK: Render
+
+    private func buildRender() async {
+        guard let file else {
+            render = nil
+            return
+        }
+        let key = renderKey
+        let language = language(for: file.path)
+        let theme: ClaudeCodeSyntaxTheme = colorScheme == .dark ? .dark : .light
+        let bounds = UIScreen.main.bounds.size
+        let maxPixel = Int(max(bounds.width, bounds.height) * UIScreen.main.scale)
+        let model = await FileRenderModel.make(
+            file: file, language: language, theme: theme, maxPixel: max(maxPixel, 512))
+        guard !Task.isCancelled, renderKey == key else { return }
+        render = model
+    }
+
     // MARK: Editing
 
     /// A plain monospaced TextEditor, deliberately without syntax highlighting.
@@ -166,31 +227,6 @@ struct WorkspaceFileViewer: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Palette.codeSurface)
             .accessibilityLabel("Edit file contents")
-    }
-
-    private func saveFailureBanner(_ message: String) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(Palette.failureInk)
-            Text(message)
-                .font(.paseo(.caption))
-                .foregroundStyle(Palette.failureInk)
-                .lineLimit(2)
-            Spacer(minLength: 8)
-            Button {
-                saveFailure = nil
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(width: 26, height: 26)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss")
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Palette.failureInk.opacity(0.08))
     }
 
     private func beginEdit() {
@@ -205,6 +241,27 @@ struct WorkspaceFileViewer: View {
         editText = nil
         saveFailure = nil
         isEditing = false
+    }
+
+    /// Back or Cancel while the buffer has unsaved edits asks first.
+    private func requestExit(_ action: ExitAction) {
+        if isDirty {
+            pendingExit = action
+        } else {
+            perform(action)
+        }
+    }
+
+    private func performExit() {
+        guard let action = pendingExit else { return }
+        pendingExit = nil
+        switch action {
+        case .leave:
+            cancelEdit()
+            onBack()
+        case .cancelEditing:
+            cancelEdit()
+        }
     }
 
     private func saveEdit() async {
@@ -262,44 +319,46 @@ struct WorkspaceFileViewer: View {
     // MARK: Top row
 
     private var topRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.sm) {
             Button {
                 Haptics.selection()
-                onBack()
+                requestExit(.leave)
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: Space.xs) {
                     Image(systemName: "chevron.left").font(.glyph(.small, weight: .semibold))
                     Text(backLabel).font(.paseo(.footnote)).lineLimit(1)
                 }
                 .foregroundStyle(Palette.secondaryInk)
-                .padding(.vertical, 8)
+                .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                 .contentShape(.rect)
             }
             .accessibilityLabel("Back to \(backLabel)")
-            Spacer(minLength: 4)
+            Spacer(minLength: Space.xs)
             Text(isEditing ? "Editing \(fileName)" : fileName)
                 .font(.paseo(.codeSmall))
                 .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Spacer(minLength: 4)
+            Spacer(minLength: Space.xs)
             if isEditing {
-                Button("Cancel") { cancelEdit() }
+                Button("Cancel") { requestExit(.cancelEditing) }
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.secondaryInk)
-                    .frame(minHeight: 28)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(.rect)
                     .accessibilityLabel("Discard edits")
                 Button {
                     Haptics.selection()
                     Task { await saveEdit() }
                 } label: {
                     if isSaving {
-                        ProgressView().controlSize(.small).frame(width: 40, height: 28)
+                        ProgressView().controlSize(.small).frame(width: 44, height: 44)
                     } else {
                         Text("Save")
                             .font(.paseo(.footnote, weight: .semibold))
                             .foregroundStyle(Palette.ink)
-                            .frame(minHeight: 28)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(.rect)
                     }
                 }
                 .disabled(isSaving)
@@ -312,7 +371,7 @@ struct WorkspaceFileViewer: View {
                         Image(systemName: "at")
                             .font(.glyph(.regular, weight: .light))
                             .foregroundStyle(Palette.tertiaryInk)
-                            .frame(width: 28, height: 28)
+                            .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -322,19 +381,19 @@ struct WorkspaceFileViewer: View {
                     Image(systemName: "checkmark")
                         .font(.glyph(.small, weight: .semibold))
                         .foregroundStyle(Palette.successInk)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 44)
                         .accessibilityLabel("Saved")
                 } else if canCopy {
                     copyButton
                 } else {
-                    Color.clear.frame(width: 28, height: 28)
+                    Color.clear.frame(width: 44, height: 44)
                 }
-                if editableFile != nil { editButton } else { Color.clear.frame(width: 28, height: 28) }
+                if editableFile != nil { editButton } else { Color.clear.frame(width: 44, height: 44) }
                 overflowMenu
             }
         }
-        .padding(.horizontal, 10)
-        .frame(height: 38)
+        .padding(.horizontal, Space.sm)
+        .frame(minHeight: 48)
     }
 
     private var overflowMenu: some View {
@@ -357,7 +416,7 @@ struct WorkspaceFileViewer: View {
                         .foregroundStyle(Palette.secondaryInk)
                 }
             }
-            .frame(width: 28, height: 28)
+            .frame(width: 44, height: 44)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -372,33 +431,38 @@ struct WorkspaceFileViewer: View {
             Image(systemName: "pencil")
                 .font(.glyph(.regular, weight: .regular))
                 .foregroundStyle(Palette.secondaryInk)
-                .frame(width: 28, height: 28)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit file")
     }
 
+    /// Copy reads the decoded model, never the daemon payload.
     private var canCopy: Bool {
-        guard let file else { return false }
-        switch file.kind {
-        case .image, .binary: return imageData != nil
-        default: return file.textContent != nil
+        guard let render else { return false }
+        switch render.payload {
+        case .text(let text, _, _): return !text.isEmpty
+        case .image(let data, _): return !data.isEmpty
+        case .svg(let source): return !source.isEmpty
+        case .binary: return false
         }
-    }
-
-    private var imageData: Data? {
-        guard let file, file.encoding == .base64, let content = file.content else { return nil }
-        return Data(base64Encoded: content, options: .ignoreUnknownCharacters)
     }
 
     private var copyButton: some View {
         Button {
             Haptics.selection()
-            if let data = imageData, let uiImage = UIImage(data: data) {
-                UIPasteboard.general.image = uiImage
-            } else if let text = file?.textContent {
-                UIPasteboard.general.string = text
+            if let render {
+                switch render.payload {
+                case .image(_, let image):
+                    UIPasteboard.general.image = image
+                case .text(let text, _, _):
+                    Clipboard.copy(text)
+                case .svg(let source):
+                    Clipboard.copy(source)
+                case .binary:
+                    break
+                }
             }
             copied = true
             Task {
@@ -409,7 +473,7 @@ struct WorkspaceFileViewer: View {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 .font(.glyph(.regular, weight: .light))
                 .foregroundStyle(copied ? Palette.ink : Palette.tertiaryInk)
-                .frame(width: 28, height: 28)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -422,7 +486,7 @@ struct WorkspaceFileViewer: View {
         if let file {
             switch file.kind {
             case .image:
-                if isSVG { svgContent(file) } else { zoomableImage(file) }
+                if isSVG { svgContent } else { zoomableImage }
             case .binary:
                 unsupportedShareableView(
                     icon: "doc", title: "Binary file",
@@ -433,19 +497,15 @@ struct WorkspaceFileViewer: View {
         } else if case .failed(let message) = files.phase {
             errorView(message)
         } else {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingState()
         }
     }
 
     @ViewBuilder private func textView(_ file: FileExplorerFile) -> some View {
-        if let text = file.textContent {
-            if text.utf16.count > 100_000 {
-                unsupportedView(
-                    icon: "doc.text", title: "File too large to show",
-                    detail: "\(WorkspaceFileFormat.bytes(file.size)) · Open it in your editor instead.")
-            } else {
-                WorkspaceCodeView(source: text, language: language(for: file.path))
-            }
+        if let render, case .text(let text, let highlighted, let lines) = render.payload {
+            WorkspaceCodeView(text: text, highlighted: highlighted, lines: lines)
+        } else if render == nil {
+            LoadingState()
         } else {
             unsupportedView(
                 icon: "doc.text", title: "No content",
@@ -463,7 +523,7 @@ struct WorkspaceFileViewer: View {
             .background(Palette.chip, in: .capsule)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, Space.sm)
         .padding(.vertical, 6)
         .background(Palette.background)
     }
@@ -480,7 +540,7 @@ struct WorkspaceFileViewer: View {
         } label: {
             Text(label)
                 .font(.paseo(.caption, weight: .medium))
-                .padding(.horizontal, 12)
+                .padding(.horizontal, Space.md)
                 .frame(minHeight: 28)
                 .foregroundStyle(selected ? Palette.ink : Palette.secondaryInk)
                 .background(selected ? Palette.background : Color.clear, in: .capsule)
@@ -490,9 +550,11 @@ struct WorkspaceFileViewer: View {
     }
 
     @ViewBuilder private var markdownContent: some View {
-        if let text = file?.textContent {
+        if render == nil {
+            LoadingState()
+        } else if let text = render?.text {
             if previewAsSource {
-                WorkspaceCodeView(source: text, language: "markdown")
+                sourceCode(text, language: "markdown")
             } else if text.utf16.count > 200_000 {
                 unsupportedView(
                     icon: "doc.text", title: "File too large to preview",
@@ -505,7 +567,7 @@ struct WorkspaceFileViewer: View {
                         if case .openLink(let url) = action { openURL(url) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
+                    .padding(Space.lg)
                 }
             }
         } else {
@@ -518,9 +580,11 @@ struct WorkspaceFileViewer: View {
     /// An HTML page with the Preview / Source control: Preview is the sandboxed web view
     /// (JavaScript off, no network), Source the highlighted markup (UX spec §6).
     @ViewBuilder private var htmlContent: some View {
-        if let text = file?.textContent {
+        if render == nil {
+            LoadingState()
+        } else if let text = render?.text {
             if previewAsSource {
-                WorkspaceCodeView(source: text, language: "html")
+                sourceCode(text, language: "html")
             } else if text.utf16.count > 200_000 {
                 unsupportedView(
                     icon: "doc.text", title: "File too large to preview",
@@ -535,11 +599,24 @@ struct WorkspaceFileViewer: View {
         }
     }
 
+    /// Source view without another decode: reuse the highlighted model when it is this text.
+    @ViewBuilder private func sourceCode(_ text: String, language: String) -> some View {
+        if let render, case .text(let modelText, let highlighted, let lines) = render.payload,
+            modelText == text
+        {
+            WorkspaceCodeView(text: modelText, highlighted: highlighted, lines: lines)
+        } else {
+            WorkspaceCodeView(text: text, highlighted: nil, lines: text.splitLines())
+        }
+    }
+
     /// An SVG file: decoded from the daemon's base64 image bytes and rendered by the sandboxed
     /// web view, fitted to the width. No scripts can run (UX spec §6).
-    @ViewBuilder private func svgContent(_ file: FileExplorerFile) -> some View {
-        if let data = imageData, let source = String(data: data, encoding: .utf8) {
+    @ViewBuilder private var svgContent: some View {
+        if let render, case .svg(let source) = render.payload {
             sandboxedPreview(WorkspaceFileWebDocument.svg(source, dark: colorScheme == .dark))
+        } else if render == nil {
+            LoadingState()
         } else {
             unsupportedView(
                 icon: "photo", title: "Image can't be shown",
@@ -556,9 +633,11 @@ struct WorkspaceFileViewer: View {
     }
 
     /// Images render zoomable: pinch, drag while zoomed, double-tap to toggle 1x/2x.
-    @ViewBuilder private func zoomableImage(_ file: FileExplorerFile) -> some View {
-        if let data = imageData, let uiImage = UIImage(data: data) {
-            ZoomableImageView(image: uiImage)
+    @ViewBuilder private var zoomableImage: some View {
+        if let render, case .image(_, let image) = render.payload {
+            ZoomableImageView(image: image)
+        } else if render == nil {
+            LoadingState()
         } else {
             unsupportedView(
                 icon: "photo", title: "Image can't be shown",
@@ -568,7 +647,7 @@ struct WorkspaceFileViewer: View {
 
     /// Binary, non-image files: a calm message and a share action.
     private func unsupportedShareableView(icon: String, title: String, detail: String) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Space.md) {
             Image(systemName: icon)
                 .font(.glyph(.hero, weight: .light))
                 .foregroundStyle(Palette.tertiaryInk)
@@ -585,13 +664,13 @@ struct WorkspaceFileViewer: View {
                 if isSharing {
                     ProgressView().controlSize(.small)
                         .frame(height: 36)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, Space.xl)
                 } else {
                     Label("Share", systemImage: "square.and.arrow.up")
                         .font(.paseo(.callout, weight: .medium))
                         .foregroundStyle(Palette.ink)
                         .frame(minHeight: 36)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, Space.lg)
                         .background(Palette.chip, in: .capsule)
                 }
             }
@@ -599,7 +678,7 @@ struct WorkspaceFileViewer: View {
             .disabled(isSharing)
             .accessibilityLabel("Share file")
         }
-        .padding(.horizontal, 32)
+        .padding(.horizontal, Space.xxxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -675,7 +754,7 @@ struct WorkspaceFileViewer: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 32)
+        .padding(.horizontal, Space.xxxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -695,52 +774,199 @@ struct WorkspaceFileViewer: View {
                 Text("Retry")
                     .font(.paseo(.footnote, weight: .medium))
                     .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, Space.lg)
                     .frame(minHeight: 32)
                     .background(Palette.chip, in: .capsule)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 32)
+        .padding(.horizontal, Space.xxxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-#endif
 
-#if canImport(UIKit)
-import PaseoStore
-import SwiftUI
-import UIKit
+// MARK: - Render model
+
+private struct FileRenderKey: Hashable {
+    let path: String
+    let revision: String
+    let dark: Bool
+}
+
+private enum ExitAction: Identifiable {
+    case leave
+    case cancelEditing
+
+    var id: Int {
+        switch self {
+        case .leave: 0
+        case .cancelEditing: 1
+        }
+    }
+}
+
+/// One file's decoded content. Built once per `(path, revision, theme)` off the main actor for
+/// the decode/split and on the main actor for the highlighter (JavaScriptCore is main-only).
+private struct FileRenderModel: @unchecked Sendable {
+    enum Payload {
+        case text(text: String, highlighted: AttributedString?, lines: [String])
+        case image(data: Data, image: UIImage)
+        case svg(source: String)
+        case binary
+    }
+
+    let payload: Payload
+
+    /// The plain text, for Markdown/HTML previews and copy.
+    var text: String? {
+        switch payload {
+        case .text(let text, _, _): return text
+        case .svg(let source): return source
+        case .image, .binary: return nil
+        }
+    }
+
+    @MainActor
+    static func make(
+        file: FileExplorerFile, language: String?, theme: ClaudeCodeSyntaxTheme, maxPixel: Int
+    ) async -> FileRenderModel {
+        let decoded = await Task.detached(priority: .userInitiated) {
+            DecodedFile(file: file, maxPixel: maxPixel)
+        }.value
+        switch decoded.payload {
+        case .text(let text, let lines):
+            // Highlighting runs through JavaScriptCore, which must stay on the main thread.
+            let highlighted = lines.count <= 500
+                ? highlightedText(text, language: language, theme: theme) : nil
+            return FileRenderModel(payload: .text(text: text, highlighted: highlighted, lines: lines))
+        case .image(let data, let image):
+            return FileRenderModel(payload: .image(data: data, image: image))
+        case .svg(let source):
+            return FileRenderModel(payload: .svg(source: source))
+        case .binary:
+            return FileRenderModel(payload: .binary)
+        }
+    }
+
+    @MainActor
+    private static func highlightedText(
+        _ text: String, language: String?, theme: ClaudeCodeSyntaxTheme
+    ) -> AttributedString? {
+        let colored = ClaudeCodeHighlighter.shared.highlight(text, language: language, theme: theme)
+        // Same fallback behavior as the Markdown code blocks: plain text if the highlighter refuses.
+        return (try? AttributedString(colored, including: \.uiKit)) ?? AttributedString(text)
+    }
+}
+
+/// The detached half: base64 decode, thumbnail downscale and line split, all plain values.
+private struct DecodedFile: @unchecked Sendable {
+    enum Payload {
+        case text(String, [String])
+        case image(Data, UIImage)
+        case svg(String)
+        case binary
+    }
+
+    let payload: Payload
+
+    init(file: FileExplorerFile, maxPixel: Int) {
+        switch file.kind {
+        case .image:
+            guard let content = file.content,
+                let data = Data(base64Encoded: content, options: .ignoreUnknownCharacters)
+            else {
+                payload = .binary
+                return
+            }
+            let ext = file.path.split(separator: ".").last?.lowercased()
+            if ext == "svg", let source = String(data: data, encoding: .utf8) {
+                payload = .svg(source)
+            } else if let image = Self.downscaled(data, maxPixel: maxPixel) {
+                payload = .image(data, image)
+            } else {
+                payload = .binary
+            }
+        case .text:
+            guard let text = file.textContent else {
+                payload = .binary
+                return
+            }
+            payload = .text(text, text.splitLines())
+        case .binary, .unknown:
+            payload = .binary
+        }
+    }
+
+    /// UIKit's `UIImage(data:)` decodes lazily on first draw and at full size; this decodes once,
+    /// down to the screen, with the `CGImageSource` thumbnail API.
+    private static func downscaled(_ data: Data, maxPixel: Int) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return UIImage(data: data)
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        if let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
+            return UIImage(cgImage: image)
+        }
+        return UIImage(data: data)
+    }
+}
+
+private extension String {
+    /// The file viewer's line split: keep empty lines and a trailing empty line.
+    func splitLines() -> [String] {
+        split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+}
+
+// MARK: - Code view
 
 /// A file's text, monospaced, with the syntax theme in force, a line-number gutter, horizontal
-/// scroll for long lines and selection. Line heights match on both sides so the gutter and the
-/// text line up. Highlighting is capped by `ClaudeCodeHighlighter`, which falls back to plain.
+/// scroll for long lines and selection. Files over 500 lines render lazy line rows; smaller files
+/// keep one selectable `Text`, as before.
 struct WorkspaceCodeView: View {
-    let source: String
-    let language: String?
-
-    @Environment(\.colorScheme) private var colorScheme
+    /// The plain source, kept for the copy path and for the long-file rows.
+    let text: String
+    /// The highlighted whole document; nil for long files (highlighter cap) and raw source.
+    let highlighted: AttributedString?
+    /// The document split once, not per body.
+    let lines: [String]
 
     static let fontSize: CGFloat = 12
-    private static let lineSpacing: CGFloat = 6 // 12 + 6 = 18 pt lines
+    private static let lineSpacing: CGFloat = 6  // 12 + 6 = 18 pt lines
 
-    private var lines: [Substring] { source.split(separator: "\n", omittingEmptySubsequences: false) }
+    private var isLong: Bool { lines.count > 500 }
+
+    private var gutterWidth: CGFloat {
+        let digits = max(2, String(max(lines.count, 1)).count)
+        return CGFloat(digits) * 8 + 4
+    }
 
     var body: some View {
+        if isLong {
+            longContent
+        } else {
+            shortContent
+        }
+    }
+
+    private var shortContent: some View {
         ScrollView(.vertical) {
             ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: Space.md) {
                     // Same font and pitch on both sides: each content line box is exactly one gutter row.
-                    if lines.count <= 4000 {
-                        Gutter(count: lines.count)
-                    }
-                    Text(highlighted)
+                    Gutter(count: lines.count)
+                    Text(highlighted ?? AttributedString(text))
                         .font(.paseo(.codeSmall))
                         .lineSpacing(Self.lineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: true, vertical: true)
                 }
-                .padding(12)
+                .padding(Space.md)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
@@ -748,11 +974,31 @@ struct WorkspaceCodeView: View {
         .codeTypeScale()
     }
 
-    private var highlighted: AttributedString {
-        let theme: ClaudeCodeSyntaxTheme = colorScheme == .dark ? .dark : .light
-        let colored = ClaudeCodeHighlighter.shared.highlight(source, language: language, theme: theme)
-        // Same fallback behavior as the Markdown code blocks: plain text if the highlighter refuses.
-        return (try? AttributedString(colored, including: \.uiKit)) ?? AttributedString(source)
+    private var longContent: some View {
+        ScrollView(.vertical) {
+            ScrollView(.horizontal) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                        HStack(alignment: .firstTextBaseline, spacing: Space.sm) {
+                            Text(verbatim: String(index + 1))
+                                .font(.paseo(.codeCaption))
+                                .foregroundStyle(Palette.captionInk)
+                                .frame(width: gutterWidth, alignment: .trailing)
+                            Text(line.isEmpty ? " " : line)
+                                .font(.paseo(.codeSmall))
+                                .foregroundStyle(Palette.ink)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .padding(.horizontal, Space.md)
+                        .padding(.vertical, 1.5)
+                    }
+                }
+                .padding(.vertical, Space.sm)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .codeTypeScale()
     }
 
     private struct Gutter: View {
@@ -776,6 +1022,7 @@ struct WorkspaceCodeView: View {
         }
     }
 }
+
 /// A zoomable image: pinch to zoom, drag to pan while zoomed, double-tap to toggle 1x/2x.
 private struct ZoomableImageView: View {
     let image: UIImage

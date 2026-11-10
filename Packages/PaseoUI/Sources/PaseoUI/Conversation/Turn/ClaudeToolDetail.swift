@@ -34,8 +34,7 @@ struct ClaudeToolCallDetail: View {
             ClaudeCodeBlock(title: path, output: content)
         case .edit(let path, let oldString, let newString, let unifiedDiff):
             ClaudeDiffView(
-                path: path,
-                lines: ClaudeDiffLine.parse(unifiedDiff: unifiedDiff, old: oldString, new: newString))
+                path: path, unifiedDiff: unifiedDiff, old: oldString, new: newString)
         case .search(let search):
             ClaudeSearchResults(search: search)
         case .fetch(let url, let result, _):
@@ -108,8 +107,23 @@ struct ClaudeDiffLine: Identifiable, Equatable {
 
 struct ClaudeDiffView: View {
     let path: String
-    let lines: [ClaudeDiffLine]
+    let unifiedDiff: String?
+    let old: String?
+    let new: String?
 
+    /// Parsed once per diff, not in `body`.
+    @State private var lines: [ClaudeDiffLine] = []
+
+    private var key: ClaudeDiffKey {
+        ClaudeDiffKey(
+            path: path,
+            diffHash: unifiedDiff?.hashValue ?? 0,
+            diffLength: unifiedDiff?.count ?? 0,
+            oldHash: old?.hashValue ?? 0,
+            oldLength: old?.count ?? 0,
+            newHash: new?.hashValue ?? 0,
+            newLength: new?.count ?? 0)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -118,17 +132,17 @@ struct ClaudeDiffView: View {
                 .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.head)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, Space.md)
                 .padding(.vertical, 9)
             ClaudeDivider()
             ScrollView([.vertical, .horizontal]) {
-                VStack(alignment: .leading, spacing: 0) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(lines) { line in
                         Text(line.text.isEmpty ? " " : line.text)
                             .font(.paseo(.codeSmall))
                             .foregroundStyle(line.kind == .header ? Palette.tertiaryInk : Palette.ink)
                             .fixedSize(horizontal: true, vertical: false)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, Space.md)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(background(for: line.kind))
                     }
@@ -145,6 +159,9 @@ struct ClaudeDiffView: View {
             RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(Palette.cardBorder, lineWidth: 1)
         }
         .codeTypeScale()
+        .task(id: key) {
+            lines = ClaudeDiffLine.parse(unifiedDiff: unifiedDiff, old: old, new: new)
+        }
     }
 
     private func background(for kind: ClaudeDiffLine.Kind) -> Color {
@@ -154,6 +171,16 @@ struct ClaudeDiffView: View {
         case .context, .header: .clear
         }
     }
+}
+
+private struct ClaudeDiffKey: Hashable {
+    let path: String
+    let diffHash: Int
+    let diffLength: Int
+    let oldHash: Int
+    let oldLength: Int
+    let newHash: Int
+    let newLength: Int
 }
 
 struct ClaudeSearchResults: View {

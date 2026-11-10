@@ -4,9 +4,12 @@ import SwiftUI
 import UIKit
 import PaseoStore
 
-/// The unified diff for one changed file: hunk headers, old/new line numbers, monospaced lines
-/// on a two-axis scroll view (long lines are never wrapped), and added/removed rows tinted with
-/// low-opacity adaptive fills.
+/// The unified diff for one changed file: pinned hunk headers, old/new line numbers, monospaced
+/// lines on a horizontal scroll view (long lines are never wrapped), and added/removed rows
+/// tinted with the shared diff palette.
+///
+/// The model is built once per `DiffKey` in `@State`; rows are values (they never re-read the
+/// model), so rendering is linear even for a large diff.
 struct WorkspaceChangesDiffView: View {
     let file: ParsedDiffFile
     let extras: WorkspaceGitExtras
@@ -20,7 +23,7 @@ struct WorkspaceChangesDiffView: View {
     var baseRef: String? = nil
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.toast) private var toast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var confirmDiscard = false
@@ -28,24 +31,17 @@ struct WorkspaceChangesDiffView: View {
     @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
     @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
     @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
-    @AppStorage("paseo.diff.sideBySide") private var sideBySide = false
     @State private var expandedHunks: Set<Int> = []
     @State private var collapsedHunks: Set<Int> = []
-    /// Line-range selection (anchor first, then the end tap); side is fixed at the anchor.
+    /// Hunks over 400 lines start collapsed to 40; these are the ones the reader expanded.
+    @State private var expandedLongHunks: Set<Int> = []
+    /// The built rows, once per input. Nothing in `body` parses the diff.
+    @State private var render: DiffRender?
+    /// Line-range selection (anchor first, then the end tap).
     @State private var selectionAnchor: LineAnchor?
     @State private var selectionEnd: LineAnchor?
     /// The open comment sheet: a new comment for an anchor, or an existing draft being edited.
     @State private var commentTarget: CommentSheetTarget?
-
-    private var model: DiffModel { DiffModel(file: file, hideWhitespaceChanges: hideWhitespace) }
-    private var sideModel: SideBySideModel {
-        SideBySideModel(file: file, hideWhitespaceChanges: hideWhitespace)
-    }
-    /// Side-by-side only on regular-width layouts (iPad, landscape Plus); compact iPhones keep
-    /// the unified view even if the toggle was set on a wider device.
-    private var effectiveSideBySide: Bool {
-        sideBySide && horizontalSizeClass == .regular
-    }
 
     // MARK: Review drafts
 
@@ -67,6 +63,14 @@ struct WorkspaceChangesDiffView: View {
             .filter { $0.filePath == file.path }
     }
 
+    /// Grouped once per body evaluation instead of filtering every draft for every row.
+    private var draftsByAnchor: [LineAnchor: [WorkspaceReviewDraftComment]] {
+        guard reviewEnabled else { return [:] }
+        return Dictionary(grouping: fileDrafts) {
+            LineAnchor(side: $0.side, line: $0.endLine)
+        }
+    }
+
     private var selectionLineRange: (start: Int, end: Int)? {
         guard let anchor = selectionAnchor, let end = selectionEnd else { return nil }
         return (min(anchor.line, end.line), max(anchor.line, end.line))
@@ -81,13 +85,9 @@ struct WorkspaceChangesDiffView: View {
 
     /// The snippet shown in the comment sheet: the target line's text, truncated.
     private func snippet(for anchor: LineAnchor) -> String? {
-        if let row = model.rows.first(where: { $0.anchor == anchor }) { return row.text }
-        for row in sideModel.rows {
-            for cell in [row.left, row.right] {
-                guard let cell, Int(cell.line) == anchor.line else { continue }
-                let side = cell.kind == .remove ? WorkspaceReviewDraftComment.DiffSide.old : .new
-                if side == anchor.side || cell.kind == .context { return cell.text }
-            }
+        guard let render else { return nil }
+        for section in render.sections {
+            if let row = section.rows.first(where: { $0.anchor == anchor }) { return row.text }
         }
         return nil
     }
@@ -169,11 +169,11 @@ struct WorkspaceChangesDiffView: View {
                     .accessibilityLabel("Review comment: \(draft.body)")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Space.md)
+        .padding(.vertical, Space.sm)
         .background(Palette.quoteWash, in: .rect(cornerRadius: Radius.md))
-        .padding(.leading, effectiveSideBySide ? 6 : 46)
-        .padding(.trailing, 12)
+        .padding(.leading, 46)
+        .padding(.trailing, Space.md)
         .padding(.vertical, 3)
     }
 
@@ -188,7 +188,7 @@ struct WorkspaceChangesDiffView: View {
     @ViewBuilder private var selectionCapsule: some View {
         if reviewEnabled, let anchor = selectionAnchor, let range = selectionLineRange {
             let count = range.end - range.start + 1
-            HStack(spacing: 4) {
+            HStack(spacing: Space.xs) {
                 Button {
                     commentTarget = .new(LineAnchor(side: anchor.side, line: range.end))
                 } label: {
@@ -218,8 +218,8 @@ struct WorkspaceChangesDiffView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear selection")
             }
-            .padding(.trailing, 16)
-            .padding(.bottom, 12)
+            .padding(.trailing, Space.lg)
+            .padding(.bottom, Space.md)
             .transition(reduceMotion ? .identity : .opacity)
         }
     }
@@ -251,14 +251,11 @@ struct WorkspaceChangesDiffView: View {
             pathHeader
             ClaudeDivider()
             if let discardError {
-                Text(discardError)
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.failureInk)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                InlineBanner(.failure, title: discardError)
+                    .padding(.horizontal, Space.lg)
+                    .padding(.vertical, Space.sm)
             }
-            content
+            content(drafts: draftsByAnchor)
         }
         .background(Palette.panel)
         .foregroundStyle(Palette.ink)
@@ -267,6 +264,9 @@ struct WorkspaceChangesDiffView: View {
             if reviewEnabled {
                 reviewCommentSheet(target)
             }
+        }
+        .task(id: diffKey) {
+            await build(diffKey)
         }
         .navigationTitle((file.path as NSString).lastPathComponent)
         .navigationBarTitleDisplayMode(.inline)
@@ -289,11 +289,52 @@ struct WorkspaceChangesDiffView: View {
             isPresented: $confirmDiscard,
             titleVisibility: .visible
         ) {
-            Button("Discard Changes", role: .destructive) { performDiscard() }
+            Button("Discard changes", role: .destructive) { performDiscard() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes all changes in \(file.path). This cannot be undone.")
         }
+    }
+
+    // MARK: Build
+
+    /// Everything that changes the rendered rows. The file carries no revision, so a cheap
+    /// content signature stands in for one.
+    private var diffKey: DiffKey {
+        let signature = file.hunks
+            .map { "\($0.oldStart):\($0.newStart):\($0.oldCount):\($0.newCount):\($0.lines.count)" }
+            .joined(separator: ",")
+        return DiffKey(
+            path: file.path,
+            signature: "\(file.additions)/\(file.deletions)/\(signature)",
+            hideWhitespace: hideWhitespace,
+            wrap: wrapLongLines)
+    }
+
+    private func build(_ key: DiffKey) async {
+        let file = self.file
+        let hide = self.hideWhitespace
+        let unitWidth = Self.characterWidth()
+        let lineCount = file.hunks.reduce(0) { $0 + $1.lines.count }
+        let built: DiffRender
+        if lineCount > 500 {
+            built = await Task.detached(priority: .userInitiated) {
+                DiffModel.render(file: file, hideWhitespace: hide, unitWidth: unitWidth)
+            }.value
+        } else {
+            built = DiffModel.render(file: file, hideWhitespace: hide, unitWidth: unitWidth)
+        }
+        guard !Task.isCancelled, diffKey == key else { return }
+        render = built
+    }
+
+    /// The mono advance width, measured once on the main actor (UIKit fonts never cross into the
+    /// detached build).
+    private static func characterWidth() -> CGFloat {
+        let size = TextRole.code.size
+        let font = UIFont(name: ClaudeTypography.anthropicMono, size: size)
+            ?? .monospacedSystemFont(ofSize: size, weight: .regular)
+        return ("M" as NSString).size(withAttributes: [.font: font]).width
     }
 
     // MARK: Review comment sheet
@@ -386,22 +427,16 @@ struct WorkspaceChangesDiffView: View {
                         .truncationMode(.middle)
                 }
             }
-            Spacer(minLength: 8)
-            HStack(spacing: 6) {
-                Text("+\(PaseoFormat.integer(file.additions))")
-                    .foregroundStyle(Palette.successInk)
-                Text("−\(PaseoFormat.integer(file.deletions))")
-                    .foregroundStyle(Palette.failureInk)
-            }
-            .font(.paseo(.codeSmall))
+            Spacer(minLength: Space.sm)
+            DiffStat(added: file.additions, removed: file.deletions)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Space.lg)
         .padding(.vertical, 10)
     }
 
     // MARK: Body
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private func content(drafts: [LineAnchor: [WorkspaceReviewDraftComment]]) -> some View {
         switch file.status {
         case .binary:
             centeredMessage(
@@ -414,13 +449,17 @@ struct WorkspaceChangesDiffView: View {
                 title: "File too large",
                 subtitle: "The diff for this file was omitted by the daemon.")
         default:
-            if model.rows.isEmpty {
-                centeredMessage(
-                    symbol: "checkmark.circle",
-                    title: "No textual changes",
-                    subtitle: "There's nothing to show for this file.")
+            if let render {
+                if render.sections.isEmpty {
+                    centeredMessage(
+                        symbol: "checkmark.circle",
+                        title: "No textual changes",
+                        subtitle: "There's nothing to show for this file.")
+                } else {
+                    diffScroll(render: render, drafts: drafts)
+                }
             } else {
-                diffScroll
+                LoadingState()
             }
         }
     }
@@ -438,31 +477,13 @@ struct WorkspaceChangesDiffView: View {
                 .foregroundStyle(Palette.secondaryInk)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 32)
-    }
-
-    private var visibleRows: [DiffModel.Row] {
-        var out: [DiffModel.Row] = []
-        for row in model.rows {
-            if let hunk = row.hunk, isCollapsed(hunk), row.kind != .hunkHeader { continue }
-            out.append(row)
-        }
-        return out
+        .padding(.horizontal, Space.xxxl)
     }
 
     private func isCollapsed(_ hunk: Int) -> Bool {
         if collapsedHunks.contains(hunk) { return true }
         if expandedHunks.contains(hunk) { return false }
         return collapseAllHunks
-    }
-
-    private var visibleSideRows: [SideBySideModel.Row] {
-        sideModel.rows.filter { row in
-            if let hunk = row.hunk, row.kind != .hunkHeader {
-                return !isCollapsed(hunk)
-            }
-            return true
-        }
     }
 
     private func toggleHunk(_ hunk: Int) {
@@ -475,181 +496,135 @@ struct WorkspaceChangesDiffView: View {
         }
     }
 
-    private var scrollAxes: Axis.Set { wrapLongLines ? .vertical : [.vertical, .horizontal] }
-
-    private var diffScroll: some View {
-        if effectiveSideBySide {
-            return AnyView(sideBySideScroll)
-        }
-        return AnyView(unifiedScroll)
+    /// Hunks over 400 lines start at their first 40.
+    private func isLongCollapsed(_ section: DiffSection) -> Bool {
+        section.rows.count > 400 && !expandedLongHunks.contains(section.hunk)
     }
 
-    private var unifiedScroll: some View {
-        ScrollView(scrollAxes) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(visibleRows) { row in
-                    lineRow(row)
-                    ForEach(anchoredDrafts(for: row.anchor)) { draft in
-                        draftCard(draft)
+    private func visibleRows(_ section: DiffSection) -> [DiffModel.Row] {
+        if isCollapsed(section.hunk) { return [] }
+        if isLongCollapsed(section) { return Array(section.rows.prefix(40)) }
+        return section.rows
+    }
+
+    // MARK: Scroll
+
+    @ViewBuilder private func diffScroll(
+        render: DiffRender, drafts: [LineAnchor: [WorkspaceReviewDraftComment]]
+    ) -> some View {
+        if wrapLongLines {
+            ScrollView(.vertical) {
+                stack(render: render, drafts: drafts)
+            }
+            .background(Palette.codeSurface)
+            .codeTypeScale()
+        } else {
+            // One two-axis ScrollView around the stack. The ticket's nested alternative (a
+            // horizontal ScrollView inside the vertical one) leaves the LazyVStack with a
+            // horizontal scroll ancestor, which breaks vertical laziness and pinning. A single
+            // ScrollView knows both viewport axes, so rows stay lazy, hunk headers pin, and every
+            // row shares the same horizontal offset. `totalWidth` is set once on the stack.
+            ScrollView([.vertical, .horizontal]) {
+                stack(render: render, drafts: drafts)
+                    .frame(width: render.totalWidth, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .background(Palette.codeSurface)
+            .codeTypeScale()
+        }
+    }
+
+    private func stack(
+        render: DiffRender, drafts: [LineAnchor: [WorkspaceReviewDraftComment]]
+    ) -> some View {
+        LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+            ForEach(render.sections) { section in
+                Section {
+                    let rows = visibleRows(section)
+                    ForEach(rows) { row in
+                        lineRow(row, totalWidth: render.totalWidth, gutterWidth: render.gutterWidth)
+                        if let anchored = row.anchor, let list = drafts[anchored] {
+                            ForEach(list) { draft in
+                                draftCard(draft)
+                            }
+                        }
                     }
-                }
-            }
-            .padding(.vertical, 8)
-            .textSelection(.enabled)
-        }
-        .background(Palette.codeSurface)
-        .codeTypeScale()
-    }
-
-    /// Two-column comparison, one HStack per row; each half wraps independently and the row
-    /// sizes to the taller half. Never horizontally scrolls.
-    private var sideBySideScroll: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(visibleSideRows) { row in
-                    sideBySideRow(row)
-                    ForEach(sideAnchoredDrafts(for: row)) { draft in
-                        draftCard(draft)
+                    if isLongCollapsed(section) {
+                        showMoreRow(section)
                     }
+                } header: {
+                    hunkHeaderRow(text: section.header, hunk: section.hunk)
                 }
             }
-            .padding(.vertical, 8)
-            .textSelection(.enabled)
         }
-        .background(Palette.codeSurface)
-        .codeTypeScale()
+        .padding(.vertical, Space.sm)
     }
 
-    private func sideBySideRow(_ row: SideBySideModel.Row) -> some View {
-        Group {
-            if row.kind == .hunkHeader, let hunk = row.hunk {
-                hunkHeaderRow(text: row.headerText ?? "", hunk: hunk)
-            } else {
-                HStack(alignment: .top, spacing: 0) {
-                    sideCell(row.left)
-                    Rectangle()
-                        .fill(Palette.divider)
-                        .frame(width: 0.5)
-                    sideCell(row.right)
-                }
-                .font(.paseo(.codeSmall))
-                .padding(.vertical, 1)
-            }
-        }
-    }
+    // MARK: Rows
 
-    private func cellAnchor(_ cell: SideBySideModel.Cell?) -> LineAnchor? {
-        guard let cell, let line = Int(cell.line) else { return nil }
-        let side: WorkspaceReviewDraftComment.DiffSide = cell.kind == .remove ? .old : .new
-        return LineAnchor(side: side, line: line)
-    }
-
-    private func sideAnchoredDrafts(for row: SideBySideModel.Row) -> [WorkspaceReviewDraftComment] {
-        let anchors = [row.left, row.right].compactMap(cellAnchor)
-        var out: [WorkspaceReviewDraftComment] = []
-        var seen = Set<UUID>()
-        for anchor in anchors {
-            for draft in anchoredDrafts(for: anchor) where seen.insert(draft.id).inserted {
-                out.append(draft)
-            }
+    private func lineRow(_ row: DiffModel.Row, totalWidth: CGFloat, gutterWidth: CGFloat) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(row.old.isEmpty ? " " : row.old)
+                .font(.paseo(.codeCaption))
+                .foregroundStyle(Palette.tertiaryInk)
+                .frame(width: gutterWidth, alignment: .trailing)
+            Text(row.new.isEmpty ? " " : row.new)
+                .font(.paseo(.codeCaption))
+                .foregroundStyle(Palette.tertiaryInk)
+                .frame(width: gutterWidth, alignment: .trailing)
+                .padding(.trailing, 10)
+            Text(row.sign)
+                .font(.paseo(.code))
+                .foregroundStyle(signTint(row.kind))
+                .frame(width: 13, alignment: .leading)
+            Text(row.text.isEmpty ? " " : row.text)
+                .font(.paseo(.code))
+                .lineLimit(wrapLongLines ? nil : 1)
+                .fixedSize(horizontal: !wrapLongLines, vertical: false)
+                .frame(
+                    maxWidth: wrapLongLines ? .infinity : nil,
+                    alignment: .leading)
+                .foregroundStyle(contentTint(row.kind))
         }
-        return out
-    }
-
-    private func sideCell(_ cell: SideBySideModel.Cell?) -> some View {
-        // Typed locals: the optional-chained tints inline were too much for the type checker.
-        let anchor: LineAnchor? = cellAnchor(cell)
-        let lineText: String = cell?.line ?? ""
-        let signText: String = cell?.sign ?? " "
-        let bodyText: String = {
-            guard let text = cell?.text, !text.isEmpty else { return " " }
-            return text
-        }()
-        let signColor: Color = cell.map { signTint($0.kind) } ?? .clear
-        let textColor: Color = cell.map { contentTint($0.kind) } ?? Palette.ink
-        let fill: Color = selectionWash(anchor)
-            ?? cell.map { rowFill($0.kind) }
-            ?? Palette.chip.opacity(0.35)
-        return Button {
-            handleRowTap(anchor)
-        } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Text(lineText)
-                    .foregroundStyle(Palette.tertiaryInk)
-                    .frame(width: 32, alignment: .trailing)
-                    .padding(.trailing, 5)
-                Text(signText)
-                    .foregroundStyle(signColor)
-                    .frame(width: 11, alignment: .leading)
-                Text(bodyText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(nil)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .foregroundStyle(textColor)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(fill)
-        }
-        .buttonStyle(.plain)
+        .frame(width: wrapLongLines ? nil : totalWidth, alignment: .leading)
+        .frame(maxWidth: wrapLongLines ? .infinity : nil, alignment: .leading)
+        .padding(.vertical, 2)
+        .background(selectionWash(row.anchor) ?? rowFill(row.kind))
+        .contentShape(.rect)
+        .onTapGesture { handleRowTap(row.anchor) }
         .contextMenu {
-            if reviewEnabled, let anchor { commentMenu(for: anchor) }
-        }
-        .accessibilityLabel(cellAccessibilityLabel(cell))
-    }
-
-    private func cellAccessibilityLabel(_ cell: SideBySideModel.Cell?) -> String {
-        guard let cell else { return "Empty side" }
-        let kind: String
-        switch cell.kind {
-        case .add: kind = "added"
-        case .remove: kind = "removed"
-        case .context: kind = "context"
-        case .hunkHeader: kind = "hunk header"
-        }
-        return "Line \(cell.line), \(kind): \(cell.text)"
-    }
-
-    private func lineRow(_ row: DiffModel.Row) -> some View {
-        Group {
-            if row.kind == .hunkHeader, let hunk = row.hunk {
-                hunkHeaderRow(text: row.text, hunk: hunk)
-            } else {
-                Button {
-                    handleRowTap(row.anchor)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 0) {
-                        Text(row.old)
-                            .foregroundStyle(Palette.tertiaryInk)
-                            .frame(width: 38, alignment: .trailing)
-                            .padding(.trailing, 6)
-                        Text(row.new)
-                            .foregroundStyle(Palette.tertiaryInk)
-                            .frame(width: 38, alignment: .trailing)
-                            .padding(.trailing, 10)
-                        Text(row.sign)
-                            .foregroundStyle(signTint(row.kind))
-                            .frame(width: 13, alignment: .leading)
-                        Text(row.text.isEmpty ? " " : row.text)
-                            .fixedSize(horizontal: wrapLongLines ? false : true, vertical: false)
-                            .lineLimit(wrapLongLines ? nil : 1)
-                            .frame(maxWidth: wrapLongLines ? .infinity : nil, alignment: .leading)
-                            .foregroundStyle(contentTint(row.kind))
-                    }
-                    .font(.paseo(.codeSmall))
-                    .frame(width: wrapLongLines ? nil : model.totalWidth, alignment: .leading)
-                    .frame(maxWidth: wrapLongLines ? .infinity : nil, alignment: .leading)
-                    .padding(.vertical, 2)
-                    .background(selectionWash(row.anchor) ?? rowFill(row.kind))
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    if reviewEnabled, let anchor = row.anchor { commentMenu(for: anchor) }
-                }
-                .accessibilityLabel(accessibilityLabel(for: row))
+            Button("Copy line", systemImage: "doc.on.doc") {
+                Clipboard.copy(row.text)
+            }
+            if reviewEnabled, let anchor = row.anchor {
+                Divider()
+                commentMenu(for: anchor)
             }
         }
+        .accessibilityLabel(accessibilityLabel(for: row))
+    }
+
+    private func showMoreRow(_ section: DiffSection) -> some View {
+        let remaining = max(0, section.rows.count - 40)
+        return HStack(spacing: Space.sm) {
+            Image(systemName: "chevron.down")
+                .font(.glyph(.small, weight: .semibold))
+                .foregroundStyle(Palette.secondaryInk)
+            Text("Show \(PaseoFormat.integer(remaining)) more lines")
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Space.lg)
+        .frame(minHeight: 44)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.chip)
+        .contentShape(.rect)
+        .onTapGesture {
+            Haptics.selection()
+            expandedLongHunks.insert(section.hunk)
+        }
+        .accessibilityLabel("Show \(remaining) more lines")
     }
 
     private func selectionWash(_ anchor: LineAnchor?) -> Color? {
@@ -663,12 +638,6 @@ struct WorkspaceChangesDiffView: View {
         case .remove: "Removed line \(row.old): \(row.text)"
         case .context, .hunkHeader: "Line \(row.new): \(row.text)"
         }
-    }
-
-    /// The drafts anchored to this row, if any.
-    private func anchoredDrafts(for anchor: LineAnchor?) -> [WorkspaceReviewDraftComment] {
-        guard reviewEnabled, let anchor else { return [] }
-        return fileDrafts.filter { $0.side == anchor.side && $0.endLine == anchor.line }
     }
 
     private func hunkHeaderRow(text: String, hunk: Int) -> some View {
@@ -687,7 +656,6 @@ struct WorkspaceChangesDiffView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.paseo(.codeSmall))
-            // In a horizontal scroll the parent's width is the widest row; `.infinity` fills it.
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 2)
             .background(rowFill(.hunkHeader))
@@ -706,8 +674,8 @@ struct WorkspaceChangesDiffView: View {
 
     private func signTint(_ kind: DiffModel.RowKind) -> Color {
         switch kind {
-        case .add: Palette.successInk
-        case .remove: Palette.failureInk
+        case .add: Palette.diffAddedInk
+        case .remove: Palette.diffRemovedInk
         case .context, .hunkHeader: .clear
         }
     }
@@ -726,6 +694,7 @@ struct WorkspaceChangesDiffView: View {
             let discarded = await extras.discard(paths: [file.path])
             if discarded {
                 Haptics.success()
+                toast?.show("Discarded \(file.path)")
                 dismiss()
             } else {
                 Haptics.failure()
@@ -735,20 +704,29 @@ struct WorkspaceChangesDiffView: View {
     }
 }
 
+// MARK: - Diff key
+
+private struct DiffKey: Hashable {
+    let path: String
+    let signature: String
+    let hideWhitespace: Bool
+    let wrap: Bool
+}
+
 // MARK: - Line anchor
 
 /// Where a diff line sits, for review comment anchoring. Context lines anchor on the `new` side.
-struct LineAnchor: Hashable {
+struct LineAnchor: Hashable, Sendable {
     let side: WorkspaceReviewDraftComment.DiffSide
     let line: Int
 }
 
 // MARK: - Diff line model
 
-/// Flattens a file's hunks into renderable rows with old/new line numbers, and measures the
-/// content width so every row can fill the horizontal scroll range.
-private struct DiffModel {
-    enum RowKind {
+/// Flattens a file's hunks into renderable sections with old/new line numbers and measures the
+/// content width once. Built off the main actor for large files; the result is plain values.
+private enum DiffModel {
+    enum RowKind: Sendable {
         case hunkHeader
         case context
         case add
@@ -756,8 +734,7 @@ private struct DiffModel {
     }
 
     /// The whitespace filter: a hunk whose changed lines all match on trimmed content carries
-    /// no real change (indent moves). Mixed hunks stay. Shared by the unified and the
-    /// side-by-side model.
+    /// no real change (indent moves). Mixed hunks stay.
     static func skipHunkForWhitespace(_ hunk: DiffHunk) -> Bool {
         let adds = hunk.lines.compactMap { $0.type == .add ? $0.content : nil }
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -766,195 +743,113 @@ private struct DiffModel {
         return !adds.isEmpty && adds.count == removes.count && adds.sorted() == removes.sorted()
     }
 
-    struct Row: Identifiable {
+    struct Row: Identifiable, Sendable {
         let id: Int
         let old: String
         let new: String
         let sign: String
         let kind: RowKind
         let text: String
-        /// Index into `file.hunks`; nil on rows that aren't tied to one (none today).
-        var hunk: Int? = nil
         /// Where a review comment would anchor; nil for hunk header rows.
         var anchor: LineAnchor? = nil
     }
 
-    let rows: [Row]
-    let totalWidth: CGFloat
-
-    init(file: ParsedDiffFile, hideWhitespaceChanges: Bool = false) {
-        var rows: [Row] = []
+    /// Builds the sections and the width once. Non-isolated: large files call it from a
+    /// detached task.
+    nonisolated static func render(
+        file: ParsedDiffFile, hideWhitespace: Bool, unitWidth: CGFloat
+    ) -> DiffRender {
+        var sections: [DiffSection] = []
         var nextId = 0
+        var maxLine = 0
+        var longest = 0
+
         for (hunkIndex, hunk) in file.hunks.enumerated() {
             // Client-side whitespace filter: skip hunks whose changed lines all match on
             // trimmed content (indent moves). Mixed hunks stay.
-            if hideWhitespaceChanges, Self.skipHunkForWhitespace(hunk) {
+            if hideWhitespace, skipHunkForWhitespace(hunk) {
                 continue
             }
             var oldLine = hunk.oldStart
             var newLine = hunk.newStart
-            let hasHeaderLine = hunk.lines.contains { $0.type == .header }
-            if !hasHeaderLine {
-                rows.append(
-                    Row(
-                        id: nextId, old: "", new: "", sign: "", kind: .hunkHeader,
-                        text: "@@ -\(hunk.oldStart),\(hunk.oldCount) +\(hunk.newStart),\(hunk.newCount) @@",
-                        hunk: hunkIndex))
-                nextId += 1
-            }
+            var rows: [Row] = []
+            var headerText = "@@ -\(hunk.oldStart),\(hunk.oldCount) +\(hunk.newStart),\(hunk.newCount) @@"
+            var skippedFirstHeader = false
+
             for line in hunk.lines {
                 switch line.type {
                 case .header:
-                    rows.append(
-                        Row(
-                            id: nextId, old: "", new: "", sign: "", kind: .hunkHeader,
-                            text: line.content, hunk: hunkIndex))
-                    nextId += 1
+                    // The first embedded header is the pinned section header; anything after it
+                    // stays as a row so no diff text is lost.
+                    if !skippedFirstHeader {
+                        headerText = line.content
+                        skippedFirstHeader = true
+                    } else {
+                        rows.append(
+                            Row(
+                                id: nextId, old: "", new: "", sign: "", kind: .hunkHeader,
+                                text: line.content))
+                        nextId += 1
+                    }
                 case .context, .unknown:
                     rows.append(
                         Row(
                             id: nextId, old: "\(oldLine)", new: "\(newLine)", sign: " ",
-                            kind: .context, text: line.content, hunk: hunkIndex,
+                            kind: .context, text: line.content,
                             anchor: LineAnchor(side: .new, line: newLine)))
                     nextId += 1
+                    maxLine = max(maxLine, oldLine, newLine)
+                    longest = max(longest, line.content.count)
                     oldLine += 1
                     newLine += 1
                 case .add:
                     rows.append(
                         Row(
                             id: nextId, old: "", new: "\(newLine)", sign: "+",
-                            kind: .add, text: line.content, hunk: hunkIndex,
+                            kind: .add, text: line.content,
                             anchor: LineAnchor(side: .new, line: newLine)))
                     nextId += 1
+                    maxLine = max(maxLine, newLine)
+                    longest = max(longest, line.content.count)
                     newLine += 1
                 case .remove:
                     rows.append(
                         Row(
                             id: nextId, old: "\(oldLine)", new: "", sign: "-",
-                            kind: .remove, text: line.content, hunk: hunkIndex,
+                            kind: .remove, text: line.content,
                             anchor: LineAnchor(side: .old, line: oldLine)))
                     nextId += 1
+                    maxLine = max(maxLine, oldLine)
+                    longest = max(longest, line.content.count)
                     oldLine += 1
                 }
             }
+            sections.append(DiffSection(hunk: hunkIndex, header: headerText, rows: rows))
         }
-        self.rows = rows
 
-        let font =
-            UIFont(name: ClaudeTypography.anthropicMono, size: 12.5)
-            ?? .monospacedSystemFont(ofSize: 12.5, weight: .regular)
-        let unit = ("M" as NSString).size(withAttributes: [.font: font]).width
-        let gutters: CGFloat = 38 + 6 + 38 + 10 + 13 + 12 + 16
-        let longest = rows.map { $0.text.count }.max() ?? 0
-        self.totalWidth = max(280, gutters + unit * CGFloat(longest))
+        let digits = max(2, String(max(maxLine, 1)).count)
+        let gutter = CGFloat(digits) * 8 + 4
+        let gutters: CGFloat = gutter * 2 + 10 + 13 + Space.lg * 2
+        let totalWidth = max(280, gutters + unitWidth * CGFloat(longest))
+        return DiffRender(sections: sections, totalWidth: totalWidth, gutterWidth: gutter)
     }
 }
 
-// MARK: - Side-by-side model
+// MARK: - Render values
 
-/// Pairs removed/added lines per change block inside each hunk; context lines sit on both
-/// sides. Shares the whitespace-hunk filter with the unified model. Long lines are wrapped by
-/// the view (side-by-side is an always-wrapped comparison, never a horizontal scroll).
-private struct SideBySideModel {
-    enum RowKind {
-        case hunkHeader
-        case context
-        case pair
-    }
-
-    struct Cell {
-        let line: String
-        let sign: String
-        let text: String
-        let kind: DiffModel.RowKind
-    }
-
-    struct Row: Identifiable {
-        let id: Int
-        let kind: RowKind
-        let hunk: Int?
-        /// Present on .hunkHeader rows (the `@@ … @@` text or an embedded `.header` line).
-        let headerText: String?
-        let left: Cell?
-        let right: Cell?
-    }
-
-    let rows: [Row]
-
-    init(file: ParsedDiffFile, hideWhitespaceChanges: Bool = false) {
-        var rows: [Row] = []
-        var nextId = 0
-        for (hunkIndex, hunk) in file.hunks.enumerated() {
-            if hideWhitespaceChanges, DiffModel.skipHunkForWhitespace(hunk) {
-                continue
-            }
-            var oldLine = hunk.oldStart
-            var newLine = hunk.newStart
-            let hasHeaderLine = hunk.lines.contains { $0.type == .header }
-            if !hasHeaderLine {
-                rows.append(
-                    Row(
-                        id: nextId, kind: .hunkHeader, hunk: hunkIndex,
-                        headerText: "@@ -\(hunk.oldStart),\(hunk.oldCount) +\(hunk.newStart),\(hunk.newCount) @@",
-                        left: nil, right: nil))
-                nextId += 1
-            }
-            var pendingRemoves: [(line: Int, text: String)] = []
-            var pendingAdds: [(line: Int, text: String)] = []
-            func flushChanges() {
-                let count = max(pendingRemoves.count, pendingAdds.count)
-                for index in 0 ..< count {
-                    let left = index < pendingRemoves.count ? pendingRemoves[index] : nil
-                    let right = index < pendingAdds.count ? pendingAdds[index] : nil
-                    rows.append(
-                        Row(
-                            id: nextId, kind: .pair, hunk: hunkIndex, headerText: nil,
-                            left: left.map {
-                                Cell(line: "\($0.line)", sign: "-", text: $0.text, kind: .remove)
-                            },
-                            right: right.map {
-                                Cell(line: "\($0.line)", sign: "+", text: $0.text, kind: .add)
-                            }))
-                    nextId += 1
-                }
-                pendingRemoves.removeAll()
-                pendingAdds.removeAll()
-            }
-            for line in hunk.lines {
-                switch line.type {
-                case .header:
-                    flushChanges()
-                    rows.append(
-                        Row(
-                            id: nextId, kind: .hunkHeader, hunk: hunkIndex,
-                            headerText: line.content, left: nil, right: nil))
-                    nextId += 1
-                case .context, .unknown:
-                    flushChanges()
-                    rows.append(
-                        Row(
-                            id: nextId, kind: .context, hunk: hunkIndex, headerText: nil,
-                            left: Cell(
-                                line: "\(oldLine)", sign: " ", text: line.content, kind: .context),
-                            right: Cell(
-                                line: "\(newLine)", sign: " ", text: line.content, kind: .context)))
-                    nextId += 1
-                    oldLine += 1
-                    newLine += 1
-                case .add:
-                    pendingAdds.append((newLine, line.content))
-                    newLine += 1
-                case .remove:
-                    pendingRemoves.append((oldLine, line.content))
-                    oldLine += 1
-                }
-            }
-            flushChanges()
-        }
-        self.rows = rows
-    }
+private struct DiffRender: Sendable {
+    let sections: [DiffSection]
+    let totalWidth: CGFloat
+    let gutterWidth: CGFloat
 }
 
+private struct DiffSection: Identifiable, Sendable {
+    let hunk: Int
+    let header: String
+    let rows: [DiffModel.Row]
+
+    var id: Int { hunk }
+}
 
 // MARK: - Comment sheet target
 
@@ -1048,7 +943,7 @@ private struct ReviewCommentSheet: View {
                             Text("Delete")
                                 .font(.paseo(.callout, weight: .medium))
                                 .foregroundStyle(Palette.failureInk)
-                                .padding(.horizontal, 16)
+                                .padding(.horizontal, Space.lg)
                                 .frame(minHeight: 44)
                         }
                         .buttonStyle(.plain)
@@ -1071,12 +966,12 @@ private struct ReviewCommentSheet: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSave)
-                    .accessibilityLabel(isEditing ? "Save review comment" : "Save review comment")
+                    .accessibilityLabel("Save review comment")
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
+            .padding(.horizontal, Space.lg)
+            .padding(.top, Space.xs)
         }
         .background(Palette.background)
         .presentationDetents([.medium, .large])

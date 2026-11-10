@@ -4,47 +4,57 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
-/// Contract for ticket M3b: the "Files" page of the workspace panel (`WorkspacePanel`).
-/// The panel constructs it with exactly these properties; M3b replaces the body.
+/// A folder pushed onto the Files navigation stack.
+struct FilePathItem: Hashable {
+    let path: String
+}
+
+/// The "Files" page of the workspace panel (`WorkspacePanel`): a real navigation stack of
+/// folders, so the system back button and the edge swipe pop one level at a time.
 struct WorkspaceFilesView: View {
     let checkout: CheckoutStore
 
-    @State private var stack: [WorkspaceFilesRoute] = []
+    @State private var path: [FilePathItem] = []
+    /// The file pushed on top of the folder stack.
+    @State private var openFile: String?
     /// Workspace-relative path of a file the Files page should flash and scroll to
     /// ("Reveal in Files page" from the viewer); consumed by the containing directory page.
     @State private var revealTarget: String?
+    @Environment(\.shellDrawer) private var shellDrawer
 
     private var files: WorkspaceFiles { checkout.files }
 
     var body: some View {
-        Group {
-            if let route = stack.last {
-                page(route)
-            } else {
-                directoryList(path: "")
-            }
+        NavigationStack(path: $path) {
+            directoryList(path: "")
+                .navigationDestination(for: FilePathItem.self) { item in
+                    directoryList(path: item.path)
+                }
+                .navigationDestination(item: $openFile) { relPath in
+                    WorkspaceFileViewer(
+                        checkout: checkout, relPath: relPath,
+                        onBack: { openFile = nil },
+                        backLabel: backLabel(for: relPath), onReveal: { reveal(relPath: relPath) })
+                    .id(relPath)
+                }
+                // The panel header already owns the back chevron and the workspace title.
+                .toolbar(.hidden, for: .navigationBar)
         }
+        .onAppear { shellDrawer?.panelHandlesBack = !path.isEmpty }
+        .onChange(of: path) { _, newPath in
+            shellDrawer?.panelHandlesBack = !newPath.isEmpty
+        }
+        .onChange(of: openFile) { _, _ in
+            // A file is a terminal destination; only folders make the stack "deeper".
+            shellDrawer?.panelHandlesBack = !path.isEmpty
+        }
+        .onDisappear { shellDrawer?.panelHandlesBack = false }
     }
 
-    @ViewBuilder private func page(_ route: WorkspaceFilesRoute) -> some View {
-        switch route {
-        case .directory(let path):
-            directoryList(path: path)
-        case .file(let path):
-            WorkspaceFileViewer(
-                checkout: checkout, relPath: path, onBack: { stack.removeLast() },
-                backLabel: backLabel(for: path), onReveal: { reveal(relPath: path) })
-            .id(path)
-        }
-    }
-
-    /// Pop the file's routes off the stack; the containing directory page stays (or, for a
-    /// root-level file, the root list). The page consumes `revealTarget` to flash the row.
+    /// Pop the file off the stack; the containing directory page stays and consumes
+    /// `revealTarget` to flash the row.
     private func reveal(relPath: String) {
-        stack.removeAll { route in
-            if case .file = route { return true }
-            return false
-        }
+        openFile = nil
         revealTarget = relPath
         Haptics.selection()
     }
@@ -52,17 +62,15 @@ struct WorkspaceFilesView: View {
     private func directoryList(path: String) -> some View {
         WorkspaceFilesDirectoryList(
             checkout: checkout, relPath: path,
-            onBack: path.isEmpty ? nil : { stack.removeLast() },
-            onOpenDirectory: { path in
-                if stack.last != .directory(path) { stack.append(.directory(path)) }
+            onBack: self.path.isEmpty ? nil : { self.path.removeLast() },
+            onOpenDirectory: { folder in
+                self.path.append(FilePathItem(path: folder))
             },
-            onOpenFile: { path in
-                if stack.last != .file(path) { stack.append(.file(path)) }
+            onOpenFile: { file in
+                openFile = file
             },
             revealTarget: revealTarget,
             onRevealConsumed: { revealTarget = nil })
-        // A distinct identity per directory: fresh state, fresh `onAppear`, no stale rows.
-        .id(path)
     }
 
     /// The folder a file lives in, as the back label; "Files" at the root.
@@ -80,13 +88,6 @@ struct WorkspaceFilesView: View {
     static var generation = 0
 }
 
-/// A push destination in the page's hand-rolled stack. Directories open in place; files open the
-/// viewer. Hashable for the `@State` stack only.
-enum WorkspaceFilesRoute: Hashable {
-    case directory(String) // workspace-relative path; "" is the root and never appears as a route
-    case file(String)
-}
-
 /// The list ordering keys. Folders always come first regardless of key.
 private enum FileSort: String, CaseIterable {
     case name, modified, size
@@ -101,7 +102,7 @@ private enum FileSort: String, CaseIterable {
 }
 
 /// One directory's rows: the back row when nested, then folders first and files after (the store
-/// sorts), pull-to-refresh, and a calm error with Retry when the read fails.
+/// sorts), pull-to-refresh, and calm loading / empty / error states.
 private struct WorkspaceFilesDirectoryList: View {
     let checkout: CheckoutStore
     let relPath: String
@@ -121,7 +122,6 @@ private struct WorkspaceFilesDirectoryList: View {
         case success([FileExplorerEntry])
         case failure(String)
     }
-    @State private var toast: String?
     /// Hidden files (dotfiles) are filtered out unless this is on; persisted per device.
     @AppStorage("paseo.files.showHidden") private var showHidden = false
     /// List ordering; folders always come first regardless of key. Persisted per device.
@@ -139,6 +139,7 @@ private struct WorkspaceFilesDirectoryList: View {
     @State private var revealedRow: String?
     @State private var revealHandled: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.toast) private var toast
     /// "Mention in chat" from a row's long-press; nil disables the action.
     @Environment(\.mentionInChat) private var mentionInChat
 
@@ -150,10 +151,11 @@ private struct WorkspaceFilesDirectoryList: View {
             ClaudeDivider()
             content
         }
+        // Every pushed folder draws its own header row; the system bar would duplicate it.
+        .toolbar(.hidden, for: .navigationBar)
         .task { await refresh() }
         .onChange(of: listing) { _, _ in syncReveal() }
         .onChange(of: revealTarget) { _, _ in syncReveal() }
-        .overlay(alignment: .bottom) { toastView }
         .alert(namePromptTitle, isPresented: namePromptBinding) {
             TextField(namePromptPlaceholder, text: $nameText)
                 .textInputAutocapitalization(.never)
@@ -176,11 +178,11 @@ private struct WorkspaceFilesDirectoryList: View {
             switch result {
             case .success:
                 Haptics.success()
-                showToast("Saved to Files")
+                toast?.show("Saved to Files")
             case .failure(let error):
                 guard !WorkspaceShare.isUserCancellation(error) else { return }
                 Haptics.failure()
-                showToast("Couldn't save: \(error.localizedDescription)")
+                toast?.show("Couldn't save: \(error.localizedDescription)")
             }
         }
         .confirmationDialog(
@@ -204,18 +206,18 @@ private struct WorkspaceFilesDirectoryList: View {
     // MARK: Header row
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.sm) {
             if let onBack {
                 Button {
                     Haptics.selection()
                     onBack()
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Space.xs) {
                         Image(systemName: "chevron.left").font(.glyph(.small, weight: .semibold))
                         Text(backTitle).font(.paseo(.footnote)).lineLimit(1)
                     }
                     .foregroundStyle(Palette.secondaryInk)
-                    .padding(.vertical, 8)
+                    .frame(minHeight: 44)
                     .contentShape(.rect)
                 }
                 .accessibilityLabel("Back to \(backTitle)")
@@ -223,23 +225,9 @@ private struct WorkspaceFilesDirectoryList: View {
                 Text("Files")
                     .font(.paseo(.callout, weight: .medium))
                     .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, Space.xs)
             }
-            Spacer(minLength: 8)
-            if files.phase == .loading {
-                ProgressView().controlSize(.mini)
-            }
-            Button {
-                Haptics.selection()
-                Task { await refresh() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.glyph(.small, weight: .medium))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 34, height: 34)
-                    .contentShape(.rect)
-            }
-            .accessibilityLabel("Refresh")
+            Spacer(minLength: Space.sm)
             Menu {
                 ForEach(FileSort.allCases, id: \.self) { choice in
                     Button {
@@ -257,7 +245,7 @@ private struct WorkspaceFilesDirectoryList: View {
                 Image(systemName: "arrow.up.arrow.down")
                     .font(.glyph(.small, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .accessibilityLabel("Sort by")
@@ -274,7 +262,7 @@ private struct WorkspaceFilesDirectoryList: View {
                 Image(systemName: "plus")
                     .font(.glyph(.regular, weight: .medium))
                     .foregroundStyle(Palette.ink)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .accessibilityLabel("New file or folder")
@@ -284,14 +272,13 @@ private struct WorkspaceFilesDirectoryList: View {
                 Image(systemName: "ellipsis")
                     .font(.glyph(.regular, weight: .medium))
                     .foregroundStyle(Palette.ink)
-                    .frame(width: 34, height: 34)
-                    .background(Palette.chip, in: .circle)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .accessibilityLabel("More file actions")
         }
-        .padding(.horizontal, 10)
-        .frame(height: 38)
+        .padding(.horizontal, Space.sm)
+        .frame(minHeight: 48)
     }
 
     private var backTitle: String {
@@ -319,12 +306,21 @@ private struct WorkspaceFilesDirectoryList: View {
     @ViewBuilder private var content: some View {
         switch listing {
         case nil:
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingState()
         case .failure(let message):
-            errorView(message)
+            InlineBanner(
+                .failure, title: message,
+                action: ("Try again", { Task { await refresh() } })
+            )
+            .padding(.horizontal, Space.lg)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .success(let entries):
             let visible = sortedVisible(entries)
-            if visible.isEmpty { emptyView } else { list(visible) }
+            if visible.isEmpty {
+                emptyView
+            } else {
+                list(visible)
+            }
         }
     }
 
@@ -360,7 +356,7 @@ private struct WorkspaceFilesDirectoryList: View {
     }
 
     private func list(_ visible: [FileExplorerEntry]) -> some View {
-        return ScrollViewReader { proxy in
+        ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
@@ -385,52 +381,20 @@ private struct WorkspaceFilesDirectoryList: View {
         }
     }
 
-    private func rowContent(_ entry: FileExplorerEntry) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: entry.isDirectory ? "folder" : "doc")
-                .font(.glyph(.regular, weight: .regular))
-                .foregroundStyle(entry.isDirectory ? Palette.ink : Palette.secondaryInk)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(entry.name)
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if let meta = meta(entry) {
-                    Text(meta)
-                        .font(.paseo(.caption))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 6)
-            if sharingPath == entry.path || savingToFilesPath == entry.path {
-                ProgressView().controlSize(.small)
-            } else if entry.isDirectory {
-                Image(systemName: "chevron.right")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.tertiaryInk)
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 46)
-        .contentShape(.rect)
-        .background(revealedRow == relative(entry) ? Palette.chip.opacity(0.9) : Color.clear)
-    }
-
     private func row(_ entry: FileExplorerEntry) -> some View {
-        Button {
-            Haptics.selection()
-            if entry.isDirectory { onOpenDirectory(entry.path) } else { onOpenFile(entry.path) }
-        } label: {
-            if entry.isDirectory {
-                rowContent(entry)
-            } else {
-                rowContent(entry).draggable(relative(entry))
+        let revealed = revealedRow == relative(entry)
+        return ListRow(
+            title: entry.name,
+            subtitle: meta(entry),
+            systemImage: entry.isDirectory ? "folder" : "doc",
+            accessory: accessory(entry),
+            action: {
+                Haptics.selection()
+                if entry.isDirectory { onOpenDirectory(entry.path) } else { onOpenFile(entry.path) }
             }
-        }
-        .buttonStyle(.plain)
+        )
+        .background(revealed ? Palette.chip.opacity(0.9) : Color.clear)
+        .draggable(relative(entry))
         .contextMenu {
             if !entry.isDirectory {
                 Button("Add to chat", systemImage: "at") {
@@ -464,99 +428,35 @@ private struct WorkspaceFilesDirectoryList: View {
                 pendingDelete = entry
             }
             Button("Copy path", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = absolute(entry)
-                showToast("Path copied")
+                Clipboard.copy(absolute(entry), toast: toast)
             }
             Button("Copy relative path", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = relative(entry)
-                showToast("Relative path copied")
+                Clipboard.copy(relative(entry), toast: toast)
             }
         }
-        .accessibilityLabel(rowAccessibilityLabel(entry))
     }
 
-    private func rowAccessibilityLabel(_ entry: FileExplorerEntry) -> String {
-        let kind = entry.isDirectory ? "Folder" : "File"
-        guard let meta = meta(entry) else { return "\(kind) \(entry.name)" }
-        return "\(kind) \(entry.name), \(meta)"
+    private func accessory(_ entry: FileExplorerEntry) -> ListRow.Accessory {
+        if sharingPath == entry.path || savingToFilesPath == entry.path { return .progress }
+        return entry.isDirectory ? .chevron : .none
     }
 
     private var emptyView: some View {
         let allHidden = !showHidden && hiddenCount > 0
-        return VStack(spacing: 10) {
-            Text(allHidden ? "No visible files" : "Empty folder")
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-            Text(allHidden
-                 ? "\(hiddenCount) hidden \(hiddenCount == 1 ? "item is" : "items are") dot-prefixed."
-                 : "There is nothing to show here yet.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-            if allHidden {
-                Button {
-                    Haptics.selection()
-                    showHidden = true
-                } label: {
-                    Text("Show hidden files")
-                        .font(.paseo(.footnote, weight: .medium))
-                        .foregroundStyle(Palette.ink)
-                        .padding(.horizontal, 18)
-                        .frame(minHeight: 32)
-                        .background(Palette.chip, in: .capsule)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func errorView(_ message: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.glyph(.xlarge, weight: .light))
-                .foregroundStyle(Palette.tertiaryInk)
-            Text(message)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
-            Button {
+        let action: (title: String, run: () -> Void)? = allHidden
+            ? (title: "Show hidden files", run: {
                 Haptics.selection()
-                Task { await refresh() }
-            } label: {
-                Text("Retry")
-                    .font(.paseo(.footnote, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 32)
-                    .background(Palette.chip, in: .capsule)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var toastView: some View {
-        Group {
-            if let toast {
-                Text(toast)
-                    .font(.paseo(.footnote))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .glassEffect()
-                    .padding(.bottom, 18)
-                    .transition(.opacity)
-            }
-        }
-    }
-
-    private func showToast(_ text: String) {
-        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = text }
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = nil }
-        }
+                showHidden = true
+            })
+            : nil
+        return EmptyState(
+            systemImage: "folder",
+            title: allHidden ? "No visible files" : "Empty folder",
+            message: allHidden
+                ? "\(PaseoFormat.integer(hiddenCount)) hidden \(hiddenCount == 1 ? "item is" : "items are") dot-prefixed."
+                : "There is nothing to show here yet.",
+            action: action)
+        .padding(.horizontal, Space.xl)
     }
 
     // MARK: Entry operations
@@ -716,6 +616,10 @@ private struct WorkspaceFilesDirectoryList: View {
             showToast(files.error ?? "Couldn't delete.")
         }
         await refresh()
+    }
+
+    private func showToast(_ text: String) {
+        toast?.show(text)
     }
 
     // MARK: Path helpers
