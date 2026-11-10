@@ -671,7 +671,7 @@ struct TranscriptView: View {
                 .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BackToEndPressStyle())
         // Above the composer bar, which the scroll view carries as its bottom inset.
         .padding(.bottom, bottomInset + Space.sm)
         .opacity(shows ? 1 : 0)
@@ -790,6 +790,20 @@ struct SendRunway: Equatable {
     var measured = false
     /// The glide to `.top` is owed: it waits for a measured viewport.
     var pendingGlide = false
+}
+
+/// Touch-down answers on the back-to-end circle: it scales in on `Motion.feedback` like the
+/// rest of the app's buttons, and Reduce Motion switches instantly.
+struct BackToEndPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(
+                Motion.feedback.resolved(reduceMotion: reduceMotion),
+                value: configuration.isPressed)
+    }
 }
 
 /// The second half of a glide-lead: the instant jump has landed, so the last stretch glides.
