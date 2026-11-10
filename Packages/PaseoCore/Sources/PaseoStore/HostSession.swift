@@ -528,6 +528,9 @@ public final class ConversationStore: Identifiable {
 
     internal let client: (any DaemonClient)?
     private var isCatchingUp = false
+    /// Incremental `TurnBuilder`: keeps the last built turns so streaming a token rebuilds only the
+    /// newest turn instead of the whole transcript. See `IncrementalTurnBuilder`.
+    private let turnBuilder = IncrementalTurnBuilder()
 
     /// True while the agent works: an active turn, or status `.running`.
     public var isRunning: Bool { activeTurnId != nil || agent?.status == .running }
@@ -864,7 +867,7 @@ public final class ConversationStore: Identifiable {
     }
 
     private func updateTurns() {
-        turns = TurnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
+        turns = turnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
         // The chat outline is stale whenever the newest prompt moves (a turn started, a page
         // arrived, the timeline was replaced). Upstream's `latestPromptSeq` effect.
         promptOutline.timelineChanged(epoch: timeline.epoch, latestPromptSeq: latestPromptSeq)
