@@ -90,3 +90,26 @@ intent, none on appearance. Remove the doubles. List what you removed.
 - Lint 0.
 - PaseoCore tests green, if touched.
 - The final message has the state matrix, the copy list and the haptics list.
+
+## 7. Follow-ups found while merging R5–R10 (lead, 2026-11-10)
+
+- **Settings shim:** `Sidebar/PaseoSidebar.swift` still builds `PaseoSettingsView`, which only forwards to
+  `SettingsRoot`. Switch the call site to `SettingsRoot`, then delete the shim.
+- **`PageList`:** `Settings/PageList.swift` (`PageList`, `.panelRow(_:)`, `.inlinePageTitle(_:)`) moves to
+  `DesignSystem/Components/` unchanged, because History and Schedules use it too.
+- **Unused heroes:** `ChatHeroSeats` and `ClaudeHomeHero` are no longer used by the conversation. Delete them if
+  `grep` finds no other user.
+- **`ClaudeCodeHighlighter`:** it's now only a test facade over `CodeHighlightCore`. Leave it.
+- **Reduce Motion:** `Conversation/Transcript/ChatTranscript.swift` has one `withAnimation(Motion.glide.animation)` that
+  skips `resolved(reduceMotion:)`. Route it through `resolved`. `grep -rn "\.animation)" Packages/PaseoUI` finds any
+  others.
+- **Key commands:** `ShellContainerController` becomes first responder in `viewDidAppear`. If it steals focus from
+  a text field on first launch, remove those two lines; key commands still work through the responder chain.
+- **New copy from R8:** these strings are new and are waiting for the user's approval. Don't change them
+  unless the user says so:
+  - "Switch host", "Endpoint", "Last connected …", "No saved hosts yet.", "Project not found";
+  - "No projects on this host yet" / "Add project from the sidebar.";
+  - "No providers reported by this host" / "Providers come from the host's catalogue.";
+  - the Keychain footer;
+  - "The host did not grant permission to manage schedules.";
+  - schedule and history toasts.
