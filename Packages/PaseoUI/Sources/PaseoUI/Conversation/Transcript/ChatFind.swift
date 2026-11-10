@@ -3,102 +3,34 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-extension ClaudeChatView {
-    // MARK: Find in conversation
+/// The in-conversation find bar's host (doc 08 / M7 §2): a search field, a live "3 of 12"
+/// counter, up/down chevrons to step matches, and a close button.
+///
+/// **Reads:** `store.search` (results, spinner, error), `controller.find` (query, index). The bar
+/// is the only view besides the composer that reads the keyboard focus state.
+struct ChatFindBarView: View {
+    @Bindable var store: ConversationStore
+    @Bindable var controller: ChatController
 
-    /// The seqEnd of the match currently on screen; nil when the results are empty.
-    var findSeq: Int? {
-        let locations = store.search.locations
-        guard findIndex < locations.count else { return nil }
-        return locations[findIndex].seq
-    }
+    @FocusState private var focused: Bool
 
-    var findBar: some View {
+    var body: some View {
+        @Bindable var find = controller.find
         ClaudeFindBar(
-            query: $findQuery,
+            query: $find.query,
             isSearching: store.search.isSearching,
-            resultCount: store.search.locations.count, currentIndex: findIndex,
+            resultCount: store.search.locations.count,
+            currentIndex: controller.find.index,
             error: store.search.error,
-            onStep: stepFind, onCancel: closeFind, focused: $findFocused)
-    }
-
-    func openFind() {
-        Haptics.selection()
-        guard !findOpen else { return }
-        findAnchor = scrollTrack.lastTrackedTurn // restore at turn granularity; bottom stays bottom
-        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { findOpen = true }
-        findFocused = true
-    }
-
-    func closeFind() {
-        Haptics.selection()
-        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { findOpen = false }
-        findQuery = ""
-        findSearchTask?.cancel()
-        findSearchTask = nil
-        store.search.clear()
-        findFocused = false
-    }
-
-    func stepFind(_ delta: Int) {
-        let locations = store.search.locations
-        guard !locations.isEmpty else { return }
-        let next = min(max(0, findIndex + delta), locations.count - 1)
-        guard next != findIndex else { return }
-        findIndex = next
-        scrollToFindMatch(animated: true)
-    }
-
-    func scrollToFindMatch(animated: Bool) {
-        guard let seq = findSeq else { return }
-        flash(seq)
-        guard let scrollProxy else { return }
-        if animated {
-            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                scrollProxy.scrollTo("row:\(seq)", anchor: .center)
-            }
-        } else {
-            scrollProxy.scrollTo("row:\(seq)", anchor: .center)
+            onStep: { controller.stepFind($0) },
+            onCancel: { controller.closeFind() },
+            focused: $focused)
+        .onAppear { focused = true }
+        .onChange(of: controller.find.query) { _, query in
+            controller.find.index = 0
+            controller.scheduleSearch(query)
         }
+        .transition(.opacity)
     }
-
-    func flash(_ seq: Int) {
-        findFlash = seq
-        let captured = seq
-        Task {
-            try? await Task.sleep(for: .seconds(1.6))
-            if findFlash == captured { findFlash = nil }
-        }
-    }
-
-    func restoreScroll(proxy: ScrollViewProxy) {
-        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-            if let findAnchor, store.turns.contains(where: { $0.id == findAnchor }) {
-                // The anchor belongs to this conversation (closing find on an agent switch may
-                // leave it pointing at garbage from the previous one).
-                proxy.scrollTo(findAnchor, anchor: .top)
-            } else {
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
-        }
-    }
-
-    func scheduleSearch(_ query: String) {
-        findSearchTask?.cancel()
-        findSearchTask = nil
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            store.search.clear()
-            return
-        }
-        findSearchTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled else { return }
-            await store.search.search(trimmed)
-            findIndex = 0
-            scrollToFindMatch(animated: true)
-        }
-    }
-
 }
 #endif

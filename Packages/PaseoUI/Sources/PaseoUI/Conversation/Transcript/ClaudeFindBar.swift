@@ -4,8 +4,8 @@ import SwiftUI
 import UIKit
 
 /// The in-conversation find bar (doc 08 / M7 §2): a search field, a live "3 of 12" counter, up/down
-/// chevrons to step matches, and a close button. The bar itself is stateless; `ClaudeChatView`
-/// owns the search session (`ConversationStore.search`) and the scroll target.
+/// chevrons to step matches, and a close button. The bar itself is stateless;
+/// `ChatFindBarView` / `ChatController` own the search session and the scroll target.
 struct ClaudeFindBar: View {
     @Binding var query: String
     let isSearching: Bool
@@ -36,6 +36,12 @@ struct ClaudeFindBar: View {
                 .textInputAutocapitalization(.never)
                 .onKeyPress(.escape) {
                     onCancel()
+                    return .handled
+                }
+                // Return steps forward; ⇧Return steps back.
+                .onSubmit { onStep(1) }
+                .onKeyPress(.return, phases: .down) { press in
+                    onStep(press.modifiers.contains(.shift) ? -1 : 1)
                     return .handled
                 }
                 .accessibilityLabel("Search in conversation")
@@ -71,6 +77,7 @@ struct ClaudeFindBar: View {
                     .font(.glyph(.regular, weight: .semibold))
                     .foregroundStyle(Palette.ink)
                     .frame(width: 30, height: 30)
+                    .frame(minWidth: 44, minHeight: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -96,6 +103,7 @@ struct ClaudeFindBar: View {
                 .font(.glyph(.small, weight: .semibold))
                 .foregroundStyle(enabled ? Palette.ink : Palette.tertiaryInk)
                 .frame(width: 26, height: 30)
+                .frame(minWidth: 44, minHeight: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
