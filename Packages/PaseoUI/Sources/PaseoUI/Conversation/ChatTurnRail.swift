@@ -54,7 +54,10 @@ struct ChatOutlineRail: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hoveredIndex: Int?
-    @State private var isTouching = false
+    /// Resets by itself when the system cancels the touch (a scroll view taking over, an alert),
+    /// which `onEnded` never reports: a stuck `@State` flag kept the ticks and haptics alive.
+    @GestureState private var isTouching = false
+    @State private var scrubbing = false
     @State private var lastTickAt: Date?
 
     private let typography = ClaudeTypography()
@@ -92,6 +95,10 @@ struct ChatOutlineRail: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isRevealed)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hoveredIndex)
         .gesture(scrub)
+        // A cancelled touch ends here too, so nothing keeps ticking after the finger is gone.
+        .onChange(of: isTouching) { _, touching in
+            if !touching { endScrub() }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("transcript.turnRail")
         .accessibilityLabel("Jump to message")
@@ -148,10 +155,10 @@ struct ChatOutlineRail: View {
     /// wanders left of the strip or past either end cancels, and release there does nothing.
     private var scrub: some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .updating($isTouching) { _, state, _ in state = true }
             .onChanged { value in
-                if !isTouching {
-                    isTouching = true
-                    onReveal()
+                if !scrubbing {
+                    scrubbing = true
                     Haptics.prepare()
                     hoveredIndex = nil
                     lastTickAt = nil
@@ -160,13 +167,17 @@ struct ChatOutlineRail: View {
             }
             .onEnded { value in
                 let index = slotIndex(at: value.location)
-                isTouching = false
-                hoveredIndex = nil
-                lastTickAt = nil
+                endScrub()
                 guard let index else { return }
                 Haptics.light()
                 onJump(items[index].seq)
             }
+    }
+
+    private func endScrub() {
+        scrubbing = false
+        hoveredIndex = nil
+        lastTickAt = nil
     }
 
     private func updateHover(at point: CGPoint) {
@@ -176,6 +187,8 @@ struct ChatOutlineRail: View {
         }
         guard hoveredIndex != index else { return }
         hoveredIndex = index
+        // Keeps the scroll-reveal timer from hiding the rail under the finger.
+        onReveal()
         tick()
     }
 

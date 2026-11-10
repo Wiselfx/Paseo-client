@@ -704,7 +704,9 @@ extension ClaudeChatView {
         if reduceMotion {
             proxy.scrollTo(id, anchor: .top)
         } else {
-            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
+            // A long, decelerating glide (upstream's smooth scroll), not a snap: the lazy stack
+            // mounts the turns it passes, and the ease-in-out hides the estimated-height drift.
+            withAnimation(.smooth(duration: 0.55)) { proxy.scrollTo(id, anchor: .top) }
         }
     }
 
