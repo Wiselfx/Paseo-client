@@ -158,7 +158,7 @@ struct ScheduleDetailPage: View {
         infoRow(
             "Heartbeat",
             value: agentTitle(agentId),
-            detail: agentId.map { "Agent id: \($0)" })
+            detail: agentId.map { "Agent ID: \($0)" })
         if let agentId,
             let workspaceId = session.agents.first(where: { $0.id == agentId })?.workspaceId,
             let workspace = session.workspaceDirectory.groups.flatMap(\.workspaces)
