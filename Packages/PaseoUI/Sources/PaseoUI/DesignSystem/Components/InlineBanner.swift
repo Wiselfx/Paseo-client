@@ -74,7 +74,6 @@ struct InlineBanner: View {
         .frame(minHeight: 44)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(fill, in: .rect(cornerRadius: Radius.md))
-        .accessibilityElement(children: .combine)
     }
 
     private var fill: Color {

@@ -5,7 +5,7 @@ import SwiftUI
 struct GlassIconButton<Label: View>: View {
     private let label: String
     private let action: () -> Void
-    @ViewBuilder private let content: () -> Label
+    private let content: () -> Label
 
     init(label: String, action: @escaping () -> Void, @ViewBuilder content: @escaping () -> Label) {
         self.label = label
@@ -19,7 +19,6 @@ struct GlassIconButton<Label: View>: View {
                 .frame(width: 44, height: 44)
                 .contentShape(.circle)
         }
-        .buttonStyle(.plain)
         .glassEffect(in: .circle)
         .accessibilityLabel(label)
     }
