@@ -855,7 +855,7 @@ struct ComposerView: View {
         Task { attachPastedImages(await PasteImageLoader.loadAll()) }
     }
 
-    /// Pasted and dropped images, in pasteboard order, through the same path a picked photo takes.
+    /// Pasted images, in pasteboard order, through the same path a picked photo takes.
     private func attachPastedImages(_ images: [Data]) {
         guard !images.isEmpty else {
             localAttachmentError = "Failed to paste image"

@@ -57,8 +57,10 @@ struct ComposerPrimaryButton: View {
         .accessibilityLabel(label)
         .modifier(QueueAction(action: onQueue))
         .accessibilityIdentifier(identifier)
-        // ⌘↩ sends, whatever tap would have done.
-        .keyboardShortcut(.return, modifiers: .command)
+        // ⌘↩ means send and nothing else: in any other state the chord must not start voice mode
+        // or stop the turn. A `nil` shortcut leaves the button's identity alone, so the pressed
+        // state and the morph survive the change.
+        .keyboardShortcut(returnShortcut)
     }
 
     /// The long-press alternative as a VoiceOver action, and only where queueing exists (a draft
@@ -99,15 +101,26 @@ struct ComposerPrimaryButton: View {
         }
     }
 
-    /// A long press fires as soon as it is recognized (0.45 s), before the finger lifts, so the
-    /// tap that follows on release is swallowed here instead of sending twice.
+    /// `onEnded` fires when the 0.45 s elapses with the finger still down — `onChanged` fires on
+    /// touch-down, which would queue every tap. The action runs while the finger is held, so its
+    /// own haptic is the confirmation (`ChatController.queueDraft` plays `Haptics.medium()`), and
+    /// the release that follows is swallowed here instead of sending twice.
     private var queuesOnLongPress: some Gesture {
         LongPressGesture(minimumDuration: 0.45)
             .onChanged { _ in
+                // Touch-down: a press that queued and was then released outside the circle never
+                // reaches the button's action, so the next tap must not be swallowed.
+                didLongPress = false
+            }
+            .onEnded { _ in
                 guard !didLongPress, let onQueue else { return }
                 didLongPress = true
                 onQueue()
             }
+    }
+
+    private var returnShortcut: KeyboardShortcut? {
+        state == .send ? KeyboardShortcut(.return, modifiers: .command) : nil
     }
 
     private func tap() {

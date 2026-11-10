@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 
 /// The composer's field (D2 §2): a `UITextView` under SwiftUI, because a SwiftUI `TextField` can
 /// not receive a pasted image. Everything the old field did stays: the text binding, the focus
@@ -18,7 +17,7 @@ struct ComposerTextView: UIViewRepresentable {
     let placeholder: String
     /// The field grows to this many lines, then scrolls inside itself.
     let lineLimit: Int
-    /// Images pasted or dropped onto the field, in pasteboard order.
+    /// Images pasted into the field, in pasteboard order.
     let onPasteImages: ([Data]) -> Void
 
     func makeUIView(context: Context) -> ComposerUITextView {
@@ -82,22 +81,29 @@ struct ComposerTextView: UIViewRepresentable {
             (textView as? ComposerUITextView)?.updatePlaceholder(visible: textView.text.isEmpty)
         }
 
+        // The writes are deferred one main-actor turn: UIKit calls these from inside
+        // `becomeFirstResponder()`/`resignFirstResponder()`, which `updateUIView` may call in the
+        // middle of a SwiftUI update, and writing a binding there is "state during view update".
         func textViewDidBeginEditing(_ textView: UITextView) {
             guard !parent.focus.wrappedValue else { return }
-            parent.focus.wrappedValue = true
+            Task { @MainActor [weak self] in
+                self?.parent.focus.wrappedValue = true
+            }
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
             guard parent.focus.wrappedValue else { return }
-            parent.focus.wrappedValue = false
+            Task { @MainActor [weak self] in
+                self?.parent.focus.wrappedValue = false
+            }
         }
     }
 }
 
-/// The field itself. Grows with its content up to `lineLimit` lines, then scrolls; accepts images
-/// from the pasteboard and from a drop, one `itemProvider` at a time.
+/// The field itself. Grows with its content up to `lineLimit` lines, then scrolls; takes images
+/// from the pasteboard, one `itemProvider` at a time.
 final class ComposerUITextView: UITextView {
-    /// Images pasted or dropped, in pasteboard order.
+    /// Images pasted, in pasteboard order.
     var onPasteImages: (([Data]) -> Void)?
     var lineLimit = 9
 
@@ -122,9 +128,6 @@ final class ComposerUITextView: UITextView {
         adjustsFontForContentSizeCategory = true
         textContainerInset = UIEdgeInsets(top: 7, left: 6, bottom: 1, right: 6)
         textContainer.lineFragmentPadding = 0
-        // Images dropped onto the field come through the same paste path as ⌘V (D2 §2).
-        pasteConfiguration = UIPasteConfiguration(
-            acceptableTypeIdentifiers: [UTType.image.identifier, UTType.plainText.identifier])
         placeholderLabel.textColor = UIColor(Palette.secondaryInk)
         placeholderLabel.numberOfLines = 1
         placeholderLabel.lineBreakMode = .byTruncatingTail
