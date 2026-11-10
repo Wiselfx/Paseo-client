@@ -28,7 +28,6 @@ struct WorkspaceTerminalFileSheet: View {
     @State private var failure: String?
     @State private var isLoading = false
 
-    private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
 
@@ -63,18 +62,18 @@ struct WorkspaceTerminalFileSheet: View {
                         let number = index + 1
                         HStack(spacing: 10) {
                             Text(verbatim: String(number))
-                                .font(typography.mono(11))
-                                .foregroundStyle(ClaudePalette.captionInk)
+                                .font(.paseo(.codeCaption))
+                                .foregroundStyle(Palette.captionInk)
                                 .frame(width: 34, alignment: .trailing)
                             Text(line)
-                                .font(typography.mono(12))
-                                .foregroundStyle(ClaudePalette.primaryInk)
+                                .font(.paseo(.codeSmall))
+                                .foregroundStyle(Palette.ink)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 1.5)
                         .background(
                             target.line == number
-                                ? ClaudePalette.chip
+                                ? Palette.chip
                                 : Color.clear)
                         .id(number)
                     }
@@ -94,21 +93,21 @@ struct WorkspaceTerminalFileSheet: View {
     private func failureView(_ message: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.xlarge, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(message)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
             Button {
                 Task { await load() }
             } label: {
                 Text("Retry")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .padding(.horizontal, 18)
-                    .frame(height: 32)
-                    .background(ClaudePalette.chip, in: .capsule)
+                    .frame(minHeight: 32)
+                    .background(Palette.chip, in: .capsule)
             }
             .buttonStyle(.plain)
         }

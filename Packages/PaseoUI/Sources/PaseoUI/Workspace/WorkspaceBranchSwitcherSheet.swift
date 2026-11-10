@@ -26,7 +26,6 @@ struct WorkspaceBranchSwitcherSheet: View {
     @State private var switchError: String?
     @State private var switchingTo: String?
 
-    private let typography = ClaudeTypography()
 
     /// The current branch checked first? No: upstream keeps the daemon's order and only marks the
     /// selected row, so the list does not jump under the user's finger.
@@ -44,8 +43,8 @@ struct WorkspaceBranchSwitcherSheet: View {
             searchField
             if let switchError {
                 Text(switchError)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
                     .accessibilityIdentifier("branchSwitcher.error")
@@ -54,11 +53,10 @@ struct WorkspaceBranchSwitcherSheet: View {
                 .frame(maxHeight: .infinity)
             Spacer(minLength: 8)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .task {
             guard !hasLoaded else { return }
             // One page, like upstream's `getBranchSuggestions(200)`.
@@ -70,10 +68,10 @@ struct WorkspaceBranchSwitcherSheet: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.small, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
             TextField("Filter branches...", text: $searchText)
-                .font(typography.sans(15))
+                .font(.paseo(.callout))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
@@ -83,7 +81,7 @@ struct WorkspaceBranchSwitcherSheet: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 38)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
         .padding(.horizontal, 16)
     }
 
@@ -93,8 +91,8 @@ struct WorkspaceBranchSwitcherSheet: View {
         } else if let branchError = extras.branchError, extras.branchSuggestions.isEmpty {
             // Upstream `branchSwitcher.failedToLoad`.
             Text("Could not load branches. Reopen the picker to try again.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.failureInk)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -115,8 +113,8 @@ struct WorkspaceBranchSwitcherSheet: View {
                 // (`branch-switcher.tsx`, `errorFooter`).
                 if extras.branchError != nil {
                     Text("Could not load branches. Reopen the picker to try again.")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.failureInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
@@ -129,8 +127,8 @@ struct WorkspaceBranchSwitcherSheet: View {
     /// Combobox uses the same string for both.
     private var emptyState: some View {
         Text("No branches found.")
-            .font(typography.sans(14))
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -141,20 +139,20 @@ struct WorkspaceBranchSwitcherSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 20)
                 Text(branch.name)
-                    .font(typography.mono(13, weight: current ? .semibold : .regular))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.code, weight: current ? .semibold : .regular))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if switchingTo == branch.name {
                     ProgressView().controlSize(.small)
                 } else if current {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                         .accessibilityLabel("Current branch")
                 }
             }

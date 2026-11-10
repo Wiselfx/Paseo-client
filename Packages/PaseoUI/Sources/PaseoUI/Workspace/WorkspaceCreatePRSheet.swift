@@ -15,7 +15,6 @@ struct WorkspaceCreatePRSheet: View {
 
     @FocusState private var focused: Bool
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         VStack(spacing: 14) {
@@ -23,25 +22,25 @@ struct WorkspaceCreatePRSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 ClaudeCard {
                     TextField("Title", text: $title)
-                        .font(typography.sans(16, weight: .medium))
+                        .font(.paseo(.callout, weight: .medium))
                         .textInputAutocapitalization(.sentences)
                         .focused($focused)
                 }
                 ClaudeCard {
                     TextEditor(text: $prBody)
-                        .font(typography.sans(14))
+                        .font(.paseo(.callout))
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 100, maxHeight: 160)
                         .accessibilityLabel("Pull request description")
                 }
                 Text("Opens from \(branch) into \(baseRef ?? "base").")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.horizontal, 2)
                 if let failure {
                     Text(failure)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.horizontal, 2)
                 }
             }
@@ -51,27 +50,26 @@ struct WorkspaceCreatePRSheet: View {
                 onCreate()
             } label: {
                 if busy {
-                    ProgressView().tint(ClaudePalette.background)
+                    ProgressView().tint(Palette.background)
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
                 } else {
                     Text("Create pull request")
-                        .font(typography.sans(15, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.background)
+                        .font(.paseo(.callout, weight: .semibold))
+                        .foregroundStyle(Palette.background)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 46)
+                        .frame(minHeight: 46)
                 }
             }
-            .background(ClaudePalette.ink.opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.35 : 1), in: .capsule)
+            .background(Palette.ink.opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.35 : 1), in: .capsule)
             .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 }
 #endif

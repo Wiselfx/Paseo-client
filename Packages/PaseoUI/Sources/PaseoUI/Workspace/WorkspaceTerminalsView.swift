@@ -44,7 +44,6 @@ struct WorkspaceTerminalsView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let typography = ClaudeTypography()
 
     private var store: TerminalsStore { session.terminals }
     private var workspaceId: String { workspace.id }
@@ -63,7 +62,7 @@ struct WorkspaceTerminalsView: View {
                 scriptsSection(scripts)
             }
         }
-        .background(ClaudePalette.background)
+        .background(Palette.background)
         .task {
             await store.open(workspaceId: workspaceId, cwd: workspace.cwd)
             guard !Task.isCancelled else { return }
@@ -228,7 +227,7 @@ struct WorkspaceTerminalsView: View {
         Group {
             if let toast {
                 Text(toast)
-                    .font(typography.sans(13))
+                    .font(.paseo(.footnote))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
                     .glassEffect()
@@ -239,10 +238,10 @@ struct WorkspaceTerminalsView: View {
     }
 
     private func showToast(_ text: String) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = text }
+        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = text }
         Task {
             try? await Task.sleep(for: .seconds(2))
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = nil }
+            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = nil }
         }
     }
 
@@ -299,16 +298,16 @@ struct WorkspaceTerminalsView: View {
             HStack(spacing: 6) {
                 PaseoStatusDot(kind: dotKind(for: terminal))
                 Text(displayName(terminal))
-                    .font(typography.sans(13))
-                    .foregroundStyle(isSelected ? ClaudePalette.ink : ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(isSelected ? Palette.ink : Palette.secondaryInk)
                     .lineLimit(1)
             }
             .padding(.horizontal, 12)
             .frame(height: 32)
-            .background(isSelected ? ClaudePalette.chip : Color.clear, in: .capsule)
+            .background(isSelected ? Palette.chip : Color.clear, in: .capsule)
             .overlay(
                 Capsule().strokeBorder(
-                    ClaudePalette.cardBorder, lineWidth: isSelected ? 0 : 0.5))
+                    Palette.cardBorder, lineWidth: isSelected ? 0 : 0.5))
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
@@ -390,18 +389,18 @@ struct WorkspaceTerminalsView: View {
         } label: {
             HStack(spacing: 6) {
                 if isCreating {
-                    ProgressView().controlSize(.mini).tint(ClaudePalette.secondaryInk)
+                    ProgressView().controlSize(.mini).tint(Palette.secondaryInk)
                 } else {
                     Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.glyph(.small, weight: .medium))
                 }
-                Text("New").font(typography.sans(13))
+                Text("New").font(.paseo(.footnote))
             }
             .padding(.horizontal, 12)
             .frame(height: 32)
-            .foregroundStyle(ClaudePalette.ink)
+            .foregroundStyle(Palette.ink)
             .overlay(
-                Capsule().strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5))
+                Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
@@ -436,7 +435,7 @@ struct WorkspaceTerminalsView: View {
                 emptyState
             } else {
                 // The selected id is stale during the same frame the data refreshes.
-                ProgressView().tint(ClaudePalette.secondaryInk)
+                ProgressView().tint(Palette.secondaryInk)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -445,11 +444,11 @@ struct WorkspaceTerminalsView: View {
     private var emptyState: some View {
         VStack(spacing: 14) {
             Text("No terminals yet")
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text("Start one to run commands in this workspace.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
             Button {
                 Haptics.selection()
@@ -465,11 +464,11 @@ struct WorkspaceTerminalsView: View {
                 }
             } label: {
                 Text("New terminal")
-                    .font(typography.sans(15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.background)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.background)
                     .padding(.horizontal, 20)
-                    .frame(height: 40)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .frame(minHeight: 40)
+                    .background(Palette.ink, in: .capsule)
             }
             .buttonStyle(.plain)
             .disabled(isCreating)
@@ -480,16 +479,16 @@ struct WorkspaceTerminalsView: View {
     private func statusMessage(_ title: String, detail: String?) -> some View {
         VStack(spacing: 8) {
             Image(systemName: "info")
-                .font(.system(size: 20, weight: .light))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.large, weight: .light))
+                .foregroundStyle(Palette.secondaryInk)
             Text(title)
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
             if let detail {
                 Text(detail)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .multilineTextAlignment(.center)
             }
         }
@@ -517,8 +516,8 @@ struct WorkspaceTerminalsView: View {
     private func exitOverlay(_ message: String) -> some View {
         VStack(spacing: 12) {
             Text(message)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
             HStack(spacing: 10) {
                 Button {
@@ -527,31 +526,31 @@ struct WorkspaceTerminalsView: View {
                     exitGeneration += 1
                 } label: {
                     Text("Reattach")
-                        .font(typography.sans(14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.background)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.background)
                         .padding(.horizontal, 16)
-                        .frame(height: 36)
-                        .background(ClaudePalette.ink, in: .capsule)
+                        .frame(minHeight: 36)
+                        .background(Palette.ink, in: .capsule)
                 }
                 .buttonStyle(.plain)
                 Button {
                     exitMessage = nil
                 } label: {
                     Text("Dismiss")
-                        .font(typography.sans(14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.horizontal, 16)
-                        .frame(height: 36)
-                        .overlay(Capsule().strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5))
+                        .frame(minHeight: 36)
+                        .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(20)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5))
+            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+                .strokeBorder(Palette.cardBorder, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.25), radius: 16, y: 4)
         .padding(.horizontal, 32)
     }
@@ -562,11 +561,11 @@ struct WorkspaceTerminalsView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Scripts")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                 Spacer(minLength: 8)
                 if store.loadingScriptWorkspaces.contains(workspaceId) {
-                    ProgressView().controlSize(.small).tint(ClaudePalette.secondaryInk)
+                    ProgressView().controlSize(.small).tint(Palette.secondaryInk)
                 }
             }
             .padding(.horizontal, 16)
@@ -590,12 +589,12 @@ struct WorkspaceTerminalsView: View {
             PaseoStatusDot(kind: scriptDotKind(script))
             VStack(alignment: .leading, spacing: 2) {
                 Text(script.scriptName)
-                    .font(typography.sans(15))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 Text(scriptSubtitle(script))
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -605,8 +604,8 @@ struct WorkspaceTerminalsView: View {
                     openServiceURL(serviceURL)
                 } label: {
                     Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.glyph(.regular, weight: .regular))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(width: 36, height: 36)
                         .contentShape(.rect)
                 }
@@ -629,11 +628,11 @@ struct WorkspaceTerminalsView: View {
                     exitMessage = nil
                 } label: {
                     Text("View")
-                        .font(typography.sans(13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .frame(height: 30)
+                        .font(.paseo(.footnote, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .frame(minHeight: 30)
                         .padding(.horizontal, 12)
-                        .overlay(Capsule().strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5))
+                        .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Show terminal for \(script.scriptName)")
@@ -658,7 +657,7 @@ struct WorkspaceTerminalsView: View {
                                 Text("Copy \(target.title) URL")
                                 Text(target.hostLabel)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Palette.secondaryInk)
                             }
                         }
                     }
@@ -770,15 +769,15 @@ struct WorkspaceTerminalsView: View {
         } label: {
             Group {
                 if busy {
-                    ProgressView().controlSize(.small).tint(ClaudePalette.ink)
+                    ProgressView().controlSize(.small).tint(Palette.ink)
                 } else {
                     Image(systemName: isRunning ? "stop.fill" : "play.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                 }
             }
             .frame(width: 32, height: 32)
-            .background(ClaudePalette.chip, in: .circle)
+            .background(Palette.chip, in: .circle)
         }
         .buttonStyle(.plain)
         .disabled(busy)
@@ -790,16 +789,16 @@ struct WorkspaceTerminalsView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Text(message)
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.failureInk)
                 .lineLimit(2)
             Spacer(minLength: 8)
             Button {
                 store.clearError()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(width: 28, height: 28)
                     .contentShape(.rect)
             }
@@ -808,7 +807,7 @@ struct WorkspaceTerminalsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(ClaudePalette.failureInk.opacity(0.08))
+        .background(Palette.failureInk.opacity(0.08))
     }
 }
 

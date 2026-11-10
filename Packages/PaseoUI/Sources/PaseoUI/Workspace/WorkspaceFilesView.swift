@@ -13,7 +13,6 @@ struct WorkspaceFilesView: View {
     /// Workspace-relative path of a file the Files page should flash and scroll to
     /// ("Reveal in Files page" from the viewer); consumed by the containing directory page.
     @State private var revealTarget: String?
-    private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
 
@@ -139,7 +138,6 @@ private struct WorkspaceFilesDirectoryList: View {
     /// The flash-highlighted row (workspace-relative path), if any; clears after a beat.
     @State private var revealedRow: String?
     @State private var revealHandled: String?
-    private let typography = ClaudeTypography()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// "Mention in chat" from a row's long-press; nil disables the action.
     @Environment(\.mentionInChat) private var mentionInChat
@@ -213,18 +211,18 @@ private struct WorkspaceFilesDirectoryList: View {
                     onBack()
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
-                        Text(backTitle).font(typography.sans(13)).lineLimit(1)
+                        Image(systemName: "chevron.left").font(.glyph(.small, weight: .semibold))
+                        Text(backTitle).font(.paseo(.footnote)).lineLimit(1)
                     }
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.vertical, 8)
                     .contentShape(.rect)
                 }
                 .accessibilityLabel("Back to \(backTitle)")
             } else {
                 Text("Files")
-                    .font(typography.sans(15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .padding(.horizontal, 4)
             }
             Spacer(minLength: 8)
@@ -236,8 +234,8 @@ private struct WorkspaceFilesDirectoryList: View {
                 Task { await refresh() }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 34, height: 34)
                     .contentShape(.rect)
             }
@@ -257,8 +255,8 @@ private struct WorkspaceFilesDirectoryList: View {
                 }
             } label: {
                 Image(systemName: "arrow.up.arrow.down")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 34, height: 34)
                     .contentShape(.rect)
             }
@@ -274,20 +272,20 @@ private struct WorkspaceFilesDirectoryList: View {
                 }
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.glyph(.regular, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 34, height: 34)
                     .contentShape(.rect)
             }
             .accessibilityLabel("New file or folder")
             Menu {
-                Toggle("Show hidden files", isOn: $showHidden).tint(.blue)
+                Toggle("Show hidden files", isOn: $showHidden).tint(Palette.toggleTint)
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.glyph(.regular, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 34, height: 34)
-                    .background(ClaudePalette.chip, in: .circle)
+                    .background(Palette.chip, in: .circle)
                     .contentShape(.rect)
             }
             .accessibilityLabel("More file actions")
@@ -381,7 +379,7 @@ private struct WorkspaceFilesDirectoryList: View {
                 if reduceMotion {
                     proxy.scrollTo(target, anchor: .center)
                 } else {
-                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .center) }
+                    withAnimation(Motion.disclosure.animation) { proxy.scrollTo(target, anchor: .center) }
                 }
             }
         }
@@ -390,19 +388,19 @@ private struct WorkspaceFilesDirectoryList: View {
     private func rowContent(_ entry: FileExplorerEntry) -> some View {
         HStack(spacing: 10) {
             Image(systemName: entry.isDirectory ? "folder" : "doc")
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(entry.isDirectory ? ClaudePalette.ink : ClaudePalette.secondaryInk)
+                .font(.glyph(.regular, weight: .regular))
+                .foregroundStyle(entry.isDirectory ? Palette.ink : Palette.secondaryInk)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.name)
-                    .font(typography.sans(15))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let meta = meta(entry) {
                     Text(meta)
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
             }
@@ -411,14 +409,14 @@ private struct WorkspaceFilesDirectoryList: View {
                 ProgressView().controlSize(.small)
             } else if entry.isDirectory {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
         }
         .padding(.horizontal, 12)
         .frame(height: 46)
         .contentShape(.rect)
-        .background(revealedRow == relative(entry) ? ClaudePalette.chip.opacity(0.9) : Color.clear)
+        .background(revealedRow == relative(entry) ? Palette.chip.opacity(0.9) : Color.clear)
     }
 
     private func row(_ entry: FileExplorerEntry) -> some View {
@@ -487,24 +485,24 @@ private struct WorkspaceFilesDirectoryList: View {
         let allHidden = !showHidden && hiddenCount > 0
         return VStack(spacing: 10) {
             Text(allHidden ? "No visible files" : "Empty folder")
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text(allHidden
                  ? "\(hiddenCount) hidden \(hiddenCount == 1 ? "item is" : "items are") dot-prefixed."
                  : "There is nothing to show here yet.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
             if allHidden {
                 Button {
                     Haptics.selection()
                     showHidden = true
                 } label: {
                     Text("Show hidden files")
-                        .font(typography.sans(13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.footnote, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .padding(.horizontal, 18)
-                        .frame(height: 32)
-                        .background(ClaudePalette.chip, in: .capsule)
+                        .frame(minHeight: 32)
+                        .background(Palette.chip, in: .capsule)
                 }
                 .buttonStyle(.plain)
             }
@@ -515,11 +513,11 @@ private struct WorkspaceFilesDirectoryList: View {
     private func errorView(_ message: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 26, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.xlarge, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(message)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
             Button {
@@ -527,11 +525,11 @@ private struct WorkspaceFilesDirectoryList: View {
                 Task { await refresh() }
             } label: {
                 Text("Retry")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .padding(.horizontal, 18)
-                    .frame(height: 32)
-                    .background(ClaudePalette.chip, in: .capsule)
+                    .frame(minHeight: 32)
+                    .background(Palette.chip, in: .capsule)
             }
             .buttonStyle(.plain)
         }
@@ -543,7 +541,7 @@ private struct WorkspaceFilesDirectoryList: View {
         Group {
             if let toast {
                 Text(toast)
-                    .font(typography.sans(13))
+                    .font(.paseo(.footnote))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
                     .glassEffect()
@@ -554,10 +552,10 @@ private struct WorkspaceFilesDirectoryList: View {
     }
 
     private func showToast(_ text: String) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = text }
+        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = text }
         Task {
             try? await Task.sleep(for: .seconds(2))
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = nil }
+            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = nil }
         }
     }
 

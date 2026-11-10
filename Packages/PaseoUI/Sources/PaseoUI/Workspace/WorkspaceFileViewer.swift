@@ -38,7 +38,6 @@ struct WorkspaceFileViewer: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
-    private let typography = ClaudeTypography()
 
     private var files: WorkspaceFiles { checkout.files }
     private var fileName: String { WorkspaceFileFormat.lastComponent(relPath) }
@@ -162,28 +161,28 @@ struct WorkspaceFileViewer: View {
     /// A plain monospaced TextEditor, deliberately without syntax highlighting.
     @ViewBuilder private var editingContent: some View {
         TextEditor(text: Binding(get: { editText ?? "" }, set: { editText = $0 }))
-            .font(typography.mono(WorkspaceCodeView.fontSize))
+            .font(.paseo(.codeSmall))
             .scrollContentBackground(.hidden)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(ClaudePalette.codeBackground)
+            .background(Palette.codeSurface)
             .accessibilityLabel("Edit file contents")
     }
 
     private func saveFailureBanner(_ message: String) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(ClaudePalette.failureInk)
+                .foregroundStyle(Palette.failureInk)
             Text(message)
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.failureInk)
                 .lineLimit(2)
             Spacer(minLength: 8)
             Button {
                 saveFailure = nil
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(width: 26, height: 26)
             }
             .buttonStyle(.plain)
@@ -191,7 +190,7 @@ struct WorkspaceFileViewer: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(ClaudePalette.failureInk.opacity(0.08))
+        .background(Palette.failureInk.opacity(0.08))
     }
 
     private func beginEdit() {
@@ -269,26 +268,26 @@ struct WorkspaceFileViewer: View {
                 onBack()
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
-                    Text(backLabel).font(typography.sans(13)).lineLimit(1)
+                    Image(systemName: "chevron.left").font(.glyph(.small, weight: .semibold))
+                    Text(backLabel).font(.paseo(.footnote)).lineLimit(1)
                 }
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.vertical, 8)
                 .contentShape(.rect)
             }
             .accessibilityLabel("Back to \(backLabel)")
             Spacer(minLength: 4)
             Text(isEditing ? "Editing \(fileName)" : fileName)
-                .font(typography.mono(12))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.codeSmall))
+                .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
             if isEditing {
                 Button("Cancel") { cancelEdit() }
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                    .frame(height: 28)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .frame(minHeight: 28)
                     .accessibilityLabel("Discard edits")
                 Button {
                     Haptics.selection()
@@ -298,9 +297,9 @@ struct WorkspaceFileViewer: View {
                         ProgressView().controlSize(.small).frame(width: 40, height: 28)
                     } else {
                         Text("Save")
-                            .font(typography.sans(13, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.ink)
-                            .frame(height: 28)
+                            .font(.paseo(.footnote, weight: .semibold))
+                            .foregroundStyle(Palette.ink)
+                            .frame(minHeight: 28)
                     }
                 }
                 .disabled(isSaving)
@@ -311,8 +310,8 @@ struct WorkspaceFileViewer: View {
                         mentionInChat(relativePath)
                     } label: {
                         Image(systemName: "at")
-                            .font(.system(size: 15, weight: .light))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.glyph(.regular, weight: .light))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .frame(width: 28, height: 28)
                             .contentShape(.rect)
                     }
@@ -321,8 +320,8 @@ struct WorkspaceFileViewer: View {
                 }
                 if savedFlash || saveSuccessFlash {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.successInk)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.successInk)
                         .frame(width: 28, height: 28)
                         .accessibilityLabel("Saved")
                 } else if canCopy {
@@ -354,8 +353,8 @@ struct WorkspaceFileViewer: View {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.glyph(.regular, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             }
             .frame(width: 28, height: 28)
@@ -371,8 +370,8 @@ struct WorkspaceFileViewer: View {
             beginEdit()
         } label: {
             Image(systemName: "pencil")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.regular, weight: .regular))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(width: 28, height: 28)
                 .contentShape(.rect)
         }
@@ -408,8 +407,8 @@ struct WorkspaceFileViewer: View {
             }
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                .font(.system(size: 15, weight: .light))
-                .foregroundStyle(copied ? ClaudePalette.ink : ClaudePalette.tertiaryInk)
+                .font(.glyph(.regular, weight: .light))
+                .foregroundStyle(copied ? Palette.ink : Palette.tertiaryInk)
                 .frame(width: 28, height: 28)
                 .contentShape(.rect)
         }
@@ -461,12 +460,12 @@ struct WorkspaceFileViewer: View {
                 previewSegment(true, label: "Source")
             }
             .padding(2)
-            .background(ClaudePalette.chip, in: .capsule)
+            .background(Palette.chip, in: .capsule)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(ClaudePalette.background)
+        .background(Palette.background)
     }
 
     private func previewSegment(_ source: Bool, label: String) -> some View {
@@ -476,15 +475,15 @@ struct WorkspaceFileViewer: View {
             if reduceMotion {
                 previewAsSource = source
             } else {
-                withAnimation(.easeOut(duration: 0.18)) { previewAsSource = source }
+                withAnimation(Motion.disclosure.animation) { previewAsSource = source }
             }
         } label: {
             Text(label)
-                .font(typography.sans(12, weight: .medium))
+                .font(.paseo(.caption, weight: .medium))
                 .padding(.horizontal, 12)
-                .frame(height: 28)
-                .foregroundStyle(selected ? ClaudePalette.ink : ClaudePalette.secondaryInk)
-                .background(selected ? ClaudePalette.background : Color.clear, in: .capsule)
+                .frame(minHeight: 28)
+                .foregroundStyle(selected ? Palette.ink : Palette.secondaryInk)
+                .background(selected ? Palette.background : Color.clear, in: .capsule)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -501,7 +500,7 @@ struct WorkspaceFileViewer: View {
             } else {
                 ScrollView {
                     ClaudeMarkdownView(
-                        text, theme: ClaudeProse.theme(typography, bodySize: 14)
+                        text, theme: ClaudeProse.theme(bodySize: 14)
                     ) { action in
                         if case .openLink(let url) = action { openURL(url) }
                     }
@@ -571,14 +570,14 @@ struct WorkspaceFileViewer: View {
     private func unsupportedShareableView(icon: String, title: String, detail: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.hero, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(title)
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text(detail)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
             Button {
                 shareCurrentFile()
@@ -589,11 +588,11 @@ struct WorkspaceFileViewer: View {
                         .padding(.horizontal, 20)
                 } else {
                     Label("Share", systemImage: "square.and.arrow.up")
-                        .font(typography.sans(14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
-                        .frame(height: 36)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
+                        .frame(minHeight: 36)
                         .padding(.horizontal, 16)
-                        .background(ClaudePalette.chip, in: .capsule)
+                        .background(Palette.chip, in: .capsule)
                 }
             }
             .buttonStyle(.plain)
@@ -664,15 +663,15 @@ struct WorkspaceFileViewer: View {
     private func unsupportedView(icon: String, title: String, detail: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.hero, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(title)
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
             Text(detail)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -683,22 +682,22 @@ struct WorkspaceFileViewer: View {
     private func errorView(_ message: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.xlarge, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(message)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
             Button {
                 Haptics.selection()
                 Task { await files.read(relativePath) }
             } label: {
                 Text("Retry")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .padding(.horizontal, 18)
-                    .frame(height: 32)
-                    .background(ClaudePalette.chip, in: .capsule)
+                    .frame(minHeight: 32)
+                    .background(Palette.chip, in: .capsule)
             }
             .buttonStyle(.plain)
         }
@@ -721,7 +720,6 @@ struct WorkspaceCodeView: View {
     let language: String?
 
     @Environment(\.colorScheme) private var colorScheme
-    private let typography = ClaudeTypography()
 
     static let fontSize: CGFloat = 12
     private static let lineSpacing: CGFloat = 6 // 12 + 6 = 18 pt lines
@@ -734,10 +732,10 @@ struct WorkspaceCodeView: View {
                 HStack(alignment: .top, spacing: 12) {
                     // Same font and pitch on both sides: each content line box is exactly one gutter row.
                     if lines.count <= 4000 {
-                        Gutter(count: lines.count, typography: typography)
+                        Gutter(count: lines.count)
                     }
                     Text(highlighted)
-                        .font(typography.mono(Self.fontSize))
+                        .font(.paseo(.codeSmall))
                         .lineSpacing(Self.lineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: true, vertical: true)
@@ -747,6 +745,7 @@ struct WorkspaceCodeView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .scrollBounceBehavior(.basedOnSize)
+        .codeTypeScale()
     }
 
     private var highlighted: AttributedString {
@@ -758,14 +757,13 @@ struct WorkspaceCodeView: View {
 
     private struct Gutter: View {
         let count: Int
-        let typography: ClaudeTypography
 
         var body: some View {
             VStack(alignment: .trailing, spacing: 6) {
                 ForEach(1...max(count, 1), id: \.self) { number in
                     Text(verbatim: String(number))
-                        .font(typography.mono(WorkspaceCodeView.fontSize))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.captionInk)
                         .frame(width: CGFloat(gutterWidth), alignment: .trailing)
                 }
             }
@@ -816,7 +814,7 @@ private struct ZoomableImageView: View {
                         }
                         .onEnded { _ in lastOffset = offset })
                 .onTapGesture(count: 2) {
-                    withAnimation(reduceMotion ? nil : .spring(duration: 0.32)) {
+                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                         if scale > 1 {
                             scale = 1
                             offset = .zero
@@ -828,7 +826,7 @@ private struct ZoomableImageView: View {
                 }
                 .accessibilityLabel("Zoomable image")
         }
-        .background(ClaudePalette.codeBackground)
+        .background(Palette.codeSurface)
     }
 
     private func fittedSize(in size: CGSize) -> CGSize {

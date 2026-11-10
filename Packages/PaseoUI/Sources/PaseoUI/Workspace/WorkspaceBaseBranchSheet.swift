@@ -18,7 +18,6 @@ struct WorkspaceBaseBranchSheet: View {
     @State private var applyError: String?
     @State private var hasLoaded = false
 
-    private let typography = ClaudeTypography()
 
     private var suggestions: [BranchSuggestion] { extras.branchSuggestions }
 
@@ -29,8 +28,8 @@ struct WorkspaceBaseBranchSheet: View {
             searchField
             if let applyError {
                 Text(applyError)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
             }
@@ -38,10 +37,9 @@ struct WorkspaceBaseBranchSheet: View {
                 .frame(maxHeight: .infinity)
             Spacer(minLength: 8)
         }
-        .background(ClaudePalette.background)
+        .background(Palette.background)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .task {
             await extras.loadBranchSuggestions(limit: 50)
             hasLoaded = true
@@ -54,10 +52,10 @@ struct WorkspaceBaseBranchSheet: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.small, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
             TextField("Search branches", text: $searchText)
-                .font(typography.sans(15))
+                .font(.paseo(.callout))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
@@ -67,7 +65,7 @@ struct WorkspaceBaseBranchSheet: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 38)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
         .padding(.horizontal, 16)
     }
 
@@ -77,13 +75,13 @@ struct WorkspaceBaseBranchSheet: View {
         } else if suggestions.isEmpty {
             VStack(spacing: 8) {
                 Text(searchText.isEmpty ? "No branches" : "No matches")
-                    .font(typography.sans(15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Text(searchText.isEmpty
                     ? "The daemon returned no branches."
                     : "Nothing matches “\(searchText)”.")
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -95,18 +93,18 @@ struct WorkspaceBaseBranchSheet: View {
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: "arrow.triangle.branch")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(ClaudePalette.secondaryInk)
+                                    .font(.glyph(.small, weight: .medium))
+                                    .foregroundStyle(Palette.secondaryInk)
                                     .frame(width: 20)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(suggestion.name)
-                                        .font(typography.mono(13))
-                                        .foregroundStyle(ClaudePalette.ink)
+                                        .font(.paseo(.code))
+                                        .foregroundStyle(Palette.ink)
                                         .lineLimit(1)
                                     if suggestion.hasRemote == true && suggestion.hasLocal != true {
                                         Text("Remote only")
-                                            .font(typography.sans(11))
-                                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                                            .font(.paseo(.caption2))
+                                            .foregroundStyle(Palette.tertiaryInk)
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)

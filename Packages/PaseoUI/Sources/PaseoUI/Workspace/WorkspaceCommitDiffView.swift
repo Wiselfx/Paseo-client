@@ -16,7 +16,6 @@ struct WorkspaceCommitDiffView: View {
     @State private var loadingPath: String?
     @State private var loadError: String?
 
-    private let typography = ClaudeTypography()
 
     private var relativeAge: String {
         guard let date = PaseoDate.parse(commit.authorDate) else { return commit.authorDate }
@@ -31,8 +30,8 @@ struct WorkspaceCommitDiffView: View {
             ClaudeDivider()
             if let loadError {
                 Text(loadError)
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.failureInk)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -49,8 +48,8 @@ struct WorkspaceCommitDiffView: View {
                 .padding(.vertical, 4)
             }
         }
-        .background(ClaudePalette.panel)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.panel)
+        .foregroundStyle(Palette.ink)
         .navigationTitle(commit.shortSha)
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $openFile) { file in
@@ -61,21 +60,21 @@ struct WorkspaceCommitDiffView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(commit.subject)
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
                 .lineLimit(2)
             HStack(spacing: 8) {
                 Text(commit.shortSha)
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                 Text("· \(commit.authorName)")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(relativeAge)
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
         }
         .padding(.horizontal, 16)
@@ -90,30 +89,30 @@ struct WorkspaceCommitDiffView: View {
         } label: {
             HStack(spacing: 12) {
                 Text(style.letter)
-                    .font(typography.mono(11, weight: .semibold))
+                    .font(.paseo(.codeCaption, weight: .semibold))
                     .foregroundStyle(style.tint)
                     .frame(width: 22, height: 22)
-                    .background(style.tint.opacity(0.16), in: .rect(cornerRadius: 6))
+                    .background(style.tint.opacity(0.16), in: .rect(cornerRadius: Radius.sm))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(file.path)
-                        .font(typography.mono(12.5))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text("+\(PaseoFormat.integer(file.additions))")
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.successInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.successInk)
                 Text("−\(PaseoFormat.integer(file.deletions))")
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.failureInk)
                 if loadingPath == file.path {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.small, weight: .medium))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
             }
             .padding(.horizontal, 14)
@@ -143,10 +142,10 @@ struct WorkspaceCommitDiffView: View {
 
     private func style(for status: CheckoutCommitFileStatus?) -> (letter: String, tint: Color, word: String) {
         switch status {
-        case .added: return ("A", ClaudePalette.successInk, "Added")
-        case .deleted: return ("D", ClaudePalette.failureInk, "Deleted")
-        case .renamed: return ("R", ClaudePalette.unread, "Renamed")
-        case .modified, .unknown, .none: return ("M", ClaudePalette.warning, "Modified")
+        case .added: return ("A", Palette.successInk, "Added")
+        case .deleted: return ("D", Palette.failureInk, "Deleted")
+        case .renamed: return ("R", Palette.unread, "Renamed")
+        case .modified, .unknown, .none: return ("M", Palette.warning, "Modified")
         }
     }
 }
