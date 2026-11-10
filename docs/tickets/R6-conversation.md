@@ -200,6 +200,10 @@ ticker as today: it runs only while `mascot.state != .sleeping`, and also stops 
 - **Haptics:** send = `Haptics.send()`; turn finished while visible = `Haptics.settle()`
   (existing). No other new haptics.
 
+## 8. Warnings to clear
+
+The Mac build warns at `Conversation/Transcript/ChatWorkGroup.swift:233-234`: `computeSummaryText` / `computeSeatGlyph` are main-actor static methods called from a nonisolated context (P6-F's `WorkGroupDerivedCache`). Make them `nonisolated` (they are pure), so the build has zero warnings in your folders.
+
 ## Proof
 
 - `swiftc -parse` on every touched file.
