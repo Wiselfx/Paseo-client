@@ -302,7 +302,7 @@ struct TranscriptJump: Equatable {
     func copyAgentId() {
         Clipboard.copy(store.agentId)
         Haptics.selection()
-        showToast("Agent id copied")
+        showToast("Agent ID copied")
     }
 
     /// Archive at once when idle; while running, ask first (the existing confirmation text).

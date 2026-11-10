@@ -465,7 +465,7 @@ struct ComposerView: View {
             Button("New agent", systemImage: "plus.bubble") {
                 controller?.newAgent(draft: text)
             }
-            Button("Copy agent id", systemImage: "doc.on.doc") {
+            Button("Copy agent ID", systemImage: "doc.on.doc") {
                 controller?.copyAgentId()
             }
         } label: {

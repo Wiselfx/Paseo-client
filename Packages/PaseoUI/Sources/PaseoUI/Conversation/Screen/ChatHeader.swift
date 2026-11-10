@@ -95,7 +95,7 @@ struct ChatHeaderBar: View {
             Button("Rename…", systemImage: "pencil") {
                 controller.beginRename()
             }
-            Button("Copy agent id", systemImage: "doc.on.doc") {
+            Button("Copy agent ID", systemImage: "doc.on.doc") {
                 controller.copyAgentId()
             }
             Divider()

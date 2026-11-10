@@ -373,9 +373,9 @@ struct ClaudeHistoryView: View {
         }
         Button {
             Clipboard.copy(row.agent.id)
-            toast?.show("Agent id copied")
+            toast?.show("Agent ID copied")
         } label: {
-            Label("Copy agent id", systemImage: "doc.on.doc")
+            Label("Copy agent ID", systemImage: "doc.on.doc")
         }
         Divider()
         if row.archived {
