@@ -180,7 +180,7 @@ struct ClaudeLiveStatusLine: View {
             Spacer(minLength: 0)
         }
         .frame(height: 24)
-        .animation(reduceMotion ? nil : .easeInOut(duration: ClaudeMotion.swap), value: activity)
+        .animation(reduceMotion ? nil : ClaudeEasing.out(duration: ClaudeMotion.swap), value: activity)
         .animation(EdgeDrawer.settleAnimation(reduceMotion: reduceMotion), value: showsOvertime)
         .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
         .onReceive(ticker) { date in
@@ -241,8 +241,10 @@ struct ClaudeSweepText: View {
     }
 }
 
-/// The swap the line trades wordings by: old words leave upward through a 2 pt blur, new words
-/// enter from below, 150 ms ease-in-out with an 8 pt travel.
+/// The swap the line trades wordings by: new words enter from below with a 6 pt rise, old words
+/// leave upward with a 4 pt fall, 0.24 s ease-out. SwiftUI drives both halves of an asymmetric
+/// transition with one animation, so the exit shares the entrance's duration (OCU §12.22 asks
+/// for 0.18 s).
 private struct ClaudeBlurSwap: ViewModifier {
     var blur: CGFloat
     var y: CGFloat
@@ -265,13 +267,13 @@ private struct ClaudeBlurSwap: ViewModifier {
 extension AnyTransition {
     static var claudeWordEntrance: AnyTransition {
         .modifier(
-            active: ClaudeBlurSwap(blur: 2, y: 8, alpha: 0),
+            active: ClaudeBlurSwap(blur: 2, y: 6, alpha: 0),
             identity: ClaudeBlurSwap(blur: 0, y: 0, alpha: 1))
     }
 
     static var claudeWordExit: AnyTransition {
         .modifier(
-            active: ClaudeBlurSwap(blur: 2, y: -8, alpha: 0),
+            active: ClaudeBlurSwap(blur: 2, y: -4, alpha: 0),
             identity: ClaudeBlurSwap(blur: 0, y: 0, alpha: 1))
     }
 }

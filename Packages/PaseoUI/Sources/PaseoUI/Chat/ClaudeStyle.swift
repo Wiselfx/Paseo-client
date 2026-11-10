@@ -265,16 +265,22 @@ struct UnequalMenu: Shape {
 
 /// Motion timings from the DSH motion table, in one place.
 enum ClaudeMotion {
+    /// Official duration tokens (`06:1017`): fast 60, snap 120, base 200, sheet 300, slow 450 ms.
+    static let fast: Double = 0.06
+    static let snap: Double = 0.12
+    static let base: Double = 0.2
+    static let sheet: Double = 0.3
+    static let slow: Double = 0.45
     /// `--dsh-claude-duration-feedback` / reveal / exit.
-    static let feedback: Double = 0.12
+    static let feedback = snap
     /// `--dsh-claude-duration-move`: the height roll on a disclosure.
-    static let move: Double = 0.20
+    static let move = base
     /// `--dsh-claude-duration-roll`: the counted digits.
     static let roll: Double = 0.16
-    /// The wording swap: 150 ms per half with a 50 ms gap.
-    static let swap: Double = 0.15
+    /// The wording swap: the status line's enter/exit pair (OCU §12.22).
+    static let swap: Double = 0.24
     /// `--dsh-claude-duration-open`: the overtime badge.
-    static let open: Double = 0.25
+    static let open = sheet
     /// `--dsh-claude-period-hold` / status sweep.
     static let statusPeriod: Double = 1.5
     /// `--dsh-claude-duration-host-sweep-delay`: the band waits this long after the words appear.
@@ -292,13 +298,27 @@ enum ClaudeMotion {
     /// 10 s of silence before "No response yet".
     static let overtime: Double = 10
     /// `--dsh-claude-duration-rise`: the home greeting rising into place.
-    static let rise: Double = 0.5
+    static let rise = slow
     /// `--dsh-claude-duration-stagger`: the second entrance starts this much later.
     static let stagger: Double = 0.07
     /// `--dsh-claude-distance-rise`.
     static let riseDistance: CGFloat = 12
     /// `--dsh-claude-blur-enter`.
     static let enterBlur: CGFloat = 3
+}
+
+/// Official easing tokens (`06:366-368`). UX-SPEC §0.4 keeps every animation critically damped,
+/// so the OCU overshoot easing is deliberately not adopted.
+enum ClaudeEasing {
+    /// `cubic-bezier(.165,.84,.44,1)`.
+    static func out(duration: Double) -> Animation {
+        .timingCurve(0.165, 0.84, 0.44, 1, duration: duration)
+    }
+
+    /// `cubic-bezier(.32,.72,0,1)`.
+    static func snap(duration: Double) -> Animation {
+        .timingCurve(0.32, 0.72, 0, 1, duration: duration)
+    }
 }
 
 /// "Completed in 4s", "Worked for 2m 10s".

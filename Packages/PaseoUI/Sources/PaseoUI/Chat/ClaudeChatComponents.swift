@@ -106,7 +106,7 @@ struct ClaudeCopyButton: View {
             Haptics.selection()
             copied = true
             Task {
-                try? await Task.sleep(for: .seconds(1.5))
+                try? await Task.sleep(for: .seconds(2.5))
                 copied = false
             }
         } label: {
@@ -122,8 +122,8 @@ struct ClaudeCopyButton: View {
 }
 
 /// What you said: the ClaudeUI bubble, trailing, with a pending state while the daemon confirms it.
-/// A message sent this session grows into place (scale 0.96 + fade, DSH chat-send);
-/// Reduce Motion fades. History bubbles never animate.
+/// A message sent this session rises 10 pt into place (fade-up, OCU §12.20); Reduce Motion fades.
+/// History bubbles never animate.
 ///
 /// Long-press → "Rewind to here" appears only once the provider acknowledged the message
 /// (`rewindChoices` non-empty). The actual rewind confirm lives in the transcript.
@@ -185,13 +185,9 @@ struct ClaudeUserBubble: View {
             bubble
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .scaleEffect(shownScale, anchor: .bottomTrailing)
+        .offset(y: shownOffset)
         .opacity(shownOpacity)
-        .animation(
-            reduceMotion
-                ? .easeOut(duration: 0.2)
-                : .timingCurve(0.22, 1, 0.36, 1, duration: 0.2),
-            value: entered)
+        .animation(ClaudeEasing.out(duration: ClaudeMotion.base), value: entered)
         .onAppear { entered = true }
     }
 
@@ -254,8 +250,8 @@ struct ClaudeUserBubble: View {
         }
     }
 
-    private var shownScale: CGFloat {
-        entered || reduceMotion ? 1 : 0.96
+    private var shownOffset: CGFloat {
+        entered || reduceMotion ? 0 : 10
     }
 
     private var shownOpacity: Double {
