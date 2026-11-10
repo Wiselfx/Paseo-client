@@ -9,7 +9,6 @@ import UIKit
 struct WorkspacePRSection: View {
     let session: HostSession
     let checkout: CheckoutStore
-    private let typography = ClaudeTypography()
 
     @Environment(\.openURL) private var openURL
     @Environment(\.mentionInChat) private var mentionInChat
@@ -31,8 +30,8 @@ struct WorkspacePRSection: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     Text("Pull request")
-                        .font(typography.sans(13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
                     Spacer(minLength: 8)
                 }
                 .padding(.horizontal, 16)
@@ -57,14 +56,14 @@ struct WorkspacePRSection: View {
                 tint: stateTint(status))
             VStack(alignment: .leading, spacing: 4) {
                 Text("#\(String(status.number ?? 0)) · \(status.title)")
-                    .font(typography.sans(15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 if let decision = reviewDecisionLine(status) {
                     Text(decision)
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -84,12 +83,12 @@ struct WorkspacePRSection: View {
     }
 
     private func stateTint(_ status: CheckoutPrStatus) -> Color {
-        if status.isMerged { return ClaudePalette.unread }
-        if status.isDraft == true { return ClaudePalette.secondaryInk }
+        if status.isMerged { return Palette.unread }
+        if status.isDraft == true { return Palette.secondaryInk }
         switch status.state.uppercased() {
-        case "OPEN": return ClaudePalette.successInk
-        case "CLOSED": return ClaudePalette.tertiaryInk
-        default: return ClaudePalette.secondaryInk
+        case "OPEN": return Palette.successInk
+        case "CLOSED": return Palette.tertiaryInk
+        default: return Palette.secondaryInk
         }
     }
 
@@ -103,8 +102,8 @@ struct WorkspacePRSection: View {
     private func checksBlock(_ status: CheckoutPrStatus) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Checks")
-                .font(typography.sans(12, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.caption, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
             ForEach(Array(status.checks.enumerated()), id: \.offset) { _, check in
@@ -112,8 +111,8 @@ struct WorkspacePRSection: View {
             }
             if let rollup = checksRollup(status.checks) {
                 Text(rollup)
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
             }
@@ -131,25 +130,25 @@ struct WorkspacePRSection: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: passing ? "checkmark.circle.fill" : failing ? "xmark.circle.fill" : "circle.dashed")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(passing ? ClaudePalette.successInk : failing ? ClaudePalette.failureInk : ClaudePalette.warning)
+                    .font(.glyph(.regular, weight: .medium))
+                    .foregroundStyle(passing ? Palette.successInk : failing ? Palette.failureInk : Palette.warning)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(check.name)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     if let workflow = check.workflow, !workflow.isEmpty {
                         Text(workflow)
-                            .font(typography.sans(11))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.caption2))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if let duration = check.duration, !duration.isEmpty {
                     Text(duration)
-                        .font(typography.mono(11))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             }
             .padding(.horizontal, 16)
@@ -213,16 +212,16 @@ struct WorkspacePRSection: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.up.right.square")
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.regular, weight: .regular))
+                    .foregroundStyle(Palette.secondaryInk)
                 Text("Open on \(forge)")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Spacer(minLength: 8)
                 if let repoOwner = status.repoOwner, let repoName = status.repoName {
                     Text("\(repoOwner)/\(repoName)")
-                        .font(typography.mono(11))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -265,8 +264,8 @@ struct WorkspacePRSection: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Text("Activity")
-                    .font(typography.sans(12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                 Spacer(minLength: 8)
                 if timeline.isLoading {
                     ProgressView().controlSize(.mini)
@@ -275,8 +274,8 @@ struct WorkspacePRSection: View {
                         Task { await loadTimeline(status) }
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.glyph(.small, weight: .medium))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .frame(width: 28, height: 28)
                             .contentShape(.rect)
                     }
@@ -293,8 +292,8 @@ struct WorkspacePRSection: View {
             } else if reviews.isEmpty && standaloneComments.isEmpty && unknownItems.isEmpty {
                 if !timeline.isLoading {
                     Text("No reviews yet.")
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 10)
                 }
@@ -310,15 +309,15 @@ struct WorkspacePRSection: View {
                 }
                 ForEach(unknownItems, id: \.self) { kind in
                     Text("Unsupported item · \(kind)")
-                        .font(typography.mono(11))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.captionInk)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 4)
                 }
                 if timeline.truncated {
                     Text("Only some items are shown.")
-                        .font(typography.sans(11))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.caption2))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 4)
                 }
@@ -330,17 +329,17 @@ struct WorkspacePRSection: View {
     private func errorRow(_ error: PullRequestTimelineError) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(ClaudePalette.failureInk)
+                .foregroundStyle(Palette.failureInk)
             Text(error.message.isEmpty ? fallbackMessage(for: error.kind) : error.message)
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(2)
             Spacer(minLength: 8)
             Button("Retry") {
                 Task { if let status { await loadTimeline(status) } }
             }
-            .font(typography.sans(12, weight: .medium))
-            .foregroundStyle(ClaudePalette.ink)
+            .font(.paseo(.caption, weight: .medium))
+            .foregroundStyle(Palette.ink)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -368,19 +367,19 @@ struct WorkspacePRSection: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(review.author)
-                        .font(typography.sans(13, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.footnote, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     VerdictPill(verdict: review.reviewState)
                     Spacer(minLength: 4)
                     Text(relativeTime(review.createdAt))
-                        .font(typography.sans(11))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.caption2))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 if !review.body.isEmpty {
                     Text(review.body)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(2)
                 }
                 if mentionInChat != nil {
@@ -398,7 +397,7 @@ struct WorkspacePRSection: View {
         HStack(alignment: .top, spacing: 12) {
             if indented {
                 Rectangle()
-                    .fill(ClaudePalette.divider)
+                    .fill(Palette.divider)
                     .frame(width: 2)
                     .padding(.vertical, 2)
             } else {
@@ -407,22 +406,22 @@ struct WorkspacePRSection: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(comment.author)
-                        .font(typography.sans(13, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.footnote, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     Spacer(minLength: 4)
                     Text(relativeTime(comment.createdAt))
-                        .font(typography.sans(11))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.caption2))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 Text(comment.body)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(2)
                 if let location = comment.location {
                     Text("\((location.path as NSString).lastPathComponent):\(PaseoFormat.integer(location.line ?? 0))")
-                        .font(typography.mono(11))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .lineLimit(1)
                 }
                 if mentionInChat != nil {
@@ -440,11 +439,11 @@ struct WorkspacePRSection: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: "at")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.glyph(.small, weight: .medium))
                 Text("Add to chat")
-                    .font(typography.sans(11, weight: .medium))
+                    .font(.paseo(.caption2, weight: .medium))
             }
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.vertical, 2)
             .contentShape(.rect)
         }
@@ -510,10 +509,10 @@ private struct AuthorAvatar: View {
 
     var body: some View {
         Text(String(author.prefix(1)).uppercased())
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .font(.paseo(.footnote, weight: .semibold))
+            .foregroundStyle(Palette.secondaryInk)
             .frame(width: 28, height: 28)
-            .background(ClaudePalette.chip, in: .circle)
+            .background(Palette.chip, in: .circle)
             .accessibilityHidden(true)
     }
 }
@@ -523,7 +522,7 @@ private struct VerdictPill: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.paseo(.caption2, weight: .semibold))
             .lineLimit(1)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
@@ -542,10 +541,10 @@ private struct VerdictPill: View {
 
     private var tint: Color {
         switch verdict {
-        case .approved: ClaudePalette.successInk
-        case .changesRequested: ClaudePalette.failureInk
-        case .commented: ClaudePalette.secondaryInk
-        case .unknown: ClaudePalette.secondaryInk
+        case .approved: Palette.successInk
+        case .changesRequested: Palette.failureInk
+        case .commented: Palette.secondaryInk
+        case .unknown: Palette.secondaryInk
         }
     }
 }
@@ -556,7 +555,7 @@ private struct StatePill: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.paseo(.caption2, weight: .semibold))
             .lineLimit(1)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

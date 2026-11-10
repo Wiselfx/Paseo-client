@@ -86,7 +86,6 @@ struct ClaudeHomeHero: View {
     @State private var markIn = false
     @State private var greetingIn = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let typography = ClaudeTypography()
 
     private var greeting: String { ClaudeGreeting.pick(username: name, draw: draw) }
 
@@ -103,14 +102,14 @@ struct ClaudeHomeHero: View {
 
             VStack(spacing: 8) {
                 Text(greeting)
-                    .font(typography.serif(26, relativeTo: .title))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.largeTitle))
+                    .foregroundStyle(Palette.ink)
                     .multilineTextAlignment(.center)
                     .accessibilityIdentifier("home.greeting")
                 if let hint {
                     Text(hint)
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .multilineTextAlignment(.center)
                 }
             }
@@ -120,16 +119,16 @@ struct ClaudeHomeHero: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if reduceMotion {
-                withAnimation(.easeOut(duration: ClaudeMotion.rise)) {
+                withAnimation(Motion.settle.animation) {
                     markIn = true
                     greetingIn = true
                 }
             } else {
                 withAnimation(
-                    .timingCurve(0.22, 1, 0.36, 1, duration: ClaudeMotion.rise)
+                    Motion.settle.animation
                 ) { markIn = true }
                 withAnimation(
-                    .timingCurve(0.22, 1, 0.36, 1, duration: ClaudeMotion.rise)
+                    Motion.settle.animation
                         .delay(ClaudeMotion.stagger)
                 ) { greetingIn = true }
             }

@@ -15,7 +15,6 @@ struct ProviderDetailSheet: View {
     @State private var modelError: String?
     @State private var diagnosticCopied = false
 
-    private let typography = ClaudeTypography()
 
     private var entry: ProviderSnapshotEntry? { session.agentControl.provider(providerID) }
     private var diagnostic: HostSettingsStore.ProviderDiagnosticState? {
@@ -43,11 +42,10 @@ struct ProviderDetailSheet: View {
             .scrollIndicators(.hidden)
             refreshBar
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .task {
             if diagnostic == nil {
                 _ = await session.hostSettings.providerDiagnostic(providerID)
@@ -69,10 +67,10 @@ struct ProviderDetailSheet: View {
                 PaseoStatusDot(kind: dotKind)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(statusTitle)
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     Text(statusDetail)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
@@ -86,8 +84,8 @@ struct ProviderDetailSheet: View {
             if let error = entry?.error, !error.isEmpty {
                 RowDivider()
                 Text(error)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -98,15 +96,15 @@ struct ProviderDetailSheet: View {
     private func statusRow(symbol: String, title: String, detail: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .light))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.glyph(.regular, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
                 .frame(width: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 17))
+                    .font(.paseo(.body))
                 Text(detail)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
@@ -179,10 +177,10 @@ struct ProviderDetailSheet: View {
             switch diagnostic {
             case .loading, .none:
                 HStack(spacing: 10) {
-                    ProgressView().controlSize(.small).tint(ClaudePalette.ink)
+                    ProgressView().controlSize(.small).tint(Palette.ink)
                     Text("Running diagnostic…")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 52)
@@ -198,8 +196,8 @@ struct ProviderDetailSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             ScrollView {
                 Text(text.isEmpty ? "The daemon returned an empty diagnostic." : text)
-                    .font(typography.mono(11.5, relativeTo: .caption))
-                    .foregroundStyle(isFailure ? ClaudePalette.failureInk : ClaudePalette.ink)
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(isFailure ? Palette.failureInk : Palette.ink)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
@@ -217,7 +215,7 @@ struct ProviderDetailSheet: View {
                 } label: {
                     Label(diagnosticCopied ? "Copied" : "Copy",
                           systemImage: diagnosticCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.paseo(.footnote, weight: .medium))
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("settings.providers.diagnostic.copy")
@@ -226,7 +224,7 @@ struct ProviderDetailSheet: View {
                     Task { _ = await session.hostSettings.providerDiagnostic(providerID) }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.paseo(.footnote, weight: .medium))
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("settings.providers.diagnostic.refresh")
@@ -243,11 +241,11 @@ struct ProviderDetailSheet: View {
         RowGroup {
             if discoveredModels.isEmpty {
                 Text(emptyDiscoveredText)
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
-                    .frame(height: 52)
+                    .frame(minHeight: 52)
             } else {
                 ForEach(Array(discoveredModels.enumerated()), id: \.element.id) { index, model in
                     discoveredModelRow(model)
@@ -256,8 +254,8 @@ struct ProviderDetailSheet: View {
             }
         }
         Text("Models the daemon probes for this provider. Read-only; the daemon owns the catalogue.")
-            .font(.system(size: 13))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.footnote))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
     }
 
@@ -267,29 +265,29 @@ struct ProviderDetailSheet: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
                     Text(model.label)
-                        .font(.system(size: 17))
-                        .foregroundStyle(unavailable ? ClaudePalette.secondary : ClaudePalette.ink)
+                        .font(.paseo(.body))
+                        .foregroundStyle(unavailable ? Palette.secondaryInk : Palette.ink)
                         .lineLimit(1)
                     if model.isDefault == true {
                         Text("Default")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.caption2, weight: .semibold))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 5)
-                            .background(ClaudePalette.chip, in: .capsule)
+                            .background(Palette.chip, in: .capsule)
                     }
                     if unavailable {
                         Text("Unavailable")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.caption2, weight: .semibold))
+                            .foregroundStyle(Palette.failureInk)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 5)
-                            .background(ClaudePalette.chip, in: .capsule)
+                            .background(Palette.chip, in: .capsule)
                     }
                 }
                 Text(model.id)
-                    .font(typography.mono(12, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -313,11 +311,11 @@ struct ProviderDetailSheet: View {
         RowGroup {
             if customModels.isEmpty {
                 Text("No custom models. Add one below.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
-                    .frame(height: 52)
+                    .frame(minHeight: 52)
             } else {
                 ForEach(Array(customModels.enumerated()), id: \.element.id) { index, model in
                     customModelRow(model)
@@ -329,13 +327,13 @@ struct ProviderDetailSheet: View {
         }
         if let modelError {
             Text(modelError)
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.failureInk)
                 .padding(.leading, 16)
         }
         Text("Custom models live in the daemon's config, merged into this provider's catalogue.")
-            .font(.system(size: 13))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.footnote))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
     }
 
@@ -343,11 +341,11 @@ struct ProviderDetailSheet: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.label)
-                    .font(.system(size: 17))
+                    .font(.paseo(.body))
                     .lineLimit(1)
                 Text(model.id)
-                    .font(typography.mono(12, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -357,8 +355,8 @@ struct ProviderDetailSheet: View {
                 removeCustomModel(model)
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 17, weight: .light))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.regular, weight: .light))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
@@ -373,7 +371,7 @@ struct ProviderDetailSheet: View {
     private var addCustomModelRow: some View {
         HStack(spacing: 12) {
             TextField("Model ID", text: $newModelID)
-                .font(typography.mono(13, relativeTo: .body))
+                .font(.paseo(.code))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
@@ -382,9 +380,9 @@ struct ProviderDetailSheet: View {
                 Haptics.selection()
                 addCustomModel()
             }
-            .font(.system(size: 15, weight: .semibold))
+            .font(.paseo(.callout, weight: .semibold))
             .foregroundStyle(newModelID.trimmingCharacters(in: .whitespaces).isEmpty
-                ? ClaudePalette.secondary : ClaudePalette.ink)
+                ? Palette.secondaryInk : Palette.ink)
             .disabled(newModelID.trimmingCharacters(in: .whitespaces).isEmpty)
             .accessibilityIdentifier("settings.providers.custom.add")
         }
@@ -442,11 +440,11 @@ struct ProviderDetailSheet: View {
                 Label(
                     session.agentControl.phase == .loading ? "Refreshing…" : "Refresh",
                     systemImage: "arrow.clockwise")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.background)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.background)
                     .padding(.horizontal, 17)
-                    .frame(height: 44)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .frame(minHeight: 44)
+                    .background(Palette.ink, in: .capsule)
                     .opacity(session.agentControl.phase == .loading ? 0.7 : 1)
             }
             .buttonStyle(.plain)
@@ -462,8 +460,8 @@ struct ProviderDetailSheet: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

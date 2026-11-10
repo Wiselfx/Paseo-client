@@ -11,7 +11,6 @@ struct WorkspaceSetupSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var isRerunning = false
-    private let typography = ClaudeTypography()
 
     private var snapshot: WorkspaceSetupSnapshot? {
         session.setupObservation.snapshot(for: workspace.id)
@@ -35,14 +34,14 @@ struct WorkspaceSetupSheet: View {
                     if let blocked = snapshot?.blockedSource { blockedRow(blocked) }
                     if let error = snapshot?.error, !error.isEmpty {
                         Text(error)
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.failureInk)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if let message = session.setupObservation.error {
                         Text(message)
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.failureInk)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     runAgainButton
@@ -52,11 +51,10 @@ struct WorkspaceSetupSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .task { await session.setupObservation.refresh(workspace.id) }
     }
 
@@ -67,12 +65,12 @@ struct WorkspaceSetupSheet: View {
             StatusGlyph(status: snapshot?.status)
             VStack(alignment: .leading, spacing: 2) {
                 Text(statusText)
-                    .font(typography.sans(15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 if let branch = snapshot?.detail.branchName, !branch.isEmpty {
                     Text(branch)
-                        .font(typography.mono(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
             }
@@ -99,12 +97,12 @@ struct WorkspaceSetupSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 ClaudeDivider()
                 Text("Worktree")
-                    .font(typography.sans(11, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption2, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.top, 6)
                 Text(path)
-                    .font(typography.mono(11))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -116,15 +114,15 @@ struct WorkspaceSetupSheet: View {
     private func logCard(_ log: String) -> some View {
         ScrollView([.horizontal, .vertical]) {
             Text(log)
-                .font(typography.mono(11))
-                .foregroundStyle(ClaudePalette.primaryInk)
+                .font(.paseo(.codeCaption))
+                .foregroundStyle(Palette.ink)
                 .lineSpacing(3)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxHeight: 180)
         .padding(10)
-        .background(ClaudePalette.codeSurface, in: .rect(cornerRadius: 12))
+        .background(Palette.codeSurface, in: .rect(cornerRadius: Radius.md))
     }
 
     private func commandsList(_ commands: [WorkspaceSetupCommand]) -> some View {
@@ -134,22 +132,22 @@ struct WorkspaceSetupSheet: View {
                     CommandStatusGlyph(status: command.status, exitCode: command.exitCode)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(command.command)
-                            .font(typography.mono(12))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.codeSmall))
+                            .foregroundStyle(Palette.ink)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         if !command.log.isEmpty {
                             Text(command.log.trimmingCharacters(in: .whitespacesAndNewlines))
-                                .font(typography.sans(11))
-                                .foregroundStyle(ClaudePalette.secondaryInk)
+                                .font(.paseo(.caption2))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .lineLimit(2)
                         }
                     }
                     Spacer(minLength: 8)
                     if let duration = command.durationMs {
                         Text("\(PaseoFormat.integer(duration)) ms")
-                            .font(typography.mono(10))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.tertiaryInk)
                     }
                 }
                 .padding(.vertical, 6)
@@ -164,15 +162,15 @@ struct WorkspaceSetupSheet: View {
     private func blockedRow(_ source: WorkspaceSetupBlockedSource) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "clock.badge.exclamationmark")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(ClaudePalette.warning)
+                .font(.glyph(.small, weight: .medium))
+                .foregroundStyle(Palette.warning)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Blocked on change request")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Text("\(source.forge) #\(String(source.number)) · \(source.headRepository)")
-                    .font(typography.mono(11))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -197,15 +195,15 @@ struct WorkspaceSetupSheet: View {
                     .frame(height: 44)
             } else {
                 Text("Run setup again")
-                    .font(typography.sans(15, weight: .semibold))
+                    .font(.paseo(.callout, weight: .semibold))
                     .foregroundStyle(
-                        capabilities.run ? ClaudePalette.background : ClaudePalette.secondaryInk)
+                        capabilities.run ? Palette.background : Palette.secondaryInk)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(minHeight: 44)
             }
         }
         .background(
-            ClaudePalette.ink.opacity(capabilities.run ? 1 : 0.35), in: .capsule)
+            Palette.ink.opacity(capabilities.run ? 1 : 0.35), in: .capsule)
         .disabled(!capabilities.run || isRerunning)
         .accessibilityLabel("Run setup again")
         .padding(.top, 4)
@@ -218,19 +216,19 @@ private struct StatusGlyph: View {
     var body: some View {
         switch status {
         case .running:
-            ProgressView().controlSize(.small).tint(ClaudePalette.secondaryInk)
+            ProgressView().controlSize(.small).tint(Palette.secondaryInk)
         case .completed:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(ClaudePalette.successInk)
+                .foregroundStyle(Palette.successInk)
         case .failed:
             Image(systemName: "xmark.circle.fill")
-                .foregroundStyle(ClaudePalette.failureInk)
+                .foregroundStyle(Palette.failureInk)
         case .blocked:
             Image(systemName: "clock.badge.exclamationmark")
-                .foregroundStyle(ClaudePalette.warning)
+                .foregroundStyle(Palette.warning)
         default:
             Image(systemName: "questionmark.circle")
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .foregroundStyle(Palette.tertiaryInk)
         }
     }
 }
@@ -243,25 +241,25 @@ private struct CommandStatusGlyph: View {
         Group {
             switch status {
             case .running:
-                ProgressView().controlSize(.mini).tint(ClaudePalette.secondaryInk)
+                ProgressView().controlSize(.mini).tint(Palette.secondaryInk)
             case .completed:
                 if (exitCode ?? 0) == 0 {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.successInk)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.successInk)
                 } else {
                     Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.failureInk)
                 }
             case .failed:
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.failureInk)
             case .unknown:
                 Image(systemName: "questionmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
         }
         .frame(width: 18, height: 18)

@@ -49,10 +49,10 @@ struct PaseoTerminalView: UIViewRepresentable {
         let scrollback = PaseoTerminalScrollback.current()
         view.changeScrollback(scrollback)
         context.coordinator.appliedScrollback = scrollback
-        // ClaudePalette's #141413 in dark mode; used in light mode too so the terminal always
-        // reads as a terminal.
-        view.nativeForegroundColor = UIColor(red: 0.949, green: 0.937, blue: 0.914, alpha: 1)
-        view.nativeBackgroundColor = UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 1)
+        // The palette's ink on its canvas, in both schemes, so the terminal always reads as a
+        // terminal.
+        view.nativeForegroundColor = UIColor(Palette.ink)
+        view.nativeBackgroundColor = UIColor(Palette.background)
         context.coordinator.view = view
         // The virtual key bar replaces SwiftTerm's built-in one: our keys, our haptics.
         view.inputAccessoryView = context.coordinator.makeKeyBar(for: view)

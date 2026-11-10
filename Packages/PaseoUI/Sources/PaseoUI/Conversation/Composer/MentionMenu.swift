@@ -124,7 +124,6 @@ struct MentionMenu: View {
     let isBuilding: Bool
     let onPick: (MentionIndexRow) -> Void
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         ComposerMenuContainer(accessibilityIdentifier: "composer.mentionMenu") {
@@ -132,8 +131,8 @@ struct MentionMenu: View {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("Loading files…")
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 .padding(.horizontal, 14)
                 .frame(height: 46)
@@ -158,19 +157,19 @@ struct MentionMenu: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: row.isDirectory ? "folder" : "doc")
-                    .font(.system(size: 15, weight: .light))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.regular, weight: .light))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 20)
                 Text("@" + row.path.trimmingSuffix(while: { $0 == "/" }))
-                    .font(typography.mono(12.5))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
                 if row.isDirectory {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.small, weight: .medium))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
             }
             .padding(.horizontal, 14)

@@ -21,9 +21,9 @@ extension ClaudeChatView {
                 }
                 if queue.count > 3 {
                     Text("+\(PaseoFormat.integer(queue.count - 3)) more")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
-                        .frame(height: 24)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.tertiaryInk)
+                        .frame(minHeight: 24)
                         .padding(.leading, 27)
                         .accessibilityLabel("\(queue.count - 3) more queued messages")
                 }
@@ -37,11 +37,11 @@ extension ClaudeChatView {
     func queuedMessageRow(_ message: MessageQueue.QueuedMessage) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "clock")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.small, weight: .medium))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(message.text)
-                .font(typography.sans(14))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 0)
@@ -50,8 +50,8 @@ extension ClaudeChatView {
                 editQueuedMessage(message)
             } label: {
                 Image(systemName: "pencil")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
@@ -61,8 +61,8 @@ extension ClaudeChatView {
                 sendQueuedNow(message)
             } label: {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
@@ -85,7 +85,7 @@ extension ClaudeChatView {
         guard !text.isEmpty else { return }
         composerQueue.mutate(store.agentId) { _ = $0.enqueue(text) }
         store.draft = ""
-        QueueHaptics.mediumImpact()
+        Haptics.medium()
     }
 
     /// A turn ended: dequeue the head and send it (steers when the next turn is already running).

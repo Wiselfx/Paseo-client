@@ -17,7 +17,6 @@ public struct WelcomeView<DirectForm: View>: View {
     @State private var stage: Stage = .welcome
     @State private var showAppearance = false
 
-    private let typography = ClaudeTypography()
 
     enum Stage { case welcome, directForm }
 
@@ -45,9 +44,9 @@ public struct WelcomeView<DirectForm: View>: View {
                                 Image(systemName: "chevron.left")
                                 Text("Welcome")
                             }
-                            .font(typography.sans(16, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
-                            .frame(height: 44)
+                            .font(.paseo(.callout, weight: .medium))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .frame(minHeight: 44)
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
@@ -60,8 +59,8 @@ public struct WelcomeView<DirectForm: View>: View {
                 }
             }
         }
-        .background(ClaudePalette.background.ignoresSafeArea())
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background.ignoresSafeArea())
+        .foregroundStyle(Palette.ink)
         .sheet(isPresented: $showAppearance) { WelcomeAppearanceSheet() }
     }
 
@@ -72,13 +71,13 @@ public struct WelcomeView<DirectForm: View>: View {
             VStack(spacing: 24) {
                 Spacer(minLength: 48)
                 Text("Paseo")
-                    .font(typography.serif(56, relativeTo: .largeTitle))
+                    .font(.paseo(.hero))
                 VStack(spacing: 8) {
                     Text("Welcome to Paseo")
-                        .font(typography.serif(24))
+                        .font(.paseo(.largeTitle))
                     Text("Connect your computer to get started")
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                     Button {
                         Haptics.selection()
                         if let url = URL(string: "https://paseo.sh") { openURL(url) }
@@ -86,10 +85,10 @@ public struct WelcomeView<DirectForm: View>: View {
                         HStack(spacing: 4) {
                             Text("paseo.sh")
                             Image(systemName: "arrow.up.right")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.glyph(.small, weight: .semibold))
                         }
-                        .font(typography.sans(14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink.opacity(0.75))
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink.opacity(0.75))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("welcome.site")
@@ -113,16 +112,16 @@ public struct WelcomeView<DirectForm: View>: View {
                     showAppearance = true
                 } label: {
                     Label("Appearance", systemImage: "circle.lefthalf.filled")
-                        .font(typography.sans(15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .frame(height: 40)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .frame(minHeight: 40)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("welcome.settings")
                 Spacer()
                 Text(versionLine)
-                    .font(typography.mono(11, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.captionInk)
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.captionInk)
                     .padding(.bottom, 14)
             }
             .padding(.horizontal, 32)
@@ -158,26 +157,26 @@ public struct WelcomeView<DirectForm: View>: View {
     private func tileContent(title: String, description: String, symbol: String) -> some View {
         HStack(spacing: 14) {
             Image(systemName: symbol)
-                .font(.system(size: 18, weight: .light))
-                .foregroundStyle(ClaudePalette.background)
+                .font(.glyph(.regular, weight: .light))
+                .foregroundStyle(Palette.background)
                 .frame(width: 34, height: 34)
-                .background(ClaudePalette.ink, in: .circle)
+                .background(Palette.ink, in: .circle)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(typography.sans(17, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.body, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Text(description)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             Spacer(minLength: 8)
             Image(systemName: "chevron.right")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.regular))
+                .foregroundStyle(Palette.secondaryInk)
         }
         .padding(.horizontal, 18)
         .frame(height: 68)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 20))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
         .contentShape(.rect)
     }
 
@@ -195,12 +194,11 @@ public struct WelcomeView<DirectForm: View>: View {
 /// The pre-connect Settings entry: appearance and text sizes, using the same keys as the
 /// general settings page. The full Settings screen needs a host (it is host-scoped).
 private struct WelcomeAppearanceSheet: View {
-    @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
+    @AppStorage(ClaudeAppearance.storageKey) private var appearance = ClaudeAppearance.system.rawValue
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
     @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
 
     @Environment(\.dismiss) private var dismiss
-    private let typography = ClaudeTypography()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -217,15 +215,15 @@ private struct WelcomeAppearanceSheet: View {
                                     tilePreview(choice)
                                         .frame(height: 64)
                                         .overlay {
-                                            RoundedRectangle(cornerRadius: 14).stroke(
-                                                appearance == choice.rawValue ? Color.blue : .clear,
+                                            RoundedRectangle(cornerRadius: Radius.md).stroke(
+                                                appearance == choice.rawValue ? Palette.selection : .clear,
                                                 lineWidth: 2)
                                         }
                                     Text(choice.rawValue)
-                                        .font(.system(size: 12))
+                                        .font(.paseo(.caption))
                                         .foregroundStyle(
                                             appearance == choice.rawValue
-                                                ? .blue : ClaudePalette.secondaryInk)
+                                                ? Palette.selection : Palette.secondaryInk)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -244,25 +242,24 @@ private struct WelcomeAppearanceSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.height(380)])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     @ViewBuilder
     private func tilePreview(_ choice: ClaudeAppearance) -> some View {
         switch choice {
         case .light:
-            ZStack { Color(white: 0.97); bars(dark: true) }
+            ZStack { Palette.Swatch.light; bars(dark: true) }
         case .dark:
-            ZStack { Color(white: 0.08); bars(dark: false) }
+            ZStack { Palette.Swatch.dark; bars(dark: false) }
         case .pureBlack:
-            ZStack { Color(white: 0); bars(dark: false) }
+            ZStack { Palette.Swatch.pureBlack; bars(dark: false) }
         case .system:
             ZStack {
-                HStack(spacing: 0) { Color(white: 0.97); Color(white: 0.08) }
+                HStack(spacing: 0) { Palette.Swatch.light; Palette.Swatch.dark }
                 bars(dark: true)
             }
         }
@@ -279,7 +276,7 @@ private struct WelcomeAppearanceSheet: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .clipShape(.rect(cornerRadius: 14))
+        .clipShape(.rect(cornerRadius: Radius.md))
     }
 
     private func scaleRow<Option: CaseIterable & RawRepresentable & Equatable>(
@@ -288,7 +285,7 @@ private struct WelcomeAppearanceSheet: View {
     ) -> some View where Option.RawValue == String {
         HStack {
             Text(title)
-                .font(.system(size: 17))
+                .font(.paseo(.body))
             Spacer(minLength: 8)
             Menu {
                 ForEach(Array(options), id: \.rawValue) { option in
@@ -304,17 +301,17 @@ private struct WelcomeAppearanceSheet: View {
             } label: {
                 HStack(spacing: 5) {
                     Text(current)
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             }
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
     }
 }
 #endif

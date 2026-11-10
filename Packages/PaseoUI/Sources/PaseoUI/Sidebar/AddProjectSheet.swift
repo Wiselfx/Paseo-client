@@ -25,7 +25,6 @@ struct AddProjectSheet: View {
     @State private var destination = ""
     @State private var cloneProtocol: GithubCloneProtocol = .https
     @State private var searchTask: Task<Void, Never>?
-    private let typography = ClaudeTypography()
 
     enum Mode: String, CaseIterable, Identifiable {
         case folder
@@ -66,11 +65,10 @@ struct AddProjectSheet: View {
                 cloneBar(repository: selected)
             }
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     // MARK: Mode picker
@@ -83,19 +81,19 @@ struct AddProjectSheet: View {
                     mode = choice
                 } label: {
                     Text(choice.title)
-                        .font(typography.sans(14, weight: mode == choice ? .medium : .regular))
+                        .font(.paseo(.callout, weight: mode == choice ? .medium : .regular))
                         .foregroundStyle(
-                            mode == choice ? ClaudePalette.background : ClaudePalette.ink)
+                            mode == choice ? Palette.background : Palette.ink)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
+                        .frame(minHeight: 32)
                         .background(
-                            mode == choice ? ClaudePalette.ink : Color.clear, in: .capsule)
+                            mode == choice ? Palette.ink : Color.clear, in: .capsule)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(3)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
         .padding(.top, 4)
     }
 
@@ -110,13 +108,13 @@ struct AddProjectSheet: View {
             RowGroup {
                 HStack(spacing: 12) {
                     Text("Path")
-                        .font(typography.sans(17))
+                        .font(.paseo(.body))
                     Spacer(minLength: 8)
                     TextField(
                         "", text: $path,
-                        prompt: Text("~/dev/my-app").foregroundStyle(ClaudePalette.secondary)
+                        prompt: Text("~/dev/my-app").foregroundStyle(Palette.secondaryInk)
                     )
-                    .font(typography.mono(13))
+                    .font(.paseo(.code))
                     .multilineTextAlignment(.trailing)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -125,13 +123,13 @@ struct AddProjectSheet: View {
                 .frame(height: 52)
             }
             Text("The host registers an existing folder as a project. Nothing is created on disk.")
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.captionInk)
                 .padding(.leading, 4)
             if let actionError = directory.actionError {
                 Text(actionError)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 4)
             }
@@ -144,15 +142,15 @@ struct AddProjectSheet: View {
         } label: {
             HStack(spacing: 8) {
                 if directory.isAddingProject {
-                    ProgressView().controlSize(.small).tint(ClaudePalette.background)
+                    ProgressView().controlSize(.small).tint(Palette.background)
                 }
                 Text(directory.isAddingProject ? "Adding…" : "Add project")
-                    .font(typography.sans(16, weight: .medium))
+                    .font(.paseo(.callout, weight: .medium))
             }
             .frame(maxWidth: .infinity)
             .frame(height: 48)
-            .foregroundStyle(ClaudePalette.background)
-            .background(ClaudePalette.ink, in: .capsule)
+            .foregroundStyle(Palette.background)
+            .background(Palette.ink, in: .capsule)
             .opacity(canAdd ? 1 : 0.4)
         }
         .buttonStyle(.plain)
@@ -183,8 +181,8 @@ struct AddProjectSheet: View {
                 searchField
             } else {
                 Text("This host cannot search GitHub repositories.")
-                    .font(typography.sans(15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.vertical, 24)
             }
             if selected == nil {
@@ -198,13 +196,13 @@ struct AddProjectSheet: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.glyph(.regular))
+                .foregroundStyle(Palette.secondaryInk)
             TextField(
                 "", text: $search,
-                prompt: Text("Search repositories…").foregroundStyle(ClaudePalette.secondary)
+                prompt: Text("Search repositories…").foregroundStyle(Palette.tertiaryInk)
             )
-            .font(typography.sans(17))
+            .font(.paseo(.body))
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
             .onChange(of: search) { _, query in scheduleSearch(query) }
@@ -217,8 +215,8 @@ struct AddProjectSheet: View {
                     results = []
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.regular))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear")
@@ -226,7 +224,7 @@ struct AddProjectSheet: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 44)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
         .padding(.top, 2)
     }
 
@@ -234,22 +232,22 @@ struct AddProjectSheet: View {
         switch searchState {
         case .idle:
             Text("Search your repositories to clone one.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.captionInk)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 24)
         case .searching:
             EmptyView()
         case .empty:
             Text("No repositories match “\(search)”.")
-                .font(typography.sans(15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 24)
         case .failed(let message):
             Text(message)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.failureInk)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 16)
         }
@@ -272,26 +270,26 @@ struct AddProjectSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(repo.nameWithOwner)
-                        .font(typography.sans(15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     if repo.visibility == .private {
                         Text("Private")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.caption2, weight: .semibold))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(ClaudePalette.chip, in: .capsule)
+                            .background(Palette.chip, in: .capsule)
                     }
                     Spacer(minLength: 4)
                     Text(WorkspaceFileFormat.relativeModified(repo.updatedAt))
-                        .font(typography.sans(11))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.caption2))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 if let description = repo.description, !description.isEmpty {
                     Text(description)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(2)
                 }
             }
@@ -312,11 +310,11 @@ struct AddProjectSheet: View {
                     selected = nil
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "chevron.left").font(.system(size: 12, weight: .semibold))
+                        Image(systemName: "chevron.left").font(.glyph(.small, weight: .semibold))
                         Text("All repositories")
-                            .font(typography.sans(13, weight: .medium))
+                            .font(.paseo(.footnote, weight: .medium))
                     }
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.vertical, 4)
                     .contentShape(.rect)
                 }
@@ -326,23 +324,23 @@ struct AddProjectSheet: View {
             if let selected {
                 HStack(spacing: 6) {
                     Image(systemName: "shippingbox")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.glyph(.regular))
+                        .foregroundStyle(Palette.secondaryInk)
                     Text(selected.nameWithOwner)
-                        .font(typography.sans(15, weight: .medium))
+                        .font(.paseo(.callout, weight: .medium))
                         .lineLimit(1)
                 }
             }
             RowGroup {
                 HStack(spacing: 12) {
                     Text("Into")
-                        .font(typography.sans(15))
+                        .font(.paseo(.callout))
                     Spacer(minLength: 8)
                     TextField(
                         "", text: $destination,
-                        prompt: Text("~/src/repo").foregroundStyle(ClaudePalette.secondary)
+                        prompt: Text("~/src/repo").foregroundStyle(Palette.secondaryInk)
                     )
-                    .font(typography.mono(13))
+                    .font(.paseo(.code))
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .multilineTextAlignment(.trailing)
@@ -352,7 +350,7 @@ struct AddProjectSheet: View {
                 RowDivider()
                 HStack {
                     Text("Protocol")
-                        .font(typography.sans(15))
+                        .font(.paseo(.callout))
                     Spacer(minLength: 8)
                     Picker("Protocol", selection: $cloneProtocol) {
                         Text("HTTPS").tag(GithubCloneProtocol.https)
@@ -366,8 +364,8 @@ struct AddProjectSheet: View {
             }
             if let actionError = directory.actionError {
                 Text(actionError)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -379,15 +377,15 @@ struct AddProjectSheet: View {
         } label: {
             HStack(spacing: 8) {
                 if directory.isCloning {
-                    ProgressView().controlSize(.small).tint(ClaudePalette.background)
+                    ProgressView().controlSize(.small).tint(Palette.background)
                 }
                 Text(directory.isCloning ? "Cloning…" : "Clone")
-                    .font(typography.sans(16, weight: .medium))
+                    .font(.paseo(.callout, weight: .medium))
             }
             .frame(maxWidth: .infinity)
             .frame(height: 48)
-            .foregroundStyle(ClaudePalette.background)
-            .background(ClaudePalette.ink, in: .capsule)
+            .foregroundStyle(Palette.background)
+            .background(Palette.ink, in: .capsule)
             .opacity(canCloneRepository(repository) ? 1 : 0.4)
         }
         .buttonStyle(.plain)

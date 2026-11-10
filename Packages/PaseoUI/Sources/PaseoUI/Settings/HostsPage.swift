@@ -12,7 +12,6 @@ struct HostsPage: View {
     @State private var renameText = ""
     @State private var forgetTarget: HostSwitchEntry?
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         ScrollView {
@@ -21,8 +20,8 @@ struct HostsPage: View {
                 if hosts.isEmpty {
                     RowGroup {
                         Text("No saved hosts yet. Every successful connection is remembered here, with its password kept in this device's Keychain.")
-                            .font(.system(size: 15))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 14)
@@ -37,8 +36,8 @@ struct HostsPage: View {
                     }
                 }
                 Text("Passwords are stored per host in this device's Keychain, never in plain settings. Forgetting a host removes its password too.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
             }
             .padding(.horizontal, 16)
@@ -70,20 +69,20 @@ struct HostsPage: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(host.label)
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                         .lineLimit(1)
                     if host.isCurrent {
                         Text("Current")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.caption2, weight: .semibold))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 5)
-                            .background(ClaudePalette.chip, in: .capsule)
+                            .background(Palette.chip, in: .capsule)
                     }
                 }
                 Text(host.urlLine)
-                    .font(typography.mono(12, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let lastConnectedAt = host.lastConnectedAt {
@@ -91,12 +90,12 @@ struct HostsPage: View {
                         host.isCurrent
                             ? "Connected now"
                             : "Last connected \(Self.relative(lastConnectedAt))")
-                        .font(.system(size: 12))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.captionInk)
                 } else {
                     Text("Never connected on this device")
-                        .font(.system(size: 12))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.captionInk)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -106,7 +105,7 @@ struct HostsPage: View {
                 renameTarget = host
             } label: {
                 Image(systemName: "pencil")
-                    .font(.system(size: 17, weight: .light))
+                    .font(.glyph(.regular, weight: .light))
                     .frame(width: 38, height: 44)
                     .contentShape(.rect)
             }
@@ -118,8 +117,8 @@ struct HostsPage: View {
                 forgetTarget = host
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 17, weight: .light))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.regular, weight: .light))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(width: 38, height: 44)
                     .contentShape(.rect)
             }
@@ -137,7 +136,7 @@ struct HostsPage: View {
             SheetHeader(title: "Rename host", close: { renameTarget = nil })
             RowGroup {
                 TextField("Label", text: $renameText)
-                    .font(typography.sans(17))
+                    .font(.paseo(.body))
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
                     .onSubmit { saveRename(target) }
@@ -149,11 +148,11 @@ struct HostsPage: View {
                 saveRename(target)
             } label: {
                 Text("Save")
-                    .font(typography.sans(16, weight: .medium))
+                    .font(.paseo(.callout, weight: .medium))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .foregroundStyle(ClaudePalette.background)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .frame(minHeight: 48)
+                    .foregroundStyle(Palette.background)
+                    .background(Palette.ink, in: .capsule)
                     .opacity(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
             }
             .buttonStyle(.plain)
@@ -162,11 +161,10 @@ struct HostsPage: View {
             .accessibilityIdentifier("settings.hosts.rename.save")
             Spacer(minLength: 0)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.height(240)])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     private func saveRename(_ target: HostSwitchEntry) {
@@ -183,8 +181,8 @@ struct HostsPage: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

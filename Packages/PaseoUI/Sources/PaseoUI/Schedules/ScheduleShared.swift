@@ -9,11 +9,11 @@ struct ScheduleStatePill: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 11, weight: .medium))
+            .font(.paseo(.caption2, weight: .medium))
             .foregroundStyle(ink)
             .padding(.horizontal, 8)
             .frame(height: 18)
-            .background(ink.opacity(0.16), in: .rect(cornerRadius: 5))
+            .background(ink.opacity(0.16), in: .rect(cornerRadius: Radius.xs))
             .accessibilityLabel(label)
     }
 
@@ -30,10 +30,10 @@ struct ScheduleStatePill: View {
 
     private var ink: Color {
         switch state {
-        case .active: ClaudePalette.successInk
-        case .paused: ClaudePalette.warning
-        case .expired, .finished, .unknown: ClaudePalette.secondaryInk
-        case .targetGone: ClaudePalette.failureInk
+        case .active: Palette.successInk
+        case .paused: Palette.warning
+        case .expired, .finished, .unknown: Palette.secondaryInk
+        case .targetGone: Palette.failureInk
         }
     }
 }

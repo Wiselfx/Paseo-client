@@ -19,10 +19,10 @@ extension ClaudeChatView {
             composerCard
         }
         .padding(.horizontal, 8)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: slashQuery != nil)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: mentionQuery != nil)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isQueueNonEmpty)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: fastModeActive)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: slashQuery != nil)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: mentionQuery != nil)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: isQueueNonEmpty)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: fastModeActive)
     }
 
     var composerCard: some View {
@@ -34,8 +34,8 @@ extension ClaudeChatView {
                 dictationDeniedBanner
                 if let error = store.actionError {
                     Text(error)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.horizontal, 8)
                         .transition(.opacity)
                 }
@@ -92,11 +92,11 @@ extension ClaudeChatView {
         if dictation.isDenied {
             HStack(spacing: 8) {
                 Image(systemName: "mic.slash")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small))
+                    .foregroundStyle(Palette.failureInk)
                 Text("Dictation is off. Enable Microphone and Speech Recognition in Settings.")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.failureInk)
                     .lineLimit(2)
                 Spacer(minLength: 4)
                 Button("Settings") {
@@ -104,8 +104,8 @@ extension ClaudeChatView {
                         openURL(url)
                     }
                 }
-                .font(typography.sans(12, weight: .semibold))
-                .foregroundStyle(ClaudePalette.orange)
+                .font(.paseo(.caption, weight: .semibold))
+                .foregroundStyle(Palette.orange)
                 .accessibilityLabel("Open Settings")
                 .accessibilityIdentifier("composer.dictation.settings")
             }
@@ -118,16 +118,16 @@ extension ClaudeChatView {
         TextField(
             "", text: $store.draft,
             prompt: Text(composerPrompt)
-                .foregroundStyle(ClaudePalette.secondaryInk),
+                .foregroundStyle(Palette.secondaryInk),
             axis: .vertical
         )
-        .font(typography.sans(ClaudeTypography.chatBodySize))
+        .font(.paseo(.body))
         // V5 §3: grow to the cap, then scroll inside the field — the controls row below always
         // stays above the keyboard.
         .lineLimit(1...composerFieldLineLimit)
         .fixedSize(horizontal: false, vertical: true)
         .focused($focused)
-        .tint(ClaudePalette.orange)
+        .tint(Palette.orange)
         .padding(.horizontal, 6)
         .padding(.top, 7)
         .accessibilityIdentifier("composer.draft")
@@ -166,10 +166,10 @@ extension ClaudeChatView {
             }
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 18, weight: .regular))
+                .font(.glyph(.regular, weight: .regular))
                 .frame(width: 36, height: 36)
-                .foregroundStyle(ClaudePalette.ink)
-                .background(ClaudePalette.chip, in: .circle)
+                .foregroundStyle(Palette.ink)
+                .background(Palette.chip, in: .circle)
         }
         .accessibilityLabel("Add to agent")
     }
@@ -194,7 +194,7 @@ extension ClaudeChatView {
 
     @ViewBuilder var composerSendControl: some View {
         if store.isRunning && trimmedDraft.isEmpty {
-            roundButton("stop.fill", label: "Stop response", color: ClaudePalette.ink, ink: ClaudePalette.background) {
+            roundButton("stop.fill", label: "Stop response", color: Palette.ink, ink: Palette.background) {
                 Task { await store.cancel() }
             }
             .accessibilityIdentifier("composer.stop")
@@ -326,10 +326,10 @@ extension ClaudeChatView {
                 toggleVoiceMode()
             } label: {
                 Image(systemName: voiceActiveForAgent && voice.isMuted ? "mic.slash.fill" : "waveform.and.mic")
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.glyph(.regular, weight: .medium))
                     .frame(width: 36, height: 36)
-                    .foregroundStyle(voiceActiveForAgent ? .white : ClaudePalette.ink)
-                    .background(voiceActiveForAgent ? ClaudePalette.orange : ClaudePalette.chip, in: .circle)
+                    .foregroundStyle(voiceActiveForAgent ? .white : Palette.ink)
+                    .background(voiceActiveForAgent ? Palette.orange : Palette.chip, in: .circle)
             }
             .accessibilityLabel(
                 voiceActiveForAgent
@@ -347,10 +347,10 @@ extension ClaudeChatView {
                 voice.setMuted(!voice.isMuted)
             } label: {
                 Image(systemName: voice.isMuted ? "mic.slash.fill" : "mic.fill")
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.glyph(.regular, weight: .medium))
                     .frame(width: 36, height: 36)
                     .foregroundStyle(.white)
-                    .background(voice.isMuted ? ClaudePalette.failureInk : ClaudePalette.chip, in: .circle)
+                    .background(voice.isMuted ? Palette.failureInk : Palette.chip, in: .circle)
             }
             .accessibilityLabel(voice.isMuted ? "Unmute voice" : "Mute voice")
             .accessibilityIdentifier("composer.voice.mute")
@@ -359,7 +359,7 @@ extension ClaudeChatView {
                 ForEach(0..<5, id: \.self) { index in
                     let height = [8.0, 13.0, 18.0, 13.0, 8.0][index]
                     Capsule()
-                        .fill(ClaudePalette.ink.opacity(0.85))
+                        .fill(Palette.ink.opacity(0.85))
                         .frame(width: 4, height: height * CGFloat(max(0.15, voice.volume) + 0.05))
                         .scaleEffect(y: voice.isMuted ? 0.3 : 1, anchor: .center)
                 }
@@ -375,10 +375,10 @@ extension ClaudeChatView {
                 Task { await voice.stop() }
             } label: {
                 Image(systemName: "stop.fill")
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.glyph(.regular, weight: .medium))
                     .frame(width: 36, height: 36)
                     .foregroundStyle(.white)
-                    .background(ClaudePalette.failureInk, in: .circle)
+                    .background(Palette.failureInk, in: .circle)
             }
             .accessibilityLabel("Stop realtime voice and interrupt turn")
             .accessibilityIdentifier("composer.voice.stop")
@@ -445,10 +445,10 @@ extension ClaudeChatView {
                 showFullScreenComposer = true
             } label: {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 28, height: 28)
-                    .background(ClaudePalette.chip, in: .circle)
+                    .background(Palette.chip, in: .circle)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
@@ -491,14 +491,14 @@ extension ClaudeChatView {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.glyph(.small, weight: .semibold))
                     Text("Fast")
-                        .font(typography.sans(13, weight: .semibold))
+                        .font(.paseo(.footnote, weight: .semibold))
                 }
-                .foregroundStyle(ClaudePalette.ink)
+                .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 12)
                 .frame(height: 36)
-                .background(ClaudePalette.chip, in: .capsule)
+                .background(Palette.chip, in: .capsule)
             }
             .accessibilityLabel("Fast mode on; turn off")
             .accessibilityIdentifier("composer.fastmode")
@@ -592,7 +592,7 @@ extension ClaudeChatView {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 17, weight: .medium))
+                .font(.glyph(.regular, weight: .medium))
                 .frame(width: 36, height: 36)
                 .foregroundStyle(ink)
                 .background(color, in: .circle)
@@ -627,10 +627,10 @@ extension ClaudeChatView {
     }
 
     func showToast(_ text: String) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = text }
+        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = text }
         Task {
             try? await Task.sleep(for: .seconds(2.5))
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = nil }
+            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = nil }
         }
     }
 }
@@ -723,12 +723,12 @@ struct ComposerCardChrome: ViewModifier {
             .padding(.vertical, expanded ? 8 : 0)
             .frame(minHeight: 48)
             .background(
-                ClaudePalette.composer,
-                in: .rect(cornerRadius: expanded ? 27 : 24, style: .continuous)
+                Palette.composer,
+                in: .rect(cornerRadius: Radius.group, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: expanded ? 27 : 24, style: .continuous)
-                    .stroke(ClaudePalette.composerBorder, lineWidth: 0.7)
+                RoundedRectangle(cornerRadius: Radius.group, style: .continuous)
+                    .stroke(Palette.composerBorder, lineWidth: 0.7)
             }
     }
 }
@@ -751,7 +751,6 @@ struct ComposerModelChip: View {
     var providerIconSvg: String?
     var action: () -> Void
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         Button(action: action) {
@@ -761,15 +760,15 @@ struct ComposerModelChip: View {
                 }
                 Text(modelLabel)
                 if let thinkingLabel {
-                    Text(thinkingLabel).foregroundStyle(ClaudePalette.secondaryInk)
+                    Text(thinkingLabel).foregroundStyle(Palette.secondaryInk)
                 }
             }
-            .font(typography.sans(14))
-            .foregroundStyle(ClaudePalette.ink)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.ink)
             .lineLimit(1)
             .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(ClaudePalette.chip, in: .capsule)
+            .frame(minHeight: 36)
+            .background(Palette.chip, in: .capsule)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Model, thinking and mode")
@@ -798,7 +797,7 @@ struct ProviderGlyph: View {
     var body: some View {
         if let icon {
             ProviderIconShape(icon: icon)
-                .fill(ClaudePalette.secondaryInk)
+                .fill(Palette.secondaryInk)
                 .frame(width: 16, height: 16)
                 .accessibilityHidden(true)
         } else {
@@ -808,10 +807,10 @@ struct ProviderGlyph: View {
 
     private var monogramTile: some View {
         Text(monogram)
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .font(.paseo(.caption2, weight: .semibold))
+            .foregroundStyle(Palette.secondaryInk)
             .frame(width: 16, height: 16)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 4, style: .continuous))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.xs, style: .continuous))
             .accessibilityHidden(true)
     }
 
@@ -837,12 +836,12 @@ struct ComposerMicButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: isListening ? "mic.fill" : "mic")
-                .font(.system(size: 17, weight: .medium))
+                .font(.glyph(.regular, weight: .medium))
                 .frame(width: 36, height: 36)
-                .foregroundStyle(isListening ? ClaudePalette.background : ClaudePalette.ink)
-                .background(isListening ? ClaudePalette.ink : ClaudePalette.chip, in: .circle)
+                .foregroundStyle(isListening ? Palette.background : Palette.ink)
+                .background(isListening ? Palette.ink : Palette.chip, in: .circle)
                 .scaleEffect(scale)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: level)
+                .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: level)
         }
         .accessibilityLabel(isListening ? "Stop dictation" : "Dictate")
         .accessibilityIdentifier("composer.dictate")
@@ -867,16 +866,15 @@ struct DictationOverlay: View {
     let onAccept: () -> Void
     let onAcceptAndSend: () -> Void
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         HStack(spacing: 12) {
             Button(action: onCancel) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.glyph(.regular, weight: .medium))
                     .frame(width: 36, height: 36)
-                    .foregroundStyle(ClaudePalette.ink)
-                    .background(ClaudePalette.chip, in: .circle)
+                    .foregroundStyle(Palette.ink)
+                    .background(Palette.chip, in: .circle)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Cancel dictation")
@@ -884,9 +882,9 @@ struct DictationOverlay: View {
 
             meter
             Text(formattedDuration)
-                .font(typography.sans(15, weight: .semibold))
+                .font(.paseo(.callout, weight: .semibold))
                 .monospacedDigit()
-                .foregroundStyle(ClaudePalette.ink)
+                .foregroundStyle(Palette.ink)
                 .accessibilityIdentifier("composer.dictation.timer")
 
             Spacer(minLength: 0)
@@ -907,7 +905,7 @@ struct DictationOverlay: View {
             ForEach(0..<5, id: \.self) { index in
                 let height = [8.0, 13.0, 18.0, 13.0, 8.0][index]
                 Capsule()
-                    .fill(ClaudePalette.ink.opacity(0.85))
+                    .fill(Palette.ink.opacity(0.85))
                     .frame(width: 4, height: height * CGFloat(max(0.15, level) + 0.05))
             }
         }
@@ -920,10 +918,10 @@ struct DictationOverlay: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.glyph(.regular, weight: .semibold))
                 .frame(width: 36, height: 36)
-                .foregroundStyle(ClaudePalette.background)
-                .background(ClaudePalette.ink, in: .circle)
+                .foregroundStyle(Palette.background)
+                .background(Palette.ink, in: .circle)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

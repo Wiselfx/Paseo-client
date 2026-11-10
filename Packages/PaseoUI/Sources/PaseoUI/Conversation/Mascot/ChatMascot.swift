@@ -132,7 +132,7 @@ extension ClaudeChatView {
                             }
                     }
                 }
-                .animation(.easeOut(duration: 0.18), value: showCostBubble)
+                .animation(Motion.disclosure.animation, value: showCostBubble)
                 .offset(y: -72)
         }
     }
@@ -140,25 +140,25 @@ extension ClaudeChatView {
     private func costBubble(usage: ContextUsage) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Session cost")
-                .font(.system(size: 11))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.caption2))
+                .foregroundStyle(Palette.secondaryInk)
             if let cost = usage.totalCostUsd {
                 Text(ClaudeContextSheet.cost(cost))
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
             }
             if let tokens = tokenTotal(usage) {
                 Text("\(PaseoFormat.integer(tokens)) tokens")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 12))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(ClaudePalette.cardBorder, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Session cost")

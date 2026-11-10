@@ -46,7 +46,6 @@ struct WorkspaceChangesView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.mentionInChat) private var mentionInChat
 
-    private let typography = ClaudeTypography()
 
     /// The modern-diff helper for this checkout. Idempotent: the same instance is returned while
     /// the workspace is open. Created through the store (never constructed by hand).
@@ -170,15 +169,15 @@ struct WorkspaceChangesView: View {
                             ForEach(files) { file in
                                 Button(shortFileName(file.path)) {
                                     Haptics.selection()
-                                    withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+                                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                                         proxy.scrollTo(file.id, anchor: .top)
                                     }
                                 }
                             }
                         } label: {
                             Image(systemName: "list.bullet")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(ClaudePalette.ink)
+                                .font(.glyph(.regular, weight: .medium))
+                                .foregroundStyle(Palette.ink)
                                 .frame(width: 44, height: 44)
                                 .glassEffect()
                         }
@@ -191,12 +190,12 @@ struct WorkspaceChangesView: View {
             .refreshable { await reload() }
             actionBar
         }
-        .background(ClaudePalette.panel)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.panel)
+        .foregroundStyle(Palette.ink)
         .overlay(alignment: .bottom) {
             if let toast {
                 Text(toast)
-                    .font(typography.sans(13))
+                    .font(.paseo(.footnote))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
                     .glassEffect()
@@ -327,11 +326,11 @@ struct WorkspaceChangesView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "paperplane")
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.glyph(.small, weight: .medium))
                                 Text("Send feedback (\(PaseoFormat.integer(reviewDraftCount)))")
-                                    .font(typography.sans(13, weight: .semibold))
+                                    .font(.paseo(.footnote, weight: .semibold))
                             }
-                            .foregroundStyle(ClaudePalette.background)
+                            .foregroundStyle(Palette.background)
                             .padding(.leading, 14)
                             .padding(.trailing, 12)
                             .frame(height: 34)
@@ -356,24 +355,24 @@ struct WorkspaceChangesView: View {
                                 }
                             } label: {
                                 Image(systemName: "chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(ClaudePalette.background)
+                                    .font(.glyph(.small, weight: .semibold))
+                                    .foregroundStyle(Palette.background)
                                     .frame(height: 34)
                                     .padding(.trailing, 10)
                             }
                             .accessibilityLabel("Choose an agent to send feedback")
                         }
                     }
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .background(Palette.ink, in: .capsule)
                 } else {
                     Text("Open an agent in this workspace to send feedback.")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 if let feedbackError {
                     Text(feedbackError)
-                        .font(typography.sans(11))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.caption2))
+                        .foregroundStyle(Palette.failureInk)
                         .lineLimit(2)
                 }
             }
@@ -381,15 +380,15 @@ struct WorkspaceChangesView: View {
             if !staleReviewDrafts.isEmpty {
                 HStack(spacing: 6) {
                     Text("\(PaseoFormat.integer(staleReviewDrafts.count)) comments no longer match this diff")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                     Button("Clear") {
                         Haptics.selection()
                         for stale in staleReviewDrafts {
                             WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: stale.id)
                         }
                     }
-                    .font(typography.sans(12, weight: .medium))
+                    .font(.paseo(.caption, weight: .medium))
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear stale comments")
                     .accessibilityIdentifier("changes.staleDrafts.clear")
@@ -444,8 +443,8 @@ struct WorkspaceChangesView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.regular, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                 VStack(alignment: .leading, spacing: 2) {
                     branchTitle
                     HStack(spacing: 8) {
@@ -458,8 +457,8 @@ struct WorkspaceChangesView: View {
                     Task { await reload() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.glyph(.regular, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
@@ -486,12 +485,12 @@ struct WorkspaceChangesView: View {
             } label: {
                 HStack(spacing: 6) {
                     Text(branchLabel)
-                        .font(typography.mono(13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.code, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 .contentShape(.rect)
             }
@@ -500,8 +499,8 @@ struct WorkspaceChangesView: View {
             .accessibilityIdentifier("changes.branchSwitcher")
         } else {
             Text(branchLabel)
-                .font(typography.mono(13, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.code, weight: .medium))
+                .foregroundStyle(Palette.ink)
                 .lineLimit(1)
         }
     }
@@ -510,18 +509,18 @@ struct WorkspaceChangesView: View {
         if let aheadBehind = checkout.aheadBehind {
             if aheadBehind.ahead > 0 {
                 HStack(spacing: 3) {
-                    Image(systemName: "arrow.up").font(.system(size: 10, weight: .semibold))
-                    Text("\(PaseoFormat.integer(aheadBehind.ahead))").font(typography.mono(12))
+                    Image(systemName: "arrow.up").font(.glyph(.small, weight: .semibold))
+                    Text("\(PaseoFormat.integer(aheadBehind.ahead))").font(.paseo(.codeSmall))
                 }
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .foregroundStyle(Palette.secondaryInk)
                 .accessibilityLabel("\(aheadBehind.ahead) commits ahead")
             }
             if aheadBehind.behind > 0 {
                 HStack(spacing: 3) {
-                    Image(systemName: "arrow.down").font(.system(size: 10, weight: .semibold))
-                    Text("\(PaseoFormat.integer(aheadBehind.behind))").font(typography.mono(12))
+                    Image(systemName: "arrow.down").font(.glyph(.small, weight: .semibold))
+                    Text("\(PaseoFormat.integer(aheadBehind.behind))").font(.paseo(.codeSmall))
                 }
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .foregroundStyle(Palette.secondaryInk)
                 .accessibilityLabel("\(aheadBehind.behind) commits behind")
             }
         }
@@ -540,7 +539,7 @@ struct WorkspaceChangesView: View {
                         Circle().fill(checksTint(badge.checks)).frame(width: 7, height: 7)
                     }
                     Text(badgeLabel(badge))
-                        .font(typography.sans(11, weight: .semibold))
+                        .font(.paseo(.caption2, weight: .semibold))
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 9)
@@ -554,18 +553,18 @@ struct WorkspaceChangesView: View {
     }
 
     private func badgeTint(_ badge: PullRequestBadge) -> Color {
-        if badge.isDraft, badge.isOpen { return ClaudePalette.secondaryInk }
-        if badge.isMerged { return ClaudePalette.unread }
-        if badge.isOpen { return ClaudePalette.successInk }
-        return ClaudePalette.tertiaryInk
+        if badge.isDraft, badge.isOpen { return Palette.secondaryInk }
+        if badge.isMerged { return Palette.unread }
+        if badge.isOpen { return Palette.successInk }
+        return Palette.tertiaryInk
     }
 
     private func checksTint(_ checks: PullRequestBadge.Checks) -> Color {
         switch checks {
-        case .passing: ClaudePalette.successInk
-        case .failing: ClaudePalette.failureInk
-        case .pending: ClaudePalette.warning
-        case .none, .unknown: ClaudePalette.secondaryInk
+        case .passing: Palette.successInk
+        case .failing: Palette.failureInk
+        case .pending: Palette.warning
+        case .none, .unknown: Palette.secondaryInk
         }
     }
 
@@ -584,7 +583,7 @@ struct WorkspaceChangesView: View {
             compareSegment(.base, label: baseRef.map { "vs \($0)" } ?? "vs base")
         }
         .padding(2)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -596,12 +595,12 @@ struct WorkspaceChangesView: View {
             compare = value
         } label: {
             Text(label)
-                .font(typography.sans(12, weight: .medium))
+                .font(.paseo(.caption, weight: .medium))
                 .lineLimit(1)
                 .padding(.horizontal, 12)
-                .frame(height: 28)
-                .foregroundStyle(selected ? ClaudePalette.background : ClaudePalette.secondaryInk)
-                .background(selected ? ClaudePalette.ink : Color.clear, in: .capsule)
+                .frame(minHeight: 28)
+                .foregroundStyle(selected ? Palette.background : Palette.secondaryInk)
+                .background(selected ? Palette.ink : Color.clear, in: .capsule)
         }
         .buttonStyle(.plain)
         .accessibilityValue(selected ? "Selected" : "")
@@ -612,18 +611,18 @@ struct WorkspaceChangesView: View {
     private var summary: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(files.isEmpty ? "" : "\(files.count) \(files.count == 1 ? "file" : "files") changed")
-                .font(typography.sans(13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
             Spacer()
             if !files.isEmpty {
                 Text("+\(PaseoFormat.integer(extras.additions))")
-                    .foregroundStyle(ClaudePalette.successInk)
+                    .foregroundStyle(Palette.successInk)
                 Text("−\(PaseoFormat.integer(extras.deletions))")
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .foregroundStyle(Palette.failureInk)
             }
         }
-        .font(typography.mono(12))
-        .foregroundStyle(ClaudePalette.secondaryInk)
+        .font(.paseo(.codeSmall))
+        .foregroundStyle(Palette.secondaryInk)
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 8)
@@ -637,30 +636,30 @@ struct WorkspaceChangesView: View {
             VStack(spacing: 12) {
                 ProgressView()
                 Text("Loading changes…")
-                    .font(typography.sans(14))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 64)
         case .failed(let message):
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.hero, weight: .light))
+                    .foregroundStyle(Palette.failureInk)
                 Text(message)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                 Button {
                     Task { await reloadDiff() }
                 } label: {
                     Text("Retry")
-                        .font(typography.sans(14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .padding(.horizontal, 18)
-                        .frame(height: 44)
-                        .background(ClaudePalette.chip, in: .capsule)
+                        .frame(minHeight: 44)
+                        .background(Palette.chip, in: .capsule)
                 }
                 .buttonStyle(.plain)
             }
@@ -669,14 +668,14 @@ struct WorkspaceChangesView: View {
         case .ready:
             VStack(spacing: 10) {
                 Image(systemName: "checkmark.circle")
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.hero, weight: .light))
+                    .foregroundStyle(Palette.tertiaryInk)
                 Text("No changes")
-                    .font(typography.sans(16, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Text(emptySubtitle)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 64)
@@ -700,34 +699,34 @@ struct WorkspaceChangesView: View {
         } label: {
             HStack(spacing: 12) {
                 Text(style.letter)
-                    .font(typography.mono(11, weight: .semibold))
+                    .font(.paseo(.codeCaption, weight: .semibold))
                     .foregroundStyle(style.tint)
                     .frame(width: 22, height: 22)
-                    .background(style.tint.opacity(0.16), in: .rect(cornerRadius: 6))
+                    .background(style.tint.opacity(0.16), in: .rect(cornerRadius: Radius.sm))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(file.path)
-                        .font(typography.mono(12.5))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let oldPath = file.oldPath {
                         Text("from \(oldPath)")
-                            .font(typography.mono(10))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text("+\(PaseoFormat.integer(file.additions))")
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.successInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.successInk)
                 Text("−\(PaseoFormat.integer(file.deletions))")
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.failureInk)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -759,10 +758,10 @@ struct WorkspaceChangesView: View {
     }
 
     private func statusStyle(for file: ParsedDiffFile) -> (letter: String, tint: Color, word: String) {
-        if file.oldPath != nil { return ("R", ClaudePalette.unread, "Renamed") }
-        if file.isNew { return ("A", ClaudePalette.successInk, "Added") }
-        if file.isDeleted { return ("D", ClaudePalette.failureInk, "Deleted") }
-        return ("M", ClaudePalette.warning, "Modified")
+        if file.oldPath != nil { return ("R", Palette.unread, "Renamed") }
+        if file.isNew { return ("A", Palette.successInk, "Added") }
+        if file.isDeleted { return ("D", Palette.failureInk, "Deleted") }
+        return ("M", Palette.warning, "Modified")
     }
 
     // MARK: Action bar
@@ -791,7 +790,7 @@ struct WorkspaceChangesView: View {
             .padding(.top, 10)
             .padding(.bottom, 12)
         }
-        .background(ClaudePalette.panel)
+        .background(Palette.panel)
     }
 
     @ViewBuilder private var primaryButton: some View {
@@ -801,17 +800,17 @@ struct WorkspaceChangesView: View {
                 showCommitSheet = true
             } label: {
                 if checkout.isCommitting {
-                    ProgressView().tint(ClaudePalette.background)
+                    ProgressView().tint(Palette.background)
                         .frame(maxWidth: .infinity).frame(height: 46)
                 } else {
                     Text("Commit")
-                        .font(typography.sans(15, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.background)
+                        .font(.paseo(.callout, weight: .semibold))
+                        .foregroundStyle(Palette.background)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 46)
+                        .frame(minHeight: 46)
                 }
             }
-            .background(ClaudePalette.ink, in: .capsule)
+            .background(Palette.ink, in: .capsule)
             .disabled(checkout.isCommitting)
             .accessibilityLabel("Commit changes")
         case .push:
@@ -828,21 +827,21 @@ struct WorkspaceChangesView: View {
                 }
             } label: {
                 if checkout.isPushing {
-                    ProgressView().tint(ClaudePalette.background)
+                    ProgressView().tint(Palette.background)
                         .frame(maxWidth: .infinity).frame(height: 46)
                 } else {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.up")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.glyph(.small, weight: .semibold))
                         Text("Push")
-                            .font(typography.sans(15, weight: .semibold))
+                            .font(.paseo(.callout, weight: .semibold))
                     }
-                    .foregroundStyle(ClaudePalette.background)
+                    .foregroundStyle(Palette.background)
                     .frame(maxWidth: .infinity)
                     .frame(height: 46)
                 }
             }
-            .background(ClaudePalette.ink, in: .capsule)
+            .background(Palette.ink, in: .capsule)
             .disabled(checkout.isPushing)
             .accessibilityLabel("Push")
         case .createPR:
@@ -851,17 +850,17 @@ struct WorkspaceChangesView: View {
                 prepareCreatePR()
             } label: {
                 if gitActions.isCreatingPullRequest {
-                    ProgressView().tint(ClaudePalette.background)
+                    ProgressView().tint(Palette.background)
                         .frame(maxWidth: .infinity).frame(height: 46)
                 } else {
                     Text("Create PR")
-                        .font(typography.sans(15, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.background)
+                        .font(.paseo(.callout, weight: .semibold))
+                        .foregroundStyle(Palette.background)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 46)
+                        .frame(minHeight: 46)
                 }
             }
-            .background(ClaudePalette.ink, in: .capsule)
+            .background(Palette.ink, in: .capsule)
             .disabled(gitActions.isCreatingPullRequest)
             .accessibilityLabel("Create pull request")
         case .viewPR:
@@ -875,15 +874,15 @@ struct WorkspaceChangesView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.glyph(.small, weight: .semibold))
                     Text("View PR")
-                        .font(typography.sans(15, weight: .semibold))
+                        .font(.paseo(.callout, weight: .semibold))
                 }
-                .foregroundStyle(ClaudePalette.background)
+                .foregroundStyle(Palette.background)
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
             }
-            .background(ClaudePalette.ink, in: .capsule)
+            .background(Palette.ink, in: .capsule)
             .accessibilityLabel("View pull request")
         }
     }
@@ -894,10 +893,10 @@ struct WorkspaceChangesView: View {
         Menu {
             Section("Diff options") {
                 if horizontalSizeClass == .regular {
-                    Toggle("Side by side", isOn: $sideBySide).tint(.blue)
+                    Toggle("Side by side", isOn: $sideBySide).tint(Palette.toggleTint)
                 }
-                Toggle("Hide whitespace changes", isOn: $hideWhitespace).tint(.blue)
-                Toggle("Wrap long lines", isOn: $wrapLongLines).tint(.blue)
+                Toggle("Hide whitespace changes", isOn: $hideWhitespace).tint(Palette.toggleTint)
+                Toggle("Wrap long lines", isOn: $wrapLongLines).tint(Palette.toggleTint)
                 Button(collapseAllHunks ? "Expand all files" : "Collapse all files") {
                     collapseAllHunks.toggle()
                 }
@@ -914,10 +913,10 @@ struct WorkspaceChangesView: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.glyph(.regular, weight: .medium))
+                .foregroundStyle(Palette.ink)
                 .frame(width: 46, height: 46)
-                .background(ClaudePalette.chip, in: .circle)
+                .background(Palette.chip, in: .circle)
         }
         .accessibilityLabel("More git actions")
     }
@@ -960,7 +959,7 @@ struct WorkspaceChangesView: View {
 
     @ViewBuilder private var autoMergeSection: some View {
         let state = autoMergeState
-        Toggle("Auto-merge (squash)", isOn: autoMergeBinding).tint(.blue)
+        Toggle("Auto-merge (squash)", isOn: autoMergeBinding).tint(Palette.toggleTint)
             .disabled(state == nil && extras.prBadge == nil)
     }
 
@@ -1054,15 +1053,15 @@ struct WorkspaceChangesView: View {
         if let issue = forgeIssue {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "terminal")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.warning)
+                    .font(.glyph(.regular, weight: .medium))
+                    .foregroundStyle(Palette.warning)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(issue.title)
-                        .font(typography.sans(12, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.caption, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                     Text("Run this on the host, then refresh:")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                     ForEach(forgeCommands(for: issue), id: \.self) { command in
                         forgeCopyCommand(command)
                     }
@@ -1071,7 +1070,7 @@ struct WorkspaceChangesView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(ClaudePalette.warning.opacity(0.08))
+            .background(Palette.warning.opacity(0.08))
             .transition(.opacity)
         }
     }
@@ -1090,15 +1089,15 @@ struct WorkspaceChangesView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: copiedForgeCommand == command ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.glyph(.small, weight: .semibold))
                 Text(command)
-                    .font(typography.mono(12))
+                    .font(.paseo(.codeSmall))
                     .lineLimit(1)
             }
-            .foregroundStyle(ClaudePalette.ink)
+            .foregroundStyle(Palette.ink)
             .padding(.horizontal, 12)
             .frame(height: 30)
-            .background(ClaudePalette.chip, in: .capsule)
+            .background(Palette.chip, in: .capsule)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -1129,15 +1128,15 @@ struct WorkspaceChangesView: View {
         }()
         return HStack(alignment: .center, spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(ClaudePalette.warning)
+                .font(.glyph(.regular, weight: .medium))
+                .foregroundStyle(Palette.warning)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(typography.sans(12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.caption, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Text("Ask the agent to resolve it.")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if !conflictFiles.isEmpty, let mentionInChat {
@@ -1148,11 +1147,11 @@ struct WorkspaceChangesView: View {
                     }
                 } label: {
                     Text("Ask the agent")
-                        .font(typography.sans(12, weight: .medium))
-                        .foregroundStyle(ClaudePalette.background)
+                        .font(.paseo(.caption, weight: .medium))
+                        .foregroundStyle(Palette.background)
                         .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .background(ClaudePalette.ink, in: .capsule)
+                        .frame(minHeight: 30)
+                        .background(Palette.ink, in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Mention the conflicted files in chat")
@@ -1160,7 +1159,7 @@ struct WorkspaceChangesView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(ClaudePalette.warning.opacity(0.08))
+        .background(Palette.warning.opacity(0.08))
     }
 
     // MARK: Commits section
@@ -1172,21 +1171,21 @@ struct WorkspaceChangesView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("Commits ahead of \(baseRef ?? "base")")
-                        .font(typography.sans(13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
                     Spacer(minLength: 8)
                     if !gitActions.commits.isEmpty {
                         Text("\(PaseoFormat.integer(gitActions.commits.count))")
-                            .font(typography.mono(12))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.codeSmall))
+                            .foregroundStyle(Palette.tertiaryInk)
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 8)
                 if let message = gitActions.commitsError {
                     Text(message)
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 8)
                 } else {
@@ -1210,22 +1209,22 @@ struct WorkspaceChangesView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(commit.subject)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     HStack(spacing: 6) {
                         Text(commit.shortSha)
-                            .font(typography.mono(11))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.secondaryInk)
                         Text("· \(relativeAge(commit.authorDate))")
-                            .font(typography.sans(11))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.caption2))
+                            .foregroundStyle(Palette.tertiaryInk)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
@@ -1305,18 +1304,18 @@ struct WorkspaceChangesView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(ClaudePalette.failureInk)
+                .foregroundStyle(Palette.failureInk)
             Text(message)
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.failureInk)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 dismissedError = message
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(width: 26, height: 26)
             }
             .buttonStyle(.plain)
@@ -1324,7 +1323,7 @@ struct WorkspaceChangesView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(ClaudePalette.failureInk.opacity(0.08))
+        .background(Palette.failureInk.opacity(0.08))
     }
 
     // MARK: Actions
@@ -1377,14 +1376,14 @@ struct WorkspaceChangesView: View {
     }
 
     private func showToast(_ message: String) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback)) {
+        withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) {
             toast = message
         }
         let shown = message
         Task {
             try? await Task.sleep(for: .seconds(2))
             if toast == shown {
-                withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback)) {
+                withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) {
                     toast = nil
                 }
             }
@@ -1396,17 +1395,17 @@ struct WorkspaceChangesView: View {
     private var notGitState: some View {
         VStack(spacing: 10) {
             Image(systemName: "tray")
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.hero, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text("Not a git repository")
-                .font(typography.sans(16, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text("Changes and commits aren't available for this workspace.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(ClaudePalette.panel)
+        .background(Palette.panel)
     }
 }
 #endif

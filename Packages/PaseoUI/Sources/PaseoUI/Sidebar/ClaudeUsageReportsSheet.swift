@@ -10,7 +10,6 @@ struct ClaudeUsageReportsSheet: View {
     let session: HostSession
 
     @Environment(\.dismiss) private var dismiss
-    private let typography = ClaudeTypography()
 
     private var overview: UsageOverview {
         UsageOverviewBuilder.compute(agents: session.agents)
@@ -41,11 +40,10 @@ struct ClaudeUsageReportsSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.height(560)])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .task {
             if case .idle = session.hostUsage.phase {
                 _ = await session.hostUsage.load(forceRefresh: false)
@@ -59,28 +57,28 @@ struct ClaudeUsageReportsSheet: View {
         switch session.hostUsage.phase {
         case .loading, .idle:
             VStack(spacing: 12) {
-                ProgressView().controlSize(.small).tint(ClaudePalette.ink)
+                ProgressView().controlSize(.small).tint(Palette.ink)
                 Text("Loading usage…")
-                    .font(.system(size: 14))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             VStack(alignment: .leading, spacing: 6) {
                 Text("Usage isn't available right now.")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Text(message)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         case .ready:
             Text("The host reports no usage sources for this device.")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -93,8 +91,8 @@ struct ClaudeUsageReportsSheet: View {
     private var overviewCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Overview")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .semibold))
+                .foregroundStyle(Palette.ink)
             LazyVGrid(
                 columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
                 spacing: 12
@@ -108,13 +106,13 @@ struct ClaudeUsageReportsSheet: View {
             }
             if overview.tokens > 0 {
                 Text("Tokens by day")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                 Chart(overview.days, id: \.date) { day in
                     BarMark(
                         x: .value("Day", day.date, unit: .day),
                         y: .value("Tokens", day.tokens))
-                        .foregroundStyle(ClaudePalette.ink.opacity(0.85))
+                        .foregroundStyle(Palette.ink.opacity(0.85))
                 }
                 .chartXAxis { AxisMarks(values: .stride(by: .day, count: 7)) { _ in
                     AxisGridLine()
@@ -125,13 +123,13 @@ struct ClaudeUsageReportsSheet: View {
                 .accessibilityValue(Self.compactTokens(overview.tokens) + " tokens total")
                 if !overview.models.isEmpty {
                     Text("Tokens by model")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
                     Chart(overview.models.prefix(6), id: \.model) { model in
                         BarMark(
                             x: .value("Model", model.model),
                             y: .value("Tokens", model.tokens))
-                            .foregroundStyle(ClaudePalette.ink.opacity(0.85))
+                            .foregroundStyle(Palette.ink.opacity(0.85))
                     }
                     .frame(height: 110)
                     .accessibilityLabel("Tokens by model")
@@ -139,27 +137,27 @@ struct ClaudeUsageReportsSheet: View {
                 }
                 if let fun = UsageBooks.funLine(forTokens: overview.tokens) {
                     Text(fun)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             } else {
                 Text("No usage yet.")
-                    .font(.system(size: 14))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
             }
         }
         .padding(16)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 20))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
     }
 
     private func statCell(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.caption2))
+                .foregroundStyle(Palette.secondaryInk)
             Text(value)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.headline))
+                .foregroundStyle(Palette.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -189,45 +187,45 @@ struct ClaudeUsageReportsSheet: View {
                 }
             case .unavailable(let problem):
                 Text(problemText(problem))
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             case .failure(let message):
                 Text(message)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
-        .background(ClaudePalette.panel, in: .rect(cornerRadius: 20))
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
     }
 
     private func usageCardHeader(_ report: UsageReportEntry) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 8) {
                 Text(report.sourceLabel)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                 if let account = report.accountLabel {
                     Text(account)
-                        .font(.system(size: 12))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.captionInk)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 if case .available(let available) = report.report, let plan = available.planLabel {
                     Text(plan)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.caption2, weight: .semibold))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(ClaudePalette.chip, in: .capsule)
+                        .background(Palette.chip, in: .capsule)
                 }
             }
             Text("Updated \(Self.relative(report.fetchedAt))")
-                .font(.system(size: 11))
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.caption2))
+                .foregroundStyle(Palette.captionInk)
         }
     }
 
@@ -237,15 +235,15 @@ struct ClaudeUsageReportsSheet: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 Text(window.label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Spacer(minLength: 8)
                 Text(Self.percent(window.usedPct))
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(window.usedPct == nil ? ClaudePalette.secondary : ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(window.usedPct == nil ? Palette.secondaryInk : Palette.ink)
                 Text(ClaudeUsageResets.short(afterISO: window.resetsAt) ?? "")
-                    .font(.system(size: 11))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.caption2))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             ClaudeUsageBar(percent: window.usedPct ?? 0, width: 240)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -257,12 +255,12 @@ struct ClaudeUsageReportsSheet: View {
     private func infoRow(_ label: String, value: String) -> some View {
         HStack(spacing: 12) {
             Text(label)
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
             Spacer(minLength: 8)
             Text(value)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.ink)
         }
     }
 

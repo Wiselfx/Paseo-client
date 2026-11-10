@@ -22,14 +22,14 @@ struct VoicePage: View {
             VStack(alignment: .leading, spacing: 18) {
                 if !isConnected {
                     Text("Connect to this host to configure voice.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.top, 32)
                         .frame(maxWidth: .infinity)
                 } else if !voice.supportsSpeechSettings {
                     Text("Update the host to configure voice.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.top, 32)
                         .frame(maxWidth: .infinity)
                 } else if let speech {
@@ -37,8 +37,8 @@ struct VoicePage: View {
                     voiceModeSection(speech)
                     if let error = voice.error {
                         Text(error)
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.failureInk)
                             .padding(.leading, 16)
                     }
                 } else {
@@ -46,8 +46,8 @@ struct VoicePage: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 32)
                     Text("Loading…")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -112,8 +112,8 @@ struct VoicePage: View {
                 siteRow(.voiceModeTTS, "Speaking")
             }
             Text("Voice mode transcribes what you say and reads agent replies aloud.")
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.leading, 16)
         }
     }
@@ -132,14 +132,14 @@ struct VoicePage: View {
             })) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 17))
+                    .font(.paseo(.body))
                 Text(envVar.map { "Set by \($0)" } ?? hint)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .tint(.blue)
+        .tint(Palette.toggleTint)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minHeight: 52)
@@ -158,16 +158,16 @@ struct VoicePage: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     Text(summaryLabel(summary))
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.glyph(.regular))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 16)
             .frame(minHeight: 60)
@@ -200,8 +200,8 @@ struct VoicePage: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

@@ -10,7 +10,6 @@ struct HelpMenuItems: View {
     var daemonVersion: String?
 
     @Environment(\.openURL) private var openURL
-    private let typography = ClaudeTypography()
 
     private static let changelogURL = "https://raw.githubusercontent.com/getpaseo/paseo/main/CHANGELOG.md"
     private static let githubIssueURL = "https://github.com/getpaseo/paseo/issues/new"
@@ -50,8 +49,8 @@ struct HelpMenuItems: View {
                 .accessibilityIdentifier("help.sponsor")
 
             Text(appVersion + (daemonVersion.map { " · Daemon \($0)" } ?? ""))
-                .font(.system(size: 11))
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.caption2))
+                .foregroundStyle(Palette.captionInk)
                 .padding(.horizontal, 8)
                 .padding(.top, 6)
         }
@@ -62,8 +61,8 @@ struct HelpMenuItems: View {
 
     private func label(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.footnote, weight: .medium))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.horizontal, 10)
             .padding(.top, 6)
     }
@@ -71,8 +70,8 @@ struct HelpMenuItems: View {
     private func menuRow(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(typography.sans(15))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)

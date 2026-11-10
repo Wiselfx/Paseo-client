@@ -20,7 +20,6 @@ struct CadencePreset: Hashable {
 
 struct ScheduleEditorPage: View {
     let session: HostSession
-    let typography: ClaudeTypography
     let seed: ClaudeSchedulesView.EditorSeed
     let onBack: () -> Void
     let onCreated: (String) -> Void
@@ -58,11 +57,10 @@ struct ScheduleEditorPage: View {
     var catalog: AgentControlStore { session.agentControl }
 
     init(
-        session: HostSession, typography: ClaudeTypography, seed: ClaudeSchedulesView.EditorSeed,
+        session: HostSession, seed: ClaudeSchedulesView.EditorSeed,
         onBack: @escaping () -> Void, onCreated: @escaping (String) -> Void, showToast: @escaping (String) -> Void
     ) {
         self.session = session
-        self.typography = typography
         self.seed = seed
         self.onBack = onBack
         self.onCreated = onCreated
@@ -134,13 +132,13 @@ struct ScheduleEditorPage: View {
         VStack(spacing: 0) {
             ZStack {
                 Text(seed.title)
-                    .font(typography.serif(17, relativeTo: .headline, weight: .semibold))
+                    .font(.paseo(.title, weight: .semibold))
                 HStack {
                     Button {
                         Haptics.selection()
                         onBack()
                     } label: {
-                        Image(systemName: "chevron.left").font(.system(size: 19, weight: .light))
+                        Image(systemName: "chevron.left").font(.glyph(.large, weight: .light))
                             .frame(width: 42, height: 42)
                     }
                     .glassEffect(in: .circle)
@@ -155,44 +153,44 @@ struct ScheduleEditorPage: View {
                 VStack(alignment: .leading, spacing: 14) {
                     fieldLabel("Name")
                     TextField("Optional", text: $name)
-                        .font(typography.sans(15))
+                        .font(.paseo(.callout))
                         .padding(.horizontal, 16)
-                        .frame(height: 46)
-                        .background(ClaudePalette.panel, in: .capsule)
-                        .overlay { Capsule().stroke(ClaudePalette.ink.opacity(0.10), lineWidth: 0.5) }
+                        .frame(minHeight: 46)
+                        .background(Palette.panel, in: .capsule)
+                        .overlay { Capsule().stroke(Palette.ink.opacity(0.10), lineWidth: 0.5) }
                         .accessibilityIdentifier("schedule.name")
                     fieldLabel("Prompt")
                     ZStack(alignment: .topLeading) {
                         if prompt.isEmpty {
                             Text("What should the agent do each time?")
-                                .font(typography.sans(15))
-                                .foregroundStyle(ClaudePalette.secondaryInk)
+                                .font(.paseo(.callout))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .padding(16)
                                 .allowsHitTesting(false)
                         }
                         TextEditor(text: $prompt)
-                            .font(typography.sans(15))
+                            .font(.paseo(.callout))
                             .scrollContentBackground(.hidden)
                             .padding(8)
                             .accessibilityIdentifier("schedule.prompt")
                     }
                     .frame(height: 132)
-                    .background(ClaudePalette.panel, in: .rect(cornerRadius: 20))
-                    .overlay { RoundedRectangle(cornerRadius: 20).stroke(ClaudePalette.ink.opacity(0.08), lineWidth: 0.5) }
+                    .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
+                    .overlay { RoundedRectangle(cornerRadius: Radius.lg).stroke(Palette.ink.opacity(0.08), lineWidth: 0.5) }
                     cadenceSection
                     fieldLabel("Max runs")
                     TextField("Unlimited", text: $maxRuns)
                         .keyboardType(.numberPad)
-                        .font(typography.sans(15))
+                        .font(.paseo(.callout))
                         .padding(.horizontal, 16)
-                        .frame(height: 46)
-                        .background(ClaudePalette.panel, in: .capsule)
-                        .overlay { Capsule().stroke(ClaudePalette.ink.opacity(0.10), lineWidth: 0.5) }
+                        .frame(minHeight: 46)
+                        .background(Palette.panel, in: .capsule)
+                        .overlay { Capsule().stroke(Palette.ink.opacity(0.10), lineWidth: 0.5) }
                         .accessibilityIdentifier("schedule.maxRuns")
                     if isHeartbeat {
                         Text("This schedule prompts an existing agent every run.")
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.horizontal, 6)
                     } else {
                         targetSection
@@ -205,8 +203,8 @@ struct ScheduleEditorPage: View {
             }
             if let actionError = schedules.actionError {
                 Text(actionError)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)
@@ -217,9 +215,9 @@ struct ScheduleEditorPage: View {
 
     private func fieldLabel(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(typography.sans(11, weight: .semibold))
+            .font(.paseo(.caption2, weight: .semibold))
             .tracking(0.8)
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 6)
     }
 
@@ -230,17 +228,17 @@ struct ScheduleEditorPage: View {
             fieldLabel("Cadence")
             if let readOnlyCadence {
                 HStack {
-                    Image(systemName: "clock").foregroundStyle(ClaudePalette.secondaryInk)
-                    Text(readOnlyCadence).font(typography.sans(15)).foregroundStyle(ClaudePalette.ink)
+                    Image(systemName: "clock").foregroundStyle(Palette.secondaryInk)
+                    Text(readOnlyCadence).font(.paseo(.callout)).foregroundStyle(Palette.ink)
                     Spacer()
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 46)
-                .background(ClaudePalette.panel, in: .capsule)
-                .overlay { Capsule().stroke(ClaudePalette.ink.opacity(0.10), lineWidth: 0.5) }
+                .background(Palette.panel, in: .capsule)
+                .overlay { Capsule().stroke(Palette.ink.opacity(0.10), lineWidth: 0.5) }
                 Text("Interval cadences can't be edited here yet.")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.horizontal, 6)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
@@ -252,28 +250,28 @@ struct ScheduleEditorPage: View {
                             cron = preset.expression
                         } label: {
                             Text(preset.label)
-                                .font(typography.sans(12, weight: .medium))
-                                .foregroundStyle(selected ? ClaudePalette.background : ClaudePalette.ink)
+                                .font(.paseo(.caption, weight: .medium))
+                                .foregroundStyle(selected ? Palette.background : Palette.ink)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 42)
-                                .background(selected ? ClaudePalette.ink : ClaudePalette.panel, in: .rect(cornerRadius: 14))
+                                .frame(minHeight: 42)
+                                .background(selected ? Palette.ink : Palette.panel, in: .rect(cornerRadius: Radius.md))
                         }
                         .buttonStyle(.plain)
                         .accessibilityAddTraits(selected ? .isSelected : [])
                     }
                 }
                 TextField("Custom cron expression", text: $cron)
-                    .font(typography.mono(14))
+                    .font(.paseo(.code))
                     .padding(.horizontal, 16)
-                    .frame(height: 46)
-                    .background(ClaudePalette.panel, in: .capsule)
+                    .frame(minHeight: 46)
+                    .background(Palette.panel, in: .capsule)
                     .overlay {
                         Capsule().stroke(
                             cronIsInvalid && !cron.isEmpty
-                                ? ClaudePalette.failureInk
-                                : ClaudePalette.ink.opacity(0.10),
+                                ? Palette.failureInk
+                                : Palette.ink.opacity(0.10),
                             lineWidth: 0.5)
                     }
                     .onChange(of: cron) { _, expression in
@@ -288,16 +286,16 @@ struct ScheduleEditorPage: View {
                     .accessibilityIdentifier("schedule.cron")
                 if cronIsInvalid && !cron.isEmpty {
                     Text("Five fields: minute hour day-of-month month day-of-week.")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.horizontal, 6)
                 }
                 TextField("Timezone (optional)", text: $timezone)
-                    .font(typography.mono(14))
+                    .font(.paseo(.code))
                     .padding(.horizontal, 16)
-                    .frame(height: 46)
-                    .background(ClaudePalette.panel, in: .capsule)
-                    .overlay { Capsule().stroke(ClaudePalette.ink.opacity(0.10), lineWidth: 0.5) }
+                    .frame(minHeight: 46)
+                    .background(Palette.panel, in: .capsule)
+                    .overlay { Capsule().stroke(Palette.ink.opacity(0.10), lineWidth: 0.5) }
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .accessibilityIdentifier("schedule.timezone")
@@ -318,10 +316,10 @@ struct ScheduleEditorPage: View {
                 if !cwd.isEmpty, !workspaces.contains(where: { $0.cwd == cwd }) {
                     RowDivider()
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Custom directory").font(typography.sans(15))
+                        Text("Custom directory").font(.paseo(.callout))
                         Text(cwd)
-                            .font(typography.mono(11))
-                            .foregroundStyle(ClaudePalette.captionInk)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.captionInk)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
@@ -342,19 +340,19 @@ struct ScheduleEditorPage: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(workspace.title ?? workspace.name)
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     Text("\(workspace.projectDisplayName)\(workspace.branch.map { " · \($0)" } ?? "")")
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 if selected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.regular, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                 }
             }
             .padding(.horizontal, 16)
@@ -442,11 +440,11 @@ struct ScheduleEditorPage: View {
             save()
         } label: {
             Text(isSaving ? "Saving…" : (seed.stored == nil ? "Create schedule" : "Save changes"))
-                .font(typography.sans(15, weight: .semibold))
-                .foregroundStyle(canSave ? ClaudePalette.background : ClaudePalette.background.opacity(0.55))
+                .font(.paseo(.callout, weight: .semibold))
+                .foregroundStyle(canSave ? Palette.background : Palette.background.opacity(0.55))
                 .frame(maxWidth: .infinity)
-                .frame(height: 48)
-                .background(canSave ? ClaudePalette.ink : ClaudePalette.ink.opacity(0.3), in: .capsule)
+                .frame(minHeight: 48)
+                .background(canSave ? Palette.ink : Palette.ink.opacity(0.3), in: .capsule)
         }
         .disabled(!canSave || isSaving)
         .accessibilityIdentifier("schedule.save")

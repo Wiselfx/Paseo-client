@@ -7,7 +7,6 @@ import SwiftUI
 
 struct SchedulesListPage: View {
     let session: HostSession
-    let typography: ClaudeTypography
     let onClose: () -> Void
     let onOpen: (String) -> Void
     let onNew: () -> Void
@@ -24,8 +23,8 @@ struct SchedulesListPage: View {
             header
             if let actionError = schedules.actionError {
                 Text(actionError)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)
@@ -41,13 +40,13 @@ struct SchedulesListPage: View {
     private var header: some View {
         ZStack {
             Text("Schedules")
-                .font(typography.serif(19, relativeTo: .headline, weight: .semibold))
+                .font(.paseo(.title, weight: .semibold))
             HStack {
                 Button {
                     Haptics.selection()
                     onClose()
                 } label: {
-                    Image(systemName: "xmark").font(.system(size: 19, weight: .light))
+                    Image(systemName: "xmark").font(.glyph(.large, weight: .light))
                         .frame(width: 42, height: 42)
                 }
                 .glassEffect(in: .circle)
@@ -57,7 +56,7 @@ struct SchedulesListPage: View {
                     Haptics.selection()
                     onNew()
                 } label: {
-                    Image(systemName: "plus").font(.system(size: 19, weight: .light))
+                    Image(systemName: "plus").font(.glyph(.large, weight: .light))
                         .frame(width: 42, height: 42)
                 }
                 .glassEffect(in: .circle)
@@ -109,20 +108,20 @@ struct SchedulesListPage: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title(summary))
-                        .font(typography.sans(15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     Text(subtitle(summary))
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 4) {
                     ScheduleStatePill(state: state)
                     Text(nextCaption(summary, state: state))
-                        .font(typography.sans(11))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.caption2))
+                        .foregroundStyle(Palette.captionInk)
                 }
             }
             .padding(.horizontal, 20)
@@ -155,16 +154,16 @@ struct SchedulesListPage: View {
     private var emptyState: some View {
         VStack(spacing: 14) {
             Image(systemName: "clock")
-                .font(.system(size: 20, weight: .light))
+                .font(.glyph(.large, weight: .light))
                 .frame(width: 48, height: 48)
-                .background(ClaudePalette.panel, in: .circle)
+                .background(Palette.panel, in: .circle)
             VStack(spacing: 4) {
                 Text("No schedules yet")
-                    .font(typography.serif(20, relativeTo: .title3))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.title))
+                    .foregroundStyle(Palette.ink)
                 Text("Schedules run agents on a cadence.")
-                    .font(typography.sans(14))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                     .multilineTextAlignment(.center)
             }
             Button {
@@ -172,11 +171,11 @@ struct SchedulesListPage: View {
                 onNew()
             } label: {
                 Label("New schedule", systemImage: "plus")
-                    .font(typography.sans(16, weight: .medium))
-                    .foregroundStyle(ClaudePalette.background)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.background)
                     .padding(.horizontal, 17)
-                    .frame(height: 44)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .frame(minHeight: 44)
+                    .background(Palette.ink, in: .capsule)
             }
             .accessibilityIdentifier("schedules.new")
         }
@@ -187,14 +186,14 @@ struct SchedulesListPage: View {
     private var unsupportedState: some View {
         VStack(spacing: 8) {
             Image(systemName: "clock")
-                .font(.system(size: 26, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.xlarge, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text("Schedules aren't available on this host")
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text("The daemon did not grant the automation.manage permission.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -204,11 +203,11 @@ struct SchedulesListPage: View {
     private func failedState(_ message: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 26, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.xlarge, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(message)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
             Button {
@@ -216,11 +215,11 @@ struct SchedulesListPage: View {
                 Task { await schedules.load() }
             } label: {
                 Text("Retry")
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .padding(.horizontal, 18)
-                    .frame(height: 32)
-                    .background(ClaudePalette.chip, in: .capsule)
+                    .frame(minHeight: 32)
+                    .background(Palette.chip, in: .capsule)
             }
             .buttonStyle(.plain)
         }

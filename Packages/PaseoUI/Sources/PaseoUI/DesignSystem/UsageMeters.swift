@@ -21,7 +21,7 @@ struct ClaudeMeterRing: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(ClaudePalette.tertiaryInk.opacity(0.35), lineWidth: lineWidth)
+                .stroke(Palette.tertiaryInk.opacity(0.35), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: CGFloat(clamped / 100))
                 .stroke(
@@ -35,7 +35,7 @@ struct ClaudeMeterRing: View {
     }
 
     /// Monochrome by percent (UX-SPEC §0.1): ink at every level.
-    static var meterColor: Color { ClaudePalette.ink }
+    static var meterColor: Color { Palette.ink }
 }
 
 /// A thin progress bar for the sidebar's usage lines and the reports sheet's window rows:
@@ -48,7 +48,7 @@ struct ClaudeUsageBar: View {
 
     var body: some View {
         Capsule()
-            .fill(ClaudePalette.tertiaryInk.opacity(0.35))
+            .fill(Palette.tertiaryInk.opacity(0.35))
             .frame(width: width, height: 3)
             .overlay(alignment: .leading) {
                 Capsule()

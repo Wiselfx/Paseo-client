@@ -34,7 +34,6 @@ struct DraftChatView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
-    private let typography = ClaudeTypography()
 
     var body: some View {
         withDraftPickers(column)
@@ -69,8 +68,8 @@ struct DraftChatView: View {
         } action: { height in
             surfaceHeight = height
         }
-        .foregroundStyle(ClaudePalette.ink)
-        .tint(ClaudePalette.ink)
+        .foregroundStyle(Palette.ink)
+        .tint(Palette.ink)
     }
 
     private func withDraftPickers(_ content: some View) -> some View {
@@ -121,7 +120,7 @@ struct DraftChatView: View {
         HStack(spacing: 8) {
             Button(action: onOpenSidebar) {
                 UnequalMenu().stroke(
-                    ClaudePalette.ink.opacity(0.8),
+                    Palette.ink.opacity(0.8),
                     style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
                 )
                 .frame(width: 18, height: 17)
@@ -131,7 +130,7 @@ struct DraftChatView: View {
             .accessibilityLabel("Open sidebar")
 
             Text(workspaceTitle)
-                .font(typography.serif(20, relativeTo: .headline))
+                .font(.paseo(.title))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .accessibilityIdentifier("draft.workspace")
@@ -139,7 +138,7 @@ struct DraftChatView: View {
             if let onOpenPanel {
                 Button(action: onOpenPanel) {
                     Image(systemName: "sidebar.right")
-                        .font(.system(size: 17, weight: .medium))
+                        .font(.glyph(.regular, weight: .medium))
                         .frame(width: 44, height: 44)
                 }
                 .glassEffect(in: .circle)
@@ -173,18 +172,18 @@ struct DraftChatView: View {
         // Tapping the page outside the composer drops the keyboard (V5 §2). Simultaneous, so the
         // workspace-line menu and the hero's own controls still take their taps.
         .simultaneousGesture(TapGesture().onEnded { focused = false })
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: draft.pendingPrompt)
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: draft.pendingPrompt)
     }
 
     private var addProjectAction: some View {
         VStack(spacing: 10) {
             Button(action: onAddProject) {
                 Label("Add project", systemImage: "folder.badge.plus")
-                    .font(typography.sans(16, weight: .medium))
-                    .foregroundStyle(ClaudePalette.background)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.background)
                     .padding(.horizontal, 18)
-                    .frame(height: 44)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .frame(minHeight: 44)
+                    .background(Palette.ink, in: .capsule)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("draft.addProject")
@@ -213,12 +212,12 @@ struct DraftChatView: View {
                 HStack(spacing: 4) {
                     Text("in \(workspaceTitle)")
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.glyph(.small, weight: .semibold))
                 }
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.horizontal, 10)
-                .frame(height: 28)
+                .frame(minHeight: 28)
                 .contentShape(.rect)
             }
             .accessibilityLabel("Workspace, \(workspaceTitle)")
@@ -277,7 +276,7 @@ struct DraftChatView: View {
             composerCard
         }
         .padding(.horizontal, composerExpanded ? 8 : 16)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: composerExpanded)
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: composerExpanded)
         .padding(.bottom, 8)
     }
 
@@ -294,7 +293,7 @@ struct DraftChatView: View {
             }
         }
         .composerCardChrome(expanded: composerExpanded)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: composerExpanded)
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: composerExpanded)
     }
 
     /// While the mic is live the row is the dictation overlay: cancel, meter, timer, insert,
@@ -347,10 +346,10 @@ struct DraftChatView: View {
             "", text: $draft.text,
             // Upstream `composer.placeholders.mobile` (en.ts:117).
             prompt: Text("Message, @files, /commands")
-                .foregroundStyle(ClaudePalette.secondaryInk),
+                .foregroundStyle(Palette.secondaryInk),
             axis: .vertical
         )
-        .font(typography.sans(ClaudeTypography.chatBodySize))
+        .font(.paseo(.body))
         // V5 §3: grow to the cap, then scroll inside the field; the controls row always stays
         // above the keyboard.
         .lineLimit(
@@ -358,7 +357,7 @@ struct DraftChatView: View {
                 ? 1...ComposerFieldLimit.lines(availableHeight: surfaceHeight) : 1...1)
         .fixedSize(horizontal: false, vertical: true)
         .focused($focused)
-        .tint(ClaudePalette.orange)
+        .tint(Palette.orange)
         .padding(.horizontal, composerExpanded ? 6 : 2)
         .padding(.top, composerExpanded ? 7 : 0)
         .accessibilityIdentifier("draft.draft")
@@ -378,10 +377,10 @@ struct DraftChatView: View {
             }
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 18, weight: .regular))
+                .font(.glyph(.regular, weight: .regular))
                 .frame(width: 36, height: 36)
-                .foregroundStyle(ClaudePalette.ink)
-                .background(ClaudePalette.chip, in: .circle)
+                .foregroundStyle(Palette.ink)
+                .background(Palette.chip, in: .circle)
         }
         .accessibilityLabel("Add attachment")
     }
@@ -405,10 +404,10 @@ struct DraftChatView: View {
         } else {
             Button(action: send) {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.glyph(.regular, weight: .medium))
                     .frame(width: 36, height: 36)
                     .foregroundStyle(.white)
-                    .background(ClaudePalette.orange, in: .circle)
+                    .background(Palette.orange, in: .circle)
                     .opacity(canSend ? 1 : 0.4)
                     .contentShape(.rect)
             }
@@ -421,8 +420,8 @@ struct DraftChatView: View {
 
     private func errorNote(_ text: String) -> some View {
         Text(text)
-            .font(typography.sans(13))
-            .foregroundStyle(ClaudePalette.failureInk)
+            .font(.paseo(.footnote))
+            .foregroundStyle(Palette.failureInk)
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -431,11 +430,11 @@ struct DraftChatView: View {
         if dictation.isDenied {
             HStack(spacing: 8) {
                 Image(systemName: "mic.slash")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small))
+                    .foregroundStyle(Palette.failureInk)
                 Text("Dictation is off. Enable Microphone and Speech Recognition in Settings.")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.failureInk)
                     .lineLimit(2)
                 Spacer(minLength: 4)
                 Button("Settings") {
@@ -443,8 +442,8 @@ struct DraftChatView: View {
                         openURL(url)
                     }
                 }
-                .font(typography.sans(12, weight: .semibold))
-                .foregroundStyle(ClaudePalette.orange)
+                .font(.paseo(.caption, weight: .semibold))
+                .foregroundStyle(Palette.orange)
                 .accessibilityLabel("Open Settings")
             }
             .padding(.horizontal, 8)

@@ -21,7 +21,6 @@ struct ClaudeNewWorkspaceSheet: View {
     @State private var baseBranchText = ""
     @State private var prompt = ""
     @State private var busyStep: BusyStep?
-    private let typography = ClaudeTypography()
 
     enum Isolation: String, CaseIterable, Identifiable {
         case local
@@ -96,7 +95,7 @@ struct ClaudeNewWorkspaceSheet: View {
                     RowGroup {
                         HStack(spacing: 12) {
                             Text("Project")
-                                .font(typography.sans(17))
+                                .font(.paseo(.body))
                             Spacer(minLength: 8)
                             Picker(
                                 "Project",
@@ -112,17 +111,17 @@ struct ClaudeNewWorkspaceSheet: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .font(typography.sans(16))
+                            .font(.paseo(.callout))
                         }
                         .padding(.horizontal, 16)
                         .frame(height: 52)
                         RowDivider()
                         HStack(spacing: 12) {
                             Text("Name")
-                                .font(typography.sans(17))
+                                .font(.paseo(.body))
                             Spacer(minLength: 8)
                             TextField("Optional", text: $name)
-                                .font(typography.sans(17))
+                                .font(.paseo(.body))
                                 .multilineTextAlignment(.trailing)
                                 .textInputAutocapitalization(.words)
                         }
@@ -136,15 +135,15 @@ struct ClaudeNewWorkspaceSheet: View {
                     promptSection
                     if let error = directory.actionError {
                         Text(error)
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.failureInk)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 4)
                     }
                     if let error = catalog.actionError {
                         Text(error)
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.failureInk)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 4)
                     }
@@ -154,11 +153,10 @@ struct ClaudeNewWorkspaceSheet: View {
                 .padding(.bottom, 12)
             }
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .onAppear {
             baseBranchText = currentBranch
             if !directory.supportsWorkspaceCreate { isolation = .local }
@@ -171,8 +169,8 @@ struct ClaudeNewWorkspaceSheet: View {
     private var isolationSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Isolation")
-                .font(typography.sans(13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.leading, 4)
             HStack(spacing: 2) {
                 ForEach(Isolation.allCases) { option in
@@ -182,13 +180,13 @@ struct ClaudeNewWorkspaceSheet: View {
                         isolation = option
                     } label: {
                         Text(option.title)
-                            .font(typography.sans(14, weight: isolation == option ? .medium : .regular))
+                            .font(.paseo(.callout, weight: isolation == option ? .medium : .regular))
                             .foregroundStyle(
-                                isolation == option ? ClaudePalette.background : ClaudePalette.ink)
+                                isolation == option ? Palette.background : Palette.ink)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 32)
+                            .frame(minHeight: 32)
                             .background(
-                                isolation == option ? ClaudePalette.ink : Color.clear, in: .capsule)
+                                isolation == option ? Palette.ink : Color.clear, in: .capsule)
                             .opacity(
                                 option == .worktree && !directory.supportsWorkspaceCreate ? 0.4 : 1)
                     }
@@ -198,11 +196,11 @@ struct ClaudeNewWorkspaceSheet: View {
                 }
             }
             .padding(3)
-            .background(ClaudePalette.chip, in: .capsule)
+            .background(Palette.chip, in: .capsule)
             if !directory.supportsWorkspaceCreate {
                 Text("This daemon cannot create worktrees; new sessions open the project root.")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.captionInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.captionInk)
                     .padding(.leading, 4)
             }
         }
@@ -211,19 +209,19 @@ struct ClaudeNewWorkspaceSheet: View {
     private var baseBranchSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Branch off")
-                .font(typography.sans(13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.leading, 4)
             RowGroup {
                 HStack(spacing: 12) {
                     Text("Branch")
-                        .font(typography.sans(17))
+                        .font(.paseo(.body))
                     Spacer(minLength: 8)
                     TextField(
                         "", text: $baseBranchText,
-                        prompt: Text("main").foregroundStyle(ClaudePalette.secondary)
+                        prompt: Text("main").foregroundStyle(Palette.secondaryInk)
                     )
-                    .font(typography.mono(13))
+                    .font(.paseo(.code))
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -232,8 +230,8 @@ struct ClaudeNewWorkspaceSheet: View {
                 .frame(height: 52)
             }
             Text("The new worktree forks from this branch. The daemon reports no branch list here; type one.")
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.captionInk)
                 .padding(.horizontal, 4)
         }
     }
@@ -241,21 +239,21 @@ struct ClaudeNewWorkspaceSheet: View {
     private var promptSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("First prompt")
-                .font(typography.sans(13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.leading, 4)
             RowGroup {
                 VStack(alignment: .leading, spacing: 6) {
                     TextField(
                         "", text: $prompt,
-                        prompt: Text("What should the agent do?").foregroundStyle(ClaudePalette.secondary),
+                        prompt: Text("What should the agent do?").foregroundStyle(Palette.secondaryInk),
                         axis: .vertical
                     )
-                    .font(typography.sans(16))
+                    .font(.paseo(.callout))
                     .lineLimit(1...4)
                     Text("Creates an agent right away with this host's default provider, model and mode.")
-                        .font(typography.sans(11))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.caption2))
+                        .foregroundStyle(Palette.captionInk)
                 }
                 .padding(12)
             }
@@ -268,15 +266,15 @@ struct ClaudeNewWorkspaceSheet: View {
         } label: {
             HStack(spacing: 8) {
                 if busyStep != nil {
-                    ProgressView().controlSize(.small).tint(ClaudePalette.background)
+                    ProgressView().controlSize(.small).tint(Palette.background)
                 }
                 Text(busyStep?.label ?? "Create workspace")
-                    .font(typography.sans(16, weight: .medium))
+                    .font(.paseo(.callout, weight: .medium))
             }
             .frame(maxWidth: .infinity)
             .frame(height: 48)
-            .foregroundStyle(ClaudePalette.background)
-            .background(ClaudePalette.ink, in: .capsule)
+            .foregroundStyle(Palette.background)
+            .background(Palette.ink, in: .capsule)
             .opacity(canCreate ? 1 : 0.4)
         }
         .buttonStyle(.plain)

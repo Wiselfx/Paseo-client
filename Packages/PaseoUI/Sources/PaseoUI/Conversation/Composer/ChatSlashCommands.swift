@@ -44,27 +44,27 @@ extension ClaudeChatView {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
                         Text("Loading commands…")
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                     }
                     .padding(.horizontal, 14)
                     .frame(height: 46)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else if let slashError, slashCommands.isEmpty {
                     Text(slashError)
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(2)
                         .padding(.horizontal, 14)
-                        .frame(height: 46)
+                        .frame(minHeight: 46)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else if filteredSlashCommands.isEmpty {
                     if !slashCommands.isEmpty {
                         Text("No matching commands")
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.horizontal, 14)
-                            .frame(height: 40)
+                            .frame(minHeight: 40)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
@@ -93,27 +93,27 @@ extension ClaudeChatView {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text("/" + command.name)
-                        .font(typography.mono(14, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.code, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     if !command.argumentHint.isEmpty {
                         Text(command.argumentHint)
-                            .font(typography.mono(11))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                     if command.kind == .skill {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.glyph(.small, weight: .medium))
+                            .foregroundStyle(Palette.secondaryInk)
                             .accessibilityLabel("Skill")
                     }
                 }
                 if !command.description.isEmpty {
                     Text(command.description)
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
             }

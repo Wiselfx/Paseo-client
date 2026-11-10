@@ -16,7 +16,7 @@ struct SidebarRoll<Content: View>: View {
             .frame(height: expanded ? contentHeight : 0, alignment: .top)
             .clipped()
             .opacity(expanded ? 1 : 0)
-            .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move), value: expanded)
+            .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: expanded)
     }
 
     /// Collapsed rolls build no rows. The content used to stay mounted (and measured) even

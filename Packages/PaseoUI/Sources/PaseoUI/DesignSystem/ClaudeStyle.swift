@@ -1,252 +1,6 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The app-wide typography: Anthropic Sans for the interface, Anthropic Serif for prose and
-/// display lines, Anthropic Mono for code and tool output. Every face keeps Dynamic Type.
-public struct ClaudeTypography: Sendable {
-    /// Claude iOS's chat body (V5): assistant prose, your bubbles and the composer all sit at
-    /// 17 pt, and everything around them is measured from it.
-    public static let chatBodySize: CGFloat = 17
-
-    public static let anthropicSans = "AnthropicSansWebVariable-TextRegular"
-    public static let anthropicSerif = "AnthropicSerifWebVariable-TextRegular"
-    public static let anthropicMono = "AnthropicMonoWebWeb-Regular"
-    public static let newsreader = "Newsreader16pt-Regular"
-
-    public var serifName: String
-    public var sansName: String
-    public var monoName: String
-
-    public init(
-        serifName: String = ClaudeTypography.anthropicSerif,
-        sansName: String = ClaudeTypography.anthropicSans,
-        monoName: String = ClaudeTypography.anthropicMono
-    ) {
-        self.serifName = serifName
-        self.sansName = sansName
-        self.monoName = monoName
-    }
-
-    /// Assistant prose, greeting, sidebar title, headings.
-    public func serif(
-        _ size: CGFloat, relativeTo style: Font.TextStyle = .body, weight: Font.Weight = .regular
-    ) -> Font {
-        let size = size * ClaudeTextScale.contentMultiplier()
-        if ClaudeFontResources.isAvailable(serifName) {
-            return apply(weight, to: .custom(serifName, size: size, relativeTo: style))
-        }
-        if ClaudeFontResources.isAvailable(ClaudeTypography.newsreader) {
-            return apply(weight, to: .custom(ClaudeTypography.newsreader, size: size, relativeTo: style))
-        }
-        return .system(style, design: .serif, weight: weight)
-    }
-
-    /// UI text, buttons, composer, sidebar rows.
-    public func sans(
-        _ size: CGFloat, relativeTo style: Font.TextStyle = .body, weight: Font.Weight = .regular
-    ) -> Font {
-        guard ClaudeFontResources.isAvailable(sansName) else {
-            return .system(style, design: .default, weight: weight)
-        }
-        return apply(weight, to: .custom(sansName, size: size, relativeTo: style))
-    }
-
-    /// Code, tool output, diffs.
-    public func mono(
-        _ size: CGFloat, relativeTo style: Font.TextStyle = .body, weight: Font.Weight = .regular
-    ) -> Font {
-        let size = size * ClaudeTextScale.codeMultiplier()
-        guard ClaudeFontResources.isAvailable(monoName) else {
-            return .system(style, design: .monospaced, weight: weight)
-        }
-        return apply(weight, to: .custom(monoName, size: size, relativeTo: style))
-    }
-
-    /// The name the Markdown theme needs; Anthropic Serif with Newsreader as the fallback.
-    public var resolvedSerifName: String {
-        if ClaudeFontResources.isAvailable(serifName) { return serifName }
-        if ClaudeFontResources.isAvailable(ClaudeTypography.newsreader) { return ClaudeTypography.newsreader }
-        return serifName
-    }
-
-    private func apply(_ weight: Font.Weight, to font: Font) -> Font {
-        font.weight(weight)
-    }
-}
-
-/// Keys shared by the app's composition root and the in-app settings sheet.
-public enum PaseoSettingsKeys {
-    public static let appearance = "paseo.appearance"
-    public static let yourName = "paseo.yourName"
-    public static let haptics = "paseo.haptics"
-    public static let mascot = "paseo.mascot.enabled"
-}
-
-/// ClaudeUI's palette, extended with the tokens the DSH turn layout asks for
-/// (`docs/research/08-dsh-live-observation.md` §5 — that document overrides doc 06).
-enum ClaudePalette {
-    /// #141413 in dark, ClaudeUI's warm canvas in light.
-    static var background: Color {
-        Color(uiColor: UIColor { traits in
-            if ClaudeAppearance.pureBlackActive {
-                return UIColor(white: 0, alpha: 1)
-            }
-            return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 1)
-                : UIColor(red: 0.976, green: 0.976, blue: 0.969, alpha: 1)
-        })
-    }
-    static var codeBackground: Color {
-        adaptive(light: 0.98, dark: 0.04, pureBlack: 0.02)
-    }
-    static var panel: Color {
-        adaptive(light: 1, dark: 31 / 255, pureBlack: 15 / 255)
-    }
-    /// A lifted gray composer card, ~#262624 in dark.
-    static var composer: Color {
-        Color(uiColor: UIColor { traits in
-            if ClaudeAppearance.pureBlackActive {
-                return UIColor(white: 18 / 255, alpha: 1)
-            }
-            return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 38 / 255, green: 38 / 255, blue: 36 / 255, alpha: 1)
-                : UIColor(white: 0.99, alpha: 1)
-        })
-    }
-    static let composerBorder = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 0.79, alpha: 1)
-        })
-    static let secondary = Color(white: 0.56)
-    /// Warm off-white in dark, ClaudeUI's near-black in light.
-    static let ink = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.949, green: 0.937, blue: 0.914, alpha: 1)
-                : UIColor(white: 0.13, alpha: 1)
-        })
-    static func adaptive(light: Double, dark: Double, pureBlack: Double? = nil) -> Color {
-        Color(
-            uiColor: UIColor { traits in
-                if ClaudeAppearance.pureBlackActive {
-                    return UIColor(white: pureBlack ?? dark, alpha: 1)
-                }
-                return traits.userInterfaceStyle == .dark
-                    ? UIColor(white: dark, alpha: 1) : UIColor(white: light, alpha: 1)
-            })
-    }
-    static let orange = Color(red: 217 / 255, green: 119 / 255, blue: 87 / 255)
-
-    // MARK: DSH tokens
-
-    /// `--dsw-alias-label-primary`: #161616 light / #FDFDFD dark. The ink DSH paints prose and
-    /// turn content with; shared tokens stay `ink` (chrome) — this one is split from it.
-    static let primaryInk = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 253 / 255, green: 253 / 255, blue: 253 / 255, alpha: 1)
-                : UIColor(red: 22 / 255, green: 22 / 255, blue: 22 / 255, alpha: 1)
-        })
-    /// `--dsw-alias-label-shimmer`: the sweep band's tint, the ink colour, never the accent.
-    static let shimmerInk = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 253 / 255, green: 253 / 255, blue: 253 / 255, alpha: 1)
-                : UIColor(red: 22 / 255, green: 22 / 255, blue: 22 / 255, alpha: 1)
-        })
-    /// The prose link colour, #184F95 light / #8AB4F8 dark (`--dsh-claude-link`).
-    static let proseLink = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 138 / 255, green: 180 / 255, blue: 248 / 255, alpha: 1)
-                : UIColor(red: 24 / 255, green: 79 / 255, blue: 149 / 255, alpha: 1)
-        })
-    /// The code-block surface: #FFFFFF light / #212121 dark (`--dsw-alias-markdown-code-block`).
-    static var codeSurface: Color {
-        Color(uiColor: UIColor { traits in
-            if ClaudeAppearance.pureBlackActive {
-                return UIColor(white: 17 / 255, alpha: 1)
-            }
-            return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 33 / 255, green: 33 / 255, blue: 33 / 255, alpha: 1)
-                : UIColor(white: 1, alpha: 1)
-        })
-    }
-    /// `--dsh-claude-inline-code-bg`: rgba(6,6,6,0.05) light / rgba(255,255,255,0.05) dark.
-    static let inlineCodeFill = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.05)
-                : UIColor(red: 6 / 255, green: 6 / 255, blue: 6 / 255, alpha: 0.05)
-        })
-    /// The blockquote's wash: rgba(20,20,19,0.04) light / rgba(250,249,245,0.06) dark.
-    static let quoteWash = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 250 / 255, green: 249 / 255, blue: 245 / 255, alpha: 0.06)
-                : UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 0.04)
-        })
-    /// `--dsw-alias-label-secondary`: #70686A / #BEB6B8.
-    static let secondaryInk = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.745, green: 0.714, blue: 0.722, alpha: 1)
-                : UIColor(red: 0.439, green: 0.408, blue: 0.416, alpha: 1)
-        })
-    /// `--dsw-alias-label-tertiary`: #91888A / #9C9395.
-    static let tertiaryInk = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.612, green: 0.576, blue: 0.584, alpha: 1)
-                : UIColor(red: 0.569, green: 0.533, blue: 0.541, alpha: 1)
-        })
-    /// `--dsw-alias-label-caption`: #B2ACAD / #776F71.
-    static let captionInk = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.467, green: 0.435, blue: 0.443, alpha: 1)
-                : UIColor(red: 0.698, green: 0.675, blue: 0.678, alpha: 1)
-        })
-    /// `--dsh-claude-divider`, drawn at 0.5 pt.
-    static let divider = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.06) : UIColor(white: 22 / 255, alpha: 0.05)
-        })
-    /// `--dsw-alias-border-l1` card edge: #E9E9E9 / translucent white highlight.
-    static let cardBorder = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.09) : UIColor(white: 233 / 255, alpha: 1)
-        })
-    /// `#F4F2F3` light / translucent white dark — DSH's `#F4F2F3` / `rgba(255,255,255,0.06)`.
-    static let userBubble = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.06)
-                : UIColor(red: 244 / 255, green: 242 / 255, blue: 243 / 255, alpha: 1)
-        })
-    /// `--dsh-claude-chip`, the hover/pressed plate.
-    static let chip = adaptive(light: 0.965, dark: 0.14)
-    /// `--dsw-alias-state-warn-label`: #DD8629 both themes.
-    static let warning = Color(red: 221 / 255, green: 134 / 255, blue: 41 / 255)
-    /// The unread / finished-in-background dot.
-    static let unread = Color(red: 0.165, green: 0.471, blue: 0.839)
-    static let failureInk = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.898, green: 0.404, blue: 0.357, alpha: 1)
-                : UIColor(red: 0.753, green: 0.271, blue: 0.227, alpha: 1)
-        })
-    static let successInk = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.435, green: 0.749, blue: 0.494, alpha: 1)
-                : UIColor(red: 0.231, green: 0.545, blue: 0.310, alpha: 1)
-        })
-}
-
 /// The drawer affordance: three rules, the last one short.
 struct UnequalMenu: Shape {
     func path(in rect: CGRect) -> Path {
@@ -357,7 +111,7 @@ enum ClaudeSweep {
 /// 0.5 pt hairline, as the DSH separators are drawn.
 struct ClaudeDivider: View {
     var body: some View {
-        Rectangle().fill(ClaudePalette.divider).frame(height: 0.5)
+        Rectangle().fill(Palette.divider).frame(height: 0.5)
     }
 }
 
@@ -367,8 +121,8 @@ struct ClaudeChevron: View {
 
     var body: some View {
         Image(systemName: "chevron.right")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(ClaudePalette.tertiaryInk)
+            .font(.glyph(.small, weight: .semibold))
+            .foregroundStyle(Palette.tertiaryInk)
             .rotationEffect(.degrees(expanded ? 90 : 0))
             .frame(width: 12, height: 12)
             .accessibilityHidden(true)
@@ -388,12 +142,12 @@ struct ClaudeTurnChevron: View {
             path.addLine(to: CGPoint(x: 6, y: 12))
         }
         .stroke(
-            ClaudePalette.tertiaryInk,
+            Palette.tertiaryInk,
             style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
         )
         .frame(width: 12, height: 12)
         .rotationEffect(.degrees(expanded ? 90 : 0))
-        .animation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.feedback), value: expanded)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: expanded)
         .accessibilityHidden(true)
     }
 }
@@ -427,9 +181,9 @@ struct ClaudeCard<Content: View>: View {
     var body: some View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 10))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
             .overlay {
-                RoundedRectangle(cornerRadius: 10).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
             }
     }
 }

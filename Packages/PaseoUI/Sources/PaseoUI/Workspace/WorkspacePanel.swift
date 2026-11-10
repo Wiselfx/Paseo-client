@@ -61,7 +61,6 @@ struct WorkspacePanel: View {
     /// while this is true, so closing the panel stops its work; the tab is remembered separately.
     @State private var isPanelVisible: Bool
 
-    private let typography = ClaudeTypography()
 
     init(
         session: HostSession, workspace: WorkspaceDescriptor?, currentAgentId: String?,
@@ -233,8 +232,8 @@ struct WorkspacePanel: View {
     private var header: some View {
         ZStack {
             Text(workspaceTitle)
-                .font(typography.serif(20, relativeTo: .title3))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.title))
+                .foregroundStyle(Palette.ink)
                 .lineLimit(1)
                 .padding(.horizontal, 56)
             HStack(spacing: 0) {
@@ -242,8 +241,8 @@ struct WorkspacePanel: View {
                     onClose()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.regular, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
@@ -343,18 +342,18 @@ struct WorkspacePanel: View {
                 HStack(spacing: 8) {
                     setupGlyph(snapshot.status)
                     Text(setupLineText(snapshot))
-                        .font(typography.sans(13, weight: .medium))
+                        .font(.paseo(.footnote, weight: .medium))
                         .foregroundStyle(setupLineInk(snapshot.status))
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(ClaudePalette.quoteWash)
+                .background(Palette.quoteWash)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(setupLineText(snapshot)). Opens setup details.")
@@ -376,24 +375,24 @@ struct WorkspacePanel: View {
 
     private func setupLineInk(_ status: WorkspaceSetupStatus) -> Color {
         switch status {
-        case .failed: ClaudePalette.failureInk
-        case .blocked: ClaudePalette.warning
-        default: ClaudePalette.secondaryInk
+        case .failed: Palette.failureInk
+        case .blocked: Palette.warning
+        default: Palette.secondaryInk
         }
     }
 
     @ViewBuilder private func setupGlyph(_ status: WorkspaceSetupStatus) -> some View {
         switch status {
         case .running:
-            ProgressView().controlSize(.mini).tint(ClaudePalette.secondaryInk)
+            ProgressView().controlSize(.mini).tint(Palette.secondaryInk)
         case .failed:
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.glyph(.small, weight: .medium))
+                .foregroundStyle(Palette.failureInk)
         case .blocked:
             Image(systemName: "clock.badge.exclamationmark")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(ClaudePalette.warning)
+                .font(.glyph(.small, weight: .medium))
+                .foregroundStyle(Palette.warning)
         default:
             EmptyView()
         }
@@ -408,21 +407,20 @@ struct WorkspacePanel: View {
                     select(page)
                 } label: {
                     Text(page.title)
-                        .font(
-                            typography.sans(14, weight: page == currentPage ? .medium : .regular))
+                        .font(.paseo(.callout, weight: page == currentPage ? .medium : .regular))
                         .foregroundStyle(
-                            page == currentPage ? ClaudePalette.background : ClaudePalette.ink)
+                            page == currentPage ? Palette.background : Palette.ink)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
+                        .frame(minHeight: 32)
                         .background(
-                            page == currentPage ? ClaudePalette.ink : Color.clear, in: .capsule)
+                            page == currentPage ? Palette.ink : Color.clear, in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(page == currentPage ? .isSelected : [])
             }
         }
         .padding(3)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
     }
 
     private func select(_ page: Page) {
@@ -431,7 +429,7 @@ struct WorkspacePanel: View {
         if reduceMotion {
             pageRaw = page.rawValue
         } else {
-            withAnimation(.easeOut(duration: 0.18)) { pageRaw = page.rawValue }
+            withAnimation(Motion.disclosure.animation) { pageRaw = page.rawValue }
         }
     }
 
@@ -483,11 +481,11 @@ struct WorkspacePanel: View {
         VStack(spacing: 8) {
             Spacer()
             Text("No workspace selected")
-                .font(typography.sans(16, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text("Open a workspace from the sidebar to fill this panel.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -505,8 +503,8 @@ struct WorkspacePanel: View {
                 }
                 if agents.isEmpty {
                     Text("No agents in this workspace yet.")
-                        .font(typography.sans(14))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.vertical, 24)
                         .frame(maxWidth: .infinity)
                 } else {
@@ -529,13 +527,13 @@ struct WorkspacePanel: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.glyph(.regular, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 30, height: 30)
-                    .background(ClaudePalette.chip, in: .circle)
+                    .background(Palette.chip, in: .circle)
                 Text("New agent")
-                    .font(typography.sans(16, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8)
@@ -553,13 +551,13 @@ struct WorkspacePanel: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.glyph(.regular, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 30, height: 30)
-                    .background(ClaudePalette.chip, in: .circle)
+                    .background(Palette.chip, in: .circle)
                 Text("Import session")
-                    .font(typography.sans(16, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8)
@@ -580,30 +578,30 @@ struct WorkspacePanel: View {
                 PaseoStatusDot(kind: agentStatusKind(agent))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(agent.title ?? "New agent")
-                        .font(typography.sans(16, weight: current ? .medium : .regular))
+                        .font(.paseo(.callout, weight: current ? .medium : .regular))
                         .lineLimit(1)
                     Text(agentMeta(agent))
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if let stamp = activityDate(agent) {
                     Text(relativeAge(stamp))
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 if current {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                         .accessibilityLabel("Current agent")
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
             .contentShape(.rect)
-            .background(current ? ClaudePalette.chip : Color.clear, in: .rect(cornerRadius: 12))
+            .background(current ? Palette.chip : Color.clear, in: .rect(cornerRadius: Radius.md))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)

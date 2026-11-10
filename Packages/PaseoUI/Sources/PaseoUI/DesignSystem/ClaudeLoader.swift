@@ -27,7 +27,7 @@ struct ClaudeLoader: View {
             // Static three-dot glyph: no wave, no rotation, no hand-over.
             HStack(spacing: 3) {
                 ForEach(0..<3, id: \.self) { _ in
-                    Circle().fill(ClaudePalette.orange).frame(width: 4, height: 4)
+                    Circle().fill(Palette.orange).frame(width: 4, height: 4)
                 }
             }
             .frame(width: 18, height: 14, alignment: .bottom)
@@ -88,7 +88,7 @@ struct ClaudeLoader: View {
     ) {
         let rect = CGRect(
             x: centreX - width / 2, y: canvasFloor - bottom - height, width: width, height: height)
-        canvas.fill(Path(ellipseIn: rect), with: .color(ClaudePalette.orange.opacity(alpha)))
+        canvas.fill(Path(ellipseIn: rect), with: .color(Palette.orange.opacity(alpha)))
     }
 
     // MARK: Lane A — bounce (3 dots, 500 ms, infinite alternate, ease)
@@ -185,7 +185,7 @@ struct ClaudeLoader: View {
             let position = Self.sample(keys, at: percent)
             let rect = CGRect(
                 x: centreX + position.x - 2, y: centreY + position.y - 2, width: 4, height: 4)
-            canvas.fill(Path(ellipseIn: rect), with: .color(ClaudePalette.orange.opacity(alpha)))
+            canvas.fill(Path(ellipseIn: rect), with: .color(Palette.orange.opacity(alpha)))
         }
     }
 

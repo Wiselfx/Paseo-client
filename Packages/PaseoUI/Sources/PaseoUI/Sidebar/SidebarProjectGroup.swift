@@ -10,15 +10,15 @@ extension PaseoSidebar {
         return HStack(spacing: 0) {
             Button {
                 Haptics.selection()
-                withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                     toggleCollapsed(group.id)
                 }
             } label: {
                 HStack(spacing: 6) {
                     ClaudeChevron(expanded: !collapsed)
                     Text(title)
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
@@ -31,8 +31,8 @@ extension PaseoSidebar {
                 newAgent(in: group)
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 30, height: 30)
                     .contentShape(.rect)
             }

@@ -27,7 +27,6 @@ struct ForgeSearchPicker: View {
     @State private var searchError: String?
     @State private var searchTask: Task<Void, Never>?
 
-    private let typography = ClaudeTypography()
     private var store: ForgeSearchStore { session.forgeSearch }
 
     enum KindFilter: String, CaseIterable {
@@ -60,21 +59,20 @@ struct ForgeSearchPicker: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .onDisappear { searchTask?.cancel() }
     }
 
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
-            TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(ClaudePalette.secondaryInk))
-                .font(typography.sans(17))
+                .font(.glyph(.regular))
+                .foregroundStyle(Palette.secondaryInk)
+            TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(Palette.secondaryInk))
+                .font(.paseo(.body))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .onChange(of: query) { _, value in scheduleSearch(value) }
@@ -86,8 +84,8 @@ struct ForgeSearchPicker: View {
                     scheduleSearch("")
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.regular))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear")
@@ -95,7 +93,7 @@ struct ForgeSearchPicker: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 44)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
     }
 
     private var kindFilterRow: some View {
@@ -107,13 +105,13 @@ struct ForgeSearchPicker: View {
                     scheduleSearch(query)
                 } label: {
                     Text(filterLabel(filter))
-                        .font(typography.sans(13, weight: kindFilter == filter ? .medium : .regular))
+                        .font(.paseo(.footnote, weight: kindFilter == filter ? .medium : .regular))
                         .foregroundStyle(
-                            kindFilter == filter ? ClaudePalette.background : ClaudePalette.ink)
+                            kindFilter == filter ? Palette.background : Palette.ink)
                         .padding(.horizontal, 12)
-                        .frame(height: 30)
+                        .frame(minHeight: 30)
                         .background(
-                            kindFilter == filter ? ClaudePalette.ink : ClaudePalette.chip,
+                            kindFilter == filter ? Palette.ink : Palette.chip,
                             in: .capsule)
                 }
                 .buttonStyle(.plain)
@@ -135,14 +133,14 @@ struct ForgeSearchPicker: View {
         }
         if let searchError {
             Text(searchError)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.failureInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         if let result, let error = result.error, !error.isEmpty {
             Text(error)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.failureInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         if let result {
@@ -151,8 +149,8 @@ struct ForgeSearchPicker: View {
                     Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         ? "Type to search."
                         : "No results found.")
-                        .font(typography.sans(14))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 24)
                 }
@@ -201,24 +199,24 @@ struct ForgeSearchPicker: View {
     private func authCallout(_ callout: AuthCallout) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(callout.title)
-                .font(typography.sans(13, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text("Run this on the host, then refresh:")
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.secondaryInk)
             ForEach(callout.commands, id: \.self) { command in
                 Text(command)
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(ClaudePalette.chip, in: .rect(cornerRadius: 8))
+                    .background(Palette.chip, in: .rect(cornerRadius: Radius.sm))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(ClaudePalette.warning.opacity(0.08), in: .rect(cornerRadius: 12))
+        .background(Palette.warning.opacity(0.08), in: .rect(cornerRadius: Radius.md))
     }
 
     private func resultRow(_ item: ForgeSearchItem) -> some View {
@@ -229,26 +227,26 @@ struct ForgeSearchPicker: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: item.kind == .changeRequest ? "arrow.triangle.branch" : "exclamationmark.circle")
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.regular))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.resultTitle(item))
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     if !item.labels.isEmpty {
                         Text(item.labels.joined(separator: " · "))
-                            .font(typography.sans(11))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.caption2))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 4)
                 if selected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                         .accessibilityLabel("Selected")
                 }
             }

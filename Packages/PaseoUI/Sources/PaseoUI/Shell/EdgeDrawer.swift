@@ -21,7 +21,7 @@ enum EdgeDrawer {
     /// The one settle animation: critically damped, no overshoot. Reduce Motion gets a flat
     /// ease-out instead (§0.4).
     static func settleAnimation(reduceMotion: Bool) -> Animation {
-        reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.32)
+        Motion.settle.resolved(reduceMotion: reduceMotion) ?? Motion.fade.animation
     }
 
     /// The scrim over a covered surface: 0.25 in light, 0.55 in dark, scaled by progress (§1.1).
@@ -141,7 +141,7 @@ extension View {
 struct EdgeDrawerCard: View {
     var body: some View {
         RoundedRectangle(cornerRadius: EdgeDrawer.cornerRadius, style: .continuous)
-            .fill(ClaudePalette.background)
+            .fill(Palette.background)
             .ignoresSafeArea()
     }
 }
@@ -155,7 +155,7 @@ struct EdgeDrawerHairline: View {
         if progress > 0 {
             RoundedRectangle(cornerRadius: EdgeDrawer.cornerRadius, style: .continuous)
                 .stroke(
-                    ClaudePalette.ink.opacity(0.10 * Double(min(max(progress, 0), 1))),
+                    Palette.ink.opacity(0.10 * Double(min(max(progress, 0), 1))),
                     lineWidth: 0.5)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)

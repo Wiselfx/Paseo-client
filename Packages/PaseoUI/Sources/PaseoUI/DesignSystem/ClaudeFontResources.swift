@@ -4,7 +4,7 @@
 
     /// Registers the bundled Anthropic faces and the Newsreader serif fallback for this process.
     /// Public so Paseo's DesignSystem can use it.
-    @MainActor public enum ClaudeFontResources {
+    public enum ClaudeFontResources {
         /// PostScript names read from the bundled files with `fc-scan`, not guessed.
         public static let anthropicSans = "AnthropicSansWebVariable-TextRegular"
         public static let anthropicSerif = "AnthropicSerifWebVariable-TextRegular"

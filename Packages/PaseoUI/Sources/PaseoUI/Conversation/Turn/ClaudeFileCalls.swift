@@ -145,7 +145,6 @@ struct ClaudeMergedFileRow: View {
     let call: ClaudeMergedFileCall
     /// The newest step of a running turn opens by default so you can watch it.
     let isLive: Bool
-    let typography: ClaudeTypography
     /// Called with the absolute path when the filename is tapped.
     let onOpenFile: (String) -> Void
     /// The seqEnd of the find flash, to light up a merged row when a match lands on one of its rows.
@@ -160,7 +159,7 @@ struct ClaudeMergedFileRow: View {
 
     private func checkFindTarget() {
         guard let findTarget, call.rowSeqEnds.contains(findTarget) else { return }
-        withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) { userExpanded = true }
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { userExpanded = true }
     }
 
     var body: some View {
@@ -168,13 +167,13 @@ struct ClaudeMergedFileRow: View {
             HStack(spacing: 0) {
                 toggleButton {
                     Text(call.verb)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(minWidth: 42, alignment: .leading)
                         .padding(.vertical, 10)
                         .contentShape(.rect)
                 }
-                Circle().fill(ClaudePalette.captionInk).frame(width: 2, height: 2)
+                Circle().fill(Palette.captionInk).frame(width: 2, height: 2)
                     .padding(.horizontal, 8)
                 fileButton
                 Spacer(minLength: 6)
@@ -214,9 +213,9 @@ struct ClaudeMergedFileRow: View {
             }
         }
         .background {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(ClaudePalette.warning.opacity(highlightedSeq.map { call.rowSeqEnds.contains($0) ? 0.18 : 0 } ?? 0))
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: highlightedSeq)
+            RoundedRectangle(cornerRadius: Radius.md)
+                .fill(Palette.warning.opacity(highlightedSeq.map { call.rowSeqEnds.contains($0) ? 0.18 : 0 } ?? 0))
+                .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
         }
     }
 
@@ -225,7 +224,7 @@ struct ClaudeMergedFileRow: View {
     ) -> some View {
         Button {
             Haptics.selection()
-            withAnimation(reduceMotion ? nil : .easeOut(duration: ClaudeMotion.move)) {
+            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                 userExpanded = !isExpanded
             }
         } label: {
@@ -242,15 +241,15 @@ struct ClaudeMergedFileRow: View {
         } label: {
             HStack(spacing: 6) {
                 Text(call.fileName)
-                    .font(typography.mono(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
-                    .underline(true, pattern: .dot, color: ClaudePalette.tertiaryInk)
+                    .font(.paseo(.code))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .underline(true, pattern: .dot, color: Palette.tertiaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if call.count > 1 {
                     Text("×\(PaseoFormat.integer(call.count))")
-                        .font(typography.mono(11))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.captionInk)
                 }
             }
             .padding(.vertical, 10)
@@ -264,14 +263,14 @@ struct ClaudeMergedFileRow: View {
         HStack(spacing: 6) {
             if stat.added > 0 {
                 Text("+\(PaseoFormat.integer(stat.added))")
-                    .foregroundStyle(ClaudePalette.successInk.opacity(0.8))
+                    .foregroundStyle(Palette.successInk.opacity(0.8))
             }
             if stat.removed > 0 {
                 Text("−\(PaseoFormat.integer(stat.removed))")
-                    .foregroundStyle(ClaudePalette.failureInk.opacity(0.8))
+                    .foregroundStyle(Palette.failureInk.opacity(0.8))
             }
         }
-        .font(typography.mono(11))
+        .font(.paseo(.codeCaption))
         .padding(.trailing, 8)
     }
 }

@@ -9,36 +9,35 @@
         public var bodyFont: Font
         public var headingFonts: [Font]
         public var codeFont: Font
-        public var foreground: Color = .primary
-        public var secondary: Color = .secondary
-        public var link: Color = ClaudePalette.proseLink
-        public var inlineCodeForeground: Color = ClaudePalette.primaryInk
+        public var foreground: Color = Palette.ink
+        public var secondary: Color = Palette.secondaryInk
+        public var link: Color = Palette.proseLink
+        public var inlineCodeForeground: Color = Palette.ink
         /// The blockquote's wash: rgba(20,20,19,0.04) light / rgba(250,249,245,0.06) dark.
-        public var quoteWash: Color = ClaudePalette.quoteWash
-        public var codeBackground: Color = ClaudePalette.codeSurface
-        public var inlineCodeBackground: Color = ClaudePalette.inlineCodeFill
-        public var tableHeaderBackground: Color = ClaudePalette.adaptive(light: 1, dark: 0.16)
-        public var rule: Color = ClaudePalette.divider
+        public var quoteWash: Color = Palette.quoteWash
+        public var codeBackground: Color = Palette.codeSurface
+        public var inlineCodeBackground: Color = Palette.inlineCodeFill
+        public var tableHeaderBackground: Color = Palette.adaptive(light: 1, dark: 0.16)
+        public var rule: Color = Palette.divider
         public var blockSpacing: CGFloat = 12
         public var lineSpacing: CGFloat = 9
         public var listSpacing: CGFloat = 9
         public var tableColumnWidth: CGFloat = 150
         public init(serifName: String = "Newsreader16pt-Regular", bodySize: CGFloat = 20) {
-            foreground = ClaudePalette.primaryInk
-            // `ClaudeTypography.serif` multiplies by the text-size setting; the theme builds its
-            // fonts directly, so without this prose would ignore Settings → Appearance.
-            let size = bodySize * ClaudeTextScale.contentMultiplier()
-            bodyFont = .custom(serifName, size: size, relativeTo: .body)
+            foreground = Palette.ink
+            // Dynamic Type (shifted by Content size in `RootView`) scales prose; the theme no
+            // longer multiplies sizes by hand.
+            bodyFont = ProseFonts.serif(size: bodySize)
             // The Claude ladder as ratios of the body: h1 1.5, h2 1.29, h3 1.14, h4 1, h5 0.93,
             // h6 0.86 (the sizes measured at 14 pt: 21 / 18 / 16 / 14 / 13 / 12).
             let headingRatios: [CGFloat] = [1.5, 1.286, 1.143, 1, 0.929, 0.857]
             headingFonts = headingRatios.enumerated().map { index, ratio in
-                Font.custom(serifName, size: size * ratio, relativeTo: index < 3 ? .headline : .body)
+                ProseFonts.serif(size: bodySize * ratio, relativeTo: index < 3 ? .headline : .body)
                     .weight(index < 3 ? .bold : .semibold)
             }
-            // ~0.88 of the body: 15 pt at the 17 pt Claude body, and the code size setting still
-            // multiplies on top inside `mono`.
-            codeFont = ClaudeTypography().mono(15, relativeTo: .body)
+            // ~0.88 of the body: 15 pt at the 17 pt Claude body. The code-size step is applied by
+            // the code container (`codeTypeScale()`), not baked into the face.
+            codeFont = ProseFonts.mono(size: 15)
         }
         public static var artifact: Self {
             var theme = Self()
@@ -105,8 +104,8 @@
                                 "markdown.code.expandedContent")
                         }.defaultScrollAnchor(.topLeading, for: .alignment).frame(
                             maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    }.padding(16).background(ClaudePalette.background).presentationDetents([.large])
-                        .presentationCornerRadius(40).presentationDragIndicator(.hidden)
+                    }.padding(16).background(Palette.background).presentationDetents([.large])
+                        .presentationDragIndicator(.hidden)
                 }
                 .environment(
                     \.openURL,
@@ -260,8 +259,8 @@
                         codeText(language: language, content: content).accessibilityIdentifier(
                             "markdown.code.content")
                     }.scrollIndicators(.hidden).padding(16)
-                }.background(theme.codeBackground, in: .rect(cornerRadius: 24)).overlay {
-                    RoundedRectangle(cornerRadius: 24).stroke(theme.rule, lineWidth: 0.6)
+                }.background(theme.codeBackground, in: .rect(cornerRadius: Radius.group)).overlay {
+                    RoundedRectangle(cornerRadius: Radius.group).stroke(theme.rule, lineWidth: 0.6)
                 }
             case .table(let header, let rows, let alignments):
                 let columns = max(header.count, rows.map(\.count).max() ?? 0)
@@ -288,8 +287,8 @@
                                 }
                             }
                         }
-                    }.clipShape(.rect(cornerRadius: 8)).overlay {
-                        RoundedRectangle(cornerRadius: 8).stroke(theme.rule, lineWidth: 0.6)
+                    }.clipShape(.rect(cornerRadius: Radius.sm)).overlay {
+                        RoundedRectangle(cornerRadius: Radius.sm).stroke(theme.rule, lineWidth: 0.6)
                     }
                 }.accessibilityIdentifier("markdown.table")
             case .unsupported(let kind, let source):
@@ -311,7 +310,9 @@
                     alignment: alignment == .right ? .right : alignment == .center ? .center : .left, onAction: onAction
                 )
             } else {
-                inlineText(content, font: font ?? theme.bodyFont).lineSpacing(theme.lineSpacing).textSelection(.enabled)
+                inlineText(content, font: font ?? theme.bodyFont)
+                    .textRenderer(InlineCodeRenderer(background: Palette.inlineCodeFill))
+                    .lineSpacing(theme.lineSpacing).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(
                         maxWidth: .infinity,
@@ -321,7 +322,7 @@
         private func codeText(language: String?, content: String) -> some View {
             Text(codeContent?(language, content) ?? defaultHighlightedCode(language: language, content: content)).font(
                 theme.codeFont
-            ).textSelection(.enabled).fixedSize(horizontal: true, vertical: false)
+            ).textSelection(.enabled).fixedSize(horizontal: true, vertical: false).codeTypeScale()
         }
         private func defaultHighlightedCode(language: String?, content: String) -> AttributedString {
             let colored = ClaudeCodeHighlighter.shared.highlight(
@@ -390,7 +391,6 @@
                     if case .code = child {
                         face = theme.codeFont
                         run.foregroundColor = theme.inlineCodeForeground
-                        run.backgroundColor = theme.inlineCodeBackground
                     }
                     if bold { face = face.weight(.semibold) } // DSH strong is 600, not 700
                     if italic { face = face.italic() }
@@ -422,7 +422,7 @@
                 for run in line {
                     if run[InlineCodeAttribute.self] != nil {
                         context.fill(
-                            Path(roundedRect: run.typographicBounds.rect.insetBy(dx: -1, dy: -1), cornerRadius: 4),
+                            Path(roundedRect: run.typographicBounds.rect.insetBy(dx: -1, dy: -1), cornerRadius: Radius.xs),
                             with: .color(background))
                     }
                     context.draw(run)

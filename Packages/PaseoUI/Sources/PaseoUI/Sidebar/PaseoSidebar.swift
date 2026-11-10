@@ -62,7 +62,6 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.showSchedules") var showSchedules = true
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
-    let typography = ClaudeTypography()
 
     var body: some View {
         // Derived once per evaluation and shared by the directory and every row (P5 #3).
@@ -70,8 +69,8 @@ struct PaseoSidebar: View {
         let chrome = VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Paseo")
-                    .font(typography.serif(27))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.largeTitle))
+                    .foregroundStyle(Palette.ink)
                 Spacer()
                 displayOptionsMenu
             }
@@ -94,8 +93,8 @@ struct PaseoSidebar: View {
         .frame(maxHeight: .infinity, alignment: .top)
         // The sidebar canvas equals the conversation canvas (§1.1); only the card's hairline
         // and dim separate the two surfaces.
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .onAppear {
             if showUsageInSidebar && session.hostUsage.isSupported {
                 Task { _ = await session.hostUsage.load(forceRefresh: false) }
@@ -296,7 +295,7 @@ struct PaseoSidebar: View {
         .overlay(alignment: .top) {
             if let toast {
                 Text(toast)
-                    .font(typography.sans(13))
+                    .font(.paseo(.footnote))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
                     .glassEffect()
@@ -309,7 +308,7 @@ struct PaseoSidebar: View {
             if let undoToast {
                 HStack(spacing: 14) {
                     Text("Archived \(undoToast.name)")
-                        .font(typography.sans(13, weight: .medium))
+                        .font(.paseo(.footnote, weight: .medium))
                         .lineLimit(1)
                     Button("Undo") {
                         let target = undoToast
@@ -324,7 +323,7 @@ struct PaseoSidebar: View {
                             }
                         }
                     }
-                    .font(typography.sans(13, weight: .semibold))
+                    .font(.paseo(.footnote, weight: .semibold))
                     .accessibilityLabel("Undo archive")
                 }
                 .padding(.horizontal, 18)
@@ -366,9 +365,9 @@ struct PaseoSidebar: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
-                    .font(.system(size: 18, weight: .light))
+                    .font(.glyph(.regular, weight: .light))
                     .frame(width: 24)
-                Text(title).font(typography.sans(18))
+                Text(title).font(.paseo(.body))
                 Spacer(minLength: 0)
             }
             .frame(height: 50)
@@ -423,13 +422,13 @@ struct PaseoSidebar: View {
         } label: {
             HStack(spacing: 8) {
                 Text("\(source) · \(window.label)")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                 ClaudeUsageBar(percent: used, width: 44)
                 Text(resets.map { "\(percent)% · \($0)" } ?? "\(percent)%")
-                    .font(typography.sans(11))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.caption2))
+                    .foregroundStyle(Palette.secondaryInk)
                     .fixedSize()
             }
             .contentShape(.rect)
@@ -452,8 +451,8 @@ struct PaseoSidebar: View {
                 sheet = .settings
             } label: {
                 Text(initial)
-                    .font(typography.serif(18, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.title, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 44, height: 44)
                     .glassEffect(in: .circle)
             }
@@ -475,16 +474,16 @@ struct PaseoSidebar: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.glyph(.regular, weight: .semibold))
                 Text("New session")
-                    .font(typography.sans(16, weight: .medium))
+                    .font(.paseo(.callout, weight: .medium))
                     .lineLimit(1)
                     .fixedSize()
             }
-            .foregroundStyle(ClaudePalette.background)
+            .foregroundStyle(Palette.background)
             .padding(.horizontal, 17)
             .frame(height: 44)
-            .background(ClaudePalette.ink, in: .capsule)
+            .background(Palette.ink, in: .capsule)
         }
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)

@@ -26,7 +26,6 @@ struct ImportSessionSheet: View {
     @State private var selectedProvider = "__all__"
     @State private var searchTask: Task<Void, Never>?
 
-    private let typography = ClaudeTypography()
     private var store: ImportSessionStore { session.importSession }
     private var scopeCwd: String? { showAll ? nil : cwd }
 
@@ -55,11 +54,10 @@ struct ImportSessionSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .task {
             await session.agentControl.loadCatalog(cwd: scopeCwd)
             await reload()
@@ -77,8 +75,8 @@ struct ImportSessionSheet: View {
     private var scopeRow: some View {
         HStack(spacing: 8) {
             Text(scopeCwd == nil ? "Sessions on this host" : "This workspace")
-                .font(typography.sans(13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
             Spacer(minLength: 0)
             if scopeCwd != nil {
                 Button {
@@ -88,7 +86,7 @@ struct ImportSessionSheet: View {
                     Task { await reload() }
                 } label: {
                     Text("Show all")
-                        .font(typography.sans(13, weight: .medium))
+                        .font(.paseo(.footnote, weight: .medium))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("importSession.showAll")
@@ -100,10 +98,10 @@ struct ImportSessionSheet: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
-            TextField("", text: $search, prompt: Text("Search sessions…").foregroundStyle(ClaudePalette.secondary))
-                .font(typography.sans(17))
+                .font(.glyph(.regular))
+                .foregroundStyle(Palette.secondaryInk)
+            TextField("", text: $search, prompt: Text("Search sessions…").foregroundStyle(Palette.tertiaryInk))
+                .font(.paseo(.body))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .onChange(of: search) { _, query in scheduleSearch(query) }
@@ -115,8 +113,8 @@ struct ImportSessionSheet: View {
                     Task { await reload() }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.regular))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear")
@@ -124,7 +122,7 @@ struct ImportSessionSheet: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 44)
-        .background(ClaudePalette.chip, in: .capsule)
+        .background(Palette.chip, in: .capsule)
     }
 
     /// Debounced 200 ms, upstream's `SEARCH_DEBOUNCE_MS`: a typed word is one request.
@@ -163,13 +161,13 @@ struct ImportSessionSheet: View {
             selectedProvider = id
         } label: {
             Text(label)
-                .font(typography.sans(13, weight: selectedProvider == id ? .medium : .regular))
+                .font(.paseo(.footnote, weight: selectedProvider == id ? .medium : .regular))
                 .foregroundStyle(
-                    selectedProvider == id ? ClaudePalette.background : ClaudePalette.ink)
+                    selectedProvider == id ? Palette.background : Palette.ink)
                 .padding(.horizontal, 12)
-                .frame(height: 30)
+                .frame(minHeight: 30)
                 .background(
-                    selectedProvider == id ? ClaudePalette.ink : ClaudePalette.chip, in: .capsule)
+                    selectedProvider == id ? Palette.ink : Palette.chip, in: .capsule)
         }
         .buttonStyle(.plain)
     }
@@ -183,8 +181,8 @@ struct ImportSessionSheet: View {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Loading recent sessions…")
-                    .font(typography.sans(14))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
@@ -193,8 +191,8 @@ struct ImportSessionSheet: View {
         } else if case .failed = store.phase, store.entries.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text(store.providerErrors.first?.message ?? "Could not load sessions.")
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                 refreshButton
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -204,8 +202,8 @@ struct ImportSessionSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(store.providerErrors, id: \.provider) { error in
                         Text("Could not load \(providerLabel(error.provider)) sessions")
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.failureInk)
                     }
                     refreshButton
                 }
@@ -226,9 +224,9 @@ struct ImportSessionSheet: View {
                         Task { await reload() }
                     } label: {
                         Text("Load more")
-                            .font(typography.sans(14, weight: .medium))
+                            .font(.paseo(.callout, weight: .medium))
                             .frame(maxWidth: .infinity)
-                            .frame(height: 44)
+                            .frame(minHeight: 44)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("importSession.loadMore")
@@ -236,8 +234,8 @@ struct ImportSessionSheet: View {
             }
             if let error = store.actionError {
                 Text(error)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -254,8 +252,8 @@ struct ImportSessionSheet: View {
 
     private func quietText(_ text: String) -> some View {
         Text(text)
-            .font(typography.sans(14))
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
     }
@@ -266,7 +264,7 @@ struct ImportSessionSheet: View {
             Task { await reload() }
         } label: {
             Label("Refresh sessions", systemImage: "arrow.clockwise")
-                .font(typography.sans(13, weight: .medium))
+                .font(.paseo(.footnote, weight: .medium))
         }
         .buttonStyle(.bordered)
         .accessibilityIdentifier("importSession.refresh")
@@ -285,17 +283,17 @@ struct ImportSessionSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(entry.displayTitle)
-                        .font(typography.sans(15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     Spacer(minLength: 4)
                     Text(WorkspaceFileFormat.relativeModified(entry.lastActivityAt))
-                        .font(typography.sans(11))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.caption2))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 Text(entry.promptPreview)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     if importing {
@@ -308,8 +306,8 @@ struct ImportSessionSheet: View {
                         }
                     }
                 }
-                .font(typography.sans(11))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.caption2))
+                .foregroundStyle(Palette.tertiaryInk)
                 .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -71,7 +71,7 @@ private func labelFill(_ color: WorkspaceLabelColor) -> Color {
 private func labelForeground(_ color: WorkspaceLabelColor, scheme: ColorScheme) -> Color {
     let table = scheme == .dark ? labelForegroundDarkHex : labelForegroundLightHex
     if let hex = table[labelKey(color)] { return hexColor(hex) }
-    return ClaudePalette.secondaryInk
+    return Palette.secondaryInk
 }
 
 private func labelGround(_ color: WorkspaceLabelColor) -> Color {
@@ -105,7 +105,7 @@ private struct WorkspaceLabelChip: View {
 
     var body: some View {
         Text(label.name)
-            .font(ClaudeTypography().sans(11, weight: .medium))
+            .font(.paseo(.caption2, weight: .medium))
             .lineLimit(1)
             .foregroundStyle(labelForeground(label.color, scheme: colorScheme))
             .padding(.horizontal, 6)
@@ -129,7 +129,7 @@ private struct LabelColorSwatch: View {
                 .overlay {
                     if selected {
                         Circle()
-                            .stroke(ClaudePalette.primaryInk, lineWidth: 2)
+                            .stroke(Palette.ink, lineWidth: 2)
                             .padding(-3)
                     }
                 }
@@ -228,8 +228,8 @@ extension PaseoSidebar {
                 if defs.count > shown.count {
                     let extra = defs.count - shown.count
                     Text("+\(PaseoFormat.integer(extra))")
-                        .font(typography.sans(11, weight: .medium))
-                        .foregroundStyle(ClaudePalette.captionInk)
+                        .font(.paseo(.caption2, weight: .medium))
+                        .foregroundStyle(Palette.captionInk)
                         .accessibilityLabel("\(extra) more labels")
                 }
             }
@@ -280,7 +280,6 @@ struct LabelsManageSheet: View {
     @State private var deleteCount: Int?
     @State private var inlineError: String?
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -294,7 +293,7 @@ struct LabelsManageSheet: View {
             .scrollIndicators(.hidden)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(ClaudePalette.panel)
+        .background(Palette.panel)
         .confirmationDialog(
             "Delete \(deleting?.name ?? "label")?",
             isPresented: Binding(
@@ -317,7 +316,7 @@ struct LabelsManageSheet: View {
     private var header: some View {
         ZStack {
             Text("Labels")
-                .font(typography.serif(19, relativeTo: .headline, weight: .semibold))
+                .font(.paseo(.title, weight: .semibold))
             HStack {
                 Button {
                     Haptics.selection()
@@ -325,7 +324,7 @@ struct LabelsManageSheet: View {
                     onClose()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 19, weight: .light))
+                        .font(.glyph(.large, weight: .light))
                         .frame(width: 42, height: 42)
                 }
                 .glassEffect(in: .circle)
@@ -341,8 +340,8 @@ struct LabelsManageSheet: View {
     @ViewBuilder private var errorBar: some View {
         if let error = inlineError ?? session.labels.actionError {
             Text(error)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.failureInk)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
         }
@@ -352,14 +351,14 @@ struct LabelsManageSheet: View {
         let catalog = session.labels.labels
         if catalog.isEmpty {
             Text("No labels yet. Create one from a workspace's Labels menu.")
-                .font(typography.sans(15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.top, 24)
         } else {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Rename, recolor or delete. Renaming follows every workspace carrying the label.")
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.captionInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.captionInk)
                     .padding(.top, 10)
                 ForEach(catalog, id: \.name) { label in
                     labelRow(label)
@@ -373,7 +372,7 @@ struct LabelsManageSheet: View {
             HStack(spacing: 10) {
                 WorkspaceLabelDot(color: label.color, size: 12)
                 TextField("Name", text: draftBinding(label.name))
-                    .font(typography.sans(15))
+                    .font(.paseo(.callout))
                     .textInputAutocapitalization(.never)
                     .submitLabel(.done)
                     .onSubmit { commitRename(original: label.name) }
@@ -383,8 +382,8 @@ struct LabelsManageSheet: View {
                     deleting = label
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.glyph(.regular, weight: .regular))
+                        .foregroundStyle(Palette.failureInk)
                         .frame(width: 36, height: 36)
                         .contentShape(.rect)
                 }
@@ -492,7 +491,6 @@ struct NewLabelSheet: View {
     @State private var name = ""
     @State private var color: WorkspaceLabelColor = .teal
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -501,13 +499,13 @@ struct NewLabelSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     fieldHint
                     TextField("Label name", text: $name)
-                        .font(typography.sans(16))
+                        .font(.paseo(.callout))
                         .textInputAutocapitalization(.never)
                         .submitLabel(.done)
                         .onSubmit(submit)
                         .padding(.horizontal, 14)
-                        .frame(height: 44)
-                        .background(ClaudePalette.chip, in: .rect(cornerRadius: 10))
+                        .frame(minHeight: 44)
+                        .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
                     colorRow
                     Button(action: submit) {
                         HStack {
@@ -516,25 +514,25 @@ struct NewLabelSheet: View {
                                 ProgressView().controlSize(.small)
                             } else {
                                 Text("Create")
-                                    .font(typography.sans(16, weight: .semibold))
+                                    .font(.paseo(.callout, weight: .semibold))
                             }
                             Spacer()
                         }
                         .frame(height: 46)
-                        .background(canCreate ? ClaudePalette.unread : ClaudePalette.chip, in: .rect(cornerRadius: 10))
-                        .foregroundStyle(canCreate ? Color.white : ClaudePalette.secondaryInk)
+                        .background(canCreate ? Palette.unread : Palette.chip, in: .rect(cornerRadius: Radius.md))
+                        .foregroundStyle(canCreate ? Color.white : Palette.secondaryInk)
                     }
                     .buttonStyle(.plain)
                     .disabled(!canCreate)
                     if let error = session.labels.actionError {
                         Text(error)
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.failureInk)
                     }
                     if matchesExisting {
                         Text("Matches an existing label — it will be assigned instead of duplicated.")
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.captionInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.captionInk)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -544,7 +542,7 @@ struct NewLabelSheet: View {
             .scrollIndicators(.hidden)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(ClaudePalette.panel)
+        .background(Palette.panel)
     }
 
     private var canCreate: Bool {
@@ -559,8 +557,8 @@ struct NewLabelSheet: View {
 
     private var fieldHint: some View {
         Text("Appears on the workspace row and in the sidebar label filter.")
-            .font(typography.sans(13))
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .font(.paseo(.footnote))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.top, 14)
     }
 
@@ -585,14 +583,14 @@ struct NewLabelSheet: View {
     private var header: some View {
         ZStack {
             Text("New label")
-                .font(typography.serif(19, relativeTo: .headline, weight: .semibold))
+                .font(.paseo(.title, weight: .semibold))
             HStack {
                 Button {
                     Haptics.selection()
                     onClose()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 19, weight: .light))
+                        .font(.glyph(.large, weight: .light))
                         .frame(width: 42, height: 42)
                 }
                 .glassEffect(in: .circle)

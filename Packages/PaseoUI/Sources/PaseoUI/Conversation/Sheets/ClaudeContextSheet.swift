@@ -9,7 +9,6 @@ struct ClaudeContextSheet: View {
     let store: ConversationStore
 
     @Environment(\.dismiss) private var dismiss
-    private let typography = ClaudeTypography()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,8 +21,8 @@ struct ClaudeContextSheet: View {
                         costByModelSection(usage: usage)
                     } else {
                         Text("This agent's host does not report context usage yet.")
-                            .font(typography.sans(15))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.horizontal, 16)
                             .padding(.top, 32)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -33,11 +32,10 @@ struct ClaudeContextSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.height(560)])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     // MARK: Header row
@@ -47,12 +45,12 @@ struct ClaudeContextSheet: View {
             ClaudeMeterRing(percent: percent, size: 64, lineWidth: 6)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(PaseoFormat.percent(percent)) used")
-                    .font(typography.serif(28))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.largeTitle))
+                    .foregroundStyle(Palette.ink)
                 if let max = usage.maxTokens {
                     Text("of \(Self.tokenCount(max)) tokens")
-                        .font(typography.sans(14))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             }
             Spacer(minLength: 0)
@@ -122,18 +120,18 @@ struct ClaudeContextSheet: View {
                     ForEach(Array(costByModel.enumerated()), id: \.offset) { index, entry in
                         HStack(spacing: 12) {
                             Text(Self.modelName(entry.key))
-                                .font(typography.mono(13, relativeTo: .footnote))
-                                .foregroundStyle(ClaudePalette.ink)
+                                .font(.paseo(.code))
+                                .foregroundStyle(Palette.ink)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                             Spacer(minLength: 8)
                             VStack(alignment: .trailing, spacing: 1) {
                                 Text(Self.cost(entry.costUsd, fractionDigits: 4))
-                                    .font(typography.sans(15, weight: .medium))
-                                    .foregroundStyle(ClaudePalette.ink)
+                                    .font(.paseo(.callout, weight: .medium))
+                                    .foregroundStyle(Palette.ink)
                                 Text("\(Self.tokenCount(entry.tokens)) tokens")
-                                    .font(typography.sans(11))
-                                    .foregroundStyle(ClaudePalette.secondaryInk)
+                                    .font(.paseo(.caption2))
+                                    .foregroundStyle(Palette.secondaryInk)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -149,8 +147,8 @@ struct ClaudeContextSheet: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(typography.sans(13, weight: .medium))
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .font(.paseo(.footnote, weight: .medium))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, -4)
@@ -159,12 +157,12 @@ struct ClaudeContextSheet: View {
     private func valueRow(_ label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(typography.sans(17))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.body))
+                .foregroundStyle(Palette.ink)
             Spacer(minLength: 8)
             Text(value)
-                .font(typography.sans(15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
         }
         .padding(.horizontal, 16)

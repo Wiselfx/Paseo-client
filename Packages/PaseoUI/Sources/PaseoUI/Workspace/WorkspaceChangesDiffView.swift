@@ -37,7 +37,6 @@ struct WorkspaceChangesDiffView: View {
     /// The open comment sheet: a new comment for an anchor, or an existing draft being edited.
     @State private var commentTarget: CommentSheetTarget?
 
-    private let typography = ClaudeTypography()
     private var model: DiffModel { DiffModel(file: file, hideWhitespaceChanges: hideWhitespace) }
     private var sideModel: SideBySideModel {
         SideBySideModel(file: file, hideWhitespaceChanges: hideWhitespace)
@@ -123,24 +122,24 @@ struct WorkspaceChangesDiffView: View {
     @ViewBuilder private func draftCard(_ draft: WorkspaceReviewDraftComment) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "text.bubble")
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.small, weight: .regular))
+                .foregroundStyle(Palette.tertiaryInk)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(lineRangeLabel(draft))
-                        .font(typography.mono(10.5))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.tertiaryInk)
                     Text("Review comment")
-                        .font(typography.sans(10.5, weight: .medium))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.caption2, weight: .medium))
+                        .foregroundStyle(Palette.tertiaryInk)
                     Spacer(minLength: 4)
                     Button {
                         commentTarget = .edit(draft)
                     } label: {
                         Image(systemName: "pencil")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.glyph(.small, weight: .medium))
+                            .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 30, height: 30)
                             .contentShape(.rect)
                     }
@@ -151,8 +150,8 @@ struct WorkspaceChangesDiffView: View {
                         Haptics.success()
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.glyph(.small, weight: .medium))
+                            .foregroundStyle(Palette.secondaryInk)
                             .frame(width: 30, height: 30)
                             .contentShape(.rect)
                     }
@@ -160,8 +159,8 @@ struct WorkspaceChangesDiffView: View {
                     .accessibilityLabel("Delete review comment")
                 }
                 Text(draft.body)
-                    .font(typography.sans(13))
-                    .foregroundStyle(ClaudePalette.primaryInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onTapGesture {
@@ -172,7 +171,7 @@ struct WorkspaceChangesDiffView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(ClaudePalette.quoteWash, in: .rect(cornerRadius: 12))
+        .background(Palette.quoteWash, in: .rect(cornerRadius: Radius.md))
         .padding(.leading, effectiveSideBySide ? 6 : 46)
         .padding(.trailing, 12)
         .padding(.vertical, 3)
@@ -195,14 +194,14 @@ struct WorkspaceChangesDiffView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "text.bubble")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.glyph(.small, weight: .medium))
                         Text("Comment on \(PaseoFormat.integer(count)) \(count == 1 ? "line" : "lines")")
-                            .font(typography.sans(13, weight: .medium))
+                            .font(.paseo(.footnote, weight: .medium))
                     }
-                    .foregroundStyle(ClaudePalette.background)
+                    .foregroundStyle(Palette.background)
                     .padding(.horizontal, 14)
                     .frame(height: 38)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .background(Palette.ink, in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Comment on the selected \(count) lines")
@@ -211,10 +210,10 @@ struct WorkspaceChangesDiffView: View {
                     selectionEnd = nil
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.background)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.background)
                         .frame(width: 38, height: 38)
-                        .background(ClaudePalette.ink.opacity(0.85), in: .circle)
+                        .background(Palette.ink.opacity(0.85), in: .circle)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear selection")
@@ -253,16 +252,16 @@ struct WorkspaceChangesDiffView: View {
             ClaudeDivider()
             if let discardError {
                 Text(discardError)
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.failureInk)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             content
         }
-        .background(ClaudePalette.panel)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.panel)
+        .foregroundStyle(Palette.ink)
         .overlay(alignment: .bottomTrailing) { selectionCapsule }
         .sheet(item: $commentTarget) { target in
             if reviewEnabled {
@@ -278,7 +277,7 @@ struct WorkspaceChangesDiffView: View {
                         confirmDiscard = true
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .foregroundStyle(Palette.failureInk)
                     }
                     .accessibilityLabel("Discard changes to this file")
                     .disabled(extras.isDiscarding)
@@ -374,15 +373,15 @@ struct WorkspaceChangesDiffView: View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(file.path)
-                    .font(typography.mono(11.5))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(2)
                     .truncationMode(.head)
                     .textSelection(.enabled)
                 if let oldPath = file.oldPath {
                     Text("renamed from \(oldPath)")
-                        .font(typography.mono(10.5))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -390,11 +389,11 @@ struct WorkspaceChangesDiffView: View {
             Spacer(minLength: 8)
             HStack(spacing: 6) {
                 Text("+\(PaseoFormat.integer(file.additions))")
-                    .foregroundStyle(ClaudePalette.successInk)
+                    .foregroundStyle(Palette.successInk)
                 Text("−\(PaseoFormat.integer(file.deletions))")
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .foregroundStyle(Palette.failureInk)
             }
-            .font(typography.mono(12))
+            .font(.paseo(.codeSmall))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -429,14 +428,14 @@ struct WorkspaceChangesDiffView: View {
     private func centeredMessage(symbol: String, title: String, subtitle: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.glyph(.hero, weight: .light))
+                .foregroundStyle(Palette.tertiaryInk)
             Text(title)
-                .font(typography.sans(16, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text(subtitle)
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 32)
@@ -498,7 +497,8 @@ struct WorkspaceChangesDiffView: View {
             .padding(.vertical, 8)
             .textSelection(.enabled)
         }
-        .background(ClaudePalette.codeBackground)
+        .background(Palette.codeSurface)
+        .codeTypeScale()
     }
 
     /// Two-column comparison, one HStack per row; each half wraps independently and the row
@@ -516,7 +516,8 @@ struct WorkspaceChangesDiffView: View {
             .padding(.vertical, 8)
             .textSelection(.enabled)
         }
-        .background(ClaudePalette.codeBackground)
+        .background(Palette.codeSurface)
+        .codeTypeScale()
     }
 
     private func sideBySideRow(_ row: SideBySideModel.Row) -> some View {
@@ -527,11 +528,11 @@ struct WorkspaceChangesDiffView: View {
                 HStack(alignment: .top, spacing: 0) {
                     sideCell(row.left)
                     Rectangle()
-                        .fill(ClaudePalette.divider)
+                        .fill(Palette.divider)
                         .frame(width: 0.5)
                     sideCell(row.right)
                 }
-                .font(typography.mono(12.5))
+                .font(.paseo(.codeSmall))
                 .padding(.vertical, 1)
             }
         }
@@ -565,16 +566,16 @@ struct WorkspaceChangesDiffView: View {
             return text
         }()
         let signColor: Color = cell.map { signTint($0.kind) } ?? .clear
-        let textColor: Color = cell.map { contentTint($0.kind) } ?? ClaudePalette.primaryInk
+        let textColor: Color = cell.map { contentTint($0.kind) } ?? Palette.ink
         let fill: Color = selectionWash(anchor)
             ?? cell.map { rowFill($0.kind) }
-            ?? ClaudePalette.chip.opacity(0.35)
+            ?? Palette.chip.opacity(0.35)
         return Button {
             handleRowTap(anchor)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(lineText)
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .foregroundStyle(Palette.tertiaryInk)
                     .frame(width: 32, alignment: .trailing)
                     .padding(.trailing, 5)
                 Text(signText)
@@ -620,11 +621,11 @@ struct WorkspaceChangesDiffView: View {
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 0) {
                         Text(row.old)
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .foregroundStyle(Palette.tertiaryInk)
                             .frame(width: 38, alignment: .trailing)
                             .padding(.trailing, 6)
                         Text(row.new)
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .foregroundStyle(Palette.tertiaryInk)
                             .frame(width: 38, alignment: .trailing)
                             .padding(.trailing, 10)
                         Text(row.sign)
@@ -636,7 +637,7 @@ struct WorkspaceChangesDiffView: View {
                             .frame(maxWidth: wrapLongLines ? .infinity : nil, alignment: .leading)
                             .foregroundStyle(contentTint(row.kind))
                     }
-                    .font(typography.mono(12.5))
+                    .font(.paseo(.codeSmall))
                     .frame(width: wrapLongLines ? nil : model.totalWidth, alignment: .leading)
                     .frame(maxWidth: wrapLongLines ? .infinity : nil, alignment: .leading)
                     .padding(.vertical, 2)
@@ -653,7 +654,7 @@ struct WorkspaceChangesDiffView: View {
 
     private func selectionWash(_ anchor: LineAnchor?) -> Color? {
         guard let anchor, isInSelectedRange(anchor) else { return nil }
-        return ClaudePalette.warning.opacity(0.16)
+        return Palette.warning.opacity(0.16)
     }
 
     private func accessibilityLabel(for row: DiffModel.Row) -> String {
@@ -677,15 +678,15 @@ struct WorkspaceChangesDiffView: View {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Image(systemName: isCollapsed(hunk) ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.tertiaryInk)
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
                     .frame(width: 14)
                 Text(text)
                     .foregroundStyle(contentTint(.hunkHeader))
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .font(typography.mono(12.5))
+            .font(.paseo(.codeSmall))
             // In a horizontal scroll the parent's width is the widest row; `.infinity` fills it.
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 2)
@@ -698,41 +699,27 @@ struct WorkspaceChangesDiffView: View {
 
     private func contentTint(_ kind: DiffModel.RowKind) -> Color {
         switch kind {
-        case .hunkHeader: ClaudePalette.tertiaryInk
-        case .context, .add, .remove: ClaudePalette.primaryInk
+        case .hunkHeader: Palette.tertiaryInk
+        case .context, .add, .remove: Palette.ink
         }
     }
 
     private func signTint(_ kind: DiffModel.RowKind) -> Color {
         switch kind {
-        case .add: ClaudePalette.successInk
-        case .remove: ClaudePalette.failureInk
+        case .add: Palette.successInk
+        case .remove: Palette.failureInk
         case .context, .hunkHeader: .clear
         }
     }
 
     private func rowFill(_ kind: DiffModel.RowKind) -> Color {
         switch kind {
-        case .add: Self.addedTint
-        case .remove: Self.removedTint
-        case .hunkHeader: ClaudePalette.chip
+        case .add: Palette.diffAdded
+        case .remove: Palette.diffRemoved
+        case .hunkHeader: Palette.chip
         case .context: .clear
         }
     }
-
-    /// Low-opacity green/red that stays readable on dark and light canvases.
-    private static let addedTint = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.29, green: 0.82, blue: 0.44, alpha: 0.18)
-                : UIColor(red: 0.16, green: 0.62, blue: 0.35, alpha: 0.14)
-        })
-    private static let removedTint = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(red: 0.93, green: 0.42, blue: 0.37, alpha: 0.20)
-                : UIColor(red: 0.80, green: 0.22, blue: 0.17, alpha: 0.13)
-        })
 
     private func performDiscard() {
         Task {
@@ -997,7 +984,6 @@ private struct ReviewCommentSheet: View {
 
     @State private var text: String
     @FocusState private var focused: Bool
-    private let typography = ClaudeTypography()
 
     init(
         title: String, targetLabel: String, snippet: String?, initialBody: String,
@@ -1024,64 +1010,64 @@ private struct ReviewCommentSheet: View {
             SheetHeader(title: title, close: onCancel)
             VStack(alignment: .leading, spacing: 14) {
                 Text(targetLabel)
-                    .font(typography.mono(11))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.secondaryInk)
                 if let snippet, !snippet.isEmpty {
                     Text("> \(snippet.prefix(200))")
-                        .font(typography.mono(11))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(4)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
-                        .background(ClaudePalette.quoteWash, in: .rect(cornerRadius: 12))
+                        .background(Palette.quoteWash, in: .rect(cornerRadius: Radius.md))
                 }
                 ZStack(alignment: .topLeading) {
                     if text.isEmpty {
                         Text("Leave a comment")
-                            .font(typography.sans(15))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .allowsHitTesting(false)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 8)
                     }
                     TextEditor(text: $text)
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.ink)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120, maxHeight: 240)
                         .focused($focused)
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
-                .background(ClaudePalette.chip, in: .rect(cornerRadius: 14))
+                .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
                 HStack(spacing: 10) {
                     if let onDelete {
                         Button {
                             onDelete()
                         } label: {
                             Text("Delete")
-                                .font(typography.sans(15, weight: .medium))
-                                .foregroundStyle(ClaudePalette.failureInk)
+                                .font(.paseo(.callout, weight: .medium))
+                                .foregroundStyle(Palette.failureInk)
                                 .padding(.horizontal, 16)
-                                .frame(height: 44)
+                                .frame(minHeight: 44)
                         }
                         .buttonStyle(.plain)
                     }
                     Spacer()
                     Button("Cancel", action: onCancel)
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
-                        .frame(height: 44)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .frame(minHeight: 44)
                     Button {
                         guard canSave else { return }
                         onSave(text)
                     } label: {
                         Text(isEditing ? "Save" : "Comment")
-                            .font(typography.sans(15, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.background)
+                            .font(.paseo(.callout, weight: .semibold))
+                            .foregroundStyle(Palette.background)
                             .padding(.horizontal, 22)
-                            .frame(height: 44)
-                            .background(ClaudePalette.ink.opacity(canSave ? 1 : 0.35), in: .capsule)
+                            .frame(minHeight: 44)
+                            .background(Palette.ink.opacity(canSave ? 1 : 0.35), in: .capsule)
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSave)
@@ -1092,9 +1078,8 @@ private struct ReviewCommentSheet: View {
             .padding(.horizontal, 16)
             .padding(.top, 4)
         }
-        .background(ClaudePalette.background)
+        .background(Palette.background)
         .presentationDetents([.medium, .large])
-        .presentationCornerRadius(38)
         .presentationDragIndicator(.visible)
         .task { focused = true }
     }

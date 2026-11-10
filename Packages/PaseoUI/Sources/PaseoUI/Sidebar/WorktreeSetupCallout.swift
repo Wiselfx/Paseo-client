@@ -24,18 +24,18 @@ extension PaseoSidebar {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "terminal")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.tertiaryInk)
+                            .font(.glyph(.small, weight: .semibold))
+                            .foregroundStyle(Palette.tertiaryInk)
                             .frame(width: 26, height: 26)
-                            .background(ClaudePalette.chip, in: .circle)
+                            .background(Palette.chip, in: .circle)
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Set up worktree scripts")
-                                .font(typography.sans(13, weight: .medium))
-                                .foregroundStyle(ClaudePalette.secondaryInk)
+                                .font(.paseo(.footnote, weight: .medium))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .lineLimit(1)
                             Text("Add setup commands so new worktrees can prepare themselves.")
-                                .font(typography.sans(11))
-                                .foregroundStyle(ClaudePalette.captionInk)
+                                .font(.paseo(.caption2))
+                                .foregroundStyle(Palette.captionInk)
                                 .lineLimit(2)
                         }
                         Spacer(minLength: 4)
@@ -49,8 +49,8 @@ extension PaseoSidebar {
                     dismissWorktreeSetupCallout(group.project.projectId)
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.glyph(.small, weight: .regular))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .frame(width: 30, height: 30)
                         .contentShape(.rect)
                 }
@@ -59,7 +59,7 @@ extension PaseoSidebar {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(ClaudePalette.chip.opacity(0.55), in: .rect(cornerRadius: 8))
+            .background(Palette.chip.opacity(0.55), in: .rect(cornerRadius: Radius.sm))
             .padding(.top, 4)
         }
     }

@@ -22,7 +22,6 @@ struct TerminalUploadSnapshot: Equatable {
 final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private weak var terminalView: TerminalView?
     private let onInput: (String) -> Void
-    private let haptic = UIImpactFeedbackGenerator(style: .light)
     private var ctrlButton: UIButton?
     /// Written once in init, read once in deinit (which is nonisolated).
     nonisolated(unsafe) private var resetObserver: NSObjectProtocol?
@@ -31,7 +30,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private let uploadFileLabel = UILabel()
     private let uploadProgress = UIProgressView(progressViewStyle: .default)
 
-    private static let ink = UIColor(red: 0.949, green: 0.937, blue: 0.914, alpha: 1)
+    private static let ink = UIColor(Palette.ink)
 
     /// Set by the coordinator; invoked when the paperclip is tapped.
     var onAttach: (() -> Void)?
@@ -44,7 +43,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 44), inputViewStyle: .keyboard)
         translatesAutoresizingMaskIntoConstraints = true
         autoresizingMask = [.flexibleWidth]
-        backgroundColor = UIColor(red: 20 / 255, green: 20 / 255, blue: 19 / 255, alpha: 1)
+        backgroundColor = UIColor(Palette.background)
 
         let keys = keysRow
         keys.axis = .horizontal
@@ -182,7 +181,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         button.accessibilityLabel = label
         button.addAction(
             UIAction { _ in
-                self.haptic.impactOccurred()
+                Haptics.light()
                 action(button)
             }, for: .touchUpInside)
         return button
@@ -195,7 +194,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private func toggleControl(_ button: UIButton) {
         guard let terminalView else { return }
         terminalView.controlModifier.toggle()
-        button.tintColor = terminalView.controlModifier ? ClaudePaletteWarm.controlActive : Self.ink
+        button.tintColor = terminalView.controlModifier ? UIColor(Palette.orange) : Self.ink
     }
 
     private func toggleKeyboard() {
@@ -206,10 +205,5 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
             _ = terminalView.becomeFirstResponder()
         }
     }
-}
-
-/// Warm accent for the sticky Ctrl state, matching ClaudePalette's dark ink on #141413.
-private enum ClaudePaletteWarm {
-    static let controlActive = UIColor(red: 0.867, green: 0.467, blue: 0.341, alpha: 1) // #DD7757-ish warm
 }
 #endif

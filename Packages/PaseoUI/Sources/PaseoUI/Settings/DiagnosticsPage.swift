@@ -20,7 +20,6 @@ struct DiagnosticsPage: View {
     @State private var testAudioPlaying = false
     @State private var testAudioResult: String?
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         ScrollView {
@@ -30,8 +29,8 @@ struct DiagnosticsPage: View {
                     VStack(alignment: .leading, spacing: 10) {
                         ScrollView {
                             Text(report)
-                                .font(typography.mono(11.5, relativeTo: .caption))
-                                .foregroundStyle(ClaudePalette.ink)
+                                .font(.paseo(.codeCaption))
+                                .foregroundStyle(Palette.ink)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(10)
@@ -49,7 +48,7 @@ struct DiagnosticsPage: View {
                             } label: {
                                 Label(copied ? "Copied" : "Copy",
                                       systemImage: copied ? "checkmark" : "doc.on.doc")
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.paseo(.footnote, weight: .medium))
                             }
                             .buttonStyle(.bordered)
                             .accessibilityIdentifier("settings.diagnostics.copy")
@@ -59,8 +58,8 @@ struct DiagnosticsPage: View {
                     .padding(12)
                 }
                 Text("Contains no tokens, passwords or host names. The host appears as a stable `host-…` digest. Share it only if support asks for it.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
                 hostDiagnosticsSection
                 testAudioSection
@@ -84,24 +83,24 @@ struct DiagnosticsPage: View {
                 switch session.hostSettings.diagnosticsState {
                 case .idle:
                     Text("Ask the daemon for its support bundle: versions, provider availability and runtime metrics.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                 case .unsupported:
                     Text("Not supported by this daemon.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                 case .loading:
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
                         Text("Running…")
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                     }
                 case .ready(let diagnostic):
                     ScrollView {
                         Text(Self.scrubHostDiagnostic(diagnostic))
-                            .font(typography.mono(11.5, relativeTo: .caption))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.ink)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(10)
@@ -119,7 +118,7 @@ struct DiagnosticsPage: View {
                         } label: {
                             Label(hostCopied ? "Copied" : "Copy",
                                   systemImage: hostCopied ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.paseo(.footnote, weight: .medium))
                         }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("settings.diagnostics.hostCopy")
@@ -127,8 +126,8 @@ struct DiagnosticsPage: View {
                     }
                 case .failed(let message):
                     Text(message)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                 }
                 if session.hostSettings.diagnosticsState != .unsupported {
                     HStack {
@@ -139,7 +138,7 @@ struct DiagnosticsPage: View {
                             Label(
                                 session.hostSettings.diagnosticsState == .loading ? "Running…" : "Run",
                                 systemImage: "play.circle")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.paseo(.footnote, weight: .medium))
                         }
                         .buttonStyle(.bordered)
                         .disabled(session.hostSettings.diagnosticsState == .loading)
@@ -160,11 +159,11 @@ struct DiagnosticsPage: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Test audio")
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     if let testAudioResult {
                         Text(testAudioResult)
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -184,7 +183,7 @@ struct DiagnosticsPage: View {
                     }
                 } label: {
                     Text(testAudioPlaying ? "Playing..." : "Play test")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.paseo(.callout, weight: .semibold))
                 }
                 .disabled(testAudioPlaying)
                 .accessibilityIdentifier("settings.diagnostics.testAudio")
@@ -318,8 +317,8 @@ struct DiagnosticsPage: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

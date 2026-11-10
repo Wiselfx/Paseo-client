@@ -10,9 +10,9 @@ struct ComposerMenuContainer<Content: View>: View {
     var body: some View {
         Group { content() }
             .frame(maxWidth: .infinity)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 14))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
             .overlay {
-                RoundedRectangle(cornerRadius: 14).strokeBorder(ClaudePalette.cardBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
             }
             .accessibilityIdentifier(accessibilityIdentifier)
     }

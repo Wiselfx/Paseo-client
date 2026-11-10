@@ -49,11 +49,10 @@ public struct AddHostMethodsSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     private func methodRow(
@@ -65,26 +64,26 @@ public struct AddHostMethodsSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
-                    .font(.system(size: 18, weight: .light))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.glyph(.regular, weight: .light))
+                    .foregroundStyle(Palette.ink)
                     .frame(width: 30, height: 30)
-                    .background(ClaudePalette.chip, in: .circle)
+                    .background(Palette.chip, in: .circle)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.body, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                     Text(description)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.glyph(.regular))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 14)
             .frame(minHeight: 60, alignment: .leading)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 16))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -141,16 +140,15 @@ public struct PairScanSheet: View {
                     startWhen: granted)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Text("Point the camera at the pairing QR code.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.vertical, 10)
             }
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .onAppear {
             Task {
                 guard DataScannerViewController.isSupported else {
@@ -181,20 +179,20 @@ public struct PairScanSheet: View {
     private func concernContent(title: String, body: String?, pasteHint: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: title.count > 30 ? 15 : 17, weight: .semibold))
+                .font(.paseo(title.count > 30 ? .callout : .body, weight: .semibold))
             if let body {
                 Text(body)
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             if let onUsePaste {
                 Button(pasteHint) { onUsePaste() }
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.paseo(.callout, weight: .medium))
                     .buttonStyle(.bordered)
             } else {
                 Text(pasteHint)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -335,57 +333,56 @@ public struct PastePairingSheet: View {
             SheetHeader(title: "Paste pairing link") { dismiss() }
             VStack(alignment: .leading, spacing: 12) {
                 Text("Treat this pairing link like a password. Anyone with it can access this daemon.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                 // Prompt-free PasteButton (system label): reads the pasteboard on tap.
                 PasteButton(payloadType: String.self) { strings in
                     text = strings.first ?? ""
                     invalid = false
                     submit()
                 }
-                .font(.system(size: 15, weight: .medium))
+                .font(.paseo(.callout, weight: .medium))
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("pairing.paste.button")
                 TextField("Pairing link", text: $text)
-                    .font(.system(size: 15))
+                    .font(.paseo(.callout))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(.horizontal, 12)
-                    .frame(height: 44)
-                    .background(ClaudePalette.chip, in: .rect(cornerRadius: 12))
+                    .frame(minHeight: 44)
+                    .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
                     .onSubmit { submit() }
                     .accessibilityIdentifier("pairing.paste.field")
                 Button {
                     submit()
                 } label: {
                     Text("Connect")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.paseo(.callout, weight: .medium))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 48)
+                        .frame(minHeight: 48)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(ClaudePalette.ink)
+                .tint(Palette.ink)
                 .accessibilityIdentifier("pairing.paste.connect")
                 if invalid {
                     Text("That link doesn't look right.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                 }
                 if let error, !invalid {
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                 }
                 Spacer()
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     private func submit() {
@@ -432,8 +429,8 @@ public struct HostConfirmationPairingSheet: View {
                     Text(kind == .changedConnection
                         ? "This link changes how you connect to this host. The host will be able to run code in this app and reach your other connected hosts. Only connect if you recognize it."
                         : "This host will be able to run code in this app and reach your other connected hosts. Only connect if you recognize it.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                     RowGroup {
                         detailRow(label: "Host", value: offer.serverID)
                         RowDivider()
@@ -445,7 +442,7 @@ public struct HostConfirmationPairingSheet: View {
                     }
                     HStack(spacing: 10) {
                         Button("Cancel") { dismiss() }
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.paseo(.callout, weight: .medium))
                             .buttonStyle(.bordered)
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("pairing.confirm.cancel")
@@ -454,14 +451,14 @@ public struct HostConfirmationPairingSheet: View {
                             onConnect()
                         } label: {
                             if isAttempting {
-                                ProgressView().controlSize(.small).tint(ClaudePalette.background)
+                                ProgressView().controlSize(.small).tint(Palette.background)
                             } else {
                                 Text("Connect")
                             }
                         }
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.paseo(.callout, weight: .semibold))
                         .buttonStyle(.borderedProminent)
-                        .tint(ClaudePalette.ink)
+                        .tint(Palette.ink)
                         .frame(maxWidth: .infinity)
                         .disabled(isAttempting)
                         .accessibilityIdentifier("pairing.confirm.connect")
@@ -472,21 +469,20 @@ public struct HostConfirmationPairingSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     private func detailRow(label: String, value: String) -> some View {
         HStack(spacing: 12) {
             Text(label)
-                .font(.system(size: 15))
+                .font(.paseo(.callout))
             Spacer(minLength: 8)
             Text(value)
-                .font(ClaudeTypography().mono(13))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.code))
+                .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
@@ -525,33 +521,33 @@ public struct PairingPasswordSheet: View {
             SheetHeader(title: "Password for \(host)") { dismiss() }
             VStack(alignment: .leading, spacing: 12) {
                 SecureField("Host password", text: $password)
-                    .font(.system(size: 17))
+                    .font(.paseo(.body))
                     .textContentType(.password)
                     .submitLabel(.go)
                     .onSubmit { submit() }
                     .padding(.horizontal, 12)
                     .frame(height: 48)
-                    .background(ClaudePalette.chip, in: .rect(cornerRadius: 12))
+                    .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
                     .accessibilityIdentifier("pairing.password.field")
                 if let error {
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                 }
                 Button {
                     submit()
                 } label: {
                     if isAttempting {
-                        ProgressView().controlSize(.small).tint(ClaudePalette.background)
+                        ProgressView().controlSize(.small).tint(Palette.background)
                     } else {
                         Text("Connect")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.paseo(.callout, weight: .medium))
                             .frame(maxWidth: .infinity)
-                            .frame(height: 48)
+                            .frame(minHeight: 48)
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(ClaudePalette.ink)
+                .tint(Palette.ink)
                 .disabled(password.isEmpty || isAttempting)
                 .opacity(password.isEmpty || isAttempting ? 0.4 : 1)
                 .accessibilityIdentifier("pairing.password.connect")
@@ -560,11 +556,10 @@ public struct PairingPasswordSheet: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     private func submit() {

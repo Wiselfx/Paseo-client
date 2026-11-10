@@ -8,7 +8,9 @@ struct RootView: View {
     @Bindable var model: AppModel
     @Bindable var notifications: NotificationCoordinator
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
+    /// The system text size; Content size shifts it and Code size shifts code containers.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(ClaudeAppearance.storageKey) private var appearance = ClaudeAppearance.system.rawValue
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
     @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
     /// First-run welcome: shown before the first successful host connection, and only while
@@ -76,12 +78,17 @@ struct RootView: View {
             onRenameSaved: { id, label in model.renameSavedHost(id, label: label) })
     }
 
-    /// Fonts and the Pure black palette are read when views are built, so changing them rebuilds
-    /// the tree (shell state resets). Light / Dark / System stay live through
-    /// `preferredColorScheme` and never rebuild.
-    private var rebuildKey: String {
-        let pureBlack = ClaudeAppearance(rawValue: appearance) == .pureBlack
-        return "\(pureBlack)|\(contentTextSize)|\(codeFontSize)"
+    /// Content size steps the whole shell's Dynamic Type; code size shifts code containers.
+    private var contentStep: Int {
+        (ClaudeTextScale.Content(rawValue: contentTextSize) ?? .medium).step
+    }
+
+    private var codeStep: Int {
+        (ClaudeTextScale.Code(rawValue: codeFontSize) ?? .medium).step
+    }
+
+    private var pureBlack: Bool {
+        (ClaudeAppearance(rawValue: appearance) ?? .system).isPureBlack
     }
 
     var body: some View {
@@ -119,7 +126,9 @@ struct RootView: View {
                 }
             }
         }
-        .id(rebuildKey)
+        .dynamicTypeSize(dynamicTypeSize.shifted(by: contentStep))
+        .environment(\.codeSizeStep, codeStep)
+        .environment(\.pureBlack, pureBlack)
         .preferredColorScheme(colorScheme)
         .environment(\.hostSwitch, model.hostContext)
         .sheet(isPresented: $model.addHostRequested) {
