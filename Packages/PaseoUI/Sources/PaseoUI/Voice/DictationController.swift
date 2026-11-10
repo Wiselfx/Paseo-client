@@ -68,6 +68,8 @@ final class DictationController: NSObject {
         committed = ""
         currentPartial = ""
         duration = 0
+        level = 0
+        waveform.reset()
 
         let engine = AVAudioEngine()
         let bufferRequest = SFSpeechAudioBufferRecognitionRequest()
