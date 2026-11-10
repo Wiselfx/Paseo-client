@@ -49,6 +49,10 @@ UX-SPEC §2, PLAN §RH and §RI (5, 6, 8, 12, 13, 17, 18, 22) and audit C.
 - **Pull-to-refresh** on the sidebar's `ScrollView` (`.refreshable`) refreshes the directory and
   the agents.
 
+- **⌘K (R5 hook):** the sidebar owns the Search sheet, so in `PaseoSidebar` set
+  `shellDrawer?.onSearch = { sheet = .search }` in `onAppear` (`@Environment(\.shellDrawer)`), and
+  open the drawer first if needed (`shellDrawer?.open(.sidebar)`).
+
 ## 3. Preferences
 
 The 16 `@AppStorage` comma-joined strings stay as storage. Wrap them in one `SidebarPreferences`
