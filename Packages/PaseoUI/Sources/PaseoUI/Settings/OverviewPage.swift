@@ -27,7 +27,7 @@ struct OverviewPage: View {
                 ListRow(
                     title: "Protocol version",
                     accessory: ListRow.Accessory.value(
-                        session.serverInfo?.protocolVersion.map(String.init) ?? "Unknown")
+                        session.serverInfo?.protocolVersion.map { String($0) } ?? "Unknown")
                 )
                 .panelRow()
             } header: {

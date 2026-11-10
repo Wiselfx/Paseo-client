@@ -28,6 +28,8 @@ import SwiftUI
     /// Every row, newest first, unfiltered.
     private var rows: [Row] = []
     private(set) var groups: [Group] = []
+    /// The query the current groups were filtered with, so a rebuild keeps the filter.
+    private var query = ""
 
     init() {}
 
@@ -64,12 +66,13 @@ import SwiftUI
                 ))
         }
         rows = built
-        applyFilter()
+        applyFilter(query)
     }
 
     /// Filters the precomputed rows and regroups them by day.
-    func applyFilter(_ query: String = "") {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    func applyFilter(_ text: String) {
+        query = text
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched =
             trimmed.isEmpty ? rows : rows.filter { $0.searchKey.contains(trimmed) }
         var today: [Row] = []

@@ -207,7 +207,7 @@ struct SettingsRoot: View {
         case .sidebar: SidebarPage()
         case .terminal: TerminalPage()
         case .overview: OverviewPage(session: session)
-        case .hosts: HostsPage()
+        case .hosts: HostsPage(session: session)
         case .hostDetail(let id): HostDetailPage(hostID: id)
         case .pairDevice: PairDevicePage(session: session)
         case .agents: AgentsPage(session: session)

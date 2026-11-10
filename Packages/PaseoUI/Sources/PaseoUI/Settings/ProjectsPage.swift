@@ -55,7 +55,7 @@ struct ProjectsPage: View {
             }
         }
         .inlinePageTitle("Projects")
-        .refreshable { await session.hostSettings.load() }
+        .refreshable { await session.workspaceDirectory.refresh() }
     }
 
     private func projectRow(_ project: WorkspaceProjectDescriptor, count: Int) -> some View {

@@ -59,8 +59,18 @@ struct DiagnosticsPage: View {
             }
         }
         .inlinePageTitle("Diagnostics")
-        .onAppear {
+        .refreshable {
+            // No refresh button anywhere: the page reloads by pulling it (PLAN §1).
+            report = Self.makeReport(session: session)
+            await session.hostSettings.loadDiagnostics()
+        }
+        .task {
             if report.isEmpty { report = Self.makeReport(session: session) }
+            if session.hostSettings.supportsDaemonDiagnostics,
+                session.hostSettings.diagnosticsState == .idle
+            {
+                await session.hostSettings.loadDiagnostics()
+            }
         }
     }
 
@@ -103,17 +113,6 @@ struct DiagnosticsPage: View {
                 Text(message)
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.failureInk)
-            }
-            if session.hostSettings.diagnosticsState != .unsupported {
-                Button {
-                    Haptics.selection()
-                    Task { await session.hostSettings.loadDiagnostics() }
-                } label: {
-                    Text(session.hostSettings.diagnosticsState == .loading ? "Running…" : "Run")
-                }
-                .buttonStyle(.paseoSecondary)
-                .disabled(session.hostSettings.diagnosticsState == .loading)
-                .accessibilityIdentifier("settings.diagnostics.hostRun")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
