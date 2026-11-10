@@ -47,13 +47,10 @@ struct ProjectSettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Project", close: { dismiss() })
-            content
-        }
-        .background(Palette.background)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.hidden)
+        content
+            .navigationTitle("Project")
+            .navigationBarTitleDisplayMode(.inline)
+            .background(Palette.background)
         .alert("Rename project", isPresented: $renaming) {
             TextField("Project name", text: $renameText)
                 .textInputAutocapitalization(.words)

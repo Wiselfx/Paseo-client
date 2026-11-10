@@ -14,61 +14,51 @@ struct DiagnosticsPage: View {
     let session: HostSession
 
     @State private var report = ""
-    @State private var copied = false
-    @State private var hostCopied = false
     @State private var audioEngine = VoiceAudioEngine()
     @State private var testAudioPlaying = false
     @State private var testAudioResult: String?
 
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                sectionLabel("App report")
-                RowGroup {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ScrollView {
-                            Text(report)
-                                .font(.paseo(.codeCaption))
-                                .foregroundStyle(Palette.ink)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                        }
-                        .frame(maxHeight: 300)
-                        HStack {
-                            Button {
-                                Haptics.selection()
-                                UIPasteboard.general.string = report
-                                copied = true
-                                Task {
-                                    try? await Task.sleep(for: .seconds(1.5))
-                                    copied = false
-                                }
-                            } label: {
-                                Label(copied ? "Copied" : "Copy",
-                                      systemImage: copied ? "checkmark" : "doc.on.doc")
-                                    .font(.paseo(.footnote, weight: .medium))
-                            }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("settings.diagnostics.copy")
-                            Spacer(minLength: 0)
-                        }
+        SettingsList {
+            Section {
+                VStack(alignment: .leading, spacing: Space.sm) {
+                    ScrollView {
+                        Text(report)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.ink)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Space.sm)
                     }
-                    .padding(12)
+                    .frame(maxHeight: 300)
+                    HStack {
+                        CopyButton(text: report)
+                            .accessibilityIdentifier("settings.diagnostics.copy")
+                        Spacer(minLength: 0)
+                    }
                 }
-                Text("Contains no tokens, passwords or host names. The host appears as a stable `host-…` digest. Share it only if support asks for it.")
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.leading, 16)
-                hostDiagnosticsSection
-                testAudioSection
+                .padding(Space.md)
+                .settingsListRow()
+            } header: {
+                Text("App report")
+            } footer: {
+                Text(
+                    "Contains no tokens, passwords or host names. The host appears as a stable `host-…` digest. Share it only if support asks for it."
+                )
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 26)
-            .padding(.bottom, 20)
+            Section {
+                hostDiagnosticsRow
+            } header: {
+                Text("Host diagnostics")
+            }
+            Section {
+                testAudioRow
+            } header: {
+                Text("Audio")
+            }
         }
-        .scrollIndicators(.hidden)
+        .settingsPage("Diagnostics")
         .onAppear {
             if report.isEmpty { report = Self.makeReport(session: session) }
         }
@@ -76,147 +66,105 @@ struct DiagnosticsPage: View {
 
     // MARK: Host diagnostics
 
-    @ViewBuilder private var hostDiagnosticsSection: some View {
-        sectionLabel("Host diagnostics")
-        RowGroup {
-            VStack(alignment: .leading, spacing: 10) {
-                switch session.hostSettings.diagnosticsState {
-                case .idle:
-                    Text("Ask the daemon for its support bundle: versions, provider availability and runtime metrics.")
+    @ViewBuilder private var hostDiagnosticsRow: some View {
+        VStack(alignment: .leading, spacing: Space.sm) {
+            switch session.hostSettings.diagnosticsState {
+            case .idle:
+                Text("Ask the daemon for its support bundle: versions, provider availability and runtime metrics.")
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
+            case .unsupported:
+                Text("Not supported by this daemon.")
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
+            case .loading:
+                HStack(spacing: Space.sm) {
+                    InlineProgress()
+                    Text("Running…")
                         .font(.paseo(.footnote))
                         .foregroundStyle(Palette.secondaryInk)
-                case .unsupported:
-                    Text("Not supported by this daemon.")
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                case .loading:
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("Running…")
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.secondaryInk)
-                    }
-                case .ready(let diagnostic):
-                    ScrollView {
-                        Text(Self.scrubHostDiagnostic(diagnostic))
-                            .font(.paseo(.codeCaption))
-                            .foregroundStyle(Palette.ink)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                    }
-                    .frame(maxHeight: 300)
-                    HStack {
-                        Button {
-                            Haptics.selection()
-                            UIPasteboard.general.string = Self.scrubHostDiagnostic(diagnostic)
-                            hostCopied = true
-                            Task {
-                                try? await Task.sleep(for: .seconds(1.5))
-                                hostCopied = false
-                            }
-                        } label: {
-                            Label(hostCopied ? "Copied" : "Copy",
-                                  systemImage: hostCopied ? "checkmark" : "doc.on.doc")
-                                .font(.paseo(.footnote, weight: .medium))
-                        }
-                        .buttonStyle(.bordered)
+                }
+            case .ready(let diagnostic):
+                ScrollView {
+                    Text(Self.scrubHostDiagnostic(diagnostic))
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.ink)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Space.sm)
+                }
+                .frame(maxHeight: 300)
+                HStack {
+                    CopyButton(text: Self.scrubHostDiagnostic(diagnostic))
                         .accessibilityIdentifier("settings.diagnostics.hostCopy")
-                        Spacer(minLength: 0)
-                    }
-                case .failed(let message):
-                    Text(message)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.failureInk)
+                    Spacer(minLength: 0)
                 }
-                if session.hostSettings.diagnosticsState != .unsupported {
-                    HStack {
-                        Button {
-                            Haptics.selection()
-                            Task { await session.hostSettings.loadDiagnostics() }
-                        } label: {
-                            Label(
-                                session.hostSettings.diagnosticsState == .loading ? "Running…" : "Run",
-                                systemImage: "play.circle")
-                                .font(.paseo(.footnote, weight: .medium))
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(session.hostSettings.diagnosticsState == .loading)
-                        .accessibilityIdentifier("settings.diagnostics.hostRun")
-                        Spacer(minLength: 0)
-                    }
-                }
+            case .failed(let message):
+                Text(message)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
             }
-            .padding(12)
+            if session.hostSettings.diagnosticsState != .unsupported {
+                Button {
+                    Haptics.selection()
+                    Task { await session.hostSettings.loadDiagnostics() }
+                } label: {
+                    Text(session.hostSettings.diagnosticsState == .loading ? "Running…" : "Run")
+                }
+                .buttonStyle(.paseoSecondary)
+                .disabled(session.hostSettings.diagnosticsState == .loading)
+                .accessibilityIdentifier("settings.diagnostics.hostRun")
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.md)
+        .settingsListRow()
     }
 
     // MARK: Test audio (M15: upstream plays the thinking-tone PCM here)
 
-    @ViewBuilder private var testAudioSection: some View {
-        sectionLabel("Audio")
-        RowGroup {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Test audio")
-                        .font(.paseo(.body))
-                    if let testAudioResult {
-                        Text(testAudioResult)
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+    private var testAudioRow: some View {
+        HStack(alignment: .center, spacing: Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Test audio")
+                    .font(.paseo(.body))
+                    .foregroundStyle(Palette.ink)
+                if let testAudioResult {
+                    Text(testAudioResult)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                Button {
-                    Haptics.selection()
-                    Task {
-                        testAudioPlaying = true
-                        testAudioResult = nil
-                        do {
-                            try await audioEngine.playTestTone()
-                            testAudioResult = nil
-                        } catch {
-                            testAudioResult = "Playback failed: \(error.localizedDescription)"
-                        }
-                        testAudioPlaying = false
-                    }
-                } label: {
-                    Text(testAudioPlaying ? "Playing..." : "Play test")
-                        .font(.paseo(.callout, weight: .semibold))
-                }
-                .disabled(testAudioPlaying)
-                .accessibilityIdentifier("settings.diagnostics.testAudio")
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            Spacer(minLength: Space.sm)
+            Button {
+                Haptics.selection()
+                playTestTone()
+            } label: {
+                Text(testAudioPlaying ? "Playing..." : "Play test")
+            }
+            .buttonStyle(.paseoSecondary)
+            .disabled(testAudioPlaying)
+            .accessibilityIdentifier("settings.diagnostics.testAudio")
         }
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.md)
+        .frame(minHeight: 44)
+        .settingsListRow()
     }
 
-    /// Scrubs the daemon bundle before display or copy: bearer credentials and
-    /// token/password/secret assignments are redacted, and the daemon host's home directory
-    /// is shortened to `~`, so no secret or home path leaves the device. The bundle is an
-    /// opaque string upstream; this is best-effort on its free text, like the app report's
-    /// machine-codes-only rule. JSON `apiKey` values (the speech provider secret) are
-    /// redacted too — the app report never includes speech config or keys at all.
-    static func scrubHostDiagnostic(_ text: String) -> String {
-        // The text comes from the daemon host, so its home directory is not this device's:
-        // shorten any macOS/Linux home path (`/Users/<name>`, `/home/<name>`) to `~`.
-        var result = Self.redact(pattern: #"/(?:Users|home)/[^/\s"']+"#, in: text, replacement: "~")
-        result = Self.redact(pattern: #"(?i)\b(Bearer)\s+\S+"#, in: result, replacement: "$1 [redacted]")
-        result = Self.redact(
-            pattern: #"(?i)"(api[_-]?key)"\s*:\s*"[^"]*""#, in: result,
-            replacement: "\"$1\": \"[redacted]\"")
-        result = Self.redact(
-            pattern: #"(?i)\b(token|password|passwd|secret|api[_-]?key|access[_-]?key)\s*[:=]\s*[^\s,;]+"#,
-            in: result, replacement: "$1: [redacted]")
-        return result
-    }
-
-    private static func redact(pattern: String, in text: String, replacement: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
-        let range = NSRange(text.startIndex..., in: text)
-        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
+    private func playTestTone() {
+        Task {
+            testAudioPlaying = true
+            testAudioResult = nil
+            do {
+                try await audioEngine.playTestTone()
+                testAudioResult = nil
+            } catch {
+                testAudioResult = "Playback failed: \(error.localizedDescription)"
+            }
+            testAudioPlaying = false
+        }
     }
 
     // MARK: Report
@@ -313,15 +261,5 @@ struct DiagnosticsPage: View {
         return formatter.string(from: date)
     }
 
-    // MARK: Shared bits
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
-            .padding(.top, 8)
-            .padding(.bottom, -8)
-    }
 }
 #endif

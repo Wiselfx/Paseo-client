@@ -18,52 +18,48 @@ struct VoicePage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                if !isConnected {
-                    Text("Connect to this host to configure voice.")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.top, 32)
-                        .frame(maxWidth: .infinity)
-                } else if !voice.supportsSpeechSettings {
-                    Text("Update the host to configure voice.")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.top, 32)
-                        .frame(maxWidth: .infinity)
-                } else if let speech {
-                    dictationSection(speech)
-                    voiceModeSection(speech)
-                    if let error = voice.error {
-                        Text(error)
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.failureInk)
-                            .padding(.leading, 16)
+        SettingsList {
+            if !isConnected {
+                Section {
+                    EmptyState(title: "Connect to this host to configure voice.")
+                        .frame(minHeight: 180)
+                        .settingsListRow(Palette.background)
+                }
+            } else if !voice.supportsSpeechSettings {
+                Section {
+                    EmptyState(title: "Update the host to configure voice.")
+                        .frame(minHeight: 180)
+                        .settingsListRow(Palette.background)
+                }
+            } else if let speech {
+                dictationSection(speech)
+                voiceModeSection(speech)
+                if let error = voice.error {
+                    Section {
+                        InlineBanner(.failure, title: error)
+                            .settingsListRow(Palette.background)
                     }
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 32)
-                    Text("Loading…")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                Section {
+                    LoadingState("Loading…")
+                        .frame(height: 160)
+                        .settingsListRow(Palette.background)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 26)
-            .padding(.bottom, 20)
         }
-        .scrollIndicators(.hidden)
-        .sheet(isPresented: Binding(
-            get: { openSite != nil },
-            set: { if !$0 { openSite = nil } })) {
-                if let siteID = openSite {
-                    SpeechProviderSheet(session: session, siteID: siteID)
-                        .id(siteID.rawValue)
-                }
+        .settingsPage("Voice")
+        .refreshable { await session.hostSettings.load() }
+        .sheet(
+            isPresented: Binding(
+                get: { openSite != nil },
+                set: { if !$0 { openSite = nil } })
+        ) {
+            if let siteID = openSite {
+                SpeechProviderSheet(session: session, siteID: siteID)
+                    .id(siteID.rawValue)
             }
+        }
         .task {
             await voice.loadModels()
         }
@@ -75,46 +71,39 @@ struct VoicePage: View {
     // MARK: Sections
 
     private func dictationSection(_ speech: SpeechSettings) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            sectionLabel("Dictation")
-            RowGroup {
-                featureSwitchRow(
-                    "Dictation",
-                    hint: "Speak into the message box instead of typing",
-                    envVar: voice.envOverrides["features.dictation.enabled"],
-                    value: speech.dictationEnabled,
-                    onChange: { enabled in
-                        Task { _ = await voice.setDictationEnabled(enabled) }
-                    },
-                    identifier: "settings.voice.dictation.enabled")
-                rowDivider
-                siteRow(.dictationSTT, "Speech-to-text")
-            }
+        Section {
+            featureSwitchRow(
+                "Dictation",
+                hint: "Speak into the message box instead of typing",
+                envVar: voice.envOverrides["features.dictation.enabled"],
+                value: speech.dictationEnabled,
+                onChange: { enabled in
+                    Task { _ = await voice.setDictationEnabled(enabled) }
+                },
+                identifier: "settings.voice.dictation.enabled")
+            siteRow(.dictationSTT, "Speech-to-text")
+        } header: {
+            Text("Dictation")
         }
     }
 
     private func voiceModeSection(_ speech: SpeechSettings) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            sectionLabel("Voice mode")
-            RowGroup {
-                featureSwitchRow(
-                    "Voice mode",
-                    hint: "Talk with your agents hands-free",
-                    envVar: voice.envOverrides["features.voiceMode.enabled"],
-                    value: speech.voiceModeEnabled,
-                    onChange: { enabled in
-                        Task { _ = await voice.setVoiceModeEnabled(enabled) }
-                    },
-                    identifier: "settings.voice.voiceMode.enabled")
-                rowDivider
-                siteRow(.voiceModeSTT, "Listening")
-                rowDivider
-                siteRow(.voiceModeTTS, "Speaking")
-            }
+        Section {
+            featureSwitchRow(
+                "Voice mode",
+                hint: "Talk with your agents hands-free",
+                envVar: voice.envOverrides["features.voiceMode.enabled"],
+                value: speech.voiceModeEnabled,
+                onChange: { enabled in
+                    Task { _ = await voice.setVoiceModeEnabled(enabled) }
+                },
+                identifier: "settings.voice.voiceMode.enabled")
+            siteRow(.voiceModeSTT, "Listening")
+            siteRow(.voiceModeTTS, "Speaking")
+        } header: {
+            Text("Voice mode")
+        } footer: {
             Text("Voice mode transcribes what you say and reads agent replies aloud.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .padding(.leading, 16)
         }
     }
 
@@ -124,25 +113,18 @@ struct VoicePage: View {
         _ title: String, hint: String, envVar: String?, value: Bool,
         onChange: @escaping (Bool) -> Void, identifier: String
     ) -> some View {
-        Toggle(isOn: Binding(
-            get: { value },
-            set: { newValue in
-                Haptics.selection()
-                onChange(newValue)
-            })) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.paseo(.body))
-                Text(envVar.map { "Set by \($0)" } ?? hint)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .tint(Palette.toggleTint)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minHeight: 52)
+        ListRow(
+            title: title,
+            subtitle: envVar.map { "Set by \($0)" } ?? hint,
+            accessory: ListRow.Accessory.toggle(
+                Binding(
+                    get: { value },
+                    set: { newValue in
+                        Haptics.selection()
+                        onChange(newValue)
+                    }))
+        )
+        .settingsListRow()
         .disabled(envVar != nil || session.hostSettings.isSaving)
         .accessibilityIdentifier(identifier)
     }
@@ -151,29 +133,16 @@ struct VoicePage: View {
         let summary = voice.summary(for: siteID)
         let disabled = summary == .unknown(provider: voice.site(siteID)?.provider.wireValue ?? "")
             || voice.site(siteID)?.provider.isKnown == false
-        return Button {
-            Haptics.selection()
-            openSite = siteID
-        } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.paseo(.body))
-                    Text(summaryLabel(summary))
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.glyph(.regular))
-                    .foregroundStyle(Palette.tertiaryInk)
+        return ListRow(
+            title: title,
+            subtitle: summaryLabel(summary),
+            accessory: ListRow.Accessory.chevron,
+            action: {
+                Haptics.selection()
+                openSite = siteID
             }
-            .padding(.horizontal, 16)
-            .frame(minHeight: 60)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
+        )
+        .settingsListRow()
         .disabled(disabled)
         .accessibilityIdentifier("settings.voice.site." + siteID.accessibilityID)
     }
@@ -190,21 +159,6 @@ struct VoicePage: View {
         case nil:
             return "Local"
         }
-    }
-
-    // MARK: Shared bits
-
-    private var rowDivider: some View {
-        Divider().padding(.leading, 16).padding(.trailing, 16)
-    }
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
-            .padding(.top, 8)
-            .padding(.bottom, -8)
     }
 }
 #endif

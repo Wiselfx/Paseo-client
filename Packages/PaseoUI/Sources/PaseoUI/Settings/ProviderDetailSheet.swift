@@ -26,19 +26,20 @@ struct ProviderDetailSheet: View {
     }
 
     var body: some View {
-        SheetScaffold(entry?.label ?? providerID, detents: .large) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Space.lg) {
-                    statusSection
-                    diagnosticSection
-                    discoveredSection
-                    customModelsSection
-                    refreshBar
-                }
-                .padding(.bottom, Space.xxl)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.lg) {
+                statusSection
+                diagnosticSection
+                discoveredSection
+                customModelsSection
+                refreshBar
             }
-            .scrollIndicators(.hidden)
+            .padding(.bottom, Space.xxl)
         }
+        .scrollIndicators(.hidden)
+        .navigationTitle(entry?.label ?? providerID)
+        .navigationBarTitleDisplayMode(.inline)
+        .background(Palette.background)
         .task {
             if diagnostic == nil {
                 _ = await session.hostSettings.providerDiagnostic(providerID)
