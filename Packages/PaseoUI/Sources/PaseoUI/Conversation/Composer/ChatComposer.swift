@@ -618,6 +618,9 @@ struct ComposerView: View {
     /// idle states. A truncated draft still sends: only `canSend` decides that it can.
     private var primaryState: ComposerPrimaryState {
         if voiceActiveForAgent { return .voiceActive }
+        // An upload in flight has nothing to send yet; the table's disabled look says so without
+        // inventing a second one.
+        if hasUploadingAttachment { return .unavailable }
         if !trimmedText.isEmpty || !readyAttachments.isEmpty { return .send }
         if store?.isRunning == true { return .stop }
         if voice?.isVoiceAvailable == true { return .voice }
