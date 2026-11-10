@@ -77,8 +77,7 @@ struct TranscriptView: View {
             if store.turns.isEmpty, store.pendingPermissions.isEmpty {
                 switch store.phase {
                 case .loading:
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingState()
                 case .failed(let message):
                     VStack(spacing: 0) {
                         InlineBanner(

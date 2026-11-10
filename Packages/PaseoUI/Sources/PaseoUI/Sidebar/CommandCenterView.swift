@@ -618,12 +618,12 @@ struct CommandCenterSheet: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if model.flatRows.isEmpty {
-                    Text(model.noResultsText)
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 36)
-                        .accessibilityIdentifier("search.noResults")
+                    EmptyState(
+                        systemImage: "magnifyingglass",
+                        title: model.noResultsText
+                    )
+                    .padding(.vertical, 36)
+                    .accessibilityIdentifier("search.noResults")
                 } else {
                     ForEach(model.sections) { section in
                         sectionHeader(section.header)

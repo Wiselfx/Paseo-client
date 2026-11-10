@@ -208,16 +208,19 @@ extension PaseoSidebar {
             InlineBanner(.failure, title: error, action: ("Try again", retryDirectory))
                 .padding(.vertical, 24)
         } else {
-            Text(
-                session.workspaceDirectory.isLoading
-                    ? "Loading workspaces…"
-                    : (labelFilterName == nil
+            if session.workspaceDirectory.isLoading {
+                LoadingState("Loading workspaces…")
+                    .padding(.vertical, 24)
+            } else {
+                Text(
+                    labelFilterName == nil
                         ? "No workspaces on this host yet."
-                        : "No workspaces with this label.")
-            )
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.vertical, 24)
+                        : "No workspaces with this label."
+                )
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
+                .padding(.vertical, 24)
+            }
         }
     }
 

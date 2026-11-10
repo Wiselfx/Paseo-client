@@ -49,7 +49,9 @@ struct ProjectsPage: View {
             }
             if let error = directory.actionError {
                 Section {
-                    InlineBanner(.failure, title: error)
+                    InlineBanner(
+                        .failure, title: error,
+                        action: ("Try again", { Task { await session.workspaceDirectory.refresh() } }))
                         .panelRow(Palette.background)
                 }
             }

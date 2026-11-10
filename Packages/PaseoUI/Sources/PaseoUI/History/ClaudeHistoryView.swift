@@ -244,7 +244,7 @@ struct ClaudeHistoryView: View {
                 systemImage: "exclamationmark.circle",
                 title: "Couldn't load agent history",
                 message: message,
-                action: (title: "Retry", run: { Task { await lifecycle.load(); rebuild() } })
+                action: (title: "Try again", run: { Task { await lifecycle.load(); rebuild() } })
             )
         case .ready:
             if model.isEmpty {

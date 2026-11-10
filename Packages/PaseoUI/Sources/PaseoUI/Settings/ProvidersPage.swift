@@ -15,7 +15,9 @@ struct ProvidersPage: View {
         PageList {
             if let actionError = catalog.actionError {
                 Section {
-                    InlineBanner(.failure, title: actionError)
+                    InlineBanner(
+                        .failure, title: actionError,
+                        action: ("Try again", { Task { await catalog.refreshCatalog() } }))
                         .panelRow(Palette.background)
                 }
             }

@@ -96,7 +96,9 @@ struct AgentsPage: View {
             }
             if let error = hostSettings.error {
                 Section {
-                    InlineBanner(.failure, title: error)
+                    InlineBanner(
+                        .failure, title: error,
+                        action: ("Try again", { Task { await hostSettings.load() } }))
                         .panelRow(Palette.background)
                 }
             }

@@ -585,7 +585,7 @@ struct WorkspaceChangesView: View {
         case .failed(let message):
             InlineBanner(
                 .failure, title: message,
-                action: ("Retry", { Task { await reloadDiff() } })
+                action: ("Try again", { Task { await reloadDiff() } })
             )
             .padding(.horizontal, Space.xl)
             .padding(.top, Space.xl)
