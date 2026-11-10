@@ -21,13 +21,13 @@ extension ScheduleEditorPage {
     ) -> some View {
         VStack(spacing: 0) {
             ZStack {
-                Text(title).font(typography.serif(17, relativeTo: .headline, weight: .semibold))
+                Text(title).font(.paseo(.title, weight: .semibold))
                 HStack {
                     Button {
                         Haptics.selection()
                         picker = nil
                     } label: {
-                        Image(systemName: "chevron.left").font(.system(size: 19, weight: .light))
+                        Image(systemName: "chevron.left").font(.glyph(.large, weight: .light))
                             .frame(width: 42, height: 42)
                     }
                     .glassEffect(in: .circle)
@@ -53,28 +53,28 @@ extension ScheduleEditorPage {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(title).font(typography.sans(15))
+                        Text(title).font(.paseo(.callout))
                         if let badge {
                             Text(badge)
-                                .font(typography.sans(10, weight: .semibold))
-                                .foregroundStyle(ClaudePalette.ink)
+                                .font(.paseo(.caption2, weight: .semibold))
+                                .foregroundStyle(Palette.ink)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3)
-                                .background(ClaudePalette.ink.opacity(0.06), in: .capsule)
+                                .background(Palette.ink.opacity(0.06), in: .capsule)
                         }
                     }
                     if let detail {
                         Text(detail)
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
                 if checked {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.regular, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
                 }
             }
             .padding(.horizontal, 16)
@@ -91,8 +91,8 @@ extension ScheduleEditorPage {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if catalog.readyProviders.isEmpty {
                         Text("No providers are ready on this host.")
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(16)
                     } else {
                         RowGroup {
@@ -150,8 +150,8 @@ extension ScheduleEditorPage {
                     .padding(.top, 12)
                     if models.isEmpty {
                         Text(providerId.isEmpty ? "Choose a provider first." : "This provider reports no models.")
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(16)
                     }
                 }
@@ -213,8 +213,8 @@ extension ScheduleEditorPage {
                     Text(resolvedThinkingModelId == nil
                         ? "Choose a provider first."
                         : "This model reports no thinking levels.")
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(16)
                 }
             }
@@ -242,8 +242,8 @@ extension ScheduleEditorPage {
                     .padding(.top, 12)
                     if workspaces.isEmpty {
                         Text("This host has no workspaces yet. Create one from the sidebar first.")
-                            .font(typography.sans(13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(16)
                     }
                 }

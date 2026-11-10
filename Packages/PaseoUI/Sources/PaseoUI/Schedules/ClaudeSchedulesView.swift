@@ -13,7 +13,6 @@ struct ClaudeSchedulesView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let typography = ClaudeTypography()
 
     /// What the editor opens with: nothing (a new schedule), or a stored schedule to edit. A
     /// heartbeat (`agent` target) edits only name, prompt, cadence and max runs.
@@ -48,13 +47,13 @@ struct ClaudeSchedulesView: View {
             switch page {
             case .list:
                 SchedulesListPage(
-                    session: session, typography: typography, onClose: { dismiss() },
+                    session: session, onClose: { dismiss() },
                     onOpen: { page = .detail($0) },
                     onNew: { page = .editor(.empty) },
                     showToast: showToast)
             case .detail(let id):
                 ScheduleDetailPage(
-                    session: session, typography: typography, scheduleId: id,
+                    session: session, scheduleId: id,
                     onBack: { page = .list },
                     onEdit: { seed in page = .editor(seed) },
                     onDelete: { summary in pendingDelete = summary },
@@ -62,15 +61,15 @@ struct ClaudeSchedulesView: View {
                 .id(id)
             case .editor(let seed):
                 ScheduleEditorPage(
-                    session: session, typography: typography, seed: seed,
+                    session: session, seed: seed,
                     onBack: { page = seed.scheduleId.map { .detail($0) } ?? .list },
                     onCreated: { id in page = .detail(id) },
                     showToast: showToast)
                 .id(seed)
             }
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
         .onAppear { Task { await schedules.load() } }
@@ -104,7 +103,7 @@ struct ClaudeSchedulesView: View {
         Group {
             if let toast {
                 Text(toast)
-                    .font(typography.sans(13))
+                    .font(.paseo(.footnote))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
                     .glassEffect()
@@ -116,10 +115,10 @@ struct ClaudeSchedulesView: View {
     }
 
     private func showToast(_ text: String) {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = text }
+        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = text }
         Task {
             try? await Task.sleep(for: .seconds(2.5))
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { toast = nil }
+            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { toast = nil }
         }
     }
 }

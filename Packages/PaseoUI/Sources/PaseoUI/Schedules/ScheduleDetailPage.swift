@@ -6,7 +6,6 @@ import SwiftUI
 
 struct ScheduleDetailPage: View {
     let session: HostSession
-    let typography: ClaudeTypography
     let scheduleId: String
     let onBack: () -> Void
     let onEdit: (ClaudeSchedulesView.EditorSeed) -> Void
@@ -41,7 +40,7 @@ struct ScheduleDetailPage: View {
     private var header: some View {
         ZStack {
             Text(summary.map(titleString) ?? "Schedule")
-                .font(typography.serif(17, relativeTo: .headline, weight: .semibold))
+                .font(.paseo(.title, weight: .semibold))
                 .lineLimit(1)
                 .frame(maxWidth: 200)
             HStack {
@@ -49,7 +48,7 @@ struct ScheduleDetailPage: View {
                     Haptics.selection()
                     onBack()
                 } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 19, weight: .light))
+                    Image(systemName: "chevron.left").font(.glyph(.large, weight: .light))
                         .frame(width: 42, height: 42)
                 }
                 .glassEffect(in: .circle)
@@ -64,8 +63,8 @@ struct ScheduleDetailPage: View {
                         showToast("Still loading this schedule.")
                     }
                 }
-                .font(typography.sans(15, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
                 .accessibilityLabel("Edit schedule")
             }
         }
@@ -113,30 +112,30 @@ struct ScheduleDetailPage: View {
     private func hero(_ summary: ScheduleSummary) -> some View {
         VStack(spacing: 6) {
             Image(systemName: "clock")
-                .font(.system(size: 19, weight: .light))
+                .font(.glyph(.large, weight: .light))
                 .frame(width: 48, height: 48)
-                .background(ClaudePalette.panel, in: .circle)
+                .background(Palette.panel, in: .circle)
             Text(titleString(summary))
-                .font(typography.serif(21, relativeTo: .headline, weight: .semibold))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.title, weight: .semibold))
+                .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
             Text(summary.cadence.detailWords)
-                .font(typography.sans(14))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
             if let rawExpression = summary.cadence.detailRawExpression {
                 Text(rawExpression)
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.captionInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.captionInk)
                     .multilineTextAlignment(.center)
             }
             if let state, state != .active {
                 ScheduleStatePill(state: state)
             } else {
                 Text(scheduleNextRun(summary.nextRunAt))
-                    .font(typography.sans(12))
-                    .foregroundStyle(ClaudePalette.captionInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.captionInk)
             }
         }
         .padding(.vertical, 4)
@@ -144,19 +143,19 @@ struct ScheduleDetailPage: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(typography.sans(11, weight: .semibold))
+            .font(.paseo(.caption2, weight: .semibold))
             .tracking(0.8)
-            .foregroundStyle(ClaudePalette.secondaryInk)
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 6)
     }
 
     private func promptPanel(_ summary: ScheduleSummary) -> some View {
         Text(summary.prompt)
-            .font(typography.sans(14))
-            .foregroundStyle(ClaudePalette.ink)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.ink)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 18))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
             .textSelection(.enabled)
     }
 
@@ -207,18 +206,18 @@ struct ScheduleDetailPage: View {
     private func infoRow(_ title: String, value: String, detail: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(title).font(typography.sans(15))
+                Text(title).font(.paseo(.callout))
                 Spacer(minLength: 8)
                 Text(value)
-                    .font(typography.sans(14))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
             if let detail {
                 Text(detail)
-                    .font(typography.mono(11))
-                    .foregroundStyle(ClaudePalette.captionInk)
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.captionInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -282,8 +281,8 @@ struct ScheduleDetailPage: View {
                 .padding(.vertical, 16)
         } else {
             Text("No runs yet.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
         }
@@ -294,9 +293,9 @@ struct ScheduleDetailPage: View {
             Group {
                 switch run.status {
                 case .succeeded:
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(ClaudePalette.successInk)
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.successInk)
                 case .failed:
-                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(ClaudePalette.failureInk)
+                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Palette.failureInk)
                 case .running, .unknown:
                     ProgressView().controlSize(.mini)
                 }
@@ -304,24 +303,24 @@ struct ScheduleDetailPage: View {
             .frame(width: 16)
             VStack(alignment: .leading, spacing: 2) {
                 Text(scheduleTimestamp(run.startedAt))
-                    .font(typography.sans(13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                 if let error = run.error, !error.isEmpty {
                     Text(error)
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.failureInk)
                         .lineLimit(2)
                 } else if let output = run.output, !output.isEmpty {
                     Text(output.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? output)
-                        .font(typography.sans(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(2)
                 }
             }
             Spacer(minLength: 6)
             Text(scheduleDuration(run.startedAt, run.endedAt))
-                .font(typography.mono(11))
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.codeCaption))
+                .foregroundStyle(Palette.captionInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -377,12 +376,12 @@ struct ScheduleDetailPage: View {
     private func actionRowLabel(_ title: String, symbol: String, destructive: Bool = false) -> some View {
         HStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .light))
+                .font(.glyph(.regular, weight: .light))
                 .frame(width: 22)
-                .foregroundStyle(destructive ? ClaudePalette.failureInk : ClaudePalette.ink)
+                .foregroundStyle(destructive ? Palette.failureInk : Palette.ink)
             Text(title)
-                .font(typography.sans(15))
-                .foregroundStyle(destructive ? ClaudePalette.failureInk : ClaudePalette.ink)
+                .font(.paseo(.callout))
+                .foregroundStyle(destructive ? Palette.failureInk : Palette.ink)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
