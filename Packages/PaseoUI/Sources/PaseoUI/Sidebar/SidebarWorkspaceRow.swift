@@ -67,13 +67,19 @@ extension PaseoSidebar {
                 toggleManualUnread(workspace)
             }
             if session.labels.supportsLabels {
-                Menu("Labels…", systemImage: "tag") {
+                Menu("Labels", systemImage: "tag") {
                     labelsSubmenu(for: workspace)
                 }
             }
             Button("Copy path", systemImage: "doc.on.doc") {
                 Clipboard.copy(workspace.cwd)
                 showToast("Path copied")
+            }
+            if let branch = workspace.branch {
+                Button("Copy branch name", systemImage: "doc.on.doc") {
+                    Clipboard.copy(branch)
+                    showToast("Branch name copied")
+                }
             }
             Button(
                 isHiddenFromSidebar(workspace) ? "Unhide" : "Hide",
