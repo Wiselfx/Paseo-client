@@ -78,8 +78,8 @@ public struct PaseoShellView: View {
         GeometryReader { geometry in
             shell(width: geometry.size.width, height: geometry.size.height)
         }
-        .foregroundStyle(ClaudePalette.ink)
-        .tint(ClaudePalette.ink)
+        .foregroundStyle(Palette.ink)
+        .tint(Palette.ink)
         .onAppear {
             session.hostSettings.startPresence(
                 focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
@@ -137,7 +137,7 @@ public struct PaseoShellView: View {
         return ZStack(alignment: .leading) {
             // Sidebar canvas == conversation canvas (§1.1): only the hairline and the dim
             // separate the two surfaces.
-            ClaudePalette.background.ignoresSafeArea()
+            Palette.background.ignoresSafeArea()
             sidebarSurface(width: drawerWidth)
             conversationSurface(width: width, height: height, drawerWidth: drawerWidth)
             panelSurface(width: width, height: height)
@@ -230,39 +230,39 @@ public struct PaseoShellView: View {
         switch session.connection {
         case .reconnecting:
             HStack(spacing: 8) {
-                ProgressView().controlSize(.small).tint(ClaudePalette.secondary)
+                ProgressView().controlSize(.small).tint(Palette.secondaryInk)
                 Text("Reconnecting…")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .frame(minHeight: 40)
-            .background(ClaudePalette.panel)
+            .background(Palette.panel)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Reconnecting")
         case .failed:
             HStack(spacing: 8) {
                 Image(systemName: "wifi.slash")
-                    .font(.system(size: 14))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.small))
+                    .foregroundStyle(Palette.failureInk)
                 Text("Can't reach the host. Check that the daemon is running.")
                     .lineLimit(2)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.failureInk)
                 Spacer(minLength: 8)
                 Button("Disconnect") {
                     onDisconnect()
                 }
-                .font(.system(size: 13, weight: .semibold))
+                .font(.paseo(.footnote, weight: .semibold))
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("shell.connection.disconnect")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .frame(minHeight: 40)
-            .background(ClaudePalette.panel)
+            .background(Palette.panel)
         case .idle, .connecting, .connected:
             EmptyView()
         }
@@ -312,7 +312,7 @@ public struct PaseoShellView: View {
                     settleDrawer(open: true)
                 } label: {
                     UnequalMenu().stroke(
-                        ClaudePalette.ink.opacity(0.8), style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
+                        Palette.ink.opacity(0.8), style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
                     )
                     .frame(width: 18, height: 17)
                     .frame(width: 44, height: 44)
@@ -329,8 +329,8 @@ public struct PaseoShellView: View {
                     VStack {
                         Spacer()
                         Text(error)
-                            .font(ClaudeTypography().sans(13))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.failureInk)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
                             .padding(.bottom, 40)
