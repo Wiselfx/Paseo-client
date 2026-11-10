@@ -30,7 +30,6 @@ public struct ConnectView: View {
     @State private var renameText = ""
     @State private var forgetTarget: HostSwitchEntry?
 
-    private let typography = ClaudeTypography()
 
     public init(
         host: Binding<String>, port: Binding<String>, password: Binding<String>,
@@ -87,14 +86,14 @@ public struct ConnectView: View {
 
     public var body: some View {
         ZStack {
-            ClaudePalette.background.ignoresSafeArea()
+            Palette.background.ignoresSafeArea()
             VStack(spacing: 18) {
                 Spacer(minLength: 12)
                 VStack(spacing: 6) {
-                    Text("Paseo").font(typography.serif(34, relativeTo: .largeTitle))
+                    Text("Paseo").font(.paseo(.largeTitle))
                     Text("Connect to your daemon")
-                        .font(typography.sans(15))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 Group {
                     if showAddForm || hosts.isEmpty {
@@ -105,8 +104,8 @@ public struct ConnectView: View {
                 }
                 if case .failed(let message) = status {
                     Text(message)
-                        .font(typography.sans(13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .transition(.opacity)
@@ -116,21 +115,21 @@ public struct ConnectView: View {
                 Text(
                     "Use your machine's LAN or Tailscale address. Set a password with `paseo daemon set-password`."
                 )
-                .font(typography.sans(12))
-                .foregroundStyle(ClaudePalette.captionInk)
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.captionInk)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
                 .padding(.bottom, 12)
             }
         }
-        .foregroundStyle(ClaudePalette.ink)
-        .tint(ClaudePalette.ink)
-        .sensoryFeedback(.error, trigger: status) { _, new in
-            if case .failed = new { true } else { false }
-        }
+        .foregroundStyle(Palette.ink)
+        .tint(Palette.ink)
         .onChange(of: status) { _, new in
             // A failed connect lands on the form with that host preselected and Retry in reach.
-            if case .failed = new { showAddForm = true }
+            if case .failed = new {
+                Haptics.failure()
+                showAddForm = true
+            }
         }
         .sheet(item: $renameTarget) { target in renameSheet(target) }
         .confirmationDialog(
@@ -161,27 +160,27 @@ public struct ConnectView: View {
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: host.isCurrent ? "checkmark.circle.fill" : "desktopcomputer")
-                                .font(.system(size: 20, weight: .light))
-                                .foregroundStyle(host.isCurrent ? ClaudePalette.ink : ClaudePalette.secondary)
+                                .font(.glyph(.large, weight: .light))
+                                .foregroundStyle(host.isCurrent ? Palette.ink : Palette.secondaryInk)
                                 .frame(width: 24)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(host.label)
-                                    .font(typography.sans(17, weight: .medium))
-                                    .foregroundStyle(ClaudePalette.ink)
+                                    .font(.paseo(.body, weight: .medium))
+                                    .foregroundStyle(Palette.ink)
                                     .lineLimit(1)
                                 Text(host.urlLine)
-                                    .font(typography.mono(11.5, relativeTo: .footnote))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.paseo(.codeCaption))
+                                    .foregroundStyle(Palette.secondaryInk)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                             }
                             Spacer(minLength: 8)
                             if connecting {
-                                ProgressView().controlSize(.small).tint(ClaudePalette.ink)
+                                ProgressView().controlSize(.small).tint(Palette.ink)
                             } else {
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.glyph(.regular))
+                                    .foregroundStyle(Palette.secondaryInk)
                             }
                         }
                         .contentShape(.rect)
@@ -216,12 +215,12 @@ public struct ConnectView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "plus.circle")
-                            .font(.system(size: 20, weight: .light))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.glyph(.large, weight: .light))
+                            .foregroundStyle(Palette.ink)
                             .frame(width: 24)
                         Text("Add host")
-                            .font(typography.sans(17))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.body))
+                            .foregroundStyle(Palette.ink)
                         Spacer(minLength: 8)
                     }
                     .contentShape(.rect)
@@ -241,7 +240,7 @@ public struct ConnectView: View {
             SheetHeader(title: "Rename host", close: { renameTarget = nil })
             RowGroup {
                 TextField("Label", text: $renameText)
-                    .font(typography.sans(17))
+                    .font(.paseo(.body))
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
                     .onSubmit { saveRename(target) }
@@ -253,11 +252,11 @@ public struct ConnectView: View {
                 saveRename(target)
             } label: {
                 Text("Save")
-                    .font(typography.sans(16, weight: .medium))
+                    .font(.paseo(.callout, weight: .medium))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .foregroundStyle(ClaudePalette.background)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .frame(minHeight: 48)
+                    .foregroundStyle(Palette.background)
+                    .background(Palette.ink, in: .capsule)
                     .opacity(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
             }
             .buttonStyle(.plain)
@@ -266,11 +265,10 @@ public struct ConnectView: View {
             .accessibilityIdentifier("connect.rename.save")
             Spacer(minLength: 0)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.height(260)])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     private func saveRename(_ target: HostSwitchEntry) {
@@ -292,8 +290,8 @@ public struct ConnectView: View {
                         showAddForm = false
                     } label: {
                         Label("Saved hosts", systemImage: "chevron.left")
-                            .font(typography.sans(15, weight: .medium))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.callout, weight: .medium))
+                            .foregroundStyle(Palette.secondaryInk)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("connect.backToHosts")
@@ -318,29 +316,29 @@ public struct ConnectView: View {
                 Toggle(isOn: $useTLS) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Use TLS (wss)")
-                            .font(typography.sans(17))
+                            .font(.paseo(.body))
                         Text("For daemons behind a TLS terminator (Caddy, nginx).")
-                            .font(typography.sans(12))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.secondaryInk)
                     }
                 }
-                .tint(.blue)
+                .tint(Palette.toggleTint)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .accessibilityIdentifier("connect.tls")
                 RowDivider()
                 Button {
                     Haptics.selection()
-                    withAnimation(.easeOut(duration: 0.18)) { showAdvanced.toggle() }
+                    withAnimation(Motion.disclosure.animation) { showAdvanced.toggle() }
                 } label: {
                     HStack(spacing: 12) {
                         fieldSymbol("chevron.down.chevron.up")
                         Text("Advanced")
-                            .font(typography.sans(17))
+                            .font(.paseo(.body))
                         Spacer(minLength: 8)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.glyph(.small, weight: .semibold))
+                            .foregroundStyle(Palette.secondaryInk)
                             .rotationEffect(.degrees(showAdvanced ? 180 : 0))
                     }
                     .padding(.horizontal, 16)
@@ -354,9 +352,9 @@ public struct ConnectView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         TextField(
                             "", text: $connectionURI,
-                            prompt: Text("wss://host:6767/ws").foregroundStyle(ClaudePalette.captionInk)
+                            prompt: Text("wss://host:6767/ws").foregroundStyle(Palette.captionInk)
                         )
-                        .font(typography.mono(15, relativeTo: .body))
+                        .font(.paseo(.code))
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -365,8 +363,8 @@ public struct ConnectView: View {
                         .padding(.vertical, 12)
                         .accessibilityIdentifier("connect.uri")
                         Text(uriError ?? "Overrides host, port and the TLS switch while filled.")
-                            .font(typography.sans(12))
-                            .foregroundStyle(uriError == nil ? ClaudePalette.secondary : ClaudePalette.failureInk)
+                            .font(.paseo(.caption))
+                            .foregroundStyle(uriError == nil ? Palette.secondaryInk : Palette.failureInk)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 10)
                     }
@@ -378,8 +376,8 @@ public struct ConnectView: View {
 
     private func errorCaption(_ message: String) -> some View {
         Text(message)
-            .font(typography.sans(12))
-            .foregroundStyle(ClaudePalette.failureInk)
+            .font(.paseo(.caption))
+            .foregroundStyle(Palette.failureInk)
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
     }
@@ -388,16 +386,16 @@ public struct ConnectView: View {
         Button(action: onConnect) {
             HStack(spacing: 8) {
                 if connecting {
-                    ProgressView().controlSize(.small).tint(ClaudePalette.background)
-                    Text("Connecting…").font(typography.sans(16, weight: .medium))
+                    ProgressView().controlSize(.small).tint(Palette.background)
+                    Text("Connecting…").font(.paseo(.callout, weight: .medium))
                 } else {
-                    Text(status.isFailed ? "Retry" : "Connect").font(typography.sans(16, weight: .medium))
+                    Text(status.isFailed ? "Retry" : "Connect").font(.paseo(.callout, weight: .medium))
                 }
             }
             .frame(maxWidth: .infinity)
             .frame(height: 48)
-            .foregroundStyle(ClaudePalette.background)
-            .background(ClaudePalette.ink, in: .capsule)
+            .foregroundStyle(Palette.background)
+            .background(Palette.ink, in: .capsule)
             .opacity(canConnect ? 1 : 0.4)
         }
         .buttonStyle(.plain)
@@ -416,9 +414,9 @@ public struct ConnectView: View {
                 fieldTitle(title)
                 TextField(
                     "", text: text,
-                    prompt: Text(prompt).foregroundStyle(ClaudePalette.captionInk)
+                    prompt: Text(prompt).foregroundStyle(Palette.captionInk)
                 )
-                .font(typography.sans(17))
+                .font(.paseo(.body))
                 .keyboardType(keyboard)
                 .textContentType(contentType)
                 .textInputAutocapitalization(.never)
@@ -436,9 +434,9 @@ public struct ConnectView: View {
                 fieldTitle(title)
                 SecureField(
                     "", text: text,
-                    prompt: Text(prompt).foregroundStyle(ClaudePalette.captionInk)
+                    prompt: Text(prompt).foregroundStyle(Palette.captionInk)
                 )
-                .font(typography.sans(17))
+                .font(.paseo(.body))
                 .textContentType(.password)
                 .submitLabel(.go)
                 .onSubmit(onConnect)
@@ -450,13 +448,13 @@ public struct ConnectView: View {
 
     private func fieldSymbol(_ symbol: String) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 18, weight: .light))
-            .foregroundStyle(ClaudePalette.tertiaryInk)
+            .font(.glyph(.regular, weight: .light))
+            .foregroundStyle(Palette.tertiaryInk)
             .frame(width: 23)
     }
 
     private func fieldTitle(_ title: String) -> some View {
-        Text(title).font(typography.sans(12)).foregroundStyle(ClaudePalette.secondaryInk)
+        Text(title).font(.paseo(.caption)).foregroundStyle(Palette.secondaryInk)
     }
 }
 
