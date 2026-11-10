@@ -140,16 +140,13 @@ struct MetadataModelPage: View {
                     .panelRow(Palette.background)
                 }
             } else {
-                ForEach(catalog.readyProviders) { provider in
-                    let models = catalog.models(forProvider: provider.provider)
-                    if !models.isEmpty {
-                        Section {
-                            ForEach(models) { model in
-                                modelRow(provider: provider.provider, model: model)
-                            }
-                        } header: {
-                            Text(provider.label ?? provider.provider)
+                ForEach(providerModels, id: \.id) { entry in
+                    Section {
+                        ForEach(entry.models) { model in
+                            modelRow(provider: entry.id, model: model)
                         }
+                    } header: {
+                        Text(entry.label)
                     }
                 }
             }
@@ -158,6 +155,15 @@ struct MetadataModelPage: View {
         .refreshable { await catalog.refreshCatalog() }
         .task {
             if catalog.phase == .idle { await catalog.loadCatalog() }
+        }
+    }
+
+    /// One section per ready provider that actually advertises models.
+    private var providerModels: [(id: String, label: String, models: [AgentModelDefinition])] {
+        catalog.readyProviders.compactMap { provider in
+            let models = catalog.models(forProvider: provider.provider)
+            guard !models.isEmpty else { return nil }
+            return (id: provider.provider, label: provider.label ?? provider.provider, models: models)
         }
     }
 
