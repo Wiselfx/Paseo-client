@@ -61,11 +61,10 @@ struct DraftControlsSheet: View {
             content
             Spacer(minLength: 0)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.height(430)])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .onAppear {
             // The draft's sheet can open before the conversation ever asked for a catalogue.
             if catalog.providers.isEmpty {
@@ -144,14 +143,14 @@ struct DraftControlsSheet: View {
             ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
         case .failed(let message):
             Text(message)
-                .font(.system(size: 14))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.failureInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
         case .ready:
             Text("No enabled providers on this host.")
-                .font(.system(size: 14))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
         }
@@ -190,8 +189,8 @@ struct DraftControlsSheet: View {
                                 ? "Loading models from this provider…"
                                 : "No models reported by this provider"
                         )
-                        .font(.system(size: 14))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                     }
                     .padding(.top, 24)
                 } else {
@@ -250,8 +249,8 @@ struct DraftControlsSheet: View {
                             ? "Waiting for this provider's model list…"
                             : "This model reports no thinking levels."
                     )
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.horizontal, 16)
                 }
             }
@@ -277,8 +276,8 @@ struct DraftControlsSheet: View {
                 .padding(.horizontal, 16)
                 if modes.isEmpty {
                     Text("This provider reports no modes.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.horizontal, 16)
                 }
             }
