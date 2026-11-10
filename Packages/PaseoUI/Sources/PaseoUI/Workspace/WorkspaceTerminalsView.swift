@@ -276,7 +276,7 @@ struct WorkspaceTerminalsView: View {
             }
         } label: {
             HStack(spacing: 6) {
-                PaseoStatusDot(kind: dotKind(for: terminal))
+                StatusDot(dotKind(for: terminal))
                 Text(displayName(terminal))
                     .font(.paseo(.footnote))
                     .foregroundStyle(isSelected ? Palette.ink : Palette.secondaryInk)
@@ -337,10 +337,10 @@ struct WorkspaceTerminalsView: View {
         }
     }
 
-    private func dotKind(for terminal: TerminalInfo) -> PaseoStatusDot.Kind {
+    private func dotKind(for terminal: TerminalInfo) -> StatusDot.State {
         switch terminal.activityBucket {
-        case .needsInput: return .needsInput
-        case .attention: return .done
+        case .needsInput: return .attention
+        case .attention: return .idle
         case .running: return .running
         case nil:
             // Daemon activity arrived since the viewer last looked at this tab.
@@ -552,7 +552,7 @@ struct WorkspaceTerminalsView: View {
     private func scriptRow(_ script: WorkspaceScript) -> some View {
         let serviceURL = script.lifecycle == .running ? script.preferredURL.flatMap(URL.init(string:)) : nil
         return HStack(spacing: 12) {
-            PaseoStatusDot(kind: scriptDotKind(script))
+            StatusDot(scriptDotKind(script))
             VStack(alignment: .leading, spacing: 2) {
                 Text(script.scriptName)
                     .font(.paseo(.callout))
@@ -708,7 +708,7 @@ struct WorkspaceTerminalsView: View {
         return parts.joined(separator: " · ")
     }
 
-    private func scriptDotKind(_ script: WorkspaceScript) -> PaseoStatusDot.Kind {
+    private func scriptDotKind(_ script: WorkspaceScript) -> StatusDot.State {
         switch script.lifecycle {
         case .running:
             return script.health == .unhealthy ? .failed : .running

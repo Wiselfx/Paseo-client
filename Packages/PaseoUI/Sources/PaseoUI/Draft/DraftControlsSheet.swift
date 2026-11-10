@@ -89,17 +89,17 @@ struct DraftControlsSheet: View {
     private var root: some View {
         VStack(spacing: 12) {
             RowGroup {
-                SheetRow(title: "Provider", value: providerLabel, chevron: true) {
+                ListRow(title: "Provider", accessory: .value(providerLabel)) {
                     page = .providers
                 }
                 RowDivider()
-                SheetRow(title: "Model", value: modelLabel, chevron: true) { page = .models }
+                ListRow(title: "Model", accessory: .value(modelLabel)) { page = .models }
                 RowDivider()
-                SheetRow(title: "Thinking", value: thinkingLabel, chevron: true) {
+                ListRow(title: "Thinking", accessory: .value(thinkingLabel)) {
                     page = .thinking
                 }
                 RowDivider()
-                SheetRow(title: "Mode", value: modeLabel, chevron: true) { page = .modes }
+                ListRow(title: "Mode", accessory: .value(modeLabel)) { page = .modes }
             }
             .padding(.horizontal, 16)
         }
@@ -115,11 +115,10 @@ struct DraftControlsSheet: View {
                 } else {
                     RowGroup {
                         ForEach(Array(providers.enumerated()), id: \.element.id) { index, provider in
-                            SheetRow(
+                            ListRow(
                                 title: provider.label ?? provider.provider,
-                                detail: providerDetail(provider),
-                                checked: draft.providerId == provider.provider,
-                                badge: providerBadge(provider)
+                                subtitle: providerDetail(provider),
+                                accessory: providerAccessory(provider)
                             ) {
                                 guard provider.isAvailable else { return }
                                 Haptics.selection()
@@ -176,6 +175,13 @@ struct DraftControlsSheet: View {
         }
     }
 
+    /// Selected wins over the badge, like `SheetRow` did.
+    private func providerAccessory(_ provider: ProviderSnapshotEntry) -> ListRow.Accessory {
+        if draft.providerId == provider.provider { return .checkmark(true) }
+        if let badge = providerBadge(provider) { return .badge(badge) }
+        return .none
+    }
+
     private var modelPage: some View {
         ScrollView {
             VStack(spacing: 12) {
@@ -196,11 +202,12 @@ struct DraftControlsSheet: View {
                 } else {
                     RowGroup {
                         ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
-                            SheetRow(
+                            ListRow(
                                 title: model.label,
-                                detail: model.description,
-                                checked: draft.modelId == model.id,
-                                badge: model.isDefault == true ? "Default" : nil
+                                subtitle: model.description,
+                                accessory: draft.modelId == model.id
+                                    ? .checkmark(true)
+                                    : (model.isDefault == true ? .badge("Default") : .none)
                             ) {
                                 Haptics.selection()
                                 draft.selectModel(model.id, catalog: catalog)
@@ -221,9 +228,10 @@ struct DraftControlsSheet: View {
         ScrollView {
             VStack(spacing: 12) {
                 RowGroup {
-                    SheetRow(
-                        title: "Default", detail: "Use the provider's level for this model",
-                        checked: draft.thinkingOptionId == nil
+                    ListRow(
+                        title: "Default",
+                        subtitle: "Use the provider's level for this model",
+                        accessory: .checkmark(draft.thinkingOptionId == nil)
                     ) {
                         Haptics.selection()
                         draft.selectThinking(nil)
@@ -231,10 +239,11 @@ struct DraftControlsSheet: View {
                     }
                     ForEach(thinkingOptions) { option in
                         RowDivider()
-                        SheetRow(
-                            title: option.label, detail: option.description,
-                            checked: draft.thinkingOptionId == option.id,
-                            badge: option.isDefault == true ? "Default" : nil
+                        ListRow(
+                            title: option.label, subtitle: option.description,
+                            accessory: draft.thinkingOptionId == option.id
+                                ? .checkmark(true)
+                                : (option.isDefault == true ? .badge("Default") : .none)
                         ) {
                             Haptics.selection()
                             draft.selectThinking(option.id)
@@ -262,9 +271,9 @@ struct DraftControlsSheet: View {
             VStack(spacing: 12) {
                 RowGroup {
                     ForEach(Array(modes.enumerated()), id: \.element.id) { index, mode in
-                        SheetRow(
-                            title: mode.label, detail: mode.description,
-                            checked: draft.modeId == mode.id
+                        ListRow(
+                            title: mode.label, subtitle: mode.description,
+                            accessory: .checkmark(draft.modeId == mode.id)
                         ) {
                             Haptics.selection()
                             draft.selectMode(mode.id)

@@ -261,7 +261,7 @@ struct ChatSubagentsSheet: View {
     /// menu carries the same action for a long press.
     private func managedRow(_ agent: AgentSnapshot) -> some View {
         HStack(spacing: 12) {
-            PaseoStatusDot(kind: managedStatus(agent))
+            StatusDot(managedStatus(agent))
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(managedTitle(agent))
@@ -329,9 +329,9 @@ struct ChatSubagentsSheet: View {
     }
 
     /// The same dot the panel's agent rows use: attention first, then the lifecycle status.
-    private func managedStatus(_ agent: AgentSnapshot) -> PaseoStatusDot.Kind {
+    private func managedStatus(_ agent: AgentSnapshot) -> StatusDot.State {
         switch agent.attention {
-        case .permission: return .needsInput
+        case .permission: return .attention
         case .error: return .failed
         case .finished: return .unread
         case .unknown, nil: break

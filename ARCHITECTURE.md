@@ -10,12 +10,21 @@ messaging app. The daemon is the backend and we never change it. Everything here
 App/                  Composition root: app entry, navigation, settings storage, Keychain.
                       Thin. Owns no logic a test would want.
 Packages/PaseoUI      (Apple platforms only)
-  Features/*          Hosts · Agents · Conversation · Terminal · Files · Workspaces · Settings …
-                      Each depends on PaseoStore + DesignSystem. Never on another Feature.
-                      PaseoStore re-exports Kit/Protocol value types for display; features
-                      never create connections or send requests.
-  DesignSystem        Tokens, typography, motion, haptics, glass, bubbles, the collapsible
-                      turn cells, rich previews (links, images, maps). No Paseo types.
+  Conversation/       The chat: Screen (header + controller), Transcript, Turn, Composer,
+                      Sheets, Mascot, and Prose (Markdown + rich content).
+  Workspace/          The panel: Agents, Files, Changes (diff, PR), Terminals.
+  Sidebar/            The drawer's content: directory, rows, menus, Search (CommandCenter).
+  Shell/              The container: ShellView (routing), ShellContainer (UIKit drawers),
+                      ShellDrawer (the SwiftUI↔UIKit bridge), EdgeDrawer (geometry).
+  Settings/ History/ Schedules/ Draft/ Voice/ Notifications/ Onboarding/ Pairing/
+                      One folder per surface; each depends on PaseoStore + DesignSystem and
+                      never on another surface. PaseoStore re-exports Kit/Protocol value
+                      types for display; surfaces never create connections or send requests.
+  DesignSystem/       Tokens (Palette, Typography, Metrics, Motion, SettingsKeys), haptics,
+                      PaseoFormat, and Components/ — the shared views every surface uses
+                      (ListRow, PageList, EmptyState, LoadingState, InlineBanner, Toast,
+                      StatusDot, StatePill, DiffStat, SheetScaffold, ShellHeader, Buttons).
+                      No Paseo types.
 Packages/PaseoCore    (Foundation only: builds and tests on Linux)
   PaseoStore          @Observable state the UI reads, and the pure logic behind it:
                       TimelineState (merging deltas), TurnBuilder (grouping into turns).

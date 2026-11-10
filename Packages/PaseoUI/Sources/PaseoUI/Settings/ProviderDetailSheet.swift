@@ -61,7 +61,7 @@ struct ProviderDetailSheet: View {
         sectionLabel("Status")
         RowGroup {
             HStack(spacing: 12) {
-                PaseoStatusDot(kind: dotKind)
+                StatusDot(dotKind)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(statusTitle)
                         .font(.paseo(.body))
@@ -107,13 +107,13 @@ struct ProviderDetailSheet: View {
         .frame(minHeight: 52)
     }
 
-    private var dotKind: PaseoStatusDot.Kind {
+    private var dotKind: StatusDot.State {
         if session.hostSettings.config != nil, !session.hostSettings.isProviderEnabled(providerID) {
             return .idle
         }
         guard let status = entry?.status else { return .idle }
         switch status {
-        case .ready: return .done
+        case .ready: return .idle
         case .loading: return .running
         case .error: return .failed
         case .unavailable: return .idle

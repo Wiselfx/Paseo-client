@@ -91,7 +91,7 @@ struct OverviewPage: View {
     /// trailing accessory, so the dot stays its own element).
     private var connectionRow: some View {
         HStack(spacing: Space.sm) {
-            PaseoStatusDot(kind: connectionKind(session.connection))
+            StatusDot(connectionKind(session.connection))
                 .padding(.leading, Space.lg)
             ListRow(
                 title: "Connection",
@@ -123,9 +123,9 @@ struct OverviewPage: View {
             })
     }
 
-    private func connectionKind(_ state: ConnectionState) -> PaseoStatusDot.Kind {
+    private func connectionKind(_ state: ConnectionState) -> StatusDot.State {
         switch state {
-        case .connected: .done
+        case .connected: .idle
         case .reconnecting, .connecting: .running
         case .failed: .failed
         case .idle: .idle

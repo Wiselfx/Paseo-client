@@ -118,6 +118,11 @@ extension Font {
 /// and the fallback keeps the requested size (scaled through `UIFontMetrics`, never a
 /// `.system(style)` that would lose it).
 enum Typography {
+    /// Claude iOS's chat body (V5): assistant prose, your bubbles and the composer all sit at
+    /// 17 pt, and everything around them is measured from it. Outside prose, name this, not
+    /// `ClaudeTypography`.
+    static let chatBodySize: CGFloat = 17
+
     /// The registered face for each family, resolved once after `register()`.
     static let serifName: String? = {
         ClaudeFontResources.register()
@@ -347,10 +352,6 @@ private struct CodeTypeScale: ViewModifier {
 /// The app-wide typography facade: prose and Markdown keep naming sizes (they are measured
 /// against their own body size), everything else uses `Font.paseo(_:)`.
 public struct ClaudeTypography: Sendable {
-    /// Claude iOS's chat body (V5): assistant prose, your bubbles and the composer all sit at
-    /// 17 pt, and everything around them is measured from it.
-    public static let chatBodySize: CGFloat = 17
-
     public static let anthropicSans = ClaudeFontResources.anthropicSans
     public static let anthropicSerif = ClaudeFontResources.anthropicSerif
     public static let anthropicMono = ClaudeFontResources.anthropicMono

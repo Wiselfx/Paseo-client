@@ -14,6 +14,37 @@ swift test --filter TimelineStateTests # one suite
 
 There is no Xcode here. `Packages/PaseoUI` and `App/` cannot be compiled on this machine.
 
+## UI rules
+
+These rules (PLAN §1, R-1…R-6) govern every line of UI code. Reviews check them.
+
+- **R-1. Observation is narrow.** A view reads only what it draws. Stores reach a leaf view as
+  values or as a narrow `@Observable` child, never as "the whole session". Derived state that costs
+  more than O(1) lives in the store, maintained incrementally, never as a computed property read
+  from `body`. No `onChange(of:)` on a computed value that scans a collection.
+- **R-2. Rows are equatable values.** Transcript turns, sidebar rows, history rows and file rows
+  take value inputs plus one actions object from the environment, and conform to `Equatable` so
+  SwiftUI skips them when nothing changed. No closures in row initializers.
+- **R-3. One owner per gesture surface; finger-tracked motion runs in UIKit.** Anything that tracks
+  a finger across the screen (the drawers, the panel) is a UIKit container driven by
+  `UIPanGestureRecognizer`, handing off to a velocity-matched
+  `UISpringTimingParameters(dampingRatio: 1)`. SwiftUI hosts the content and learns only
+  open/closed.
+- **R-4. Tokens only.** Colors from `Palette`, fonts from `Typography` (via `Font.paseo(_:)`),
+  spacing from `Space`, radii from `Radius`, animations from `Motion` (always
+  `resolved(reduceMotion:)`), feedback from `Haptics`. A literal `.font(.system(size:))`,
+  `Color(red:)`, `.cornerRadius(n)` or `.animation(.spring…)` outside `DesignSystem/` fails
+  review; `Tools/style-lint/style-lint.sh` is the check.
+- **R-5. Components before screens.** If two screens need the same thing, it is a component in
+  `DesignSystem/Components/`.
+- **R-6. No new features in this round.** Behaviour changes only where a plan or ticket says so.
+  Upstream copy stays verbatim.
+- **Copy.** Sentence case for our own labels; "host" is the user-facing noun ("daemon" only in
+  troubleshooting or a command name); never invent copy — keep the existing string or port
+  upstream's `en.ts` verbatim.
+- **Accessibility.** Every icon-only control has a label, every control has a 44 pt hit area, text
+  containers use `minHeight` (not `height`), and all motion goes through `Motion.resolved`.
+
 ## Rules
 
 1. **Stay inside your ticket.** Only edit the files it lists. If you think something outside it must

@@ -78,7 +78,7 @@ struct ProvidersPage: View {
         HStack(spacing: 0) {
             NavigationLink(value: SettingsRoute.provider(provider.provider)) {
                 HStack(spacing: Space.md) {
-                    PaseoStatusDot(kind: dotKind(provider))
+                    StatusDot(dotKind(provider))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(provider.label ?? provider.provider)
                             .font(.paseo(.body))
@@ -141,9 +141,9 @@ struct ProvidersPage: View {
         }
     }
 
-    private func statusKind(_ status: ProviderStatus) -> PaseoStatusDot.Kind {
+    private func statusKind(_ status: ProviderStatus) -> StatusDot.State {
         switch status {
-        case .ready: .done
+        case .ready: .idle
         case .loading: .running
         case .error: .failed
         case .unavailable: .idle
@@ -152,7 +152,7 @@ struct ProvidersPage: View {
     }
 
     /// Hollow dot when the provider is config-disabled; otherwise its catalogue status.
-    private func dotKind(_ provider: ProviderSnapshotEntry) -> PaseoStatusDot.Kind {
+    private func dotKind(_ provider: ProviderSnapshotEntry) -> StatusDot.State {
         if hostSettings.config != nil, !hostSettings.isProviderEnabled(provider.provider) {
             return .idle
         }

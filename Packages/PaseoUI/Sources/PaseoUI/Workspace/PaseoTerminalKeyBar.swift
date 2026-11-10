@@ -108,7 +108,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         spinner.color = Self.ink
         spinner.startAnimating()
         uploadRow.addArrangedSubview(spinner)
-        uploadFileLabel.font = UIFont(name: ClaudeTypography.anthropicMono, size: 12)
+        uploadFileLabel.font = UIFont(name: ClaudeFontResources.anthropicMono, size: 12)
             ?? .monospacedSystemFont(ofSize: 12, weight: .regular)
         uploadFileLabel.textColor = Self.ink.withAlphaComponent(0.85)
         uploadFileLabel.lineBreakMode = .byTruncatingMiddle
@@ -173,7 +173,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
                 for: .normal)
         } else if let title {
             button.setTitle(title, for: .normal)
-            button.titleLabel?.font = UIFont(name: ClaudeTypography.anthropicMono, size: 17)
+            button.titleLabel?.font = UIFont(name: ClaudeFontResources.anthropicMono, size: 17)
                 ?? UIFont.monospacedSystemFont(ofSize: 17, weight: .regular)
         }
         button.tintColor = Self.ink

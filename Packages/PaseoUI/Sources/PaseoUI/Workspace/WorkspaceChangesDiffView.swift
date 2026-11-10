@@ -335,7 +335,7 @@ struct WorkspaceChangesDiffView: View {
     /// detached build).
     private static func characterWidth() -> CGFloat {
         let size = TextRole.code.size
-        let font = UIFont(name: ClaudeTypography.anthropicMono, size: size)
+        let font = UIFont(name: ClaudeFontResources.anthropicMono, size: size)
             ?? .monospacedSystemFont(ofSize: size, weight: .regular)
         return ("M" as NSString).size(withAttributes: [.font: font]).width
     }

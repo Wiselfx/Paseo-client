@@ -115,7 +115,7 @@ struct PaseoSidebar: View {
     func sheetContent(_ selection: PaseoSidebarSheet) -> some View {
         switch selection {
         case .settings:
-            PaseoSettingsView(session: session, onDisconnect: onDisconnect)
+            SettingsRoot(session: session, onDisconnect: onDisconnect)
         case .schedules:
             ClaudeSchedulesView(session: session)
         case .history:

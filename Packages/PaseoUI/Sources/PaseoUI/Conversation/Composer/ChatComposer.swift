@@ -1253,7 +1253,7 @@ enum ComposerFieldLimit {
     /// (≈ 8 lines on an iPhone in portrait). Clamped so an unmeasured pass still leaves a usable
     /// field, and a tall screen can never take more than a third of the card.
     static func lines(
-        availableHeight: CGFloat, fontSize: CGFloat = ClaudeTypography.chatBodySize
+        availableHeight: CGFloat, fontSize: CGFloat = Typography.chatBodySize
     ) -> Int {
         guard availableHeight > 0 else { return 9 }
         let lineHeight = fontSize * 1.4

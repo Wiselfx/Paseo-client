@@ -18,7 +18,7 @@ import UIKit
         let title: String
         let subtitle: String?
         let symbol: String?
-        let dot: PaseoStatusDot.Kind?
+        let dot: StatusDot.State?
         let archived: Bool
         let agent: AgentSnapshot?
         let workspace: WorkspaceDescriptor?
@@ -331,9 +331,9 @@ import UIKit
 
     // MARK: Dots
 
-    private func agentDot(_ agent: AgentSnapshot) -> PaseoStatusDot.Kind {
+    private func agentDot(_ agent: AgentSnapshot) -> StatusDot.State {
         if agent.archivedAt != nil { return .idle }
-        if agent.attention == .permission { return .needsInput }
+        if agent.attention == .permission { return .attention }
         if agent.attention == .error || agent.status == .error { return .failed }
         if agent.status == .running { return .running }
         if agent.attention == .finished { return .unread }
@@ -341,9 +341,9 @@ import UIKit
     }
 
     /// Reads the precomputed roll-up; never scans the agent list.
-    private func workspaceDot(_ workspace: WorkspaceDescriptor) -> PaseoStatusDot.Kind {
+    private func workspaceDot(_ workspace: WorkspaceDescriptor) -> StatusDot.State {
         let entry = activity(workspace)
-        if entry.needsInput { return .needsInput }
+        if entry.needsInput { return .attention }
         if entry.failed { return .failed }
         if entry.isRunning { return .running }
         if entry.unread { return .unread }
@@ -691,7 +691,7 @@ struct CommandCenterSheet: View {
 
     @ViewBuilder private func leading(_ row: SearchModel.Result) -> some View {
         if let dot = row.dot {
-            PaseoStatusDot(kind: dot)
+            StatusDot(dot)
         } else if let symbol = row.symbol {
             Image(systemName: symbol)
                 .font(.glyph(.regular))
