@@ -4,12 +4,14 @@ import SwiftUI
 import UIKit
 
 extension PaseoSidebar {
-    func workspaceRow(_ workspace: WorkspaceDescriptor) -> some View {
-        let rowAgents = agents(in: workspace)
+    func workspaceRow(
+        _ workspace: WorkspaceDescriptor, derivations: SidebarDerivations
+    ) -> some View {
+        let rowAgents = agents(in: workspace, derivations: derivations)
         let selected = rowAgents.contains { $0.id == selectedAgentId }
         let attention = rowAgents.contains { $0.requiresAttention == true } || isManuallyUnread(workspace)
         return Button {
-            openWorkspace(workspace)
+            openWorkspace(workspace, agents: rowAgents)
         } label: {
             HStack(spacing: 8) {
                 PaseoStatusDot(kind: workspaceStatusKind(workspace, agents: rowAgents))
@@ -17,7 +19,7 @@ extension PaseoSidebar {
                     Text(workspaceTitle(workspace))
                         .font(typography.sans(16, weight: .medium))
                         .lineLimit(1)
-                    metaRow(workspace)
+                    metaRow(workspace, derivations: derivations)
                 }
                 Spacer(minLength: 0)
                 if attention {
@@ -90,18 +92,20 @@ extension PaseoSidebar {
 
     /// Tapping a workspace opens its most recently active agent; the other agents are the header's
     /// tab chips. Opening also clears a manual unread mark.
-    func openWorkspace(_ workspace: WorkspaceDescriptor) {
+    func openWorkspace(_ workspace: WorkspaceDescriptor, agents: [AgentSnapshot]) {
         Haptics.selection()
         clearManualUnread(workspace)
-        guard let target = agents(in: workspace).first else {
+        guard let target = agents.first else {
             showToast("No agents yet. Long-press the workspace to create one.")
             return
         }
         onSelectAgent(target.id)
     }
 
-    func agents(in workspace: WorkspaceDescriptor) -> [AgentSnapshot] {
-        session.agents.filter { $0.workspaceId == workspace.id }
+    func agents(
+        in workspace: WorkspaceDescriptor, derivations: SidebarDerivations
+    ) -> [AgentSnapshot] {
+        derivations.agentsByWorkspace[workspace.id] ?? []
     }
 
     /// One line: the workspace title, or the branch when there is no title.
@@ -114,7 +118,11 @@ extension PaseoSidebar {
         return workspace.branch ?? workspace.name
     }
 
-    @ViewBuilder func metaRow(_ workspace: WorkspaceDescriptor) -> some View {
+    @ViewBuilder func metaRow(
+        _ workspace: WorkspaceDescriptor, derivations: SidebarDerivations
+    ) -> some View {
+        // Looked up once per row instead of up to three times (P5 finding #3).
+        let activityStamp = derivations.activityDates[workspace.id]
         HStack(spacing: 4) {
             if showBranch {
                 Text(workspace.branch ?? workspaceKindLabel(workspace))
@@ -132,7 +140,7 @@ extension PaseoSidebar {
                         .foregroundStyle(ClaudePalette.failureInk.opacity(0.75))
                 }
             }
-            if let stamp = activityDate(for: workspace) {
+            if let stamp = activityStamp {
                 if showBranch || hasVisibleDiffStat(workspace) {
                     Text("·").foregroundStyle(ClaudePalette.captionInk)
                 }
@@ -141,7 +149,7 @@ extension PaseoSidebar {
             }
             let rowLabels = labelDefinitions(for: workspace)
             if !rowLabels.isEmpty {
-                if showBranch || hasVisibleDiffStat(workspace) || activityDate(for: workspace) != nil {
+                if showBranch || hasVisibleDiffStat(workspace) || activityStamp != nil {
                     Text("·").foregroundStyle(ClaudePalette.captionInk)
                 }
                 labelChips(for: workspace)

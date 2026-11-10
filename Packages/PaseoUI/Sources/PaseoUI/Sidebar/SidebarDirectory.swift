@@ -2,6 +2,14 @@
 import PaseoStore
 import SwiftUI
 
+/// Derived once per sidebar body evaluation (P5 finding #3): the workspace→agents and
+/// workspace→last-activity tables. The directory and every row share one pass over
+/// `session.agents` and one date parse per workspace instead of one scan/parse per row.
+struct SidebarDerivations {
+    let agentsByWorkspace: [String: [AgentSnapshot]]
+    let activityDates: [String: Date]
+}
+
 extension PaseoSidebar {
     func sectionHeader(_ title: String) -> some View {
         Text(title)
@@ -13,19 +21,43 @@ extension PaseoSidebar {
             .padding(.bottom, 6)
     }
 
-    @ViewBuilder var directory: some View {
-        let pinned = pinnedWorkspaces()
+    /// Builds the shared tables once per body evaluation. `activityDate` parses up to five
+    /// ISO-8601 stamps per workspace; doing that per row (or per sort comparison) was the
+    /// sidebar's hot path (P3/P5 finding #3).
+    func sidebarDerivations() -> SidebarDerivations {
+        var agentsByWorkspace: [String: [AgentSnapshot]] = [:]
+        for agent in session.agents {
+            guard let workspaceId = agent.workspaceId else { continue }
+            agentsByWorkspace[workspaceId, default: []].append(agent)
+        }
+        var activityDates: [String: Date] = [:]
+        for workspace in session.workspaceDirectory.workspaces {
+            if let date = activityDate(for: workspace, agents: agentsByWorkspace[workspace.id] ?? []) {
+                activityDates[workspace.id] = date
+            }
+        }
+        return SidebarDerivations(
+            agentsByWorkspace: agentsByWorkspace, activityDates: activityDates)
+    }
+
+    @ViewBuilder func directory(derivations: SidebarDerivations) -> some View {
+        let pinned = pinnedWorkspaces(derivations: derivations)
         switch sidebarGrouping {
         case .project:
             groupedDirectory(
-                groups: sortedGroups(session.workspaceDirectory.groups), pinned: pinned)
+                groups: sortedGroups(session.workspaceDirectory.groups, derivations: derivations),
+                pinned: pinned,
+                derivations: derivations)
         case .date:
-            dateDirectory(buckets: dateBuckets(), pinned: pinned)
+            dateDirectory(
+                buckets: dateBuckets(derivations: derivations),
+                pinned: pinned,
+                derivations: derivations)
         }
     }
 
     @ViewBuilder func groupedDirectory(
-        groups: [WorkspaceGroup], pinned: [WorkspaceDescriptor]
+        groups: [WorkspaceGroup], pinned: [WorkspaceDescriptor], derivations: SidebarDerivations
     ) -> some View {
         let isEmpty =
             groups.allSatisfy { $0.workspaces.isEmpty } && pinned.isEmpty
@@ -33,53 +65,61 @@ extension PaseoSidebar {
         if isEmpty {
             emptyDirectoryState
         } else {
-            pinnedSection(pinned)
-            ForEach(groups) { group in
-                projectRow(group)
-                    .task(id: group.project.projectRootPath) {
-                        await session.projectSetupProbe.check(repoRoot: group.project.projectRootPath)
-                    }
-                SidebarRoll(expanded: !isCollapsed(group.id)) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(group.workspaces) { workspace in
-                            workspaceRow(workspace)
+            // Lazy so a large project list mounts only the groups near the viewport; the
+            // ForEach must be a direct child of the lazy stack to virtualize (P5 #3).
+            LazyVStack(alignment: .leading, spacing: 0) {
+                pinnedSection(pinned, derivations: derivations)
+                ForEach(groups) { group in
+                    projectRow(group)
+                        .task(id: group.project.projectRootPath) {
+                            await session.projectSetupProbe.check(repoRoot: group.project.projectRootPath)
                         }
-                        worktreeSetupCallout(group)
+                    SidebarRoll(expanded: !isCollapsed(group.id)) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(group.workspaces) { workspace in
+                                workspaceRow(workspace, derivations: derivations)
+                            }
+                            worktreeSetupCallout(group)
+                        }
+                        // Animated reorder (active-first); None under Reduce Motion.
+                        .animation(
+                            reduceMotion ? nil : .easeInOut(duration: 0.3),
+                            value: group.workspaces.map(\.id))
                     }
-                    // Animated reorder (active-first); None under Reduce Motion.
-                    .animation(
-                        reduceMotion ? nil : .easeInOut(duration: 0.3),
-                        value: group.workspaces.map(\.id))
                 }
+                trailingRows
             }
-            trailingRows
         }
     }
 
     @ViewBuilder func dateDirectory(
-        buckets: [SidebarDateBucket], pinned: [WorkspaceDescriptor]
+        buckets: [SidebarDateBucket], pinned: [WorkspaceDescriptor],
+        derivations: SidebarDerivations
     ) -> some View {
         let visible = buckets.filter { !$0.workspaces.isEmpty }
         let isEmpty = visible.isEmpty && pinned.isEmpty && hiddenWorkspacesSet.isEmpty
         if isEmpty {
             emptyDirectoryState
         } else {
-            pinnedSection(pinned)
-            ForEach(visible) { bucket in
-                dateGroupHeader(bucket)
-                SidebarRoll(expanded: !isDateGroupCollapsed(bucket.id)) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(bucket.workspaces) { workspace in
-                            workspaceRow(workspace)
+            // Lazy for the same reason as the project grouping (P5 #3).
+            LazyVStack(alignment: .leading, spacing: 0) {
+                pinnedSection(pinned, derivations: derivations)
+                ForEach(visible) { bucket in
+                    dateGroupHeader(bucket)
+                    SidebarRoll(expanded: !isDateGroupCollapsed(bucket.id)) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(bucket.workspaces) { workspace in
+                                workspaceRow(workspace, derivations: derivations)
+                            }
                         }
+                        // Animated reorder (active-first); None under Reduce Motion.
+                        .animation(
+                            reduceMotion ? nil : .easeInOut(duration: 0.3),
+                            value: bucket.workspaces.map(\.id))
                     }
-                    // Animated reorder (active-first); None under Reduce Motion.
-                    .animation(
-                        reduceMotion ? nil : .easeInOut(duration: 0.3),
-                        value: bucket.workspaces.map(\.id))
                 }
+                trailingRows
             }
-            trailingRows
         }
     }
 
@@ -110,12 +150,14 @@ extension PaseoSidebar {
     }
 
     /// The Pinned section, shared by both groupings.
-    @ViewBuilder func pinnedSection(_ pinned: [WorkspaceDescriptor]) -> some View {
+    @ViewBuilder func pinnedSection(
+        _ pinned: [WorkspaceDescriptor], derivations: SidebarDerivations
+    ) -> some View {
         if !pinned.isEmpty {
             sectionHeader("Pinned")
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(pinned) { workspace in
-                    workspaceRow(workspace)
+                    workspaceRow(workspace, derivations: derivations)
                 }
             }
             .animation(
@@ -206,31 +248,35 @@ extension PaseoSidebar {
     }
 
     /// Pinned workspaces, newest activity first.
-    func pinnedWorkspaces() -> [WorkspaceDescriptor] {
+    func pinnedWorkspaces(derivations: SidebarDerivations) -> [WorkspaceDescriptor] {
         sortedWorkspaces(
             session.workspaceDirectory.workspaces.filter {
                 $0.isPinned && isVisible($0) && matchesLabelFilter($0)
-            })
+            },
+            derivations: derivations)
     }
 
     /// A workspace counts as running when the daemon's own bucket says so, or any agent in it
     /// is running — the same signal the row's dot uses.
-    func isRunningWorkspace(_ workspace: WorkspaceDescriptor) -> Bool {
+    func isRunningWorkspace(
+        _ workspace: WorkspaceDescriptor, derivations: SidebarDerivations
+    ) -> Bool {
         if workspace.status == .running { return true }
-        return agents(in: workspace).contains { $0.status == .running }
+        return agents(in: workspace, derivations: derivations).contains { $0.status == .running }
     }
 
     /// Workspaces per the sidebar sort, keys computed once each.
     ///
-    /// `activityDate` walks the workspace's agents and parses up to five ISO-8601 timestamps; run
-    /// from inside a comparator that is thousands of parses per sidebar evaluation (a sort calls
-    /// the comparator O(n log n) times), and the sidebar evaluates on every store change (P3).
-    func sortedWorkspaces(_ workspaces: [WorkspaceDescriptor]) -> [WorkspaceDescriptor] {
+    /// The activity key comes from the shared `activityDates` table (built once per body
+    /// evaluation) instead of being recomputed per comparison (P3/P5 finding #3).
+    func sortedWorkspaces(
+        _ workspaces: [WorkspaceDescriptor], derivations: SidebarDerivations
+    ) -> [WorkspaceDescriptor] {
         let sorted: [WorkspaceDescriptor]
         switch sidebarSort {
         case .activity:
             sorted = workspaces
-                .map { (workspace: $0, date: activityDate(for: $0)) }
+                .map { (workspace: $0, date: derivations.activityDates[$0.id]) }
                 .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
                 .map { $0.workspace }
         case .created:
@@ -256,7 +302,7 @@ extension PaseoSidebar {
         var running: [WorkspaceDescriptor] = []
         var rest: [WorkspaceDescriptor] = []
         for workspace in sorted {
-            if isRunningWorkspace(workspace) {
+            if isRunningWorkspace(workspace, derivations: derivations) {
                 running.append(workspace)
             } else {
                 rest.append(workspace)
@@ -272,7 +318,7 @@ extension PaseoSidebar {
     /// Date buckets per DSH `date-groups`: today, yesterday, weekday names for the last six
     /// days, then one `earlier` bucket for anything a week or more old. Same visible/label-
     /// filtered set as the project grouping; each bucket is sorted and floated (active-first).
-    func dateBuckets() -> [SidebarDateBucket] {
+    func dateBuckets(derivations: SidebarDerivations) -> [SidebarDateBucket] {
         let calendar = Calendar.current
         let now = Date()
         let startOfToday = calendar.startOfDay(for: now)
@@ -282,7 +328,7 @@ extension PaseoSidebar {
             !$0.isPinned && isVisible($0) && matchesLabelFilter($0)
         }
         for workspace in visible {
-            let date = activityDate(for: workspace)
+            let date = derivations.activityDates[workspace.id]
             let start = date.map { calendar.startOfDay(for: $0) }
             let offset = start.map {
                 calendar.dateComponents([.day], from: $0, to: startOfToday).day ?? 999
@@ -298,10 +344,11 @@ extension PaseoSidebar {
         }
         var buckets: [SidebarDateBucket] = [
             SidebarDateBucket(
-                id: "today", title: "Today", workspaces: sortedWorkspaces(byBucket["today"] ?? [])),
+                id: "today", title: "Today",
+                workspaces: sortedWorkspaces(byBucket["today"] ?? [], derivations: derivations)),
             SidebarDateBucket(
                 id: "yesterday", title: "Yesterday",
-                workspaces: sortedWorkspaces(byBucket["yesterday"] ?? [])),
+                workspaces: sortedWorkspaces(byBucket["yesterday"] ?? [], derivations: derivations)),
         ]
         let symbols = calendar.weekdaySymbols
         for offset in 2...6 {
@@ -311,12 +358,13 @@ extension PaseoSidebar {
             buckets.append(
                 SidebarDateBucket(
                     id: "day-\(offset)", title: title,
-                    workspaces: sortedWorkspaces(byBucket["day-\(offset)"] ?? [])))
+                    workspaces: sortedWorkspaces(
+                        byBucket["day-\(offset)"] ?? [], derivations: derivations)))
         }
         buckets.append(
             SidebarDateBucket(
                 id: "earlier", title: "Earlier",
-                workspaces: sortedWorkspaces(byBucket["earlier"] ?? [])))
+                workspaces: sortedWorkspaces(byBucket["earlier"] ?? [], derivations: derivations)))
         return buckets
     }
 
@@ -373,16 +421,21 @@ extension PaseoSidebar {
     ///
     /// The group's sort date is computed once per group, not once per comparison (P3 — see
     /// `sortedWorkspaces`).
-    func sortedGroups(_ groups: [WorkspaceGroup]) -> [WorkspaceGroup] {
+    func sortedGroups(
+        _ groups: [WorkspaceGroup], derivations: SidebarDerivations
+    ) -> [WorkspaceGroup] {
         groups
             .map { group in
                 let workspaces = sortedWorkspaces(
                     group.workspaces.filter {
                         !$0.isPinned && isVisible($0) && matchesLabelFilter($0)
-                    })
+                    },
+                    derivations: derivations)
                 return (
                     group: WorkspaceGroup(project: group.project, workspaces: workspaces),
-                    date: workspaces.compactMap(groupSortDate).max()
+                    date: workspaces.compactMap {
+                        groupSortDate($0, derivations: derivations)
+                    }.max()
                 )
             }
             .sorted { left, right in
@@ -399,13 +452,20 @@ extension PaseoSidebar {
             .map { $0.group }
     }
 
-    func groupSortDate(_ workspace: WorkspaceDescriptor) -> Date? {
-        sidebarSort == .created ? createdDate(workspace) : activityDate(for: workspace)
+    func groupSortDate(
+        _ workspace: WorkspaceDescriptor, derivations: SidebarDerivations
+    ) -> Date? {
+        sidebarSort == .created ? createdDate(workspace) : derivations.activityDates[workspace.id]
     }
 
-    func activityDate(for workspace: WorkspaceDescriptor) -> Date? {
+    /// Last activity for a workspace: the newest of its agents' `updatedAt`/`lastUserMessageAt`,
+    /// else the workspace's own `activityAt`/`lastUserMessageAt`/`createdAt`. Callers pass the
+    /// precomputed agent list from `SidebarDerivations` (P5 finding #3).
+    func activityDate(
+        for workspace: WorkspaceDescriptor, agents: [AgentSnapshot]
+    ) -> Date? {
         var best: Date?
-        for agent in session.agents where agent.workspaceId == workspace.id {
+        for agent in agents {
             for stamp in [agent.updatedAt, agent.lastUserMessageAt] {
                 guard let stamp, let date = PaseoDate.parse(stamp) else { continue }
                 best = max(best ?? date, date)

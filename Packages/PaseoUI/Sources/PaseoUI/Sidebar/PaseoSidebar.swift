@@ -65,6 +65,8 @@ struct PaseoSidebar: View {
     let typography = ClaudeTypography()
 
     var body: some View {
+        // Derived once per evaluation and shared by the directory and every row (P5 #3).
+        let derivations = sidebarDerivations()
         let chrome = VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Paseo")
@@ -77,9 +79,9 @@ struct PaseoSidebar: View {
             .frame(height: 52)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     navigation
-                    directory
+                    directory(derivations: derivations)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
