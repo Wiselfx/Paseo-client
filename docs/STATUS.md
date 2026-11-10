@@ -225,5 +225,16 @@ They tested it on device and reported problems. Tickets: `docs/tickets/_D-common
 | D3 sidebar width, Settings chevrons, turn-detail fonts (R2 serif→title bug), compact k numbers | `d3-layout` | b92d04cb |
 | D4 terminal smoothness (upstream docs/terminal-*.md), agent paging (65 vs 72 subagents) | `d4-terminal` | faf08a0b |
 
-Next after merges: D5 haptics. Today there are 212 `selection()` calls and 34 `success()` notification buzzes. Plan: none on plain navigation taps, copy gets a light tick rather than success, and success is kept for awaited completions only.
+**D1–D4 merged** (foundation 4e2bf1b). IPA `Paseo-20261110-1142-4e2bf1b.ipa`; device testing pending. Lead fixes during the merge:
+- D2's item-provider load is bridged through a continuation;
+- D2's queue closure has an explicit type.
+
+Unverified on device:
+- whether `safeAreaBar` insets reach the transcript `ScrollView`;
+- the send runway formula;
+- the paste overrides;
+- the voice meters.
+
+D5 (haptics) is in flight: agent 53a8c622, branch `d5-haptics`, visible in the sidebar.
+Notes from the D5 planning: Today there are 212 `selection()` calls and 34 `success()` notification buzzes. Plan: none on plain navigation taps, copy gets a light tick rather than success, and success is kept for awaited completions only.
 Waiting on the user: the device crash log for the draft-send crash.
