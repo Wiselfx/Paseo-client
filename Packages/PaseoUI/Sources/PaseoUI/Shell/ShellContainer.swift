@@ -479,17 +479,17 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
     override var keyCommands: [UIKeyCommand]? {
         [
             UIKeyCommand(
-                input: "k", modifierFlags: .command, action: #selector(searchCommand),
-                discoverabilityTitle: "Search"),
+                title: "Search", action: #selector(searchCommand), input: "k",
+                modifierFlags: .command),
             UIKeyCommand(
-                input: "n", modifierFlags: .command, action: #selector(newSessionCommand),
-                discoverabilityTitle: "New session"),
+                title: "New session", action: #selector(newSessionCommand), input: "n",
+                modifierFlags: .command),
             UIKeyCommand(
-                input: "\\", modifierFlags: .command, action: #selector(toggleSidebarCommand),
-                discoverabilityTitle: "Show sidebar"),
+                title: "Show sidebar", action: #selector(toggleSidebarCommand), input: "\\",
+                modifierFlags: .command),
             UIKeyCommand(
-                input: "\\", modifierFlags: [.command, .shift],
-                action: #selector(togglePanelCommand), discoverabilityTitle: "Show workspace"),
+                title: "Show workspace", action: #selector(togglePanelCommand), input: "\\",
+                modifierFlags: [.command, .shift]),
             UIKeyCommand(
                 input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeCommand)),
         ]
