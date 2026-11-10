@@ -65,7 +65,7 @@ struct AddProjectSheet: View {
     private var confirmAction: SheetConfirm? {
         switch mode {
         case .folder:
-            SheetConfirm(
+            return SheetConfirm(
                 "Add project", isEnabled: canAdd, isWorking: directory.isAddingProject,
                 identifier: "addProject.confirm"
             ) {

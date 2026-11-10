@@ -179,15 +179,15 @@ private struct ToastWindowHost: UIViewRepresentable {
         coordinator.detach()
     }
 
-    @MainActor final class Coordinator {
+    final class Coordinator {
         private let center: ToastCenter
-        private weak var window: ToastWindow?
+        @MainActor private weak var window: ToastWindow?
 
         init(center: ToastCenter) {
             self.center = center
         }
 
-        func attach() {
+        @MainActor func attach() {
             guard window == nil else { return }
             let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             guard let scene = scenes.first(where: { $0.activationState == .foregroundActive })
@@ -206,7 +206,7 @@ private struct ToastWindowHost: UIViewRepresentable {
             self.window = window
         }
 
-        func detach() {
+        @MainActor func detach() {
             window?.isHidden = true
             window = nil
         }
