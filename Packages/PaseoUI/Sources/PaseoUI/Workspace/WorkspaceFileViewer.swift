@@ -248,7 +248,8 @@ struct WorkspaceFileViewer: View {
         if isDirty {
             pendingExit = action
         } else {
-            perform(action)
+            pendingExit = action
+            performExit()
         }
     }
 
