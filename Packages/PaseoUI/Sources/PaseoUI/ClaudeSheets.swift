@@ -5,7 +5,7 @@
         let title: String
         var back = false
         var trailing: String?
-        var controlDiameter: CGFloat = 42
+        var controlDiameter: CGFloat = 30
         var titleMaxWidth: CGFloat = 200
         let close: () -> Void
         var trailingAction: (() -> Void)?
@@ -14,7 +14,7 @@
                 Text(title).font(.system(size: 17, weight: .semibold)).lineLimit(1).frame(maxWidth: titleMaxWidth)
                 HStack {
                     Button(action: close) {
-                        Image(systemName: back ? "chevron.left" : "xmark").font(.system(size: 21, weight: .light))
+                        Image(systemName: back ? "chevron.left" : "xmark").font(.system(size: 15, weight: .light))
                             .frame(width: controlDiameter, height: controlDiameter)
                     }.glassEffect(in: .circle).accessibilityLabel(back ? "Back" : "Close").accessibilityIdentifier(
                         "sheet.close.\(title)")

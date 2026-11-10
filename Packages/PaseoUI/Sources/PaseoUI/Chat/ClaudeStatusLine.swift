@@ -181,9 +181,7 @@ struct ClaudeLiveStatusLine: View {
         }
         .frame(height: 24)
         .animation(reduceMotion ? nil : .easeInOut(duration: ClaudeMotion.swap), value: activity)
-        .animation(
-            reduceMotion ? nil : .spring(response: ClaudeMotion.open, dampingFraction: 0.62),
-            value: showsOvertime)
+        .animation(EdgeDrawer.settleAnimation(reduceMotion: reduceMotion), value: showsOvertime)
         .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
         .onReceive(ticker) { date in
             now = date
