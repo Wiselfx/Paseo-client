@@ -143,6 +143,26 @@ final class ComposerAttachmentStore {
     }
 }
 
+
+extension ComposerAttachmentStore {
+    /// Attach an image the user picked: decode, downscale and JPEG-encode **off main** (audit B
+    /// N7/N8), then add the finished item and let the pump upload it. Returns false when the data
+    /// doesn't decode, so the caller can say so.
+    @discardableResult
+    func addImage(data: Data, fileName: String, to id: String, store: ConversationStore) async -> Bool {
+        let processed = await Task.detached(priority: .userInitiated) {
+            ComposerImageProcessor.downscaledJPEG(data: data)
+        }.value
+        guard let processed else { return false }
+        add(
+            ComposerAttachmentItem(
+                fileName: fileName, mimeType: "image/jpeg", byteCount: processed.data.count,
+                data: processed.data, thumbnail: processed.image),
+            to: id, store: store)
+        return true
+    }
+}
+
 // MARK: - Image downscaling
 
 enum ComposerImageProcessor {
@@ -167,6 +187,23 @@ enum ComposerImageProcessor {
         }
         guard let jpeg = scaled.jpegData(compressionQuality: jpegQuality) else { return nil }
         return (jpeg, scaled)
+    }
+
+    /// Decode + downscale with ImageIO, without a full `UIImage` pass: `CGImageSource` reads the
+    /// header, creates one thumbnail at `maxPixelSize` and never materializes the full bitmap.
+    /// Safe off main (audit B N7).
+    nonisolated static func thumbnail(data: Data, maxPixelSize: Double) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(1, maxPixelSize),
+        ]
+        guard
+            let cgImage = CGImageSourceCreateThumbnailAtIndex(
+                source, 0, options as CFDictionary)
+        else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 
     /// Byte count for display.

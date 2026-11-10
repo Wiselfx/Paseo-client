@@ -452,3 +452,76 @@ struct ClaudeTurnActionButton: View {
 /// its own. The card is capped at `min(400 pt, 50% of height)` and scrolls inside.
 
 #endif
+
+// MARK: - TurnRow (R6 §4)
+
+/// One turn in the timeline: a narrow, **equatable** value so a streamed token re-evaluates only
+/// the row it changed (`.equatable()` on the `ForEach` row).
+///
+/// The verbs come from `@Environment(\.chatActions)`-adjacent input — the same `ChatActions`
+/// instance for the screen's life, so it is not part of `==`. `ClaudeTurnView` carries the layout
+/// and its subviews; this row only decides what the row is told.
+struct TurnRow: View, Equatable {
+    let turn: Turn
+    let isLatest: Bool
+    /// The seqEnd of the current find match, non-nil only when it is inside this turn.
+    let findSeq: Int?
+    /// The seqEnd whose row flashes after a find step, same rule.
+    let flashSeq: Int?
+    let isLanding: Bool
+    let actions: ChatActions
+
+    @State private var landingStartedAt = Date()
+
+    static func == (lhs: TurnRow, rhs: TurnRow) -> Bool {
+        lhs.turn == rhs.turn && lhs.isLatest == rhs.isLatest && lhs.findSeq == rhs.findSeq
+            && lhs.flashSeq == rhs.flashSeq && lhs.isLanding == rhs.isLanding
+    }
+
+    var body: some View {
+        ClaudeTurnView(
+            turn: turn,
+            onMarkdown: actions.markdown,
+            localImageLoader: actions.loadImage,
+            highlightedSeq: flashSeq,
+            findTarget: findSeq,
+            onOpenFile: actions.openFile,
+            rewindChoices: actions.rewindChoices,
+            onRewind: actions.rewind,
+            canRewrite: actions.canRewrite,
+            onEdit: actions.edit,
+            onRerun: actions.rerun,
+            onFork: actions.fork,
+            onForkInFlight: actions.forkInFlight,
+            onDeleteTurn: actions.deleteTurn,
+            onRetract: actions.retract,
+            isLatestTurn: isLatest
+        )
+        .overlay(alignment: .top) {
+            if isLanding {
+                LandingLine(startedAt: landingStartedAt)
+                    .offset(y: -8)
+            }
+        }
+        .onChange(of: isLanding) { _, landed in
+            if landed { landingStartedAt = Date() }
+        }
+    }
+}
+
+extension Turn {
+    /// Does this turn own the row with `seqEnd`? O(rows of this turn), and only ever asked while
+    /// find is open.
+    func containsRow(seqEnd: Int) -> Bool {
+        if let row = userMessage, row.seqEnd == seqEnd { return true }
+        for segment in segments {
+            switch segment {
+            case .work(let group):
+                if group.rows.contains(where: { $0.seqEnd == seqEnd }) { return true }
+            case .prose(let row), .todo(let row), .notice(let row):
+                if row.seqEnd == seqEnd { return true }
+            }
+        }
+        return false
+    }
+}

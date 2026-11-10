@@ -10,7 +10,6 @@ enum ClaudeChatSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
-
 /// A rewind awaiting the can't-undo confirmation (M7d).
 struct PendingRewind: Identifiable {
     let messageId: String
@@ -30,6 +29,107 @@ struct PendingMessageAction: Identifiable {
     let text: String
     let kind: MessageActionKind
     var id: String { "\(kind.rawValue)/\(messageId)" }
+}
+
+/// Every modal the conversation presents: the agent-controls sheet, the subagents and background
+/// work sheets, the prompt index, context usage, the file viewer, and the two confirmations that
+/// belong to the timeline (message actions and rewinds). R4 owns the sheet bodies; this only
+/// routes to them.
+///
+/// **Reads:** `store.subagents`, `store.backgroundWork`, `store.agent` (the file viewer's
+/// workspace), `store.promptOutline` (the sheet's rows). All of it only while a sheet is open.
+struct ChatSheets: ViewModifier {
+    @Bindable var store: ConversationStore
+    let session: HostSession
+    @Bindable var controller: ChatController
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $controller.sheet) { item in
+                sheet(item)
+            }
+            .sheet(isPresented: $controller.showContextSheet) {
+                ClaudeContextSheet(store: store)
+            }
+            .sheet(isPresented: openFilePathBinding) {
+                fileSheetContent
+            }
+            .confirmationDialog(
+                controller.messageActionTitle,
+                isPresented: messageActionBinding,
+                titleVisibility: .visible,
+                presenting: controller.pendingMessageAction
+            ) { action in
+                Button(action.kind == .edit ? "Rewind and edit" : "Rewind and rerun", role: .destructive) {
+                    controller.pendingMessageAction = nil
+                    Task { await controller.performMessageAction(action) }
+                }
+                Button("Cancel", role: .cancel) { controller.pendingMessageAction = nil }
+            } message: { action in
+                Text(controller.messageActionDescription(for: action))
+            }
+    }
+
+    @ViewBuilder private func sheet(_ item: ClaudeChatSheet) -> some View {
+        switch item {
+        case .controls:
+            ClaudeAgentControlsSheet(session: session, store: store)
+        case .subagents:
+            ChatSubagentsSheet(
+                session: session, parentAgentId: store.agentId, subagents: store.subagents,
+                hiddenIds: $controller.hiddenSubagentIds,
+                onOpenAgent: { agentId in
+                    controller.sheet = nil
+                    controller.onOpenAgent?(agentId)
+                })
+        case .backgroundWork:
+            ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork)
+        case .turnNav:
+            ChatTurnNavSheet(
+                store: store, items: controller.outlineItems,
+                activeSeq: store.promptOutline.activeSeq
+            ) { seq in
+                controller.sheet = nil
+                controller.jumpToPrompt(seq)
+            }
+        }
+    }
+
+    private var openFilePathBinding: Binding<Bool> {
+        Binding(
+            get: { controller.openFilePath != nil },
+            set: { if !$0 { controller.openFilePath = nil } })
+    }
+
+    private var messageActionBinding: Binding<Bool> {
+        Binding(
+            get: { controller.pendingMessageAction != nil },
+            set: { if !$0 { controller.pendingMessageAction = nil } })
+    }
+
+    @ViewBuilder private var fileSheetContent: some View {
+        if let agent = store.agent,
+            let workspaceId = agent.workspaceId,
+            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
+        {
+            NavigationStack {
+                WorkspaceFileViewer(
+                    checkout: session.checkout(for: workspace),
+                    relPath: controller.openFilePath ?? "",
+                    onBack: { controller.openFilePath = nil },
+                    backLabel: "Files")
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+        } else {
+            // The agent's workspace isn't loaded (rare: directory fetch pending).
+            EmptyState(
+                systemImage: "exclamationmark.triangle", title: "Workspace not available",
+                message: nil,
+                action: (title: "Close", run: { controller.openFilePath = nil }))
+                .presentationDetents([.height(240)])
+        }
+    }
 }
 
 #endif

@@ -3,136 +3,211 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-extension ClaudeChatView {
-    // MARK: Mascot (M5a)
+/// The mascot's wiring: every input the crab reacts to, read from the R3 digest and the host
+/// aggregates — no scans of the timeline (R6 §3).
+///
+/// | Input | Source |
+/// |---|---|
+/// | failed tool calls | `store.timeline.failedToolCalls` (seq-aware through `mascotSeqFloor`) |
+/// | running subagents | `store.timeline.runningSubAgentCount` |
+/// | compaction | `store.timeline.lastCompactionStatus` |
+/// | activity | `store.timeline.latestRowKind` + `latestRowId` |
+/// | busy / pending / attention | `session.runningAgentCount`, `.pendingPermissionCount`, `.attentionCount` |
+///
+/// The 1 s ticker runs only while the machine has something left to expire, and stops while the
+/// surface is obscured (R4/R5 environment).
+struct MascotDriver: ViewModifier {
+    let store: ConversationStore
+    let session: HostSession
+    let controller: ChatController
 
+    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
+
+    func body(content: Content) -> some View {
+        content
+            // History arrives after the view appears, so baselines are taken when the first load
+            // is ready; seeding on appear left them empty and history's failures played as errors
+            // (B11).
+            .onAppear {
+                if case .ready = store.phase { controller.seedMascotBaselines() }
+            }
+            .onChange(of: store.phase) { _, phase in
+                if case .ready = phase { controller.seedMascotBaselines() }
+            }
+            .onChange(of: store.activeTurnId) { _, newId in
+                controller.turnBoundaryChanged(newId)
+            }
+            .onChange(of: store.timeline.latestRowId) { _, _ in
+                controller.activityChanged()
+            }
+            .onChange(of: store.timeline.failedToolCalls) { _, calls in
+                controller.failedToolCallsChanged(calls)
+            }
+            .onChange(of: store.timeline.runningSubAgentCount) { _, count in
+                controller.feedMascot(.subagentsChanged(count: count, at: Date()))
+            }
+            .onChange(of: store.timeline.lastCompactionStatus) { _, _ in
+                controller.compactionChanged()
+            }
+            .onChange(of: session.runningAgentCount) { _, count in
+                controller.feedMascot(.busySessionsChanged(count: count, at: Date()))
+            }
+            .onChange(of: session.pendingPermissionCount) { _, count in
+                controller.feedMascot(.pendingInteractionsChanged(count: count, at: Date()))
+            }
+            .onChange(of: session.attentionCount) { _, _ in
+                controller.attentionChanged()
+            }
+            .task(id: ticking) {
+                guard ticking else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    controller.mascot.tick(now: Date())
+                }
+            }
+    }
+
+    /// True while the mascot's own clock has work to do: on stage, waking, or counting down to
+    /// sleep. Once it is asleep only an event can move it, so the ticker stops (P3).
+    private var ticking: Bool {
+        controller.mascot.state != .sleeping && !isSurfaceObscured
+    }
+}
+
+extension ChatController {
     func feedMascot(_ event: MascotEvent) {
         mascot.handle(event)
     }
 
     /// Runs once, when the conversation's first load is ready (UX spec §4.4): baselines the
     /// one-shot histories from the loaded state, then hands the machine the current levels.
-    /// Seeding on appear baselined an empty timeline, so history's failed tool calls arrived
-    /// afterwards looking new and played the error animation (B11).
     func seedMascotBaselines() {
         guard !mascotSeeded else { return }
         mascotSeeded = true
         let now = Date()
-        mascotSeqFloor = store.timeline.rows.map(\.seqStart).min() ?? 0
-        signalledToolFailureIds = Set(failedToolCallIds)
-        attentionActive = attentionCount > 0
-        compactionOpen = lastCompactionStatus == "loading"
+        // The oldest row present is the floor: anything below it is history, not a live event.
+        mascotSeqFloor = store.timeline.rows.first?.seqStart ?? 0
+        signalledToolFailureIds = Set(allFailedToolCallIds)
+        attentionActive = session.attentionCount > 0
+        compactionOpen = store.timeline.lastCompactionStatus == "loading"
         if let activeTurnId = store.activeTurnId {
             mascotLiveTurnId = activeTurnId
             feedMascot(.turnStarted(at: now))
         }
-        feedMascot(.busySessionsChanged(count: busySessions, at: now))
-        feedMascot(.pendingInteractionsChanged(count: pendingInteractions, at: now))
-        feedMascot(.subagentsChanged(count: runningSubagents, at: now))
+        feedMascot(.busySessionsChanged(count: session.runningAgentCount, at: now))
+        feedMascot(.pendingInteractionsChanged(count: session.pendingPermissionCount, at: now))
+        feedMascot(.subagentsChanged(count: store.timeline.runningSubAgentCount, at: now))
         if compactionOpen { feedMascot(.compactionStarted(at: now)) }
     }
 
-    /// `rowId|kind` of the newest row; only the kind drives the activity switch.
-    var mascotActivitySignature: String {
-        guard let last = store.timeline.rows.last else { return "|" }
-        return "\(last.id)|\(mascotRowTag(last.item))"
+    /// Every failed tool call the digest knows, by `callId`.
+    var allFailedToolCallIds: [String] {
+        store.timeline.failedToolCalls.map(\.callId)
     }
 
-    func mascotRowTag(_ item: TimelineItem) -> String {
-        switch item {
-        case .reasoning: "reasoning"
-        case .toolCall: "toolCall"
-        default: "other"
-        }
-    }
-
-    /// Failed tool calls at or above the seed floor: failures the reader watched happen. Older
-    /// pages prepend rows below the floor, so loading history never feeds the mascot.
+    /// Failed calls at or above the seed floor: failures the reader watched happen.
     var liveFailedToolCallIds: [String] {
-        store.timeline.rows.compactMap { row in
-            guard row.seqEnd >= mascotSeqFloor else { return nil }
-            if case .toolCall(let call) = row.item, call.status == .failed,
-                MascotToolError.isFailure(call)
-            {
-                return call.callId
-            }
-            return nil
+        store.timeline.failedToolCalls
+            .filter { $0.seq >= mascotSeqFloor }
+            .map(\.callId)
+    }
+
+    /// A turn started or ended. Only a turn the mascot was told about can end: a snapshot settling
+    /// to nil as history loads is not news (UX spec §4.4).
+    func turnBoundaryChanged(_ newId: String?) {
+        guard mascotSeeded else { return }
+        let now = Date()
+        if let newId {
+            mascotLiveTurnId = newId
+            feedMascot(.turnStarted(at: now))
+            return
+        }
+        guard mascotLiveTurnId != nil else { return }
+        mascotLiveTurnId = nil
+        switch store.turns.last?.phase {
+        case .failed: feedMascot(.turnFailed(at: now))
+        default: feedMascot(.turnCompleted(at: now))
         }
     }
 
-    /// Failed tool calls whose failure is not an AbortError — the machine's `toolFailed`.
-    var failedToolCallIds: [String] {
-        store.timeline.rows.compactMap { row in
-            if case .toolCall(let call) = row.item, call.status == .failed,
-                MascotToolError.isFailure(call)
-            {
-                return call.callId
-            }
-            return nil
+    /// The newest row's kind: reasoning streams think, a running tool call works.
+    func activityChanged() {
+        guard mascotSeeded, store.timeline.latestRowId != nil else { return }
+        switch store.timeline.latestRowKind {
+        case .reasoning: feedMascot(.activityChanged(.reasoning, at: Date()))
+        case .toolCall: feedMascot(.activityChanged(.working, at: Date()))
+        default: break
         }
     }
 
-    /// Running sub-agent tool calls of the followed session.
-    var runningSubagents: Int {
-        store.timeline.rows.filter { row in
-            if case .toolCall(let call) = row.item, call.status == .running,
-                case .subAgent = call.detail
-            {
-                return true
+    func failedToolCallsChanged(_ calls: [TimelineState.FailedToolCall]) {
+        guard mascotSeeded else {
+            signalledToolFailureIds = Set(calls.map(\.callId))
+            return
+        }
+        let unseen = liveFailedToolCallIds.filter { !signalledToolFailureIds.contains($0) }
+        guard !unseen.isEmpty else { return }
+        for _ in unseen { feedMascot(.toolFailed(at: Date())) }
+        signalledToolFailureIds.formUnion(unseen)
+    }
+
+    func compactionChanged() {
+        let status = store.timeline.lastCompactionStatus
+        let now = Date()
+        if status == "loading" {
+            if !compactionOpen {
+                compactionOpen = true
+                feedMascot(.compactionStarted(at: now))
             }
-            return false
-        }.count
+        } else if compactionOpen {
+            compactionOpen = false
+            feedMascot(.compactionEnded(failed: status == "failed", at: now))
+        }
     }
 
-    /// The raw `status` of the newest compaction row (`loading` / `completed` / unknown), or nil.
-    var lastCompactionStatus: String? {
-        store.timeline.rows.compactMap { row -> String? in
-            if case .compaction(let status, _, _) = row.item { return status }
-            return nil
-        }.last
+    func attentionChanged() {
+        let active = session.attentionCount > 0
+        if active, !attentionActive { feedMascot(.attention(at: Date())) }
+        attentionActive = active
     }
+}
 
-    /// Busy sessions in the workspace (the followed one included), as the machine wants them.
-    var busySessions: Int {
-        session.agents.filter { $0.status == .running }.count
-    }
+/// The crab, feet on the composer card's top edge, flush with its right edge, above the card.
+/// 104 × 72 pt of art; only the resting body takes touches.
+///
+/// **Reads:** `controller.mascot.state`, `controller.showCostBubble`, `store.contextUsage` (only
+/// while the bubble is open).
+struct MascotCrab: View {
+    @Bindable var controller: ChatController
+    let store: ConversationStore?
 
-    /// Workspace-wide pending interactions: approvals, questions, plan reviews.
-    var pendingInteractions: Int {
-        session.agents.reduce(0) { $0 + $1.pendingPermissions.count }
-    }
+    @AppStorage(PaseoSettingsKeys.mascot) private var mascotEnabled = true
 
-    /// Sessions that finished unread while out of view.
-    var attentionCount: Int {
-        session.agents.filter { $0.requiresAttention == true }.count
-    }
-
-    /// The crab, feet on the composer card's top edge, flush with its right edge, above the card.
-    /// 104 × 72 pt of art; only the resting body takes touches.
-    /// Long-press opens the cost bubble (M17): the conversation's cost/tokens from the
-    /// context-usage data, when the provider reports them. Tap stays the poke. The bubble
-    /// sits above the crab and closes on tap or after a few seconds. No balance line —
-    /// Paseo has no balance source.
-    @ViewBuilder var mascotCrab: some View {
+    var body: some View {
         if mascotEnabled {
-            ComposerCrab(state: mascot.state)
-                .onLongPressGesture(minimumDuration: 0.35) { showCostBubble = true }
+            ComposerCrab(state: controller.mascot.state)
+                // Long-press opens the cost bubble (M17); tap stays the poke.
+                .onLongPressGesture(minimumDuration: 0.35) { controller.showCostBubble = true }
                 .overlay(alignment: .topTrailing) {
-                    if showCostBubble, let usage = store.contextUsage,
-                        usage.totalCostUsd != nil || usage.inputTokens != nil || usage.outputTokens != nil
+                    if controller.showCostBubble, let usage = store?.contextUsage,
+                        usage.totalCostUsd != nil || usage.inputTokens != nil
+                            || usage.outputTokens != nil
                     {
                         costBubble(usage: usage)
                             .fixedSize()
                             .alignmentGuide(.top) { $0[.bottom] + 6 }
-                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottomTrailing)))
-                            .onTapGesture { showCostBubble = false }
+                            .transition(
+                                .opacity.combined(with: .scale(scale: 0.96, anchor: .bottomTrailing))
+                            )
+                            .onTapGesture { controller.showCostBubble = false }
                             .task {
                                 try? await Task.sleep(for: .seconds(4))
-                                showCostBubble = false
+                                controller.showCostBubble = false
                             }
                     }
                 }
-                .animation(Motion.disclosure.animation, value: showCostBubble)
+                .animation(Motion.disclosure.animation, value: controller.showCostBubble)
                 .offset(y: -72)
         }
     }
@@ -172,6 +247,5 @@ extension ClaudeChatView {
         case (nil, nil): nil
         }
     }
-
 }
 #endif

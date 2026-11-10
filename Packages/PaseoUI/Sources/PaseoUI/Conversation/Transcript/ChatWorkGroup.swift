@@ -37,7 +37,7 @@ struct ClaudeWorkGroupCell: View {
     }
 
     /// The leading seat's activity icon (doc 08 §1.2): the group's content decides the glyph.
-    static func computeSeatGlyph(_ group: Turn.WorkGroup) -> ClaudeGlyph.Kind {
+    nonisolated static func computeSeatGlyph(_ group: Turn.WorkGroup) -> ClaudeGlyph.Kind {
         var hasShell = false
         var hasFile = false
         for row in group.rows {
@@ -88,7 +88,7 @@ struct ClaudeWorkGroupCell: View {
 
     /// One sentence of what the group did, such as "Edited 3 files and ran 2 commands". Keeps
     /// DSH's wording; the headline counts folds and tool kinds into verbs. Revised from raw counts.
-    static func computeSummaryText(_ group: Turn.WorkGroup) -> String {
+    nonisolated static func computeSummaryText(_ group: Turn.WorkGroup) -> String {
         var editedFiles = Set<String>()
         var readFiles = Set<String>()
         var commands = 0, searches = 0, otherTools = 0

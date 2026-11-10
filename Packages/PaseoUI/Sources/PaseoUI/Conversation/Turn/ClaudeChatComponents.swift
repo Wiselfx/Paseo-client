@@ -197,9 +197,10 @@ struct ClaudeUserBubble: View {
     /// The filled bubble, and the thing the context-menu preview shows.
     private var bubble: some View {
         bodyText
-            .font(.paseo(.callout))
+            // UX-SPEC §4.1 (amended): the user bubble is 17 pt with 4 pt line spacing.
+            .font(.paseo(.body))
             .foregroundStyle(Palette.ink)
-            .lineSpacing(8) // 14 / 22
+            .lineSpacing(4)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(
