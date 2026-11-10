@@ -28,16 +28,12 @@ struct PaseoSidebar: View {
     @State var renamingWorkspace: WorkspaceDescriptor?
     @State var renamingProject: WorkspaceProjectDescriptor?
     @State var projectPendingRemoval: WorkspaceProjectDescriptor?
-    /// Set only when the daemon can't undo an archive: then a confirmation guards it instead.
-    @State var workspacePendingArchive: WorkspaceDescriptor?
-    /// Set when a worktree-kind workspace has uncommitted or unpushed changes.
-    @State var workspacePendingArchiveWarning: WorktreeArchiveWarning?
-    @State var undoToast: (id: String, name: String)?
-    @State var undoToastToken = UUID()
     @State var renameText = ""
-    @State var toast: String?
+    /// The comma-joined preferences, parsed once (§3).
+    @State var preferences = SidebarPreferences()
+    /// The workspace archive flow: the risk check and the two confirmations.
+    @State var archive = WorkspaceArchiveActions()
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
-    @AppStorage("paseo.sidebar.collapsedProjects") var collapsedProjects = ""
     @AppStorage("paseo.sidebar.sort") var sortRaw = SidebarSort.activity.rawValue
     @AppStorage("paseo.sidebar.showBranch") var showBranch = true
     @AppStorage("paseo.sidebar.showDiffStats") var showDiffStats = true
@@ -45,13 +41,6 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.groupBy") var groupByRaw = SidebarGrouping.project.rawValue
     /// Running workspaces float to the top of their group. Default on.
     @AppStorage("paseo.sidebar.activeFirst") var activeFirst = true
-    /// Project ids whose "Set up worktree scripts" callout was dismissed.
-    @AppStorage("paseo.sidebar.setupCalloutDismissed") var setupCalloutDismissed = ""
-    /// Workspace ids manually marked unread (DSH manual-unread). Cleared on open.
-    @AppStorage("paseo.sidebar.manualUnread") var manualUnread = ""
-    /// Date-group ids (today/yesterday/day-2…day-6/earlier) whose section is collapsed.
-    @AppStorage("paseo.sidebar.collapsedDateGroups") var collapsedDateGroups = ""
-    @AppStorage("paseo.sidebar.hiddenWorkspaces") var hiddenWorkspaces = ""
     /// The sidebar label filter: the raw label name, or "" for All (one at a time, by design).
     @AppStorage("paseo.sidebar.labelFilter") var labelFilter = ""
     /// Shared with the Settings → General toggle, which owns this row. Hidden by default.
@@ -61,6 +50,9 @@ struct PaseoSidebar: View {
     /// Shared with Settings → Sidebar; default shown.
     @AppStorage("paseo.sidebar.showSchedules") var showSchedules = true
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.toast) var toast
+    /// R5's drawer, for the ⌘K hook: the sidebar owns the Search sheet.
+    @Environment(\.shellDrawer) private var shellDrawer
 
 
     var body: some View {
@@ -81,11 +73,16 @@ struct PaseoSidebar: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     navigation
                     directory(derivations: derivations)
+                        .padding(.horizontal, 20)
                 }
-                .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             }
             .scrollIndicators(.hidden)
+            .refreshable {
+                // The action is `@Sendable`: capture the session, not this view.
+                await session.workspaceDirectory.refresh()
+                await session.refreshAgents()
+            }
 
             usageSection
             footer
@@ -96,20 +93,22 @@ struct PaseoSidebar: View {
         .background(Palette.background)
         .foregroundStyle(Palette.ink)
         .onAppear {
+            // R5's ⌘K hook: the sidebar owns the Search sheet, so it hands the route over here.
+            shellDrawer?.onSearch = {
+                shellDrawer?.open(.sidebar)
+                sheet = .search
+            }
             if showUsageInSidebar && session.hostUsage.isSupported {
                 Task { _ = await session.hostUsage.load(forceRefresh: false) }
             }
             consumeAddProjectRequest()
+            loadDirectoryIfNeeded()
         }
         .onChange(of: addProjectRequest) { _, _ in
             consumeAddProjectRequest()
         }
         let sheeted = chrome.sheet(item: $sheet) { sheetContent($0) }
-        return withOverlays(withArchiveDialogs(withRenameAlerts(sheeted)))
-            .onAppear {
-                guard !session.workspaceDirectory.hasLoaded, session.workspaceDirectory.error == nil else { return }
-                Task { await session.workspaceDirectory.refresh() }
-            }
+        return withArchiveDialogs(withRenameAlerts(sheeted))
     }
 
     @ViewBuilder
@@ -235,37 +234,33 @@ struct PaseoSidebar: View {
         .confirmationDialog(
             "Archive worktree?",
             isPresented: Binding(
-                get: { workspacePendingArchiveWarning != nil },
-                set: { if !$0 { workspacePendingArchiveWarning = nil } }),
+                get: { archive.pendingWarning != nil },
+                set: { if !$0 { archive.pendingWarning = nil } }),
             titleVisibility: .visible
         ) {
             Button("Archive", role: .destructive) {
-                guard let warning = workspacePendingArchiveWarning else { return }
-                workspacePendingArchiveWarning = nil
-                archiveWorkspace(warning.workspace)
+                archive.confirmWarning(session: session, toast: toast)
             }
-            Button("Cancel", role: .cancel) { workspacePendingArchiveWarning = nil }
+            Button("Cancel", role: .cancel) { archive.pendingWarning = nil }
         } message: {
-            Text(workspacePendingArchiveWarning?.message ?? "")
+            Text(archive.pendingWarning?.message ?? "")
         }
         .confirmationDialog(
             "Archive workspace?",
             isPresented: Binding(
-                get: { workspacePendingArchive != nil },
-                set: { if !$0 { workspacePendingArchive = nil } }),
+                get: { archive.pendingConfirmation != nil },
+                set: { if !$0 { archive.pendingConfirmation = nil } }),
             titleVisibility: .visible
         ) {
             Button("Archive", role: .destructive) {
-                guard let workspace = workspacePendingArchive else { return }
-                workspacePendingArchive = nil
-                archiveWorkspace(workspace)
+                archive.confirmPending(session: session, toast: toast)
             }
-            Button("Cancel", role: .cancel) { workspacePendingArchive = nil }
+            Button("Cancel", role: .cancel) { archive.pendingConfirmation = nil }
         } message: {
             Text("Its agents and terminals stop. This host can't undo an archive.")
         }
         .confirmationDialog(
-            "Remove project?",
+            ProjectActions.removeTitle,
             isPresented: Binding(
                 get: { projectPendingRemoval != nil },
                 set: { if !$0 { projectPendingRemoval = nil } }),
@@ -274,64 +269,11 @@ struct PaseoSidebar: View {
             Button("Remove", role: .destructive) {
                 guard let project = projectPendingRemoval else { return }
                 projectPendingRemoval = nil
-                Task {
-                    let removed = await session.workspaceDirectory.removeProject(project.projectId)
-                    showToast(
-                        removed
-                            ? "Project removed"
-                            : (session.workspaceDirectory.actionError ?? "Couldn't remove the project."))
-                }
+                ProjectActions.remove(project, session: session, toast: toast)
             }
             Button("Cancel", role: .cancel) { projectPendingRemoval = nil }
         } message: {
-            Text(
-                "The project and its workspaces will be unregistered on this host. Files on disk will not be changed."
-            )
-        }
-    }
-
-    func withOverlays(_ content: some View) -> some View {
-        content
-        .overlay(alignment: .top) {
-            if let toast {
-                Text(toast)
-                    .font(.paseo(.footnote))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .glassEffect()
-                    .padding(.top, 58)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if let undoToast {
-                HStack(spacing: 14) {
-                    Text("Archived \(undoToast.name)")
-                        .font(.paseo(.footnote, weight: .medium))
-                        .lineLimit(1)
-                    Button("Undo") {
-                        let target = undoToast
-                        self.undoToast = nil
-                        undoToastToken = UUID()
-                        Task {
-                            let ok = await session.workspaceDirectory.undoArchive(target.id)
-                            if !ok {
-                                showToast(
-                                    session.workspaceDirectory.actionError
-                                        ?? "Couldn't undo the archive.")
-                            }
-                        }
-                    }
-                    .font(.paseo(.footnote, weight: .semibold))
-                    .accessibilityLabel("Undo archive")
-                }
-                .padding(.horizontal, 18)
-                .frame(height: 44)
-                .glassEffect(in: .capsule)
-                .padding(.bottom, 76)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            Text(ProjectActions.removeMessage)
         }
     }
 
@@ -339,44 +281,33 @@ struct PaseoSidebar: View {
 
     private var navigation: some View {
         VStack(spacing: 0) {
-            navigationRow("Search", symbol: "magnifyingglass") { sheet = .search }
+            ListRow(title: "Search", systemImage: "magnifyingglass") { sheet = .search }
             if showHistory {
-                navigationRow("History", symbol: "clock.arrow.2.circlepath") { sheet = .history }
+                ListRow(title: "History", systemImage: "clock.arrow.2.circlepath") {
+                    sheet = .history
+                }
             }
             if showSchedules {
-                navigationRow("Schedules", symbol: "clock") { sheet = .schedules }
+                ListRow(title: "Schedules", systemImage: "clock") { sheet = .schedules }
             }
             if session.agentControl.isSupported {
-                navigationRow("Import session", symbol: "square.and.arrow.down") {
+                ListRow(title: "Import session", systemImage: "square.and.arrow.down") {
                     sheet = .importSession
                 }
             }
             if session.workspaceDirectory.supportsProjectAdd {
-                navigationRow("Add project", symbol: "plus") { sheet = .addProject }
+                ListRow(title: "Add project", systemImage: "folder.badge.plus") {
+                    sheet = .addProject
+                }
             }
             if session.workspaceDirectory.supportsWorkspaceCreate {
-                navigationRow("New workspace", symbol: "plus") { sheet = .newWorkspace }
+                ListRow(title: "New workspace", systemImage: "plus") { sheet = .newWorkspace }
             }
         }
         .padding(.top, 4)
     }
 
-    private func navigationRow(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: symbol)
-                    .font(.glyph(.regular, weight: .light))
-                    .frame(width: 24)
-                Text(title).font(.paseo(.body))
-                Spacer(minLength: 0)
-            }
-            .frame(height: 50)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-    }
-
-        // MARK: Usage
+    // MARK: Usage
 
     /// One compact line per available provider report, with its pinned (or first) window:
     /// "62% · resets 3h". Hidden entirely unless enabled in Settings → General.
@@ -398,11 +329,10 @@ struct PaseoSidebar: View {
         }
     }
 
+    /// One switch (Settings → General owns it) plus the host's support; a host with usage off
+    /// reports the failure itself, so its own policy is not a second gate.
     private var showsUsageFooter: Bool {
-        showUsageInSidebar
-            && session.hostUsage.isSupported
-            && session.hostUsage.usageEnabled
-            && !session.hostUsage.reports.isEmpty
+        showUsageInSidebar && session.hostUsage.isSupported
     }
 
     private func summaryWindows(_ available: AvailableUsageReport) -> [ProviderUsageWindow] {
@@ -440,7 +370,7 @@ struct PaseoSidebar: View {
         .accessibilityIdentifier("sidebar.usage.\(source).\(window.id)")
     }
 
-        // MARK: Footer
+    // MARK: Footer
 
     /// Avatar leading, the inverted New session pill trailing, sized to its label and never
     /// truncated (§0.3, §2.5). The host lives in Settings only; the host chip is gone.
@@ -469,25 +399,44 @@ struct PaseoSidebar: View {
 
     private var newSessionPill: some View {
         Button {
-            Haptics.selection()
+            // The shell settles the drawer and plays the one haptic (PLAN §RH).
             onNewSession(currentWorkspaceId)
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
                     .font(.glyph(.regular, weight: .semibold))
                 Text("New session")
-                    .font(.paseo(.callout, weight: .medium))
                     .lineLimit(1)
                     .fixedSize()
             }
-            .foregroundStyle(Palette.background)
-            .padding(.horizontal, 17)
-            .frame(height: 44)
-            .background(Palette.ink, in: .capsule)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.paseoPrimary())
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityLabel("New session")
+    }
+
+    /// Every sidebar message goes through the shell's toast, which sits above sheets (§RI 8).
+    func showToast(_ text: String) {
+        toast?.show(text)
+    }
+
+    /// Pull-to-refresh and the error banner's retry: the directory and the agents together.
+    private func refreshDirectory() async {
+        await session.workspaceDirectory.refresh()
+        await session.refreshAgents()
+    }
+
+    /// Also the error banner's action, from `SidebarDirectory`.
+    func retryDirectory() {
+        Task { await refreshDirectory() }
+    }
+
+    /// The first load, from `onAppear` so a body evaluation never triggers it.
+    private func loadDirectoryIfNeeded() {
+        guard !session.workspaceDirectory.hasLoaded, session.workspaceDirectory.error == nil else {
+            return
+        }
+        Task { await session.workspaceDirectory.refresh() }
     }
 
     private var initial: String {

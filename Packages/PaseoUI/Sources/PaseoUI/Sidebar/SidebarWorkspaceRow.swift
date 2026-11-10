@@ -14,7 +14,7 @@ extension PaseoSidebar {
             openWorkspace(workspace, agents: rowAgents)
         } label: {
             HStack(spacing: 8) {
-                PaseoStatusDot(kind: workspaceStatusKind(workspace, agents: rowAgents))
+                StatusDot(workspaceStatusKind(workspace, agents: rowAgents))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(workspaceTitle(workspace))
                         .font(.paseo(.callout, weight: .medium))
@@ -23,7 +23,7 @@ extension PaseoSidebar {
                 }
                 Spacer(minLength: 0)
                 if attention {
-                    PaseoStatusDot(kind: .unread)
+                    StatusDot(.unread)
                 }
             }
             .padding(.horizontal, 8)
@@ -37,20 +37,11 @@ extension PaseoSidebar {
             isManuallyUnread(workspace) ? "Manually marked unread" : (attention ? "Needs attention" : ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
-            Button("New agent here", systemImage: "plus") { onNewSession(workspace.id) }
-            Button("Rename workspace", systemImage: "pencil") {
+            // PLAN §RH order: open-variants, edit verbs, copy, hide, then the destructive verb.
+            Button("New session", systemImage: "plus") { onNewSession(workspace.id) }
+            Button("Rename…", systemImage: "pencil") {
                 renameText = workspace.title ?? workspace.name
                 renamingWorkspace = workspace
-            }
-            Button("Copy path", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = workspace.cwd
-                showToast("Path copied")
-            }
-            if let branch = workspace.branch {
-                Button("Copy branch name", systemImage: "doc.on.doc") {
-                    UIPasteboard.general.string = branch
-                    showToast("Branch name copied")
-                }
             }
             if session.workspaceDirectory.supportsWorkspacePinning {
                 Button(
@@ -68,11 +59,6 @@ extension PaseoSidebar {
                     }
                 }
             }
-            if session.labels.supportsLabels {
-                Menu("Labels", systemImage: "tag") {
-                    labelsSubmenu(for: workspace)
-                }
-            }
             Button(
                 isManuallyUnread(workspace) ? "Clear unread mark" : "Mark as unread",
                 systemImage: isManuallyUnread(workspace) ? "checkmark.circle" : "circle"
@@ -80,12 +66,31 @@ extension PaseoSidebar {
                 Haptics.selection()
                 toggleManualUnread(workspace)
             }
-            Button(isHiddenFromSidebar(workspace) ? "Unhide from sidebar" : "Hide from sidebar", systemImage: isHiddenFromSidebar(workspace) ? "eye" : "eye.slash") {
+            if session.labels.supportsLabels {
+                Menu("Labels", systemImage: "tag") {
+                    labelsSubmenu(for: workspace)
+                }
+            }
+            Button("Copy path", systemImage: "doc.on.doc") {
+                Clipboard.copy(workspace.cwd)
+                showToast("Path copied")
+            }
+            if let branch = workspace.branch {
+                Button("Copy branch name", systemImage: "doc.on.doc") {
+                    Clipboard.copy(branch)
+                    showToast("Branch name copied")
+                }
+            }
+            Button(
+                isHiddenFromSidebar(workspace) ? "Unhide" : "Hide",
+                systemImage: isHiddenFromSidebar(workspace) ? "eye" : "eye.slash"
+            ) {
                 Haptics.selection()
                 toggleHiddenFromSidebar(workspace)
             }
-            Button("Archive workspace", systemImage: "archivebox", role: .destructive) {
-                requestArchive(workspace)
+            Divider()
+            Button("Archive", systemImage: "archivebox", role: .destructive) {
+                archive.request(workspace, session: session, toast: toast)
             }
         }
     }
@@ -93,10 +98,11 @@ extension PaseoSidebar {
     /// Tapping a workspace opens its most recently active agent; the other agents are the header's
     /// tab chips. Opening also clears a manual unread mark.
     func openWorkspace(_ workspace: WorkspaceDescriptor, agents: [AgentSnapshot]) {
-        Haptics.selection()
+        // The tap moves the drawer, so the shell owns the haptic (PLAN §RH).
         clearManualUnread(workspace)
         guard let target = agents.first else {
-            showToast("No agents yet. Long-press the workspace to create one.")
+            // No agent yet: a draft in this workspace, like Search (audit C #6).
+            onNewSession(workspace.id)
             return
         }
         onSelectAgent(target.id)
@@ -244,21 +250,22 @@ extension PaseoSidebar {
     /// status bucket when no agent outranks it.
     func workspaceStatusKind(
         _ workspace: WorkspaceDescriptor, agents: [AgentSnapshot]
-    ) -> PaseoStatusDot.Kind {
-        if agents.contains(where: { $0.attention == .permission }) { return .needsInput }
+    ) -> StatusDot.State {
+        if agents.contains(where: { $0.attention == .permission }) { return .attention }
         if agents.contains(where: { $0.attention == .error || $0.status == .error }) { return .failed }
         if agents.contains(where: { $0.status == .running }) { return .running }
         if agents.contains(where: { $0.attention == .finished }) { return .unread }
-        return statusKind(workspace.status)
+        return statusState(workspace.status)
     }
 
-    func statusKind(_ status: WorkspaceStatusBucket) -> PaseoStatusDot.Kind {
+    /// A finished workspace is no longer a green dot (UX-SPEC §0.1 keeps green for diff
+    /// counts), so `.done` reads as the quiet dot.
+    func statusState(_ status: WorkspaceStatusBucket) -> StatusDot.State {
         switch status {
-        case .needsInput, .attention: .needsInput
+        case .needsInput, .attention: .attention
         case .failed: .failed
         case .running: .running
-        case .done: .done
-        case .unknown: .idle
+        case .done, .unknown: .idle
         }
     }
 
