@@ -207,6 +207,9 @@ public final class WorkspaceGitExtras: Identifiable {
     private var diffSlot: UInt8?
     private var fileSubscriptionId: String?
     private var watchedPath: String?
+    /// Set by `close()`. A load or watch that was already in flight when the panel closed must
+    /// not subscribe afterwards; the helper is dropped and recreated on the next open.
+    private var isClosed = false
 
     internal init(
         workspaceId: String, cwd: String, checkout: CheckoutStore, client: any DaemonClient
@@ -239,12 +242,14 @@ public final class WorkspaceGitExtras: Identifiable {
     /// Loads a comparison through the modern binary pipeline when the daemon supports it, and
     /// through `CheckoutStore.loadDiff` otherwise.
     public func loadDiff(compare: DiffCompare) async {
+        guard !isClosed else { return }
         lastCompare = compare
         guard capabilities.supportsModernDiff else {
             await loadLegacyDiff(compare)
             return
         }
         await releaseDiff()
+        guard !isClosed else { return }
         isUsingLegacyPipeline = false
         snapshot = nil
         pendingEntries = []
@@ -252,6 +257,7 @@ public final class WorkspaceGitExtras: Identifiable {
         diffPhase = .loading
         do {
             let payload = try await client.send(DiffSubscribeRequest(compare: compare))
+            guard !isClosed else { return }
             if let error = payload.error {
                 diffError = error.message
                 diffPhase = .failed(error.message)
@@ -380,12 +386,14 @@ public final class WorkspaceGitExtras: Identifiable {
     /// Watches one file. Without `features.workspaceFileEditing` this falls back to a one-shot
     /// `file_explorer_request` read through `checkout.files`.
     public func watchFile(_ path: String) async {
+        guard !isClosed else { return }
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             fileError = "A file path is required."
             return
         }
         await releaseFileWatch()
+        guard !isClosed else { return }
         watchedPath = trimmed
         guard capabilities.supportsFileWatching else {
             await checkout.files.read(trimmed)
@@ -408,6 +416,7 @@ public final class WorkspaceGitExtras: Identifiable {
         do {
             let payload = try await client.send(
                 FileSubscribeRequest(cwd: cwd, path: trimmed))
+            guard !isClosed else { return }
             fileSubscriptionId = payload.subscriptionId
             apply(version: payload.initial)
         } catch {
@@ -456,6 +465,7 @@ public final class WorkspaceGitExtras: Identifiable {
     }
 
     internal func resubscribe() async {
+        guard !isClosed else { return }
         // The legacy stream is owned by CheckoutStore, which HostSession already resubscribed.
         if capabilities.supportsModernDiff, let lastCompare {
             await loadDiff(compare: lastCompare)
@@ -466,6 +476,7 @@ public final class WorkspaceGitExtras: Identifiable {
     }
 
     internal func close() async {
+        isClosed = true
         await releaseDiff()
         await releaseFileWatch()
         lastCompare = nil

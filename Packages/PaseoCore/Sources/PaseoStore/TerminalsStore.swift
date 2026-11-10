@@ -129,6 +129,9 @@ public final class TerminalsStore {
             }
             subscribeDirectory(workspaceId: workspaceId, cwd: watched[workspaceId]?.cwd)
             await refreshTerminals(in: workspaceId)
+            // The view that asked for the directory went away (the panel closed): do not start
+            // the scripts fetch, and do not repopulate a list the store's close already cleared.
+            guard !Task.isCancelled else { return }
             await refreshScripts(in: workspaceId)
         }
     }
@@ -157,6 +160,7 @@ public final class TerminalsStore {
             let response = try await client.send(
                 ListTerminalsRequest(
                     cwd: watched[workspaceId]?.cwd, workspaceId: workspaceId))
+            guard !Task.isCancelled else { return }
             terminalsByWorkspace[workspaceId] = response.terminals
             error = nil
         } catch {
@@ -314,6 +318,7 @@ public final class TerminalsStore {
         do {
             let response = try await client.send(
                 ListWorkspaceScriptsRequest(workspaceId: workspaceId))
+            guard !Task.isCancelled else { return }
             if let scripts = response.scripts { scriptsByWorkspace[workspaceId] = scripts }
             if let message = response.error {
                 error = message

@@ -58,6 +58,9 @@ public final class CheckoutStore: Identifiable {
     private let client: any DaemonClient
     private var subscriptionId: String?
     private var lastCompare: CheckoutDiffCompare?
+    /// Set by `close()`. A load that was already in flight when the panel closed must not
+    /// subscribe afterwards; the store is dropped and recreated on the next open.
+    private var isClosed = false
 
     internal init(workspace: WorkspaceDescriptor, client: any DaemonClient) {
         self.workspace = workspace
@@ -97,8 +100,10 @@ public final class CheckoutStore: Identifiable {
 
     /// Loads status, the PR badge and the working diff.
     public func load() async {
+        guard !isClosed else { return }
         phase = .loading
         await loadStatus()
+        guard !isClosed else { return }
         guard phase == .ready, isGit else { return }
         if status?.hasRemote == true { await loadPrStatus() }
         await loadDiff(compare: workingCompare)
@@ -132,6 +137,7 @@ public final class CheckoutStore: Identifiable {
     /// Subscribes to the legacy JSON diff stream for `compare` (default: the working tree).
     /// Replaces any previous subscription.
     public func loadDiff(compare: CheckoutDiffCompare? = nil) async {
+        guard !isClosed else { return }
         guard isGit else {
             diff = nil
             diffPhase = .ready
@@ -143,11 +149,13 @@ public final class CheckoutStore: Identifiable {
             return
         }
         await releaseDiff()
+        guard !isClosed else { return }
         lastCompare = compare
         diffPhase = .loading
         do {
             let response = try await client.send(
                 SubscribeCheckoutDiffRequest(cwd: cwd, compare: compare))
+            guard !isClosed else { return }
             subscriptionId = response.subscriptionId
             apply(response)
         } catch {
@@ -158,6 +166,7 @@ public final class CheckoutStore: Identifiable {
 
     /// Releases the diff subscription. Called by `HostSession.closeCheckout`.
     public func close() async {
+        isClosed = true
         await releaseDiff()
         lastCompare = nil
         files.clearFile()

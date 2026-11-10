@@ -57,6 +57,9 @@ struct WorkspacePanel: View {
     @State private var showSetupSheet = false
     @State private var showImportSheet = false
     @State private var observedSetupWorkspaceId: String?
+    /// Whether the shell's drawer has the panel on screen. The page content is mounted only
+    /// while this is true, so closing the panel stops its work; the tab is remembered separately.
+    @State private var isPanelVisible: Bool
 
     private let typography = ClaudeTypography()
 
@@ -78,6 +81,10 @@ struct WorkspacePanel: View {
         self.initialTerminalId = initialTerminalId
         self.onClose = onClose
         self.dismissDrag = dismissDrag
+        // A drawer-driven panel starts hidden: its work loads on the first open and is released
+        // on close. Without a drawer there is no progress to gate on, so it is always visible.
+        let startsVisible = dismissDrag.map { $0.progress.wrappedValue > 0 } ?? true
+        self._isPanelVisible = State(initialValue: startsVisible)
         // The last page is remembered per workspace; a notification tap lands on Terminal.
         let initial: Page = initialTerminalId != nil ? .terminal : .agents
         let id = workspace?.id ?? "none"
@@ -115,12 +122,26 @@ struct WorkspacePanel: View {
             dismissableContent
         }
         // Canvas comes from the shell's rounded, full-bleed card (UX-SPEC §1.1).
+        .modifier(
+            PanelVisibilityTracker(
+                progress: dismissDrag?.progress ?? .constant(1),
+                isVisible: $isPanelVisible))
         .environment(\.mentionInChat, onMentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
         .onChange(of: initialTerminalId) { _, terminalId in
             if terminalId != nil { pageRaw = Page.terminal.rawValue }
         }
-        .task(id: workspace?.id) {
+        .task(id: isPanelVisible ? workspace?.id : nil) {
+            guard !Task.isCancelled else { return }
+            // Closed: drop the setup watch and the page's stores. The checkout and terminal
+            // attachments are released by `releaseWorkspaceWork` when the page disappears.
+            guard isPanelVisible else {
+                await stopSetupObservation()
+                guard !Task.isCancelled else { return }
+                checkout = nil
+                gitExtras = nil
+                return
+            }
             if let previous = observedSetupWorkspaceId, previous != workspace?.id {
                 observedSetupWorkspaceId = nil
                 await session.setupObservation.stopObserving(previous)
@@ -131,11 +152,24 @@ struct WorkspacePanel: View {
                 return
             }
             let store = await MainActor.run { session.checkout(for: workspace) }
+            guard isPanelVisible, !Task.isCancelled else {
+                await session.closeCheckout(workspace.id)
+                return
+            }
             let extras = await MainActor.run { session.gitExtras.workspace(for: store) }
+            guard isPanelVisible, !Task.isCancelled else {
+                await session.closeCheckout(workspace.id)
+                return
+            }
             checkout = store
             gitExtras = extras
             observedSetupWorkspaceId = workspace.id
             await session.setupObservation.observe(workspace.id)
+            // The workspace changed (or the panel closed) while the subscribe was in flight.
+            guard !Task.isCancelled else {
+                await session.setupObservation.stopObserving(workspace.id)
+                return
+            }
         }
         .sheet(isPresented: $showSetupSheet) {
             if let workspace {
@@ -254,10 +288,44 @@ struct WorkspacePanel: View {
     }
 
     @ViewBuilder private var dismissableContent: some View {
-        if dismissDrag != nil, currentPage == .agents || currentPage == .files {
-            withPanelDismiss(content)
+        if isPanelVisible {
+            PanelPage {
+                if dismissDrag != nil, currentPage == .agents || currentPage == .files {
+                    withPanelDismiss(content)
+                } else {
+                    content
+                }
+            }
+            .onDisappear {
+                if let workspace, dismissDrag != nil {
+                    releaseWorkspaceWork(workspace)
+                }
+            }
         } else {
-            content
+            EmptyView()
+        }
+    }
+
+    /// Stops the setup watch. Used when the panel closes and when the workspace changes.
+    private func stopSetupObservation() async {
+        if let previous = observedSetupWorkspaceId {
+            observedSetupWorkspaceId = nil
+            await session.setupObservation.stopObserving(previous)
+        }
+    }
+
+    /// Releases the page's stores when the panel closes or the workspace changes: the checkout
+    /// (and its diff subscription) and the workspace's terminal attachments. Both are recreated
+    /// lazily on the next open.
+    private func releaseWorkspaceWork(_ workspace: WorkspaceDescriptor) {
+        checkout = nil
+        gitExtras = nil
+        session.terminals.close(workspaceId: workspace.id)
+        let session = self.session
+        let workspaceId = workspace.id
+        Task {
+            await session.closeCheckout(workspaceId)
+            await session.setupObservation.stopObserving(workspaceId)
         }
     }
 
@@ -606,5 +674,34 @@ struct WorkspacePanel: View {
         }
         return "The agent will be archived."
     }
+}
+
+/// Publishes the shell's drawer progress to the panel's `isPanelVisible` without making the
+/// panel's body depend on every drag frame: only this modifier reads the progress binding, and
+/// it flips the boolean once per open/close instead of per frame.
+private struct PanelVisibilityTracker: ViewModifier {
+    let progress: Binding<CGFloat>
+    @Binding var isVisible: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { isVisible = progress.wrappedValue > 0 }
+            .onChange(of: progress.wrappedValue) { _, value in
+                let visible = value > 0
+                if visible != isVisible { isVisible = visible }
+            }
+    }
+}
+
+/// A stable identity for the mounted page, so `.onDisappear` fires when the panel closes or the
+/// workspace changes, but not when the selected tab changes.
+private struct PanelPage<Content: View>: View {
+    private let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View { content() }
 }
 #endif
