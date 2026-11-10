@@ -117,13 +117,10 @@ struct RootView: View {
                 .environment(
                     \.notificationTestAction,
                     { @Sendable in await notifications.sendTestNotification() })
-                .onAppear { deliverNotifications(session) }
-                .onChange(of: session.attention.pending) { _, _ in
-                    deliverNotifications(session)
-                }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { deliverNotifications(session) }
-                }
+                .modifier(
+                    AttentionDelivery(
+                        session: session, scenePhase: scenePhase,
+                        notifications: notifications))
             }
         }
         .dynamicTypeSize(dynamicTypeSize.shifted(by: contentStep))
@@ -306,9 +303,25 @@ struct RootView: View {
         }
     }
 
+}
+
+/// Drains queued attention intents into the notification coordinator, in its own body: the shell
+/// and the root never observe the attention queue (R5 §4.6).
+private struct AttentionDelivery: ViewModifier {
+    let session: HostSession
+    let scenePhase: ScenePhase
+    let notifications: NotificationCoordinator
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { deliver() }
+            .onChange(of: session.attention.pending) { _, _ in deliver() }
+            .onChange(of: scenePhase) { _, _ in deliver() }
+    }
+
     /// Drains queued attention intents and hands them to the notification coordinator. Runs on
     /// every change, on appear, and when the app returns to the foreground.
-    private func deliverNotifications(_ session: HostSession) {
+    private func deliver() {
         let intents = session.attention.drain()
         guard !intents.isEmpty else { return }
         // Sound cues (M12): foreground only, and AttentionCenter already dropped the agent

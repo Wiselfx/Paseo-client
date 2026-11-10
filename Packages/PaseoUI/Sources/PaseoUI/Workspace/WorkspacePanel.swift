@@ -38,14 +38,12 @@ struct WorkspacePanel: View {
     let currentAgentId: String?
     var onSelectAgent: (String) -> Void
     var onNewAgent: (WorkspaceDescriptor) -> Void
-    /// Inserts `@relative/path ` into the open conversation's composer (see `PaseoShellView`).
+    /// Inserts `@relative/path ` into the open conversation's composer (see `ShellView`).
     var onMentionInChat: ((String) -> Void)?
     /// A terminal to select when the panel reaches the Terminal page (notification tap).
     var initialTerminalId: String? = nil
     /// Closes the panel: the header's back chevron (§1.3).
     var onClose: () -> Void
-    /// The shared panel dismissal gesture, when the shell drives it (§1.3).
-    var dismissDrag: PanelDismissDrag?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage private var pageRaw: String
@@ -57,10 +55,10 @@ struct WorkspacePanel: View {
     @State private var showSetupSheet = false
     @State private var showImportSheet = false
     @State private var observedSetupWorkspaceId: String?
+    @Environment(\.shellDrawer) private var shellDrawer
     /// Whether the shell's drawer has the panel on screen. The page content is mounted only
     /// while this is true, so closing the panel stops its work; the tab is remembered separately.
-    @State private var isPanelVisible: Bool
-
+    @Environment(\.isPanelVisible) private var isPanelVisible
 
     init(
         session: HostSession, workspace: WorkspaceDescriptor?, currentAgentId: String?,
@@ -68,8 +66,7 @@ struct WorkspacePanel: View {
         onNewAgent: @escaping (WorkspaceDescriptor) -> Void,
         onMentionInChat: ((String) -> Void)? = nil,
         initialTerminalId: String? = nil,
-        onClose: @escaping () -> Void = {},
-        dismissDrag: PanelDismissDrag? = nil
+        onClose: @escaping () -> Void = {}
     ) {
         self.session = session
         self.workspace = workspace
@@ -79,11 +76,6 @@ struct WorkspacePanel: View {
         self.onMentionInChat = onMentionInChat
         self.initialTerminalId = initialTerminalId
         self.onClose = onClose
-        self.dismissDrag = dismissDrag
-        // A drawer-driven panel starts hidden: its work loads on the first open and is released
-        // on close. Without a drawer there is no progress to gate on, so it is always visible.
-        let startsVisible = dismissDrag.map { $0.progress.wrappedValue > 0 } ?? true
-        self._isPanelVisible = State(initialValue: startsVisible)
         // The last page is remembered per workspace; a notification tap lands on Terminal.
         let initial: Page = initialTerminalId != nil ? .terminal : .agents
         let id = workspace?.id ?? "none"
@@ -112,7 +104,7 @@ struct WorkspacePanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            withPanelDismiss(header)
+            header
             setupQuietLine
             segmented
                 .padding(.horizontal, 16)
@@ -121,10 +113,6 @@ struct WorkspacePanel: View {
             dismissableContent
         }
         // Canvas comes from the shell's rounded, full-bleed card (UX-SPEC §1.1).
-        .modifier(
-            PanelVisibilityTracker(
-                progress: dismissDrag?.progress ?? .constant(1),
-                isVisible: $isPanelVisible))
         .environment(\.mentionInChat, onMentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
         .onChange(of: initialTerminalId) { _, terminalId in
@@ -228,7 +216,7 @@ struct WorkspacePanel: View {
     // MARK: Header
 
     /// The panel header (§1.3): a back chevron leading, the workspace name centered, and the
-    /// tabs below. The whole header is a horizontal drag surface that dismisses the panel.
+    /// tabs below. A horizontal drag on it dismisses the panel through the shell's pan.
     private var header: some View {
         ZStack {
             Text(workspaceTitle)
@@ -238,7 +226,7 @@ struct WorkspacePanel: View {
                 .padding(.horizontal, 56)
             HStack(spacing: 0) {
                 Button {
-                    onClose()
+                    close()
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.glyph(.regular, weight: .medium))
@@ -270,33 +258,23 @@ struct WorkspacePanel: View {
         return workspace.branch ?? workspace.name
     }
 
-    /// The shared panel dismissal (§1.3): the header, and the pages whose content does not
-    /// scroll sideways. Diff and code views keep only the back button and the leading edge.
-    @ViewBuilder private func withPanelDismiss(_ view: some View) -> some View {
-        if let dismissDrag {
-            // The leading 24 pt belongs to the shell's edge dismissal, so a drag and the edge
-            // strip can never drive the same progress twice.
-            view.edgeDrawerDrag(
-                edge: nil, screenWidth: dismissDrag.width, drawerWidth: dismissDrag.width,
-                isOpen: { true }, blocked: { false }, openDirection: .trailing,
-                excludeLeadingEdge: true,
-                progress: dismissDrag.progress, onSettle: dismissDrag.onSettle)
+    /// The panel closes through the shell's drawer: the back button is one of its dismissal
+    /// routes (UX-SPEC §1.3).
+    private func close() {
+        if let shellDrawer {
+            shellDrawer.close()
         } else {
-            view
+            onClose()
         }
     }
 
     @ViewBuilder private var dismissableContent: some View {
         if isPanelVisible {
             PanelPage {
-                if dismissDrag != nil, currentPage == .agents || currentPage == .files {
-                    withPanelDismiss(content)
-                } else {
-                    content
-                }
+                content
             }
             .onDisappear {
-                if let workspace, dismissDrag != nil {
+                if let workspace {
                     releaseWorkspaceWork(workspace)
                 }
             }
@@ -671,23 +649,6 @@ struct WorkspacePanel: View {
             return "This agent is still running. Archiving it will stop the agent."
         }
         return "The agent will be archived."
-    }
-}
-
-/// Publishes the shell's drawer progress to the panel's `isPanelVisible` without making the
-/// panel's body depend on every drag frame: only this modifier reads the progress binding, and
-/// it flips the boolean once per open/close instead of per frame.
-private struct PanelVisibilityTracker: ViewModifier {
-    let progress: Binding<CGFloat>
-    @Binding var isVisible: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .onAppear { isVisible = progress.wrappedValue > 0 }
-            .onChange(of: progress.wrappedValue) { _, value in
-                let visible = value > 0
-                if visible != isVisible { isVisible = visible }
-            }
     }
 }
 
