@@ -280,6 +280,7 @@ struct WorkspaceFileViewer: View {
             editText = nil
             saveFailure = nil
             savedFlash = true
+            Haptics.success()
             await files.read(relativePath)
             Task {
                 try? await Task.sleep(for: .seconds(1.5))
@@ -322,7 +323,6 @@ struct WorkspaceFileViewer: View {
     private var topRow: some View {
         HStack(spacing: Space.sm) {
             Button {
-                Haptics.selection()
                 requestExit(.leave)
             } label: {
                 HStack(spacing: Space.xs) {
@@ -349,7 +349,6 @@ struct WorkspaceFileViewer: View {
                     .contentShape(.rect)
                     .accessibilityLabel("Discard edits")
                 Button {
-                    Haptics.selection()
                     Task { await saveEdit() }
                 } label: {
                     if isSaving {
@@ -401,7 +400,6 @@ struct WorkspaceFileViewer: View {
         Menu {
             if let onReveal {
                 Button("Reveal in Files page", systemImage: "folder") {
-                    Haptics.selection()
                     onReveal()
                 }
             }
@@ -452,7 +450,7 @@ struct WorkspaceFileViewer: View {
 
     private var copyButton: some View {
         Button {
-            Haptics.selection()
+            Haptics.light()
             if let render {
                 switch render.payload {
                 case .image(_, let image):
@@ -689,7 +687,6 @@ struct WorkspaceFileViewer: View {
         guard !isPreparingSave, let file else { return }
         isPreparingSave = true
         shareFailure = nil
-        Haptics.selection()
         Task {
             do {
                 let name = file.path.split(separator: "/").last.map(String.init)
@@ -711,7 +708,6 @@ struct WorkspaceFileViewer: View {
         guard !isSharing, let file else { return }
         isSharing = true
         shareFailure = nil
-        Haptics.selection()
         Task {
             do {
                 let name = file.path.split(separator: "/").last.map(String.init)
@@ -769,7 +765,6 @@ struct WorkspaceFileViewer: View {
                 .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
             Button {
-                Haptics.selection()
                 Task { await files.read(relativePath) }
             } label: {
                 Text("Try again")

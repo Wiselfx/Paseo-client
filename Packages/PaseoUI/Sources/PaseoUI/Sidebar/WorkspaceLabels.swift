@@ -319,7 +319,6 @@ struct LabelsManageSheet: View {
                 .font(.paseo(.title, weight: .semibold))
             HStack {
                 Button {
-                    Haptics.selection()
                     commitAllDrafts()
                     onClose()
                 } label: {
@@ -377,7 +376,6 @@ struct LabelsManageSheet: View {
                     .submitLabel(.done)
                     .onSubmit { commitRename(original: label.name) }
                 Button {
-                    Haptics.selection()
                     deleteCount = nil
                     deleting = label
                 } label: {
@@ -467,7 +465,7 @@ struct LabelsManageSheet: View {
     private func confirmDelete() {
         guard let target = deleting else { return }
         deleting = nil
-        Haptics.selection()
+        Haptics.light()
         Task {
             let ok = await session.labels.deleteLabel(name: target.name)
             var updated = drafts
@@ -587,7 +585,6 @@ struct NewLabelSheet: View {
                 .font(.paseo(.title, weight: .semibold))
             HStack {
                 Button {
-                    Haptics.selection()
                     onClose()
                 } label: {
                     Image(systemName: "xmark")
@@ -607,11 +604,13 @@ struct NewLabelSheet: View {
     private func submit() {
         let trimmed = normalizedLabelName(name)
         guard !trimmed.isEmpty, !session.labels.isWorking else { return }
-        Haptics.selection()
         Task {
             let ok = await session.labels.createAndAssign(
                 name: trimmed, color: color, toWorkspace: workspace.id)
-            if ok { onClose() }
+            if ok {
+                Haptics.success()
+                onClose()
+            }
         }
     }
 }

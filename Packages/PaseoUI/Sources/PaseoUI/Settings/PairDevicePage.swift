@@ -141,7 +141,7 @@ struct PairDevicePage: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                 Button {
-                    Haptics.selection()
+                    Haptics.light()
                     Self.copy(url: url)
                     copied = true
                     Task {

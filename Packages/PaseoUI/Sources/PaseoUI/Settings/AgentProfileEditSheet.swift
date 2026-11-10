@@ -94,7 +94,6 @@ struct AgentProfileEditSheet: View {
                 "Save", isEnabled: canSave, isWorking: saving,
                 identifier: "settings.profiles.save"
             ) {
-                Haptics.selection()
                 save()
             }
         ) {
@@ -319,6 +318,7 @@ struct AgentProfileEditSheet: View {
             let ok = await session.hostSettings.saveProfiles(next)
             saving = false
             if ok {
+                Haptics.success()
                 dismiss()
             } else {
                 saveError = session.hostSettings.error ?? "The host rejected that profile."

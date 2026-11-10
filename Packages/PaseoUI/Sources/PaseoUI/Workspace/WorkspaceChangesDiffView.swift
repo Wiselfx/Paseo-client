@@ -148,7 +148,7 @@ struct WorkspaceChangesDiffView: View {
                     .accessibilityLabel("Edit review comment")
                     Button {
                         WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: draft.id)
-                        Haptics.success()
+                        Haptics.light()
                     } label: {
                         Image(systemName: "trash")
                             .font(.glyph(.small, weight: .medium))
@@ -399,14 +399,14 @@ struct WorkspaceChangesDiffView: View {
         case .edit(let draft):
             WorkspaceReviewDrafts.shared.updateBody(key: reviewKey, id: draft.id, body: trimmed)
         }
-        Haptics.success()
+        Haptics.light()
         commentTarget = nil
     }
 
     private func deleteComment(_ target: CommentSheetTarget) {
         if case .edit(let draft) = target {
             WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: draft.id)
-            Haptics.success()
+            Haptics.light()
         }
         commentTarget = nil
     }
@@ -696,7 +696,7 @@ struct WorkspaceChangesDiffView: View {
         Task {
             let discarded = await extras.discard(paths: [file.path])
             if discarded {
-                Haptics.success()
+                Haptics.light()
                 toast?.show("Discarded \(file.path)")
                 dismiss()
             } else {

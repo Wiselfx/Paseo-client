@@ -19,7 +19,6 @@ struct BackgroundWorkRow: View {
 
     var body: some View {
         Button {
-            Haptics.selection()
             action()
         } label: {
             HStack(spacing: 8) {
@@ -126,7 +125,7 @@ struct ChatBackgroundWorkSheet: View {
             Spacer(minLength: 8)
             if canStop && item.canStop == true, item.stopToken != nil {
                 Button("Stop") {
-                    Haptics.selection()
+                    Haptics.light()
                     if item.kind == "shell" {
                         pendingStop = item
                     } else {

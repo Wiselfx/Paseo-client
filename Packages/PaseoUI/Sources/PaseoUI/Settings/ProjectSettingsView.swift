@@ -452,7 +452,6 @@ struct ProjectSettingsView: View {
                 sectionLabel("Scripts")
                 Spacer()
                 Button {
-                    Haptics.selection()
                     let draft = ProjectScriptDraft(name: "", command: "")
                     scripts.append(draft)
                     editingScript = draft
@@ -750,7 +749,7 @@ private struct ScriptEditSheet: View {
                     var saved = script
                     saved.name = saved.name.trimmingCharacters(in: .whitespaces)
                     onSave(saved)
-                    Haptics.success()
+                    Haptics.light()
                 } label: {
                     Text("Save")
                         .font(.paseo(.callout, weight: .semibold))

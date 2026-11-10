@@ -100,7 +100,6 @@ struct SpeechProviderSheet: View {
                 "Save", isEnabled: isChanged, isWorking: saving,
                 identifier: "settings.voice.save"
             ) {
-                Haptics.selection()
                 save()
             }
         ) {
@@ -194,7 +193,6 @@ struct SpeechProviderSheet: View {
                             .foregroundStyle(Palette.secondaryInk)
                         Spacer(minLength: 8)
                         Button("Try again") {
-                            Haptics.selection()
                             Task { await voice.loadModels() }
                         }
                         .font(.paseo(.callout, weight: .semibold))
@@ -318,7 +316,6 @@ struct SpeechProviderSheet: View {
         case .installed:
             if !model.inUse {
                 Button {
-                    Haptics.selection()
                     pendingDelete = model
                 } label: {
                     Label("Delete", systemImage: "trash")
@@ -329,7 +326,7 @@ struct SpeechProviderSheet: View {
             }
         case .failed, .notInstalled:
             Button {
-                Haptics.selection()
+                Haptics.light()
                 Task { _ = await voice.download(modelId: model.id) }
             } label: {
                 Label(isFailedModel(state) ? "Retry" : "Download", systemImage: "arrow.down.circle")
@@ -418,6 +415,7 @@ struct SpeechProviderSheet: View {
             saving = false
             if ok {
                 apiKey = ""
+                Haptics.success()
                 dismiss()
             } else {
                 saveError = voice.error ?? session.hostSettings.error ?? "Unable to update voice settings"

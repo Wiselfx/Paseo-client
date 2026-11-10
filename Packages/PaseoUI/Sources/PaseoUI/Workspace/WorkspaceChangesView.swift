@@ -343,7 +343,7 @@ struct WorkspaceChangesView: View {
                         .font(.paseo(.caption))
                         .foregroundStyle(Palette.secondaryInk)
                     Button("Clear") {
-                        Haptics.selection()
+                        Haptics.light()
                         for stale in staleReviewDrafts {
                             WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: stale.id)
                         }
@@ -430,7 +430,6 @@ struct WorkspaceChangesView: View {
     @ViewBuilder private var branchTitle: some View {
         if currentBranch != nil {
             Button {
-                Haptics.selection()
                 showBranchSwitcher = true
             } label: {
                 HStack(spacing: 6) {
@@ -610,7 +609,6 @@ struct WorkspaceChangesView: View {
     private func fileRow(_ file: ParsedDiffFile) -> some View {
         let style = statusStyle(for: file)
         return Button {
-            Haptics.selection()
             openFile = file
         } label: {
             HStack(spacing: 12) {
@@ -753,7 +751,6 @@ struct WorkspaceChangesView: View {
             .accessibilityLabel("Push")
         case .createPR:
             Button {
-                Haptics.selection()
                 prepareCreatePR()
             } label: {
                 if gitActions.isCreatingPullRequest {
@@ -772,7 +769,6 @@ struct WorkspaceChangesView: View {
             .accessibilityLabel("Create pull request")
         case .viewPR:
             Button {
-                Haptics.selection()
                 if let url = extras.prBadge.flatMap({ URL(string: $0.url) }),
                     !(extras.prBadge?.url.isEmpty ?? true)
                 {
@@ -984,7 +980,7 @@ struct WorkspaceChangesView: View {
     private func forgeCopyCommand(_ command: String) -> some View {
         Button {
             UIPasteboard.general.string = command
-            Haptics.success()
+            Haptics.light()
             copiedForgeCommand = command
             Task {
                 try? await Task.sleep(for: .seconds(1.5))
@@ -1045,7 +1041,7 @@ struct WorkspaceChangesView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if !conflictFiles.isEmpty, let mentionInChat {
                 Button {
-                    Haptics.selection()
+                    Haptics.light()
                     for path in conflictFiles.prefix(10) {
                         mentionInChat(path)
                     }
@@ -1109,7 +1105,6 @@ struct WorkspaceChangesView: View {
 
     private func commitRow(_ commit: CheckoutCommit) -> some View {
         Button {
-            Haptics.selection()
             openCommit = commit
         } label: {
             HStack(spacing: 10) {
@@ -1254,7 +1249,7 @@ struct WorkspaceChangesView: View {
         Task {
             let discarded = await extras.discard(paths: [file.path])
             if discarded {
-                Haptics.success()
+                Haptics.light()
                 showToast("Discarded \(file.path)")
             } else {
                 Haptics.failure()

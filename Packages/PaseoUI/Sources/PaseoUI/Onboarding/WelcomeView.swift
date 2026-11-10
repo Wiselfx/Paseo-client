@@ -37,7 +37,6 @@ public struct WelcomeView<DirectForm: View>: View {
                 VStack(spacing: 0) {
                     HStack {
                         Button {
-                            Haptics.selection()
                             stage = .welcome
                         } label: {
                             HStack(spacing: 6) {
@@ -79,7 +78,6 @@ public struct WelcomeView<DirectForm: View>: View {
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.secondaryInk)
                     Button {
-                        Haptics.selection()
                         if let url = URL(string: "https://paseo.sh") { openURL(url) }
                     } label: {
                         HStack(spacing: 4) {
@@ -108,7 +106,6 @@ public struct WelcomeView<DirectForm: View>: View {
                 }
                 .padding(.top, 10)
                 Button {
-                    Haptics.selection()
                     showAppearance = true
                 } label: {
                     Label("Appearance", systemImage: "circle.lefthalf.filled")
@@ -131,7 +128,6 @@ public struct WelcomeView<DirectForm: View>: View {
 
     private var directTile: some View {
         Button {
-            Haptics.selection()
             stage = .directForm
         } label: {
             tileContent(
@@ -145,7 +141,6 @@ public struct WelcomeView<DirectForm: View>: View {
         title: String, description: String, symbol: String, id: String, action: @escaping () -> Void
     ) -> some View {
         Button {
-            Haptics.selection()
             action()
         } label: {
             tileContent(title: title, description: description, symbol: symbol)

@@ -377,7 +377,7 @@ struct WorkspaceTerminalsView: View {
         } else {
             Task {
                 let ok = await store.killTerminal(terminal.id)
-                if ok { Haptics.success() } else { Haptics.failure() }
+                if ok { Haptics.light() } else { Haptics.failure() }
             }
         }
     }
@@ -387,7 +387,7 @@ struct WorkspaceTerminalsView: View {
         closeCandidate = nil
         Task {
             let ok = await store.killTerminal(target.id)
-            if ok { Haptics.success() } else { Haptics.failure() }
+            if ok { Haptics.light() } else { Haptics.failure() }
         }
     }
 
@@ -398,7 +398,7 @@ struct WorkspaceTerminalsView: View {
         guard !title.isEmpty else { return }
         Task {
             let ok = await store.renameTerminal(target.id, to: title, in: workspaceId)
-            if ok { Haptics.success() } else { Haptics.failure() }
+            if ok { Haptics.light() } else { Haptics.failure() }
         }
     }
 
@@ -415,7 +415,7 @@ struct WorkspaceTerminalsView: View {
 
     private var newTerminalButton: some View {
         Button {
-            Haptics.selection()
+            Haptics.light()
             guard !isCreating else { return }
             isCreating = true
             Task {
@@ -505,7 +505,6 @@ struct WorkspaceTerminalsView: View {
             onOpenLink: handleOpenLink,
             upload: isSelected ? uploadSnapshot : nil,
             onAttach: {
-                Haptics.selection()
                 showAttachMenu = true
             },
             onCancelUpload: { session.fileUploader.cancel() })
@@ -542,7 +541,7 @@ struct WorkspaceTerminalsView: View {
             title: "No terminals yet",
             message: "Start one to run commands in this workspace.",
             action: (title: "New terminal", run: {
-                Haptics.selection()
+                Haptics.light()
                 guard !isCreating else { return }
                 isCreating = true
                 Task {
@@ -576,10 +575,8 @@ struct WorkspaceTerminalsView: View {
     private func handleOpenLink(_ target: TerminalLinkTarget) {
         switch target {
         case .localFile(let path, let line, let col):
-            Haptics.selection()
             linkedFile = TerminalLinkedFile(path: path, line: line, col: col)
         case .url(let url):
-            Haptics.selection()
             openURL(url)
         case .unhandled:
             Haptics.failure()
@@ -669,7 +666,6 @@ struct WorkspaceTerminalsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if let serviceURL {
                 Button {
-                    Haptics.selection()
                     openServiceURL(serviceURL)
                 } label: {
                     Image(systemName: "arrow.up.right.square")
@@ -687,7 +683,7 @@ struct WorkspaceTerminalsView: View {
                     }
                     Button("Copy URL", systemImage: "doc.on.doc") {
                         UIPasteboard.general.string = serviceURL.absoluteString
-                        Haptics.success()
+                        Haptics.light()
                     }
                 }
             }
@@ -720,7 +716,7 @@ struct WorkspaceTerminalsView: View {
                     ForEach(urlTargets) { target in
                         Button {
                             UIPasteboard.general.string = target.url
-                            Haptics.success()
+                            Haptics.light()
                         } label: {
                             VStack(alignment: .leading) {
                                 Text("Copy \(target.title) URL")
@@ -735,7 +731,7 @@ struct WorkspaceTerminalsView: View {
             if let serviceURL = script.preferredURL {
                 Button("Copy URL", systemImage: "doc.on.doc") {
                     UIPasteboard.general.string = serviceURL
-                    Haptics.success()
+                    Haptics.light()
                 }
             }
         }
@@ -782,7 +778,7 @@ struct WorkspaceTerminalsView: View {
     /// Restart = stop then start, one action. No confirmation: the script is designed to be
     /// bounced.
     private func restart(_ script: WorkspaceScript) async {
-        Haptics.selection()
+        Haptics.light()
         busyScripts.insert(script.scriptName)
         if script.lifecycle == .running {
             _ = await store.stopScript(script.scriptName, in: workspaceId)
@@ -825,7 +821,7 @@ struct WorkspaceTerminalsView: View {
         let busy = busyScripts.contains(script.scriptName)
         let isRunning = script.lifecycle == .running
         return Button {
-            Haptics.selection()
+            Haptics.light()
             busyScripts.insert(script.scriptName)
             Task {
                 if isRunning {

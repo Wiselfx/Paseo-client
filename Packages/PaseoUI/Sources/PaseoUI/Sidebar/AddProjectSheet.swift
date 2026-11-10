@@ -287,7 +287,6 @@ struct AddProjectSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Button {
-                    Haptics.selection()
                     selected = nil
                 } label: {
                     HStack(spacing: 4) {

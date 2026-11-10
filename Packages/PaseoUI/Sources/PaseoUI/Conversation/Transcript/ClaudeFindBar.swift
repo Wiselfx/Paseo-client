@@ -70,7 +70,6 @@ struct ClaudeFindBar: View {
                 onStep(1)
             }
             Button {
-                Haptics.selection()
                 onCancel()
             } label: {
                 Image(systemName: "xmark")
@@ -96,7 +95,6 @@ struct ClaudeFindBar: View {
 
     @ViewBuilder private func stepButton(_ symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button {
-            Haptics.selection()
             action()
         } label: {
             Image(systemName: symbol)

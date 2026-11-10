@@ -56,7 +56,6 @@ struct WorkspaceFilesView: View {
     private func reveal(relPath: String) {
         openFile = nil
         revealTarget = relPath
-        Haptics.selection()
     }
 
     private func directoryList(path: String) -> some View {
@@ -209,7 +208,6 @@ private struct WorkspaceFilesDirectoryList: View {
         HStack(spacing: Space.sm) {
             if let onBack {
                 Button {
-                    Haptics.selection()
                     onBack()
                 } label: {
                     HStack(spacing: Space.xs) {
@@ -389,7 +387,6 @@ private struct WorkspaceFilesDirectoryList: View {
             systemImage: entry.isDirectory ? "folder" : "doc",
             accessory: accessory(entry),
             action: {
-                Haptics.selection()
                 if entry.isDirectory { onOpenDirectory(entry.path) } else { onOpenFile(entry.path) }
             }
         )
@@ -514,7 +511,7 @@ private struct WorkspaceFilesDirectoryList: View {
         let name = nameText.trimmingCharacters(in: .whitespacesAndNewlines)
         namePrompt = nil
         guard !name.isEmpty else { return }
-        Haptics.selection()
+        Haptics.light()
         Task {
             switch prompt {
             case .newFile(let parent):
@@ -544,7 +541,6 @@ private struct WorkspaceFilesDirectoryList: View {
     private func share(_ entry: FileExplorerEntry) {
         guard sharingPath == nil else { return }
         sharingPath = entry.path
-        Haptics.selection()
         Task {
             do {
                 let url = try await WorkspaceShare.prepare(
@@ -564,7 +560,6 @@ private struct WorkspaceFilesDirectoryList: View {
     private func saveToFiles(_ entry: FileExplorerEntry) {
         guard savingToFilesPath == nil else { return }
         savingToFilesPath = entry.path
-        Haptics.selection()
         Task {
             do {
                 let payload = try await WorkspaceShare.prepareExport(
@@ -597,7 +592,7 @@ private struct WorkspaceFilesDirectoryList: View {
     }
 
     private func duplicate(_ entry: FileExplorerEntry) async {
-        Haptics.selection()
+        Haptics.light()
         let duplicated = await files.duplicate(path: entry.path)
         if duplicated != nil {
             showToast("Duplicated \(entry.name)")
@@ -610,7 +605,7 @@ private struct WorkspaceFilesDirectoryList: View {
     private func deleteEntry(_ entry: FileExplorerEntry) async {
         let ok = await files.delete(path: entry.path)
         if ok {
-            Haptics.selection()
+            Haptics.light()
             showToast("Deleted \(entry.name)")
         } else {
             showToast(files.error ?? "Couldn't delete.")

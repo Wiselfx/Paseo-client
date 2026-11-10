@@ -288,7 +288,7 @@ struct ComposerCrab: View {
     }
 
     private func pokeNow() {
-        Haptics.selection()
+        Haptics.light()
         let next: CrabAnimation = pokeLeftNext ? .pokeLeft : .pokeRight
         pokeLeftNext.toggle()
         poke = next

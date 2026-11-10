@@ -130,14 +130,13 @@ struct SchedulesListPage: View {
         }
         if summary.target.newAgentConfig != nil {
             Button {
-                Haptics.selection()
+                Haptics.light()
                 Task { await runNow(summary) }
             } label: {
                 Label("Run now", systemImage: "play.fill")
             }
         }
         Button {
-            Haptics.selection()
             Task { await edit(summary) }
         } label: {
             Label("Edit", systemImage: "pencil")
@@ -219,7 +218,6 @@ struct SchedulesListPage: View {
             title: "No schedules yet",
             message: "Schedules run agents on a cadence.",
             action: (title: "New schedule", run: {
-                Haptics.selection()
                 onNew()
             })
         )
@@ -240,7 +238,6 @@ struct SchedulesListPage: View {
             title: message,
             message: nil,
             action: (title: "Try again", run: {
-                Haptics.selection()
                 Task { await schedules.load() }
             })
         )

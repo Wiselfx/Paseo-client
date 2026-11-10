@@ -44,7 +44,6 @@ struct SubagentTrackPill: View {
 
     var body: some View {
         Button {
-            Haptics.selection()
             action()
         } label: {
             HStack(spacing: 7) {
@@ -219,7 +218,6 @@ struct ChatSubagentsSheet: View {
 
     private func subagentRow(_ item: ProviderSubagent) -> some View {
         Button {
-            Haptics.selection()
             pushTarget = item
         } label: {
             HStack(spacing: 12) {
@@ -304,7 +302,6 @@ struct ChatSubagentsSheet: View {
         .frame(height: 56)
         .contentShape(.rect)
         .onTapGesture {
-            Haptics.selection()
             onOpenAgent(agent.id)
         }
         .contextMenu {

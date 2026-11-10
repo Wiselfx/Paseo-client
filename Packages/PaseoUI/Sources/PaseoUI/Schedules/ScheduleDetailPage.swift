@@ -293,7 +293,7 @@ struct ScheduleDetailPage: View {
         .panelRow()
         if summary.target.newAgentConfig != nil {
             ListRow(title: "Run now") {
-                Haptics.selection()
+                Haptics.light()
                 Task { await runNow(summary) }
             }
             .panelRow()
@@ -308,7 +308,6 @@ struct ScheduleDetailPage: View {
             .accessibilityLabel("Edit schedule")
         }
         Button(role: .destructive) {
-            Haptics.selection()
             confirmDelete = true
         } label: {
             Text("Delete schedule")

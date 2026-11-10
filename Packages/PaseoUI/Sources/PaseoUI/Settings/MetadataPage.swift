@@ -104,7 +104,6 @@ struct MetadataPage: View {
     private func save(_ build: (inout DaemonConfigPatch) -> Void) {
         var patch = DaemonConfigPatch()
         build(&patch)
-        Haptics.selection()
         Task { await hostSettings.save(patch) }
     }
 }

@@ -118,7 +118,6 @@ struct WorkspaceBaseBranchSheet: View {
         guard !isApplying else { return }
         isApplying = true
         applyError = nil
-        Haptics.selection()
         let remoteOnly = suggestion.hasLocal == false && suggestion.hasRemote == true
         let ref = (remoteOnly ? "refs/remotes/" : "refs/heads/") + suggestion.name
         Task {

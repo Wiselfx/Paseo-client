@@ -227,7 +227,7 @@ public struct ShellView: View {
         }
         drawer.close()
         composerFocusRequested = true
-        Haptics.selection()
+        Haptics.light()
     }
 
     private func appending(_ mention: String, to text: String) -> String {

@@ -111,6 +111,8 @@ struct ComposerPrimaryButton: View {
                 // Touch-down: a press that queued and was then released outside the circle never
                 // reaches the button's action, so the next tap must not be swallowed.
                 didLongPress = false
+                // Warm the generators on touch-down so the send's thump is not a frame late.
+                Haptics.prepare()
             }
             .onEnded { _ in
                 guard !didLongPress, let onQueue else { return }

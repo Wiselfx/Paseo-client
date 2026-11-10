@@ -19,7 +19,7 @@ struct CopyButton: View {
     var body: some View {
         Button {
             Clipboard.copy(text)
-            Haptics.selection()
+            Haptics.light()
             withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) { copied = true }
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")

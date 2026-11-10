@@ -291,7 +291,6 @@ struct TranscriptJump: Equatable {
     // MARK: Header
 
     func beginRename() {
-        Haptics.selection()
         renameText = store.agent?.title ?? ""
         renamingAgent = true
     }
@@ -304,7 +303,7 @@ struct TranscriptJump: Equatable {
 
     func copyAgentId() {
         Clipboard.copy(store.agentId)
-        Haptics.selection()
+        Haptics.light()
         showToast("Agent ID copied")
     }
 
@@ -314,7 +313,7 @@ struct TranscriptJump: Equatable {
             archiveConfirm = true
             return
         }
-        Haptics.selection()
+        Haptics.light()
         Task { await archiveNow() }
     }
 
@@ -336,7 +335,6 @@ struct TranscriptJump: Equatable {
     }
 
     func openFileViewer(at path: String) {
-        Haptics.selection()
         openFilePath = path
     }
 
@@ -616,7 +614,6 @@ struct TranscriptJump: Equatable {
     /// Long-press on the send button: holds the draft back until the running turn ends.
     func queueDraft(attachments: [ComposerAttachmentItem]) {
         guard attachments.isEmpty else {
-            Haptics.selection()
             showToast("Remove attachments to queue")
             return
         }
@@ -837,7 +834,7 @@ struct TranscriptJump: Equatable {
             openURLFromEnvironment?(url)
         case .copyCode(let code):
             Clipboard.copy(code)
-            Haptics.selection()
+            Haptics.light()
             showToast("Code copied")
         default:
             break
