@@ -51,9 +51,6 @@ public struct ShellView: View {
     /// The drawer bridge. A class held by `@State`: the container moves the surfaces, so nothing
     /// here changes while a finger is down.
     @State private var drawer = ShellDrawer()
-    /// The committed surface, mirrored from the container for the shell's own a11y and pausing.
-    /// The container is the source of truth; this never drives a frame.
-    @State private var surface: ShellDrawer.Surface = .none
     @State private var toastCenter = ToastCenter()
 
     @Environment(\.scenePhase) private var scenePhase
@@ -87,7 +84,6 @@ public struct ShellView: View {
                     onDirectoryLoaded: showDefaultDraftIfIdle)
             }
             .onAppear {
-                drawer.onStateChange = { surface = $0 }
                 drawer.onNewSession = { openNewSession(workspaceId: nil) }
                 session.hostSettings.startPresence(
                     focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
@@ -510,7 +506,7 @@ struct PanelRoot: View {
     var body: some View {
         WorkspacePanel(
             session: session,
-            workspace: workspaceId.map { session.workspaceDirectory.workspace(id: $0) },
+            workspace: workspaceId.flatMap { session.workspaceDirectory.workspace(id: $0) },
             currentAgentId: currentAgentId,
             onSelectAgent: onSelectAgent,
             onNewAgent: onNewAgent,
