@@ -21,7 +21,6 @@ struct AgentProfileEditSheet: View {
     @State private var saveError: String?
     @State private var didSeed = false
 
-    private let typography = ClaudeTypography()
 
     private var entries: [ProviderSnapshotEntry] { session.agentControl.providers }
     private var providerOptions: [ProviderSnapshotEntry] {
@@ -80,13 +79,13 @@ struct AgentProfileEditSheet: View {
                     sectionLabel("When to use")
                     RowGroup { notesField }
                     Text("Free text surfaced to orchestrating agents, so they can pick the right profile.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.leading, 16)
                     if let saveError {
                         Text(saveError)
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.failureInk)
                             .padding(.leading, 16)
                     }
                 }
@@ -95,11 +94,10 @@ struct AgentProfileEditSheet: View {
             .scrollIndicators(.hidden)
             saveBar
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .onAppear(perform: seedIfNeeded)
     }
 
@@ -107,9 +105,9 @@ struct AgentProfileEditSheet: View {
 
     private var nameField: some View {
         TextField("Profile name", text: $name)
-            .font(.system(size: 17))
+            .font(.paseo(.body))
             .padding(.horizontal, 16)
-            .frame(height: 52)
+            .frame(minHeight: 52)
             .textInputAutocapitalization(.words)
             .submitLabel(.done)
             .accessibilityIdentifier("settings.profiles.name.field")
@@ -117,7 +115,7 @@ struct AgentProfileEditSheet: View {
 
     private var notesField: some View {
         TextField("When to use this profile…", text: $notes, axis: .vertical)
-            .font(.system(size: 15))
+            .font(.paseo(.callout))
             .lineLimit(2...5)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -131,19 +129,19 @@ struct AgentProfileEditSheet: View {
     ) -> some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 17))
+                .font(.paseo(.body))
             Spacer(minLength: 8)
             Menu {
                 content()
             } label: {
                 HStack(spacing: 5) {
                     Text(current)
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
                 .padding(.trailing, 2)
             }
@@ -270,8 +268,8 @@ struct AgentProfileEditSheet: View {
         HStack {
             if let hint = catalogHint {
                 Text(hint)
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
@@ -280,11 +278,11 @@ struct AgentProfileEditSheet: View {
                 save()
             } label: {
                 Text(saving ? "Saving…" : "Save")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.background)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.background)
                     .padding(.horizontal, 22)
-                    .frame(height: 44)
-                    .background(ClaudePalette.ink.opacity(canSave ? 1 : 0.3), in: .capsule)
+                    .frame(minHeight: 44)
+                    .background(Palette.ink.opacity(canSave ? 1 : 0.3), in: .capsule)
             }
             .buttonStyle(.plain)
             .disabled(!canSave)
@@ -329,8 +327,8 @@ struct AgentProfileEditSheet: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

@@ -15,7 +15,7 @@ struct PaseoSettingsView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.hostSwitch) private var hostSwitch
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(PaseoSettingsKeys.appearance) private var appearance = ClaudeAppearance.system.rawValue
+    @AppStorage(ClaudeAppearance.storageKey) private var appearance = ClaudeAppearance.system.rawValue
     /// Shared with the terminal view (Settings → Terminal).
     @AppStorage("paseo.terminal.scrollback") private var terminalScrollback = 2_000
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
@@ -51,7 +51,6 @@ struct PaseoSettingsView: View {
     @FocusState private var appendPromptFocused: Bool
     @FocusState private var resumePromptFocused: Bool
 
-    private let typography = ClaudeTypography()
 
     enum Page: String, CaseIterable, Identifiable, Equatable {
         case general
@@ -128,11 +127,10 @@ struct PaseoSettingsView: View {
                 root
             }
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
-        .tint(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
+        .tint(Palette.ink)
         .presentationDetents([.large])
-        .presentationCornerRadius(40)
         .presentationDragIndicator(.hidden)
         .sheet(isPresented: Binding(
             get: { providerSheetID != nil },
@@ -169,7 +167,7 @@ struct PaseoSettingsView: View {
     private var header: some View {
         ZStack {
             Text(page?.title ?? "Settings")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.paseo(.body, weight: .semibold))
                 .lineLimit(1)
             HStack {
                 Button {
@@ -180,7 +178,7 @@ struct PaseoSettingsView: View {
                     }
                 } label: {
                     Image(systemName: page == nil ? "xmark" : "chevron.left")
-                        .font(.system(size: 21, weight: .light))
+                        .font(.glyph(.large, weight: .light))
                         .frame(width: 44, height: 44)
                 }
                 .glassEffect(in: .circle)
@@ -191,7 +189,7 @@ struct PaseoSettingsView: View {
                         Task { await session.agentControl.refreshCatalog() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 19, weight: .light))
+                            .font(.glyph(.large, weight: .light))
                             .frame(width: 44, height: 44)
                     }
                     .glassEffect(in: .circle)
@@ -201,7 +199,7 @@ struct PaseoSettingsView: View {
                         Task { await session.hostSettings.load() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 19, weight: .light))
+                            .font(.glyph(.large, weight: .light))
                             .frame(width: 44, height: 44)
                     }
                     .glassEffect(in: .circle)
@@ -219,7 +217,7 @@ struct PaseoSettingsView: View {
             page = next
             return
         }
-        withAnimation(.easeOut(duration: 0.2)) { page = next }
+        withAnimation(Motion.disclosure.animation) { page = next }
     }
 
     // MARK: Root
@@ -363,14 +361,14 @@ struct PaseoSettingsView: View {
                                     appearancePreview(choice)
                                         .frame(height: 68)
                                         .overlay {
-                                            RoundedRectangle(cornerRadius: 14).stroke(
-                                                appearance == choice.rawValue ? Color.blue : .clear,
+                                            RoundedRectangle(cornerRadius: Radius.md).stroke(
+                                                appearance == choice.rawValue ? Palette.selection : .clear,
                                                 lineWidth: 2)
                                         }
                                     Text(choice.rawValue)
-                                        .font(.system(size: 14))
+                                        .font(.paseo(.callout))
                                         .foregroundStyle(
-                                            appearance == choice.rawValue ? .blue : ClaudePalette.secondaryInk)
+                                            appearance == choice.rawValue ? Palette.selection : Palette.secondaryInk)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -401,17 +399,17 @@ struct PaseoSettingsView: View {
                         }
                 }
                 Text("Content size scales prose and headings on top of Dynamic Type; code size scales code blocks, diffs and tool output. Applies live.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
                 sectionLabel("You")
                 RowGroup {
                     HStack {
                         Text("Your name")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                         Spacer(minLength: 8)
                         TextField("Your name", text: $name)
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                             .multilineTextAlignment(.trailing)
                             .textInputAutocapitalization(.words)
                     }
@@ -419,8 +417,8 @@ struct PaseoSettingsView: View {
                     .frame(height: 52)
                 }
                 Text("Used in the greeting on the home screen and the sidebar avatar.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
                 sectionLabel("Feedback")
                 RowGroup {
@@ -429,18 +427,19 @@ struct PaseoSettingsView: View {
                             "Haptic feedback",
                             systemImage: "iphone.gen3.radiowaves.left.and.right"
                         )
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     }
-                    .tint(.blue)
+                    .tint(Palette.toggleTint)
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.haptics")
+                    .onChange(of: haptics) { _, enabled in Haptics.setEnabled(enabled) }
                     Divider().padding(.leading, 16)
                     Toggle(isOn: $mascot) {
                         Label("Show mascot", systemImage: "sparkles")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                     }
-                    .tint(.blue)
+                    .tint(Palette.toggleTint)
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.mascot")
@@ -449,9 +448,9 @@ struct PaseoSettingsView: View {
                 RowGroup {
                     Toggle(isOn: $notificationsEnabled) {
                         Label("Agent notifications", systemImage: "bell")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                     }
-                    .tint(.blue)
+                    .tint(Palette.toggleTint)
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.notifications.enabled")
@@ -460,13 +459,13 @@ struct PaseoSettingsView: View {
                     }
                 }
                 Text("Local notifications while Paseo is open or recently backgrounded. True push while the app is closed is not available without a relay.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
                 RowGroup {
                     HStack(spacing: 12) {
                         Label("Sound cue", systemImage: "waveform")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                         Spacer(minLength: 8)
                         Picker("Sound cue", selection: $soundCueLevel) {
                             ForEach(SoundCueLevel.allCases, id: \.rawValue) { level in
@@ -481,28 +480,28 @@ struct PaseoSettingsView: View {
                     .accessibilityIdentifier("settings.notifications.soundCue")
                 }
                 Text("Play a cue when a task finishes or is blocked.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
                 RowGroup {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Test notification")
-                                .font(.system(size: 17))
+                                .font(.paseo(.body))
                             Text(testNotificationHint)
-                                .font(.system(size: 13))
-                                .foregroundStyle(ClaudePalette.secondary)
+                                .font(.paseo(.footnote))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 8)
                         Button(isSendingTestNotification ? "Sending..." : "Send") {
                             sendTestNotification()
                         }
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.footnote, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .padding(.horizontal, 18)
-                        .frame(height: 32)
-                        .background(ClaudePalette.chip, in: .capsule)
+                        .frame(minHeight: 32)
+                        .background(Palette.chip, in: .capsule)
                         .disabled(!notificationsEnabled || isSendingTestNotification)
                         .accessibilityIdentifier("settings.notifications.test")
                     }
@@ -523,7 +522,7 @@ struct PaseoSettingsView: View {
                 RowGroup {
                     HStack(spacing: 12) {
                         Text("Chat display")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                         Spacer(minLength: 8)
                         Menu {
                             ForEach(ChatDisplayMode.allCases, id: \.self) { option in
@@ -541,11 +540,11 @@ struct PaseoSettingsView: View {
                         } label: {
                             HStack(spacing: 5) {
                                 Text(chatDisplayMode.label)
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.paseo(.callout))
+                                    .foregroundStyle(Palette.secondaryInk)
                                 Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.glyph(.small, weight: .semibold))
+                                    .foregroundStyle(Palette.tertiaryInk)
                             }
                         }
                         .accessibilityLabel("Chat display, currently \(chatDisplayMode.label)")
@@ -556,16 +555,16 @@ struct PaseoSettingsView: View {
                     Divider().padding(.leading, 16)
                     Toggle(isOn: $alwaysExpandReasoning) {
                         Text("Always expand reasoning")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                     }
-                    .tint(.blue)
+                    .tint(Palette.toggleTint)
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .accessibilityIdentifier("settings.alwaysExpandReasoning")
                     Divider().padding(.leading, 16)
                     HStack(spacing: 12) {
                         Text("When the agent is running")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                         Spacer(minLength: 8)
                         Menu {
                             ForEach(DefaultSendBehavior.allCases, id: \.self) { option in
@@ -582,11 +581,11 @@ struct PaseoSettingsView: View {
                         } label: {
                             HStack(spacing: 5) {
                                 Text(defaultSendBehavior.label)
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.paseo(.callout))
+                                    .foregroundStyle(Palette.secondaryInk)
                                 Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.glyph(.small, weight: .semibold))
+                                    .foregroundStyle(Palette.tertiaryInk)
                             }
                         }
                         .accessibilityLabel("Default send behavior, currently \(defaultSendBehavior.label)")
@@ -596,8 +595,8 @@ struct PaseoSettingsView: View {
                     .frame(height: 52)
                 }
                 Text("Applies when you tap send while a turn is running. Long-press on send does the opposite between Steer and Queue.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
             }
             .padding(.horizontal, 16)
@@ -611,34 +610,34 @@ struct PaseoSettingsView: View {
         switch choice {
         case .light:
             ZStack {
-                Color(white: 0.97)
+                Palette.Swatch.light
                 previewBars(dark: true)
             }
-            .clipShape(.rect(cornerRadius: 14))
+            .clipShape(.rect(cornerRadius: Radius.md))
             .frame(maxWidth: .infinity)
         case .dark:
             ZStack {
-                Color(white: 0.08)
+                Palette.Swatch.dark
                 previewBars(dark: false)
             }
-            .clipShape(.rect(cornerRadius: 14))
+            .clipShape(.rect(cornerRadius: Radius.md))
             .frame(maxWidth: .infinity)
         case .system:
             ZStack {
                 HStack(spacing: 0) {
-                    Color(white: 0.97)
-                    Color(white: 0.08)
+                    Palette.Swatch.light
+                    Palette.Swatch.dark
                 }
                 previewBars(dark: true)
             }
-            .clipShape(.rect(cornerRadius: 14))
+            .clipShape(.rect(cornerRadius: Radius.md))
             .frame(maxWidth: .infinity)
         case .pureBlack:
             ZStack {
-                Color(white: 0)
+                Palette.Swatch.pureBlack
                 previewBars(dark: false)
             }
-            .clipShape(.rect(cornerRadius: 14))
+            .clipShape(.rect(cornerRadius: Radius.md))
             .frame(maxWidth: .infinity)
         }
     }
@@ -651,11 +650,11 @@ struct PaseoSettingsView: View {
     ) -> some View where Option.RawValue == String {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 18, weight: .light))
+                .font(.glyph(.regular, weight: .light))
                 .frame(width: 24)
-                .foregroundStyle(ClaudePalette.ink.opacity(0.75))
+                .foregroundStyle(Palette.ink.opacity(0.75))
             Text(title)
-                .font(.system(size: 17))
+                .font(.paseo(.body))
             Spacer(minLength: 8)
             Menu {
                 ForEach(Array(options), id: \.rawValue) { option in
@@ -671,11 +670,11 @@ struct PaseoSettingsView: View {
             } label: {
                 HStack(spacing: 5) {
                     Text(current)
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
             }
             .accessibilityLabel("\(title), currently \(current)")
@@ -758,13 +757,13 @@ struct PaseoSettingsView: View {
                 Text(
                     "Unset toggles show as off. Changes apply immediately; the effective config comes back from the daemon."
                 )
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.leading, 16)
                 if let error = session.hostSettings.error {
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.leading, 16)
                 }
                 RowGroup {
@@ -789,16 +788,16 @@ struct PaseoSettingsView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "trash")
-                            .font(.system(size: 17, weight: .light))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.glyph(.regular, weight: .light))
+                            .foregroundStyle(Palette.failureInk)
                             .frame(width: 24)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Remove host")
-                                .font(.system(size: 17))
-                                .foregroundStyle(ClaudePalette.failureInk)
+                                .font(.paseo(.body))
+                                .foregroundStyle(Palette.failureInk)
                             Text("Removes this host and its saved connections from this device")
-                                .font(.system(size: 12))
-                                .foregroundStyle(ClaudePalette.secondary)
+                                .font(.paseo(.caption))
+                                .foregroundStyle(Palette.secondaryInk)
                         }
                         Spacer(minLength: 0)
                     }
@@ -830,18 +829,18 @@ struct PaseoSettingsView: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Connection")
-                    .font(.system(size: 17))
+                    .font(.paseo(.body))
                 Text(session.serverInfo?.hostname ?? "Paseo daemon")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             HStack(spacing: 6) {
                 PaseoStatusDot(kind: connectionKind(session.connection))
                 Text(connectionLabel(session.connection))
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
             }
         }
@@ -855,8 +854,8 @@ struct PaseoSettingsView: View {
         } label: {
             HStack {
                 Text("Disconnect")
-                    .font(.system(size: 17))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.body))
+                    .foregroundStyle(Palette.failureInk)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
@@ -906,15 +905,15 @@ struct PaseoSettingsView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Skills")
-                                    .font(.system(size: 17))
+                                    .font(.paseo(.body))
                                 Text("Installed on the host for orchestrating agents")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.paseo(.footnote))
+                                    .foregroundStyle(Palette.secondaryInk)
                             }
                             Spacer(minLength: 8)
                             Text(skills.label)
-                                .font(.system(size: 15))
-                                .foregroundStyle(ClaudePalette.secondary)
+                                .font(.paseo(.callout))
+                                .foregroundStyle(Palette.secondaryInk)
                         }
                         .padding(.horizontal, 16)
                         .frame(minHeight: 52)
@@ -945,8 +944,8 @@ struct PaseoSettingsView: View {
                 AgentProfilesSection(session: session)
                 if let error = session.hostSettings.error {
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.leading, 16)
                 }
             }
@@ -1036,7 +1035,7 @@ struct PaseoSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text("Resume agents after restart")
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     SettingsInfoButton(
                         title: "Resume agents after restart",
                         info:
@@ -1044,13 +1043,13 @@ struct PaseoSettingsView: View {
                     )
                 }
                 Text("Continue interrupted work automatically.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             Button("Edit") { showResumePromptSheet = true }
-                .font(.system(size: 15))
+                .font(.paseo(.callout))
                 .disabled(!resumeOnStartupEnabled || configControlsDisabled)
                 .accessibilityLabel("Edit prompt")
             Toggle(
@@ -1060,7 +1059,7 @@ struct PaseoSettingsView: View {
                     set: { $0.resumeOnStartup = $1 })
             )
             .labelsHidden()
-            .tint(.blue)
+            .tint(Palette.toggleTint)
             .disabled(configControlsDisabled)
             .accessibilityLabel("Resume agents after restart")
             .accessibilityIdentifier("settings.config.Resume agents after restart")
@@ -1087,18 +1086,18 @@ struct PaseoSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(title)
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     SettingsInfoButton(title: title, info: info)
                 }
                 Text(hint)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             Toggle("", isOn: isOn)
                 .labelsHidden()
-                .tint(.blue)
+                .tint(Palette.toggleTint)
                 .disabled(configControlsDisabled)
                 .accessibilityLabel(title)
                 .accessibilityIdentifier("settings.config." + title)
@@ -1121,8 +1120,8 @@ struct PaseoSettingsView: View {
                 isPresented = true
             } label: {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.glyph(.small))
+                    .foregroundStyle(Palette.tertiaryInk)
                     .frame(width: 28, height: 28)
                     .contentShape(.rect)
             }
@@ -1130,8 +1129,8 @@ struct PaseoSettingsView: View {
             .accessibilityLabel("About \(title)")
             .popover(isPresented: $isPresented) {
                 Text(info)
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.ink)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(20)
@@ -1147,16 +1146,16 @@ struct PaseoSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             SheetHeader(title: "Resume prompt", close: { closeResumePromptSheet() })
             TextField("Resume working.", text: resumePromptBinding, axis: .vertical)
-                .font(typography.mono(12.5, relativeTo: .footnote))
+                .font(.paseo(.codeSmall))
                 .lineLimit(4...12)
                 .padding(12)
-                .background(ClaudePalette.background.opacity(0.55), in: .rect(cornerRadius: 12))
+                .background(Palette.background.opacity(0.55), in: .rect(cornerRadius: Radius.md))
                 .focused($resumePromptFocused)
                 .accessibilityLabel("Resume prompt")
             if let error = session.hostSettings.error {
                 Text(error)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
             }
             HStack(spacing: 12) {
                 Spacer(minLength: 0)
@@ -1170,7 +1169,6 @@ struct PaseoSettingsView: View {
         .padding(.horizontal, 20)
         .padding(.bottom, 24)
         .presentationDetents([.medium])
-        .presentationCornerRadius(38)
     }
 
     private var canSaveResumePrompt: Bool {
@@ -1191,20 +1189,20 @@ struct PaseoSettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
             TextField(placeholder, text: draft, axis: .vertical)
-                .font(typography.mono(12.5, relativeTo: .footnote))
+                .font(.paseo(.codeSmall))
                 .lineLimit(3...12)
                 .padding(12)
-                .background(ClaudePalette.background.opacity(0.55), in: .rect(cornerRadius: 12))
+                .background(Palette.background.opacity(0.55), in: .rect(cornerRadius: Radius.md))
                 .focused(focused)
             if dirty {
                 HStack {
                     Spacer(minLength: 8)
                     Button(action: onSave) {
                         Text(saving ? "Saving…" : "Done")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.paseo(.callout, weight: .semibold))
                     }
                     .disabled(saving)
                 }
@@ -1223,11 +1221,11 @@ struct PaseoSettingsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Model selection")
-                                .font(.system(size: 17))
+                                .font(.paseo(.body))
                             Spacer(minLength: 8)
                             Text(metadataMode == .automatic ? "Automatic" : "Manual")
-                                .font(.system(size: 15))
-                                .foregroundStyle(ClaudePalette.secondary)
+                                .font(.paseo(.callout))
+                                .foregroundStyle(Palette.secondaryInk)
                         }
                         HStack(spacing: 8) {
                             metadataModeChip(.automatic, "Automatic")
@@ -1246,16 +1244,16 @@ struct PaseoSettingsView: View {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Model")
-                                        .font(.system(size: 17))
+                                        .font(.paseo(.body))
                                     Text(metadataModelLabel)
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(ClaudePalette.secondary)
+                                        .font(.paseo(.footnote))
+                                        .foregroundStyle(Palette.secondaryInk)
                                         .lineLimit(1)
                                 }
                                 Spacer(minLength: 8)
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.glyph(.regular))
+                                    .foregroundStyle(Palette.tertiaryInk)
                             }
                             .padding(.horizontal, 16)
                             .frame(height: 60)
@@ -1268,13 +1266,13 @@ struct PaseoSettingsView: View {
                 Text(
                     "Used for titles, branch names, commit messages and pull requests drafted by the host."
                 )
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.leading, 16)
                 if let error = session.hostSettings.error {
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.leading, 16)
                 }
             }
@@ -1297,11 +1295,11 @@ struct PaseoSettingsView: View {
             }
         } label: {
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isSelected ? ClaudePalette.background : ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .semibold))
+                .foregroundStyle(isSelected ? Palette.background : Palette.ink)
                 .padding(.horizontal, 18)
-                .frame(height: 40)
-                .background(isSelected ? ClaudePalette.ink : ClaudePalette.chip, in: .capsule)
+                .frame(minHeight: 40)
+                .background(isSelected ? Palette.ink : Palette.chip, in: .capsule)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("settings.metadata.mode." + title)
@@ -1335,13 +1333,13 @@ struct PaseoSettingsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 32)
                     Text("Loading providers…")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(maxWidth: .infinity)
                 } else if session.agentControl.readyProviders.isEmpty {
                     Text("No usable models on this host. Enable a provider on the Providers page first.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.top, 32)
                         .frame(maxWidth: .infinity)
                 } else {
@@ -1396,8 +1394,8 @@ struct PaseoSettingsView: View {
                 }
                 if let error = session.hostSettings.error {
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.leading, 16)
                 }
             }
@@ -1423,8 +1421,8 @@ struct PaseoSettingsView: View {
                 sectionLabel("On this host")
                 if projects.isEmpty {
                     Text("No projects on this host yet.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.leading, 16)
                 } else {
                     RowGroup {
@@ -1439,13 +1437,13 @@ struct PaseoSettingsView: View {
                 Text(
                     "Removing a project unregisters it on this host. Files on disk are not changed."
                 )
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .padding(.leading, 16)
                 if let error = session.workspaceDirectory.actionError {
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.leading, 16)
                 }
             }
@@ -1485,18 +1483,18 @@ struct PaseoSettingsView: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                             .lineLimit(1)
                         Text(project.projectRootPath)
-                            .font(typography.mono(12, relativeTo: .footnote))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.codeSmall))
+                            .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
                     Spacer(minLength: 8)
                     Text(count == 1 ? "1 workspace" : "\(count) workspaces")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
                 .contentShape(.rect)
@@ -1510,8 +1508,8 @@ struct PaseoSettingsView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 19, weight: .light))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.glyph(.large, weight: .light))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .frame(width: 44, height: 44)
                         .contentShape(.rect)
                 }
@@ -1551,16 +1549,16 @@ struct PaseoSettingsView: View {
         Toggle(isOn: isOn) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 17))
+                    .font(.paseo(.body))
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .tint(.blue)
+        .tint(Palette.toggleTint)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(minHeight: 52)
@@ -1575,8 +1573,8 @@ struct PaseoSettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if let actionError = session.agentControl.actionError {
                     Text(actionError)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.leading, 16)
                 }
                 if session.agentControl.providers.isEmpty {
@@ -1585,18 +1583,18 @@ struct PaseoSettingsView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 32)
                         Text("Loading providers…")
-                            .font(.system(size: 15))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.secondaryInk)
                             .frame(maxWidth: .infinity)
                     } else if case .failed(let message) = session.agentControl.phase {
                         Text(message)
-                            .font(.system(size: 15))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.failureInk)
                             .padding(.top, 32)
                     } else {
                         Text("No providers reported by this host.")
-                            .font(.system(size: 15))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.top, 32)
                             .frame(maxWidth: .infinity)
                     }
@@ -1609,13 +1607,13 @@ struct PaseoSettingsView: View {
                         }
                     }
                     Text("Enable switches are stored in the daemon's config; status and models come from the host's catalogue.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.leading, 16)
                     if session.hostSettings.config == nil {
                         Text("Daemon config is unavailable — pull to refresh on a Host page to enable toggles.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.leading, 16)
                     }
                 }
@@ -1645,11 +1643,11 @@ struct PaseoSettingsView: View {
                         PaseoStatusDot(kind: dotKind(provider))
                         VStack(alignment: .leading, spacing: 1) {
                             Text(provider.label ?? provider.provider)
-                                .font(.system(size: 17))
+                                .font(.paseo(.body))
                                 .lineLimit(1)
                             Text(providerDetailLine(provider, countLine: countLine))
-                                .font(.system(size: 13))
-                                .foregroundStyle(ClaudePalette.secondary)
+                                .font(.paseo(.footnote))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .lineLimit(1)
                         }
                     }
@@ -1672,15 +1670,15 @@ struct PaseoSettingsView: View {
                             })
                     )
                     .labelsHidden()
-                    .tint(.blue)
+                    .tint(Palette.toggleTint)
                     .disabled(session.hostSettings.isSaving)
                     .accessibilityLabel("Enable \(provider.label ?? provider.provider)")
                 }
             }
             if let error = provider.error, !error.isEmpty {
                 Text(error)
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.failureInk)
                     .lineLimit(2)
                     .padding(.leading, 32)
             }
@@ -1729,14 +1727,14 @@ struct PaseoSettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Paseo Client")
-                        .font(typography.serif(28))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.largeTitle))
+                        .foregroundStyle(Palette.ink)
                     Text(versionLine)
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                     Text("A native client for the Paseo daemon.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 .padding(.top, 8)
                 sectionLabel("This host")
@@ -1771,15 +1769,15 @@ struct PaseoSettingsView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     Text(detail)
-                        .font(typography.mono(12, relativeTo: .footnote))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "arrow.up.right.square")
-                    .font(.system(size: 17, weight: .light))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.glyph(.regular, weight: .light))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 16)
             .frame(height: 60)
@@ -1797,8 +1795,8 @@ struct PaseoSettingsView: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)
@@ -1813,26 +1811,26 @@ struct PaseoSettingsView: View {
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: symbol)
-                    .font(.system(size: 20, weight: .light))
+                    .font(.glyph(.large, weight: .light))
                     .frame(width: 26)
-                    .foregroundStyle(ClaudePalette.ink.opacity(0.75))
+                    .foregroundStyle(Palette.ink.opacity(0.75))
                 Text(destination.title)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if !value.isEmpty {
                     Text(value)
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                 }
                 if chevron {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.glyph(.regular))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
             }
-            .font(.system(size: 17))
-            .foregroundStyle(ClaudePalette.ink)
+            .font(.paseo(.body))
+            .foregroundStyle(Palette.ink)
             .padding(.horizontal, 16)
-            .frame(height: 51)
+            .frame(minHeight: 51)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -1842,11 +1840,11 @@ struct PaseoSettingsView: View {
     @ViewBuilder private func valueRow(_ title: String, value: String, mono: Bool = false) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 17))
+                .font(.paseo(.body))
             Spacer(minLength: 8)
             Text(value)
-                .font(mono ? typography.mono(13, relativeTo: .footnote) : .system(size: 15))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(mono ? .paseo(.code) : .paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(mono ? .middle : .tail)
                 .textSelection(.enabled)

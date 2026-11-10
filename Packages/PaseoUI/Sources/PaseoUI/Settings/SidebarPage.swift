@@ -11,7 +11,6 @@ struct SidebarPage: View {
     /// Shared with the sidebar usage footer. Hidden by default.
     @AppStorage("paseo.usage.showInSidebar") private var showUsage = false
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         ScrollView {
@@ -33,8 +32,8 @@ struct SidebarPage: View {
                         identifier: "settings.sidebar.showSchedules")
                 }
                 Text("Rows that open the History and Schedules screens. Applies immediately.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
                 sectionLabel("Footer")
                 RowGroup {
@@ -46,8 +45,8 @@ struct SidebarPage: View {
                         identifier: "settings.sidebar.showUsage")
                 }
                 Text("Hidden by default. Toggling this applies immediately.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
             }
             .padding(.horizontal, 16)
@@ -64,20 +63,20 @@ struct SidebarPage: View {
         Toggle(isOn: isOn) {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
-                    .font(.system(size: 18, weight: .light))
+                    .font(.glyph(.regular, weight: .light))
                     .frame(width: 24)
-                    .foregroundStyle(ClaudePalette.ink.opacity(0.75))
+                    .foregroundStyle(Palette.ink.opacity(0.75))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     Text(subtitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .tint(.blue)
+        .tint(Palette.toggleTint)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minHeight: 52)
@@ -90,8 +89,8 @@ struct SidebarPage: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

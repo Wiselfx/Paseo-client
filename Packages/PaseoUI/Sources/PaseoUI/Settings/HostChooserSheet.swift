@@ -13,7 +13,6 @@ public struct HostChooserSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var query = ""
-    private let typography = ClaudeTypography()
 
     public init(hosts: [DeepLinkHost], onChoose: @escaping (DeepLinkHost) -> Void) {
         // The caller decides when to ask; this view keeps upstream's local-first order.
@@ -34,8 +33,8 @@ public struct HostChooserSheet: View {
                     LazyVStack(spacing: 4) {
                         if options.isEmpty {
                             Text("No matching hosts")
-                                .font(typography.sans(15))
-                                .foregroundStyle(ClaudePalette.secondaryInk)
+                                .font(.paseo(.callout))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 18)
@@ -53,24 +52,23 @@ public struct HostChooserSheet: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
     }
 
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.glyph(.small))
+                .foregroundStyle(Palette.tertiaryInk)
             TextField(
                 "",
                 text: $query,
-                prompt: Text("Search hosts...").foregroundStyle(ClaudePalette.secondary)
+                prompt: Text("Search hosts...").foregroundStyle(Palette.secondaryInk)
             )
-            .font(typography.sans(15))
+            .font(.paseo(.callout))
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .submitLabel(.search)
@@ -78,7 +76,7 @@ public struct HostChooserSheet: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 42)
-        .background(ClaudePalette.chip, in: .rect(cornerRadius: 12))
+        .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
     }
 
     private func row(_ host: DeepLinkHost) -> some View {
@@ -88,28 +86,28 @@ public struct HostChooserSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Circle()
-                    .fill(host.isCurrent ? ClaudePalette.successInk : ClaudePalette.secondary.opacity(0.5))
+                    .fill(host.isCurrent ? Palette.successInk : Palette.secondaryInk.opacity(0.5))
                     .frame(width: 7, height: 7)
                     .frame(width: 14)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(host.label)
-                        .font(typography.sans(17, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.body, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .lineLimit(1)
                     Text(host.detail)
-                        .font(typography.mono(12))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: host.isRelay ? "lock.shield" : "server.rack")
-                    .font(.system(size: 15, weight: .light))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.glyph(.regular, weight: .light))
+                    .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 14)
             .frame(minHeight: 56, alignment: .leading)
-            .background(ClaudePalette.panel, in: .rect(cornerRadius: 14))
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

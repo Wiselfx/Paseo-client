@@ -24,7 +24,6 @@ struct PairDevicePage: View {
     /// The rasterized QR, cached per URL (NIT 6: don't re-render on every body pass).
     @State private var cachedQR: UIImage? = nil
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         ScrollView {
@@ -70,8 +69,8 @@ struct PairDevicePage: View {
                 ProgressView().controlSize(.small)
                 // en.ts:1969 loadingOffer
                 Text("Loading pairing offer...")
-                    .font(.system(size: 15))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
@@ -80,22 +79,22 @@ struct PairDevicePage: View {
                 if message == "Pairing offer unavailable." {
                     // en.ts:1985 unavailable — one line, upstream shows it alone.
                     Text(message)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                 } else {
                     // en.ts:1970 failedToLoadOffer
                     Text("Failed to load pairing offer.")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.callout, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                     Text(message)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 // en.ts:1991 retry
                 Button("Retry") {
                     Task { await session.hostSettings.loadPairingOffer() }
                 }
-                .font(.system(size: 15, weight: .medium))
+                .font(.paseo(.callout, weight: .medium))
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("pairDevice.retry")
             }
@@ -112,8 +111,8 @@ struct PairDevicePage: View {
         VStack(alignment: .leading, spacing: 14) {
             // en.ts:1986 hint
             Text("Scan this QR code with Paseo on your phone, or copy the link below.")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
             if let qr = cachedQR {
                 Image(uiImage: qr)
                     .resizable()
@@ -122,18 +121,18 @@ struct PairDevicePage: View {
                     .frame(width: 220)
                     // Upstream qrTile: white tile with padding (a QR needs a light surround).
                     .padding(12)
-                    .background(Color.white, in: .rect(cornerRadius: 16))
+                    .background(Color.white, in: .rect(cornerRadius: Radius.lg))
                     .accessibilityLabel("Pairing QR code") // en.ts:1990 qrAccessibility
             } else {
                 // en.ts:1989 qrUnavailable
                 Text("QR code unavailable.")
-                    .font(.system(size: 14))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             HStack(spacing: 8) {
                 Text(url)
-                    .font(typography.mono(12))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -149,15 +148,15 @@ struct PairDevicePage: View {
                 } label: {
                     // en.ts:1992 copy / en.ts:1993 copied
                     Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.paseo(.footnote, weight: .medium))
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("pairDevice.copy")
             }
             // en.ts:1987-1988 securityWarning
             Text("Treat this pairing link like a password. Anyone with it can access this daemon.")
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondary)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
         }
         .task(id: url) {
             cachedQR = Self.qrImage(for: url)
@@ -168,32 +167,32 @@ struct PairDevicePage: View {
         VStack(alignment: .leading, spacing: 10) {
             // en.ts:1971 relayDisabled
             Text("Relay is not enabled. Enable relay to pair a device.")
-                .font(.system(size: 15))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
             if session.hostSettings.supportsRelayConfig {
                 Button {
                     confirmEnableRelay = true
                 } label: {
                     // en.ts:1977 enableRelay
                     Text(session.hostSettings.isSaving ? "Enabling..." : "Enable relay") // en.ts:1978 enablingRelay
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.paseo(.callout, weight: .semibold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 48)
+                        .frame(minHeight: 48)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(ClaudePalette.ink)
+                .tint(Palette.ink)
                 .disabled(session.hostSettings.isSaving)
                 .accessibilityIdentifier("pairDevice.enableRelay")
             } else {
                 // en.ts:1984 updateRequired
                 Text("Update the host to enable relay from Paseo Desktop.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
             }
             if let enableFailed, !enableFailed.isEmpty {
                 Text(enableFailed)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
             }
         }
     }
@@ -234,8 +233,8 @@ struct PairDevicePage: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

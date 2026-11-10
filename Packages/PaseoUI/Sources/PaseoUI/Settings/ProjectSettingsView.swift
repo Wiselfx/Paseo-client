@@ -31,7 +31,6 @@ struct ProjectSettingsView: View {
     @State private var hasCustomIcon: Bool
     @State private var didSeed = false
 
-    private let typography = ClaudeTypography()
     private let store: ProjectConfigStore
     private let icons: ProjectIconStore
 
@@ -52,9 +51,8 @@ struct ProjectSettingsView: View {
             SheetHeader(title: "Project", close: { dismiss() })
             content
         }
-        .background(ClaudePalette.background)
+        .background(Palette.background)
         .presentationDetents([.large])
-        .presentationCornerRadius(40)
         .presentationDragIndicator(.hidden)
         .alert("Rename project", isPresented: $renaming) {
             TextField("Project name", text: $renameText)
@@ -178,14 +176,14 @@ struct ProjectSettingsView: View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(ClaudePalette.warning)
+                .font(.glyph(.xlarge, weight: .light))
+                .foregroundStyle(Palette.warning)
             Text("Couldn't read paseo.json")
-                .font(typography.sans(16, weight: .medium))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.ink)
             Text(store.error?.userMessage ?? store.sendError ?? "Something went wrong. Try again.")
-                .font(typography.sans(13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .multilineTextAlignment(.center)
             Button {
                 Task {
@@ -194,11 +192,11 @@ struct ProjectSettingsView: View {
                 }
             } label: {
                 Text("Retry")
-                    .font(typography.sans(15, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.background)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.background)
                     .padding(.horizontal, 24)
-                    .frame(height: 44)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .frame(minHeight: 44)
+                    .background(Palette.ink, in: .capsule)
             }
             Spacer()
         }
@@ -212,7 +210,7 @@ struct ProjectSettingsView: View {
         HStack(spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(ClaudePalette.chip)
+                    .fill(Palette.chip)
                     .frame(width: 60, height: 60)
                 if let image = iconImage {
                     Image(uiImage: image)
@@ -222,18 +220,18 @@ struct ProjectSettingsView: View {
                         .clipShape(Circle())
                 } else {
                     Text(String(title.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                        .font(typography.serif(28))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.paseo(.largeTitle))
+                        .foregroundStyle(Palette.ink)
                 }
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(typography.serif(22, relativeTo: .title3))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.title))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 Text(project.projectRootPath)
-                    .font(typography.mono(12, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -259,14 +257,14 @@ struct ProjectSettingsView: View {
                     } label: {
                         HStack(spacing: 14) {
                             Text(title)
-                                .font(.system(size: 17))
-                                .foregroundStyle(ClaudePalette.ink)
+                                .font(.paseo(.body))
+                                .foregroundStyle(Palette.ink)
                                 .lineLimit(1)
                             Spacer(minLength: 8)
                             if project.projectCustomName == nil {
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(ClaudePalette.secondaryInk)
+                                    .font(.glyph(.regular))
+                                    .foregroundStyle(Palette.secondaryInk)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -284,11 +282,11 @@ struct ProjectSettingsView: View {
                             }
                         } label: {
                             Text("Reset")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(ClaudePalette.secondaryInk)
+                                .font(.paseo(.footnote, weight: .medium))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .padding(.horizontal, 12)
-                                .frame(height: 30)
-                                .background(ClaudePalette.chip, in: .capsule)
+                                .frame(minHeight: 30)
+                                .background(Palette.chip, in: .capsule)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reset to the folder name")
@@ -308,11 +306,11 @@ struct ProjectSettingsView: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Icon")
-                            .font(.system(size: 17))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.body))
+                            .foregroundStyle(Palette.ink)
                         Text(hasCustomIcon ? "Custom" : "Automatic")
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.secondaryInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                     }
                     Spacer(minLength: 8)
                     if icons.isSaving {
@@ -325,11 +323,11 @@ struct ProjectSettingsView: View {
                 HStack(spacing: 8) {
                     PhotosPicker(selection: $photoItem, matching: .images) {
                         Label("Photos", systemImage: "photo")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.footnote, weight: .medium))
+                            .foregroundStyle(Palette.ink)
                             .padding(.horizontal, 14)
-                            .frame(height: 36)
-                            .background(ClaudePalette.chip, in: .capsule)
+                            .frame(minHeight: 36)
+                            .background(Palette.chip, in: .capsule)
                     }
                     .buttonStyle(.plain)
                     .disabled(!icons.supportsCustomIcon)
@@ -339,11 +337,11 @@ struct ProjectSettingsView: View {
                         pickingFile = true
                     } label: {
                         Label("Files", systemImage: "doc")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(ClaudePalette.ink)
+                            .font(.paseo(.footnote, weight: .medium))
+                            .foregroundStyle(Palette.ink)
                             .padding(.horizontal, 14)
-                            .frame(height: 36)
-                            .background(ClaudePalette.chip, in: .capsule)
+                            .frame(minHeight: 36)
+                            .background(Palette.chip, in: .capsule)
                     }
                     .buttonStyle(.plain)
                     .disabled(!icons.supportsCustomIcon)
@@ -362,11 +360,11 @@ struct ProjectSettingsView: View {
                             }
                         } label: {
                             Text("Reset")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(ClaudePalette.secondaryInk)
+                                .font(.paseo(.footnote, weight: .medium))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .padding(.horizontal, 14)
-                                .frame(height: 36)
-                                .background(ClaudePalette.chip, in: .capsule)
+                                .frame(minHeight: 36)
+                                .background(Palette.chip, in: .capsule)
                         }
                         .buttonStyle(.plain)
                         .disabled(!icons.supportsCustomIcon)
@@ -378,15 +376,15 @@ struct ProjectSettingsView: View {
                 .frame(height: 51)
                 if !icons.supportsCustomIcon {
                     Text("This host can't set project icons.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                 }
                 if let error = icons.error {
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                 }
@@ -402,10 +400,10 @@ struct ProjectSettingsView: View {
             if store.hasUncommittedWorktreeSetupChanges {
                 HStack(spacing: 8) {
                     Image(systemName: "clock.badge.exclamationmark")
-                        .foregroundStyle(ClaudePalette.warning)
+                        .foregroundStyle(Palette.warning)
                     Text("This worktree setup has uncommitted changes.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -416,8 +414,8 @@ struct ProjectSettingsView: View {
                 configField(title: "Teardown", text: $teardownText, placeholder: "docker compose down")
             }
             Text("One command per line, run in order. Saved to paseo.json on this host.")
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.tertiaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.tertiaryInk)
                 .padding(.leading, 16)
         }
     }
@@ -425,20 +423,20 @@ struct ProjectSettingsView: View {
     private func configField(title: String, text: Binding<String>, placeholder: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
             ZStack(alignment: .topLeading) {
                 if text.wrappedValue.isEmpty {
                     Text(placeholder)
-                        .font(typography.mono(13))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.code))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .allowsHitTesting(false)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 8)
                 }
                 TextEditor(text: text)
-                    .font(typography.mono(13))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.code))
+                    .foregroundStyle(Palette.ink)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 64, maxHeight: 160)
                     .textInputAutocapitalization(.never)
@@ -463,10 +461,10 @@ struct ProjectSettingsView: View {
                     editingScript = draft
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(ClaudePalette.ink)
+                        .font(.glyph(.regular, weight: .medium))
+                        .foregroundStyle(Palette.ink)
                         .frame(width: 30, height: 30)
-                        .background(ClaudePalette.chip, in: .circle)
+                        .background(Palette.chip, in: .circle)
                 }
                 .padding(.trailing, 16)
                 .accessibilityLabel("Add script")
@@ -474,8 +472,8 @@ struct ProjectSettingsView: View {
             RowGroup {
                 if scripts.isEmpty {
                     Text("No scripts. Scripts run on demand from the workspace panel.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(ClaudePalette.secondaryInk)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 14)
@@ -488,8 +486,8 @@ struct ProjectSettingsView: View {
             }
             if let issue = scriptsIssue {
                 Text(issue)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .padding(.leading, 16)
             }
         }
@@ -499,12 +497,12 @@ struct ProjectSettingsView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(script.name.isEmpty ? "Unnamed script" : script.name)
-                    .font(typography.mono(13, relativeTo: .footnote, weight: .medium))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.code, weight: .medium))
+                    .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 Text(script.command.isEmpty ? "No command" : script.command)
-                    .font(typography.mono(12, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -516,8 +514,8 @@ struct ProjectSettingsView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.secondaryInk)
+                    .font(.glyph(.regular, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 36, height: 44)
                     .contentShape(.rect)
             }
@@ -566,8 +564,8 @@ struct ProjectSettingsView: View {
         HStack {
             if let error = session.workspaceDirectory.actionError {
                 Text(error)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .padding(.leading, 16)
             }
         }
@@ -578,25 +576,25 @@ struct ProjectSettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.callout, weight: .semibold))
+                .foregroundStyle(Palette.failureInk)
             Text(detail)
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: action) {
                 Text(actionLabel)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.footnote, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
                     .padding(.horizontal, 16)
-                    .frame(height: 34)
-                    .background(ClaudePalette.chip, in: .capsule)
+                    .frame(minHeight: 34)
+                    .background(Palette.chip, in: .capsule)
             }
             .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(ClaudePalette.quoteWash, in: .rect(cornerRadius: 16))
+        .background(Palette.quoteWash, in: .rect(cornerRadius: Radius.lg))
     }
 
     private var removeButton: some View {
@@ -604,10 +602,10 @@ struct ProjectSettingsView: View {
             confirmRemove = true
         } label: {
             Text("Remove project…")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.callout, weight: .medium))
+                .foregroundStyle(Palette.failureInk)
                 .frame(maxWidth: .infinity)
-                .frame(height: 48)
+                .frame(minHeight: 48)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Remove project")
@@ -627,19 +625,19 @@ struct ProjectSettingsView: View {
                         Image(systemName: "checkmark")
                         Text("Saved")
                     }
-                    .font(typography.sans(16, weight: .semibold))
+                    .font(.paseo(.callout, weight: .semibold))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 48)
+                    .frame(minHeight: 48)
                 } else {
                     Text("Save changes")
-                        .font(typography.sans(16, weight: .semibold))
+                        .font(.paseo(.callout, weight: .semibold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 48)
+                        .frame(minHeight: 48)
                 }
             }
-            .foregroundStyle(ClaudePalette.background)
+            .foregroundStyle(Palette.background)
             .background(
-                ClaudePalette.ink.opacity(canSave ? 1 : 0.35), in: .capsule)
+                Palette.ink.opacity(canSave ? 1 : 0.35), in: .capsule)
         }
         .buttonStyle(.plain)
         .disabled(!canSave)
@@ -726,8 +724,8 @@ struct ProjectSettingsView: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
     }
 }
@@ -738,7 +736,6 @@ private struct ScriptEditSheet: View {
     var onSave: (ProjectScriptDraft) -> Void
     var onCancel: () -> Void
 
-    private let typography = ClaudeTypography()
 
     private var canSave: Bool {
         !script.name.trimmingCharacters(in: .whitespaces).isEmpty
@@ -759,12 +756,12 @@ private struct ScriptEditSheet: View {
                     Haptics.success()
                 } label: {
                     Text("Save")
-                        .font(typography.sans(16, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.background)
+                        .font(.paseo(.callout, weight: .semibold))
+                        .foregroundStyle(Palette.background)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 48)
+                        .frame(minHeight: 48)
                         .background(
-                            ClaudePalette.ink.opacity(canSave ? 1 : 0.35), in: .capsule)
+                            Palette.ink.opacity(canSave ? 1 : 0.35), in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSave)
@@ -774,32 +771,31 @@ private struct ScriptEditSheet: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
         }
-        .background(ClaudePalette.background)
+        .background(Palette.background)
         .presentationDetents([.medium, .large])
-        .presentationCornerRadius(38)
     }
 
     private func field(title: String, text: Binding<String>, placeholder: String, mono: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(ClaudePalette.secondaryInk)
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
             ZStack(alignment: .leading) {
                 if text.wrappedValue.isEmpty {
                     Text(placeholder)
-                        .font(typography.mono(15))
-                        .foregroundStyle(ClaudePalette.tertiaryInk)
+                        .font(.paseo(.code))
+                        .foregroundStyle(Palette.tertiaryInk)
                         .allowsHitTesting(false)
                 }
                 TextField("", text: text)
-                    .font(typography.mono(15))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.code))
+                    .foregroundStyle(Palette.ink)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
             .padding(.horizontal, 14)
             .frame(height: 48)
-            .background(ClaudePalette.chip, in: .rect(cornerRadius: 14))
+            .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
         }
     }
 }

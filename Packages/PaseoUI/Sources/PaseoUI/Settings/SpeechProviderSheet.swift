@@ -100,7 +100,7 @@ struct SpeechProviderSheet: View {
                     RowGroup {
                         HStack {
                             Text("Provider")
-                                .font(.system(size: 17))
+                                .font(.paseo(.body))
                             Spacer(minLength: 8)
                             Picker("Provider", selection: $provider) {
                                 Text("Local").tag(SpeechProvider.local)
@@ -114,8 +114,8 @@ struct SpeechProviderSheet: View {
                         .accessibilityIdentifier("settings.voice.provider")
                         if let hint = setByHint(fields[.provider]) {
                             Text(hint)
-                                .font(.system(size: 13))
-                                .foregroundStyle(ClaudePalette.secondary)
+                                .font(.paseo(.footnote))
+                                .foregroundStyle(Palette.secondaryInk)
                                 .padding(.leading, 16)
                         }
                     }
@@ -133,8 +133,8 @@ struct SpeechProviderSheet: View {
 
                     if let saveError {
                         Text(saveError)
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.failureInk)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.failureInk)
                             .padding(.leading, 16)
                     }
                 }
@@ -143,11 +143,10 @@ struct SpeechProviderSheet: View {
             .scrollIndicators(.hidden)
             footer
         }
-        .background(ClaudePalette.background)
-        .foregroundStyle(ClaudePalette.ink)
+        .background(Palette.background)
+        .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(38)
         .task {
             await voice.loadModels()
         }
@@ -189,27 +188,27 @@ struct SpeechProviderSheet: View {
                 if let error = voice.modelsError {
                     HStack {
                         Text("Couldn't load local models")
-                            .font(.system(size: 15))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.secondaryInk)
                         Spacer(minLength: 8)
                         Button("Retry") {
                             Haptics.selection()
                             Task { await voice.loadModels() }
                         }
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.paseo(.callout, weight: .semibold))
                     }
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     Text(error)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.failureInk)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.failureInk)
                         .padding(.leading, 16)
                 } else {
                     Text(voice.modelsPhase == .loading ? "Loading models..." : "No models available")
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                         .padding(.horizontal, 16)
-                        .frame(height: 52)
+                        .frame(minHeight: 52)
                 }
             } else {
                 ForEach(Array(kindModels.enumerated()), id: \.element.id) { index, model in
@@ -233,40 +232,40 @@ struct SpeechProviderSheet: View {
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 5) {
                             Text(model.label)
-                                .font(.system(size: 17))
+                                .font(.paseo(.body))
                                 .lineLimit(1)
                             if model.isDefault {
                                 Text("Recommended")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.paseo(.caption2, weight: .semibold))
+                                    .foregroundStyle(Palette.secondaryInk)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 5)
-                                    .background(ClaudePalette.chip, in: .capsule)
+                                    .background(Palette.chip, in: .capsule)
                             }
                         }
                         Text(formatModelSize(bytes: model.downloadSizeBytes))
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                         if state == .installed {
                             Text(model.inUse ? "In use" : "Downloaded")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(ClaudePalette.successInk)
+                                .font(.paseo(.caption2, weight: .semibold))
+                                .foregroundStyle(Palette.successInk)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
-                                .background(ClaudePalette.chip, in: .capsule)
+                                .background(Palette.chip, in: .capsule)
                         }
                         if selected, let hint = setByHint(fields[.model]) {
                             Text(hint)
-                                .font(.system(size: 13))
-                                .foregroundStyle(ClaudePalette.secondary)
+                                .font(.paseo(.footnote))
+                                .foregroundStyle(Palette.secondaryInk)
                         }
                     }
                     Spacer(minLength: 8)
                     modelControl(model, state: state)
                     if selected {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(.blue)
+                            .font(.glyph(.large, weight: .semibold))
+                            .foregroundStyle(Palette.selection)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -281,8 +280,8 @@ struct SpeechProviderSheet: View {
             let rowError = actionError ?? failedModelError(state)
             if let rowError {
                 Text(rowError)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.failureInk)
                     .padding(.leading, 32)
             }
         }
@@ -304,15 +303,15 @@ struct SpeechProviderSheet: View {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text(percent.map { "Downloading \($0)%" } ?? "Downloading...")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
             }
         case .extracting:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Extracting...")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
             }
         case .installed:
             if !model.inUse {
@@ -321,7 +320,7 @@ struct SpeechProviderSheet: View {
                     pendingDelete = model
                 } label: {
                     Label("Delete", systemImage: "trash")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.paseo(.footnote, weight: .medium))
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("settings.voice.model.delete." + model.id)
@@ -332,7 +331,7 @@ struct SpeechProviderSheet: View {
                 Task { _ = await voice.download(modelId: model.id) }
             } label: {
                 Label(isFailedModel(state) ? "Retry" : "Download", systemImage: "arrow.down.circle")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.paseo(.footnote, weight: .medium))
             }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("settings.voice.model.download." + model.id)
@@ -350,8 +349,8 @@ struct SpeechProviderSheet: View {
                 SecureField(
                     "", text: $apiKey,
                     prompt: Text(hasSavedApiKey ? "Saved" : "sk-...")
-                        .foregroundStyle(ClaudePalette.secondary))
-                    .font(.system(size: 17))
+                        .foregroundStyle(Palette.secondaryInk))
+                    .font(.paseo(.body))
                     .textContentType(.password)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -366,8 +365,8 @@ struct SpeechProviderSheet: View {
                 TextField(
                     "", text: $baseUrl,
                     prompt: Text("https://api.openai.com/v1")
-                        .foregroundStyle(ClaudePalette.secondary))
-                    .font(.system(size: 17))
+                        .foregroundStyle(Palette.secondaryInk))
+                    .font(.paseo(.body))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.done)
@@ -394,8 +393,8 @@ struct SpeechProviderSheet: View {
             envHint: setByHint(fields[.language])) {
             TextField(
                 "", text: $language,
-                prompt: Text("Auto-detect").foregroundStyle(ClaudePalette.secondary))
-                .font(.system(size: 17))
+                prompt: Text("Auto-detect").foregroundStyle(Palette.secondaryInk))
+                .font(.paseo(.body))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
@@ -409,8 +408,8 @@ struct SpeechProviderSheet: View {
     private var footer: some View {
         HStack {
             Button("Cancel") { dismiss() }
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(ClaudePalette.ink)
+                .font(.paseo(.callout, weight: .semibold))
+                .foregroundStyle(Palette.ink)
                 .disabled(saving)
                 .accessibilityIdentifier("settings.voice.cancel")
             Spacer()
@@ -419,11 +418,11 @@ struct SpeechProviderSheet: View {
                 save()
             } label: {
                 Text(saving ? "Saving…" : "Save")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(ClaudePalette.background)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.background)
                     .padding(.horizontal, 24)
-                    .frame(height: 44)
-                    .background(ClaudePalette.ink, in: .capsule)
+                    .frame(minHeight: 44)
+                    .background(Palette.ink, in: .capsule)
                     .opacity(isChanged && !saving ? 1 : 0.5)
             }
             .disabled(!isChanged || saving)
@@ -497,12 +496,12 @@ struct SpeechProviderSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 17))
+                .font(.paseo(.body))
             content()
             if let hint = envHint ?? hint {
                 Text(hint)
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -516,7 +515,7 @@ struct SpeechProviderSheet: View {
     ) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 17))
+                .font(.paseo(.body))
             Spacer(minLength: 8)
             Menu {
                 ForEach(options, id: \.value) { option in
@@ -533,11 +532,11 @@ struct SpeechProviderSheet: View {
             } label: {
                 HStack(spacing: 5) {
                     Text(currentMenuValue(options: options, title: title))
-                        .font(.system(size: 15))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.callout))
+                        .foregroundStyle(Palette.secondaryInk)
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.glyph(.small, weight: .semibold))
+                        .foregroundStyle(Palette.tertiaryInk)
                 }
             }
             .accessibilityLabel("\(title), currently \(currentMenuValue(options: options, title: title))")
@@ -560,8 +559,8 @@ struct SpeechProviderSheet: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

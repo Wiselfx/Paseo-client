@@ -8,7 +8,6 @@ struct TerminalPage: View {
     /// Shared with `Workspace/WorkspaceTerminalsView.swift`. Default `ask` (upstream).
     @AppStorage(ServiceUrlBehavior.storageKey) private var serviceUrlBehavior = ServiceUrlBehavior.ask.rawValue
 
-    private let typography = ClaudeTypography()
     private let options: [(label: String, value: Int)] = [
         ("1,000 lines", 1_000),
         ("2,000 lines", 2_000),
@@ -32,10 +31,10 @@ struct TerminalPage: View {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Scrollback")
-                                .font(.system(size: 17))
+                                .font(.paseo(.body))
                             Text("Lines kept in the buffer")
-                                .font(.system(size: 13))
-                                .foregroundStyle(ClaudePalette.secondary)
+                                .font(.paseo(.footnote))
+                                .foregroundStyle(Palette.secondaryInk)
                         }
                         Spacer(minLength: 8)
                         Menu {
@@ -53,11 +52,11 @@ struct TerminalPage: View {
                         } label: {
                             HStack(spacing: 5) {
                                 Text(selectedLabel)
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.paseo(.callout))
+                                    .foregroundStyle(Palette.secondaryInk)
                                 Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.glyph(.small, weight: .semibold))
+                                    .foregroundStyle(Palette.tertiaryInk)
                             }
                         }
                         .accessibilityLabel("Terminal scrollback, currently \(selectedLabel)")
@@ -68,7 +67,7 @@ struct TerminalPage: View {
                     RowDivider()
                     HStack(spacing: 12) {
                         Text("Clicking a script's service URL")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                         Spacer(minLength: 8)
                         Menu {
                             ForEach(ServiceUrlBehavior.allCases, id: \.self) { option in
@@ -85,11 +84,11 @@ struct TerminalPage: View {
                         } label: {
                             HStack(spacing: 5) {
                                 Text(currentBehavior.label)
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.paseo(.callout))
+                                    .foregroundStyle(Palette.secondaryInk)
                                 Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(ClaudePalette.secondary)
+                                    .font(.glyph(.small, weight: .semibold))
+                                    .foregroundStyle(Palette.tertiaryInk)
                             }
                         }
                         .accessibilityLabel("Clicking a script's service URL, currently \(currentBehavior.label)")
@@ -99,8 +98,8 @@ struct TerminalPage: View {
                     .frame(height: 52)
                 }
                 Text("Applies to new and already-open terminal views on this device.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
             }
             .padding(.horizontal, 16)
@@ -112,8 +111,8 @@ struct TerminalPage: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

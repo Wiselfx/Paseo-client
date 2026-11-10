@@ -12,7 +12,6 @@ struct ConnectionsPage: View {
 
     @State private var removeTarget: HostSwitchEntry?
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         ScrollView {
@@ -21,8 +20,8 @@ struct ConnectionsPage: View {
                 if hosts.isEmpty {
                     RowGroup {
                         Text("No saved connections. Every successful connection is remembered here.")
-                            .font(.system(size: 15))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 14)
@@ -37,8 +36,8 @@ struct ConnectionsPage: View {
                     }
                 }
                 Text("One saved endpoint per connection. Removing one also removes its password from this device's Keychain.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
                     .padding(.leading, 16)
             }
             .padding(.horizontal, 16)
@@ -69,26 +68,26 @@ struct ConnectionsPage: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(host.label)
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                         .lineLimit(1)
                     if host.isCurrent {
                         Text("Current")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.caption2, weight: .semibold))
+                            .foregroundStyle(Palette.secondaryInk)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 5)
-                            .background(ClaudePalette.chip, in: .capsule)
+                            .background(Palette.chip, in: .capsule)
                     }
                 }
                 Text(host.urlLine)
-                    .font(typography.mono(12, relativeTo: .footnote))
-                    .foregroundStyle(ClaudePalette.secondary)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if host.isRelay {
                     Text("Encrypted relay")
-                        .font(.system(size: 12))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -97,8 +96,8 @@ struct ConnectionsPage: View {
                 removeTarget = host
             } label: {
                 Text("Remove")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.failureInk)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Remove \(host.label)")
@@ -111,8 +110,8 @@ struct ConnectionsPage: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)

@@ -14,7 +14,6 @@ struct AgentProfilesSection: View {
     @State private var editing: ProfileEditTarget?
     @State private var pendingDelete: AgentProfile?
 
-    private let typography = ClaudeTypography()
 
     var body: some View {
         Group {
@@ -25,10 +24,10 @@ struct AgentProfilesSection: View {
                 RowGroup {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Not available on this host")
-                            .font(.system(size: 17))
+                            .font(.paseo(.body))
                         Text("Profiles need the daemon's agentProfiles feature.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(ClaudePalette.secondary)
+                            .font(.paseo(.footnote))
+                            .foregroundStyle(Palette.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.horizontal, 16)
@@ -66,10 +65,10 @@ struct AgentProfilesSection: View {
             if profiles.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("No profiles yet.")
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                     Text("Bundle provider, model, mode, thinking and a note into a named profile you can start an agent from.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, 16)
@@ -86,13 +85,13 @@ struct AgentProfilesSection: View {
         }
         if let error = session.hostSettings.error {
             Text(error)
-                .font(.system(size: 13))
-                .foregroundStyle(ClaudePalette.failureInk)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.failureInk)
                 .padding(.leading, 16)
         }
         Text("Stored host-wide on this daemon, not on this device.")
-            .font(.system(size: 13))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.footnote))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
     }
 
@@ -103,19 +102,19 @@ struct AgentProfilesSection: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(profile.name)
-                        .font(.system(size: 17))
+                        .font(.paseo(.body))
                         .lineLimit(1)
                         .accessibilityIdentifier("settings.profiles.name.\(profile.id)")
                     Text(summary(for: profile))
-                        .font(typography.mono(11, relativeTo: .caption))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.codeCaption))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 if let notes = profile.notes, !notes.isEmpty {
                     Text(notes)
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClaudePalette.secondary)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
                         .lineLimit(2)
                 }
             }
@@ -136,7 +135,7 @@ struct AgentProfilesSection: View {
                 editing = ProfileEditTarget(mode: .edit, profile: profile)
             } label: {
                 Image(systemName: "pencil")
-                    .font(.system(size: 17, weight: .light))
+                    .font(.glyph(.regular, weight: .light))
                     .frame(width: 38, height: 44)
                     .contentShape(.rect)
             }
@@ -148,8 +147,8 @@ struct AgentProfilesSection: View {
                 pendingDelete = profile
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 17, weight: .light))
-                    .foregroundStyle(ClaudePalette.failureInk)
+                    .font(.glyph(.regular, weight: .light))
+                    .foregroundStyle(Palette.failureInk)
                     .frame(width: 38, height: 44)
                     .contentShape(.rect)
             }
@@ -165,8 +164,8 @@ struct AgentProfilesSection: View {
             move(profile: profile, offset: offset)
         } label: {
             Image(systemName: offset < 0 ? "chevron.up" : "chevron.down")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle((isFirst || isLast) ? ClaudePalette.secondary.opacity(0.4) : ClaudePalette.secondary)
+                .font(.glyph(.regular, weight: .regular))
+                .foregroundStyle((isFirst || isLast) ? Palette.tertiaryInk.opacity(0.4) : Palette.tertiaryInk)
                 .frame(width: 34, height: 44)
                 .contentShape(.rect)
         }
@@ -183,11 +182,11 @@ struct AgentProfilesSection: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "plus.circle")
-                    .font(.system(size: 20, weight: .light))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.glyph(.large, weight: .light))
+                    .foregroundStyle(Palette.ink)
                 Text("Add profile")
-                    .font(.system(size: 17))
-                    .foregroundStyle(ClaudePalette.ink)
+                    .font(.paseo(.body))
+                    .foregroundStyle(Palette.ink)
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 16)
@@ -250,8 +249,8 @@ struct AgentProfilesSection: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15))
-            .foregroundStyle(ClaudePalette.secondary)
+            .font(.paseo(.callout))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.leading, 16)
             .padding(.top, 8)
             .padding(.bottom, -8)
