@@ -536,6 +536,7 @@ struct CommandCenterSheet: View {
                 ClaudeUsageReportsSheet(session: session)
             }
         }
+        .onAppear { refresh() }
         .task {
             fieldFocused = true
             if session.agentLifecycle.phase == .idle {
@@ -648,11 +649,15 @@ struct CommandCenterSheet: View {
             .accessibilityAddTraits(.isHeader)
     }
 
+    /// The highlighted row's id, so a row compares one string instead of scanning the list.
+    private var selectedRowID: String? {
+        model.flatRows.indices.contains(selectedIndex)
+            ? model.flatRows[selectedIndex].id : model.flatRows.first?.id
+    }
+
     private func rowView(_ row: SearchModel.Result) -> some View {
-        let index = model.flatRows.firstIndex { $0.id == row.id } ?? 0
-        let isSelected = index == selectedIndex
+        let isSelected = row.id == selectedRowID
         return Button {
-            selectedIndex = index
             activate(row)
         } label: {
             HStack(spacing: Space.md) {
