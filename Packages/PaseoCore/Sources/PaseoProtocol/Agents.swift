@@ -83,17 +83,44 @@ public struct FetchAgentsRequest: PaseoRequest {
     public var page: Page?
     /// Present to also receive live `agent_update` messages for this session.
     public var subscribe: Subscribe?
+    /// `active` keeps the directory to agents placed in an active workspace, so archived rows
+    /// cannot push active ones off a page (messages.ts:1332). Optional: older hosts strip it.
+    public var scope: String?
+    /// Include agents living in background workspaces. Optional, and only sent when the host
+    /// advertises `backgroundWorkspaces` (upstream `supportsBackgroundWorkspaces()`).
+    public var includeBackground: Bool?
+    /// Directory order, applied before the page is cut (messages.ts:1335-1342).
+    public var sort: [Sort]?
 
-    public struct Page: Encodable, Sendable {
+    /// The server caps a page at 200 rows (messages.ts:1345).
+    public static let maxPageLimit = 200
+
+    public struct Page: Encodable, Sendable, Equatable {
         public var limit: Int
         public var cursor: String?
         public init(limit: Int, cursor: String? = nil) { self.limit = limit; self.cursor = cursor }
     }
     public struct Subscribe: Encodable, Sendable { public init() {} }
+    public struct Sort: Encodable, Sendable, Equatable {
+        public var key: String
+        public var direction: String
+        public init(key: String, direction: String) {
+            self.key = key
+            self.direction = direction
+        }
+        /// What upstream sends: `[{ key: "updated_at", direction: "desc" }]`.
+        public static let updatedAtDescending = Sort(key: "updated_at", direction: "desc")
+    }
 
-    public init(page: Page? = Page(limit: 100), subscribe: Bool = false) {
+    public init(
+        page: Page? = Page(limit: 100), subscribe: Bool = false, scope: String? = nil,
+        includeBackground: Bool? = nil, sort: [Sort]? = nil
+    ) {
         self.page = page
         self.subscribe = subscribe ? Subscribe() : nil
+        self.scope = scope
+        self.includeBackground = includeBackground
+        self.sort = sort
     }
 
     public struct Response: Decodable, Sendable {
@@ -103,9 +130,28 @@ public struct FetchAgentsRequest: PaseoRequest {
         /// daemons also send their locally chosen id.
         public var subscriptionId: String?
         public var entries: [Entry]
+        /// Absent on hosts that predate paging: one page, nothing more to read.
+        public var pageInfo: PageInfo?
         public struct Entry: Decodable, Sendable {
             public var agent: AgentSnapshot
             public var project: ProjectPlacement?
+        }
+
+        /// Source: `AgentDirectoryPageInfoSchema` (messages.ts:4457-4461).
+        public struct PageInfo: Decodable, Sendable {
+            public var nextCursor: String?
+            public var prevCursor: String?
+            public var hasMore: Bool?
+            /// Older spellings the reference client still reads
+            /// (`resolveAgentNextPage`, directory-sync/index.ts:46-53).
+            public var afterCursor: String?
+            public var hasMoreAfter: Bool?
+
+            /// The next page's cursor, or nil when this was the last page.
+            public var cursorForNextPage: String? {
+                guard hasMore ?? hasMoreAfter ?? false else { return nil }
+                return nextCursor ?? afterCursor
+            }
         }
     }
 }

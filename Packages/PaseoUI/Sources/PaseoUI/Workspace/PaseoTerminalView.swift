@@ -1,5 +1,7 @@
 #if canImport(UIKit)
+import Dispatch
 import PaseoStore
+import QuartzCore
 import SwiftTerm
 import SwiftUI
 import UIKit
@@ -11,6 +13,11 @@ import UIKit
 /// incremental parser, and reports keystrokes and resizes back through the store. While a
 /// replay is parsing, generated replies (cursor-position reports and friends) are dropped so
 /// the daemon does not receive phantom answers to its own snapshot queries.
+///
+/// Live output is coalesced to one `feed` per display frame, the way upstream's coalescer is a
+/// leading+trailing throttle (`terminal-performance.md`, "Coalescers are leading+trailing
+/// throttles"): the first chunk after an idle frame reaches the parser synchronously, the rest of
+/// a burst waits for the next tick.
 ///
 /// API used from SwiftTerm (checkout of 1.99.3): `TerminalView(frame:font:)` (iOS designated
 /// init), `terminalDelegate`, `feed(byteArray:)`, `resetToInitialState()`,
@@ -24,10 +31,13 @@ struct PaseoTerminalView: UIViewRepresentable {
 
     let store: TerminalsStore
     let terminalId: String?
+    /// Whether this terminal is the one on screen. Only the visible terminal claims the PTY
+    /// size; the retained hidden ones keep their streams but follow with `update`.
+    let isVisible: Bool
     /// Called when the daemon detaches the stream. A non-nil error means observation failed and
     /// the process may still be running; nil means it ended cleanly.
     var onExit: (String?) -> Void = { _ in }
-    /// Called on every live output chunk, for activity tracking in the tab strip.
+    /// Called after live output arrives, at most once per `activityInterval` per terminal.
     var onOutput: () -> Void = {}
     /// A link tap in the terminal; the page routes it (open the file, open the URL, …).
     var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
@@ -53,7 +63,9 @@ struct PaseoTerminalView: UIViewRepresentable {
         view.nativeForegroundColor = UIColor(Palette.ink)
         view.nativeBackgroundColor = UIColor(Palette.background)
         context.coordinator.view = view
-        // The virtual key bar replaces SwiftTerm's built-in one: our keys, our haptics.
+        // The virtual key bar replaces SwiftTerm's built-in one: our keys, our haptics. Built once
+        // here, never in `updateUIView`: rebuilding it would drop the keyboard's accessory view
+        // and make the bar jump.
         view.inputAccessoryView = context.coordinator.makeKeyBar(for: view)
         return view
     }
@@ -62,6 +74,7 @@ struct PaseoTerminalView: UIViewRepresentable {
         context.coordinator.configure(
             store: store, onOutput: onOutput, onOpenLink: onOpenLink, onExit: onExit,
             onAttach: onAttach, onCancelUpload: onCancelUpload)
+        context.coordinator.setVisible(isVisible)
         context.coordinator.select(terminalId: terminalId)
         context.coordinator.setUpload(upload)
     }
@@ -102,6 +115,26 @@ enum PaseoTerminalScrollback {
 
 @MainActor
 final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
+    /// One display frame at 60 Hz: a chunk that arrives inside a frame that already fed bytes
+    /// waits for the next tick; a chunk after an idle frame feeds immediately.
+    static let frameInterval: CFTimeInterval = 1.0 / 60.0
+    /// Activity bookkeeping writes view state at most this often, and never when the tab's dot
+    /// would not change.
+    static let activityInterval: CFTimeInterval = 0.5
+    /// The keyboard and the key bar move the grid in animated steps; the size is sent once they
+    /// have settled.
+    static let resizeSettle: Duration = .milliseconds(120)
+    /// A burst larger than this is fed at once rather than held back for a frame.
+    static let maxBufferedBytes = 256 * 1024
+
+    /// The coordinator whose terminal is on screen. Only one terminal is visible at a time, so a
+    /// keyboard hand-off has exactly one place to go.
+    private static weak var visibleTerminal: PaseoTerminalCoordinator?
+    /// The keyboard is up on a terminal that just went hidden. It moves to the visible terminal at
+    /// the end of this run loop turn, which is what keeps the keyboard from dropping and re-rising
+    /// on a switch.
+    private static var keyboardHandoff = false
+
     weak var store: TerminalsStore?
     weak var view: TerminalView?
     /// The scrollback the view was last configured with — live re-application on change.
@@ -111,15 +144,25 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     var appliedFontSize = PaseoTerminalFont.baseSize
 
     private var terminalId: String?
+    private var isVisible = true
+    /// Whether this attachment has claimed the PTY size. The visible terminal claims on attach and
+    /// on focus; every later geometry change from it is an `update`.
+    private var claimed = false
     private var lastSize: TerminalSize?
     private var attachedId: String?
     private var attachedSize: TerminalSize?
-    private var didClaim = false
     private var isAttaching = false
     private var isReplaying = false
     private var pendingResize: TerminalSize?
     private var attachTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
+    private var resizeTask: Task<Void, Never>?
+    /// Bytes received since the last feed. Live output only: replay bytes are barriers and go
+    /// straight through.
+    private var pendingBytes: [UInt8] = []
+    private var flushLink: CADisplayLink?
+    private var lastFeedTime: CFTimeInterval = 0
+    private var lastActivityReport: CFTimeInterval = 0
     private var onOutput: () -> Void = {}
     private var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
     private var onExit: (String?) -> Void = { _ in }
@@ -187,19 +230,74 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         if let lastSize { attachIfPossible(size: lastSize) }
     }
 
+    /// Told by the page whether this terminal is the one on screen. Becoming visible takes the
+    /// PTY size back (`claim` transfers ownership even when the dimensions are unchanged); going
+    /// hidden never gives it away (`terminal-performance.md`, "Terminal size has one daemon-owned
+    /// claimant").
+    func setVisible(_ visible: Bool) {
+        guard visible != isVisible else { return }
+        isVisible = visible
+        guard visible else {
+            // A hidden terminal must not keep the keyboard: keystrokes would land on a grid nobody
+            // can see. The hand-off itself runs at the end of this turn, after the visible terminal
+            // has been told it is visible, so it does not matter which of the two views SwiftUI
+            // updates first.
+            if view?.isFirstResponder == true {
+                Self.keyboardHandoff = true
+                Self.scheduleKeyboardHandoff()
+            }
+            return
+        }
+        Self.visibleTerminal = self
+        if let store, let terminalId, attachedId == terminalId, let size = attachedSize {
+            store.resize(terminalId, to: size, intent: .claim)
+            claimed = true
+        }
+        Self.scheduleKeyboardHandoff()
+    }
+
+    /// Hands the keyboard on once the whole update pass that switched terminals has run. One run
+    /// loop hop per tab switch, never per frame.
+    private static func scheduleKeyboardHandoff() {
+        guard keyboardHandoff else { return }
+        DispatchQueue.main.async {
+            // Main queue by construction; the hop exists to run after this run loop turn.
+            MainActor.assumeIsolated { handOverKeyboard() }
+        }
+    }
+
+    /// Becoming first responder resigns the hidden one in the same turn, so the keyboard stays up
+    /// instead of animating away and back.
+    private static func handOverKeyboard() {
+        guard keyboardHandoff else { return }
+        keyboardHandoff = false
+        guard let target = visibleTerminal, target.isVisible,
+            target.view?.isFirstResponder != true
+        else { return }
+        _ = target.view?.becomeFirstResponder()
+    }
+
     /// Releases the subscription, cancels the byte pump and resets the emulator.
     func teardown() {
         attachTask?.cancel()
         attachTask = nil
         streamTask?.cancel()
         streamTask = nil
+        resizeTask?.cancel()
+        resizeTask = nil
+        flushLink?.invalidate()
+        flushLink = nil
+        pendingBytes.removeAll(keepingCapacity: false)
+        lastFeedTime = 0
+        lastActivityReport = 0
         if let attachedId { store?.detach(attachedId) }
         attachedId = nil
         attachedSize = nil
-        didClaim = false
+        claimed = false
         isAttaching = false
         isReplaying = false
         pendingResize = nil
+        if Self.visibleTerminal === self { Self.visibleTerminal = nil }
         view?.resetToInitialState()
     }
 
@@ -236,7 +334,8 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private func attachIfPossible(size: TerminalSize) {
         guard let store, let terminalId else { return }
         if attachedId == terminalId {
-            if attachedSize != size { sendResize(size) }
+            // The grid moves while the keyboard animates and while the key bar comes and goes.
+            scheduleResize(size)
             return
         }
         if isAttaching {
@@ -245,6 +344,8 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         }
         isAttaching = true
         attachTask = Task { [weak self] in
+            // Attaching with the measured size is what makes the daemon replay at this grid
+            // (`terminal-rendering.md`: "The pane attaches with that size").
             let stream = await store.attach(terminalId, size: size)
             guard let self else { return }
             self.attachTask = nil
@@ -256,17 +357,22 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
             self.attachedId = terminalId
             self.attachedSize = size
             self.isAttaching = false
-            // Attaching claims the PTY size; later geometry changes travel as `update`.
-            store.resize(terminalId, to: size, intent: .claim)
-            self.didClaim = true
-            if let pending = self.pendingResize, pending != size {
-                store.resize(terminalId, to: pending, intent: .update)
-                self.attachedSize = pending
+            // Attaching claims the PTY size; later geometry changes travel as `update`. A
+            // retained hidden tab must never take the grid from the visible one.
+            if self.isVisible {
+                store.resize(terminalId, to: size, intent: .claim)
+                self.claimed = true
             }
-            self.pendingResize = nil
+            if let pending = self.pendingResize, pending != size {
+                self.scheduleResize(pending)
+            } else {
+                self.pendingResize = nil
+            }
             self.consume(stream, for: terminalId)
         }
     }
+
+    // MARK: Feeding
 
     private func consume(_ stream: AsyncStream<TerminalOutput>, for terminalId: String) {
         streamTask = Task { [weak self] in
@@ -275,27 +381,134 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
                 guard self.attachedId == terminalId else { break }
                 switch output {
                 case .replayBegin:
+                    // A barrier: the snapshot replaces the screen, so bytes still waiting for the
+                    // next frame are dropped rather than replayed under it.
                     self.isReplaying = true
+                    self.pendingBytes.removeAll(keepingCapacity: true)
+                    self.flushLink?.isPaused = true
                     self.view?.resetToInitialState()
                 case .output(let data):
-                    self.onOutput()
-                    self.view?.feed(byteArray: ArraySlice([UInt8](data)))
+                    // Replay bytes are parsed in order and never held back: the replies they may
+                    // generate have to stay suppressed until the last of them lands.
+                    if self.isReplaying {
+                        self.view?.feed(byteArray: ArraySlice(data))
+                    } else {
+                        self.receive(data)
+                    }
                 case .replayEnd:
                     self.isReplaying = false
+                    // The grid is settled now: send the size the keyboard measured while the
+                    // snapshot was parsing.
+                    self.applyResize()
                 case .exited(let error):
                     self.isReplaying = false
+                    self.pendingBytes.removeAll(keepingCapacity: true)
+                    self.flushLink?.isPaused = true
                     self.onExit(error)
                 }
             }
         }
     }
 
-    private func sendResize(_ size: TerminalSize) {
-        guard let store, let terminalId else { return }
-        let intent: TerminalResizeIntent = didClaim ? .update : .claim
+    /// A live output chunk. Bursts are one `feed` per frame; a chunk that arrives after an idle
+    /// frame goes straight through so keystroke echo never waits (upstream
+    /// `terminal-performance.md`, "Coalescers are leading+trailing throttles").
+    private func receive(_ data: Data) {
+        let now = CACurrentMediaTime()
+        reportActivity(now)
+        if pendingBytes.isEmpty, now - lastFeedTime >= Self.frameInterval,
+            data.count < Self.maxBufferedBytes
+        {
+            lastFeedTime = now
+            view?.feed(byteArray: ArraySlice(data))
+            return
+        }
+        pendingBytes.append(contentsOf: data)
+        if pendingBytes.count >= Self.maxBufferedBytes {
+            flushPending()
+        } else {
+            startFlushLink()
+        }
+    }
+
+    /// Feeds everything received since the last frame, in one parser call.
+    fileprivate func flushPending() {
+        guard !pendingBytes.isEmpty else {
+            flushLink?.isPaused = true
+            return
+        }
+        lastFeedTime = CACurrentMediaTime()
+        // `feed` parses synchronously, so the batch buffer is reusable the moment it returns.
+        view?.feed(byteArray: pendingBytes[...])
+        pendingBytes.removeAll(keepingCapacity: true)
+    }
+
+    private func startFlushLink() {
+        if let flushLink {
+            flushLink.isPaused = false
+            return
+        }
+        let target = PaseoTickTarget()
+        target.coordinator = self
+        let link = CADisplayLink(target: target, selector: #selector(PaseoTickTarget.tick(_:)))
+        link.add(to: .main, forMode: .common)
+        flushLink = link
+    }
+
+    /// Activity bookkeeping for the tab's dot: at most one view write per `activityInterval`,
+    /// and the view drops the ones that would not change anything.
+    private func reportActivity(_ now: CFTimeInterval) {
+        guard now - lastActivityReport >= Self.activityInterval else { return }
+        lastActivityReport = now
+        onOutput()
+    }
+
+    // MARK: Resize
+
+    /// Debounces a measured grid size. A keyboard animation walks the terminal through a dozen
+    /// heights, and each `sizeChanged` used to send its own resize RPC.
+    private func scheduleResize(_ size: TerminalSize) {
+        guard attachedSize != size else {
+            pendingResize = nil
+            return
+        }
+        pendingResize = size
+        resizeTask?.cancel()
+        resizeTask = Task { [weak self] in
+            try? await Task.sleep(for: PaseoTerminalCoordinator.resizeSettle)
+            guard !Task.isCancelled, let self else { return }
+            self.resizeTask = nil
+            self.applyResize()
+        }
+    }
+
+    /// Sends the debounced size, once the keyboard animation has settled and any replay has
+    /// finished. Replay geometry belongs to the parser queue, so a resize never lands inside one.
+    private func applyResize() {
+        guard let store, let terminalId, let size = pendingResize else { return }
+        guard attachedId == terminalId, !isReplaying else { return }
+        if attachedSize == size {
+            pendingResize = nil
+            return
+        }
+        // Only the terminal on screen claims the PTY size, and only once; later changes from this
+        // attachment are updates. A retained hidden tab never claims.
+        let intent: TerminalResizeIntent = isVisible && !claimed ? .claim : .update
         store.resize(terminalId, to: size, intent: intent)
+        if intent == .claim { claimed = true }
         attachedSize = size
-        didClaim = true
+        pendingResize = nil
+    }
+}
+
+/// The display link's target. It holds the coordinator weakly, so a link that outlives its view
+/// never owns it.
+@MainActor
+private final class PaseoTickTarget: NSObject {
+    weak var coordinator: PaseoTerminalCoordinator?
+
+    @objc func tick(_ link: CADisplayLink) {
+        coordinator?.flushPending()
     }
 }
 
