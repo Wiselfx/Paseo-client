@@ -45,8 +45,9 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         try? await Task.sleep(for: .milliseconds(16))
         let configuration = WKSnapshotConfiguration()
         configuration.rect = CGRect(x: 0, y: 0, width: width, height: height)
-        configuration.snapshotWidth = NSNumber(value: Double(width / max(scale, 1)))
-        return try? await webView.takeSnapshot(with: configuration)
+        // Points: WebKit renders the image at the screen scale itself.
+        configuration.snapshotWidth = NSNumber(value: Double(width))
+        return try? await webView.takeSnapshot(configuration: configuration)
     }
 
     private func contentHeight(_ webView: WKWebView) async -> CGFloat? {
