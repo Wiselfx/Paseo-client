@@ -13,7 +13,8 @@ struct DraftChatView: View {
     var onOpenPanel: (() -> Void)?
     /// No workspaces on this host: the hero asks for a project instead of offering a composer.
     var onAddProject: () -> Void
-    var onCreated: (String) -> Void
+    /// The composer's send; the shell owns creation (D2 §3).
+    var onSubmit: (DraftSubmission) -> Void
 
     @FocusState private var focused: Bool
 
@@ -187,11 +188,10 @@ struct DraftChatView: View {
 
     /// The one composer (R6 §5): the draft's card is `ComposerView` in `.draft` mode — a one-line
     /// pill at rest, the two-row card once it has focus, text, an attachment or an error. Send
-    /// creates the agent and hands its id back to the shell.
+    /// hands the prompt to the shell, which creates the agent and swaps the conversation in.
     private var composer: some View {
         ComposerView(
-            draft: draft, session: session, onCreated: { agentId in onCreated(agentId) },
-            focused: $focused)
+            draft: draft, session: session, onSubmit: onSubmit, focused: $focused)
         .padding(.bottom, 8)
     }
 
