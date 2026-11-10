@@ -154,10 +154,10 @@
         }
 
         /// Table rows, identified by their own cells.
-        private func identifiedRows(_ rows: [[[MarkdownInline]]]) -> [IdentifiedValue<[MarkdownInline]>] {
+        private func identifiedRows(_ rows: [[[MarkdownInline]]]) -> [IdentifiedValue<[[MarkdownInline]]>] {
             identified(rows) { row in
                 var hasher = Hasher()
-                row.hashStable(into: &hasher)
+                for cell in row { cell.hashStable(into: &hasher) }
                 return hasher.finalize()
             }
         }
