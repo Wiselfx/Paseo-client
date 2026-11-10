@@ -72,13 +72,17 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         self.configuration = configuration
         self.transportFactory = transportFactory
 
+        // Bounded buffers: a slow consumer applies backpressure instead of growing without
+        // limit, then catching up in a burst. The newest event/state wins — a stale delta is
+        // dropped rather than queued behind a stalled main thread, and `TimelineState` reports
+        // the gap so the store catches up from the daemon.
         let (events, eventContinuation) = AsyncStream.makeStream(
-            of: DaemonEvent.self, bufferingPolicy: .unbounded)
+            of: DaemonEvent.self, bufferingPolicy: .bufferingNewest(64))
         self.eventsStream = events
         self.eventContinuation = eventContinuation
 
         let (states, stateContinuation) = AsyncStream.makeStream(
-            of: ConnectionState.self, bufferingPolicy: .unbounded)
+            of: ConnectionState.self, bufferingPolicy: .bufferingNewest(64))
         self.statesStream = states
         self.stateContinuation = stateContinuation
 

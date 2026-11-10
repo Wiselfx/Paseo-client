@@ -63,6 +63,9 @@ public final class HostSession {
 
     private let client: any DaemonClient
     private var conversations: [String: ConversationStore] = [:]
+    /// Per-agent live-delta coalescers, keyed like `conversations`. A `.timeline` payload is
+    /// buffered here and committed once per display frame instead of on every delta.
+    private var timelineCoalescers: [String: TimelineCommitCoalescer] = [:]
     private var checkouts: [String: CheckoutStore] = [:]
     /// The agent-list subscription, so a re-fetch can release the previous one on a modern socket.
     private var agentsSubscriptionId: String?
@@ -137,6 +140,7 @@ public final class HostSession {
         }
         store.update(serverInfo: serverInfo)
         conversations[agentId] = store
+        timelineCoalescers[agentId] = TimelineCommitCoalescer(store: store)
         sendSubscription()
 
         Task { await store.load() }
@@ -172,6 +176,7 @@ public final class HostSession {
 
     /// Call when the conversation screen goes away. Unsubscribes its stream; the store is dropped.
     public func closeConversation(_ agentId: String) {
+        timelineCoalescers.removeValue(forKey: agentId)
         guard conversations.removeValue(forKey: agentId) != nil else { return }
         sendSubscription()
     }
@@ -298,7 +303,17 @@ public final class HostSession {
             }
             voiceSession.handle(agentStream: payload)
             guard let store = conversations[payload.agentId] else { return }
-            await store.handleStream(payload)
+            if case .timeline = payload.event {
+                // Coalesced: consecutive deltas are merged and committed once per display
+                // frame. Non-timeline events (turn lifecycle, permissions, usage) are
+                // stateful and always applied immediately.
+                timelineCoalescers[payload.agentId]?.enqueue(payload)
+            } else {
+                // A lifecycle event is a barrier: commit buffered deltas first so the turn's
+                // final text is in place before the turn completes or a permission appears.
+                timelineCoalescers[payload.agentId]?.flush()
+                await store.handleStream(payload)
+            }
 
         case .agentUpdate(let update):
             apply(update)
@@ -531,6 +546,8 @@ public final class ConversationStore: Identifiable {
     /// Incremental `TurnBuilder`: keeps the last built turns so streaming a token rebuilds only the
     /// newest turn instead of the whole transcript. See `IncrementalTurnBuilder`.
     private let turnBuilder = IncrementalTurnBuilder()
+    /// Number of `updateTurns()` commits. Test probe for the coalescing guarantee.
+    internal private(set) var turnCommits = 0
 
     /// True while the agent works: an active turn, or status `.running`.
     public var isRunning: Bool { activeTurnId != nil || agent?.status == .running }
@@ -759,20 +776,55 @@ public final class ConversationStore: Identifiable {
             removePermission(requestId: requestId)
 
         case .timeline:
-            switch timeline.applyStream(payload) {
-            case .applied:
-                updateTurns()
+            switch applyTimelineDeltas([payload]) {
+            case .applied, .unchanged:
+                break
             case .gap:
                 await catchUp()
             case .epochChanged:
                 await load()
-            case .duplicate, .ignored:
-                break
             }
 
         default:
             break
         }
+    }
+
+    /// The outcome of applying a batch of live timeline deltas.
+    internal enum TimelineBatchResult: Sendable {
+        /// At least one delta applied; the turns were committed once.
+        case applied
+        /// Nothing applied (every delta was a duplicate or ignored).
+        case unchanged
+        /// A delta was missed; the store must catch up from the daemon.
+        case gap
+        /// The epoch changed; the store must reload the tail.
+        case epochChanged
+    }
+
+    /// Applies consecutive live timeline deltas in one batch and commits the turns once.
+    /// Payloads after a gap or an epoch change are left unapplied: the catch-up fetch covers
+    /// them, and applying them against a stale `nextSeq` would only report more gaps.
+    internal func applyTimelineDeltas(_ payloads: [AgentStreamPayload]) -> TimelineBatchResult {
+        var appliedAny = false
+        var failure: TimelineBatchResult = .unchanged
+        for payload in payloads {
+            guard payload.agentId == agentId, case .timeline = payload.event else { continue }
+            switch timeline.applyStream(payload) {
+            case .applied:
+                appliedAny = true
+            case .gap:
+                failure = .gap
+            case .epochChanged:
+                failure = .epochChanged
+            case .duplicate, .ignored:
+                continue
+            }
+            if failure != .unchanged { break }
+        }
+        guard appliedAny else { return failure }
+        updateTurns()
+        return failure == .unchanged ? .applied : failure
     }
 
     /// The daemon rebuilt this timeline: drop local rows and fetch the tail again.
@@ -867,20 +919,16 @@ public final class ConversationStore: Identifiable {
     }
 
     private func updateTurns() {
+        turnCommits += 1
         turns = turnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
         // The chat outline is stale whenever the newest prompt moves (a turn started, a page
         // arrived, the timeline was replaced). Upstream's `latestPromptSeq` effect.
         promptOutline.timelineChanged(epoch: timeline.epoch, latestPromptSeq: latestPromptSeq)
     }
 
-    /// The newest prompt row on the wire. Pending sends are not in the daemon's index yet.
-    private var latestPromptSeq: Int? {
-        timeline.rows.last { row in
-            guard !row.isPending else { return false }
-            if case .userMessage = row.item { return true }
-            return false
-        }?.seqStart
-    }
+    /// The newest prompt row on the wire, cached by `TimelineState` so this is O(1).
+    /// Pending sends are not in the daemon's index yet.
+    private var latestPromptSeq: Int? { timeline.latestPromptSeq }
 
     /// Upstream `planTimelinePromptJump` (`app/src/timeline/timeline-sync-plan.ts:77-88`): a
     /// bounded window starting half a page above the prompt, merged outside the loaded range.
@@ -941,6 +989,72 @@ public final class ConversationStore: Identifiable {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: Date())
+    }
+}
+
+/// Coalesces consecutive `.timeline` stream payloads for one agent so the observable
+/// transcript commits at most once per display frame.
+///
+/// The first payload after an idle window commits immediately (leading edge), so the first
+/// token of a turn is not delayed. Payloads that arrive while the frame timer is pending are
+/// buffered and committed together when it fires (trailing edge / ceiling). Nothing is dropped:
+/// every payload is applied when the buffer flushes, so the store always holds the full text.
+@MainActor
+internal final class TimelineCommitCoalescer {
+    /// The store to commit. Applying a batch is synchronous; only a gap or an epoch change
+    /// needs a follow-up task.
+    private let store: ConversationStore
+    /// The coalescing window: one display frame at 60 Hz.
+    private let frameInterval: Duration
+    private var pending: [AgentStreamPayload] = []
+    private var timer: Task<Void, Never>?
+    private var lastFlushAt: ContinuousClock.Instant?
+
+    internal init(store: ConversationStore, frameInterval: Duration = .milliseconds(16)) {
+        self.store = store
+        self.frameInterval = frameInterval
+    }
+
+    /// Buffers one live delta. Commits synchronously when the stream has been idle for a frame.
+    internal func enqueue(_ payload: AgentStreamPayload) {
+        pending.append(payload)
+        guard timer == nil else { return }
+
+        let elapsed = lastFlushAt.map { ContinuousClock.now - $0 } ?? frameInterval
+        if elapsed >= frameInterval {
+            flush()
+        }
+        arm()
+    }
+
+    /// Commits everything buffered now. Used by the frame timer and by tests.
+    internal func flush() {
+        guard !pending.isEmpty else { return }
+        timer?.cancel()
+        timer = nil
+        let payloads = pending
+        pending = []
+        lastFlushAt = ContinuousClock.now
+        switch store.applyTimelineDeltas(payloads) {
+        case .applied, .unchanged:
+            break
+        case .gap:
+            Task { await store.catchUp() }
+        case .epochChanged:
+            Task { await store.load() }
+        }
+    }
+
+    private func arm() {
+        timer = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: self.frameInterval)
+            self.timer = nil
+            self.flush()
+            if !self.pending.isEmpty {
+                self.arm()
+            }
+        }
     }
 }
 
