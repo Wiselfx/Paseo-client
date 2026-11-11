@@ -30,6 +30,31 @@ public final class HostUsageStore {
     /// `config.usage.enabled` from the daemon's own policy, read fresh per load. `true` until
     /// the first load (and when the config cannot be read, which fails open).
     public private(set) var usageEnabled = true
+    /// When the host last answered the usage question — a `.ready` load, or its own policy saying
+    /// usage is off — nil until then. The sidebar uses it to throttle its drawer-open refresh
+    /// (H4 §2). A failed load (transport, correlation, timeout) never moves it, so a failure is
+    /// retried the next time the drawer opens.
+    public private(set) var lastLoadedAt: Date?
+
+    /// The shortest gap between two automatic loads. One value for every caller: a drawer open is
+    /// a cheap question, but a host's plan quotas move in minutes, not seconds.
+    public static let automaticRefreshInterval: TimeInterval = 60
+
+    /// The line the sidebar footer shows when the host advertises no usage support at all. One
+    /// copy of the string: `load()` refuses with the same words.
+    public static let unsupportedMessage = "This host does not report usage; update the host."
+
+    /// True when an automatic load is worth doing: the host supports usage, none is in flight, and
+    /// either the host has not answered yet or it answered at least `minimumInterval` ago. Callers
+    /// gate on the user's own toggle; this store never decides to load on its own.
+    public func needsAutomaticLoad(
+        now: Date = Date(),
+        minimumInterval: TimeInterval = HostUsageStore.automaticRefreshInterval
+    ) -> Bool {
+        guard isSupported, phase != .loading else { return false }
+        guard let lastLoadedAt else { return true }
+        return now.timeIntervalSince(lastLoadedAt) >= minimumInterval
+    }
 
     private let client: any DaemonClient
     private var pendingReports: PendingLoad?
@@ -48,7 +73,7 @@ public final class HostUsageStore {
     /// snapshot, which is mapped onto the same entries. Returns true on success.
     public func load(forceRefresh: Bool = false) async -> Bool {
         guard isSupported else {
-            phase = .failed("This host does not report usage; update the host.")
+            phase = .failed(Self.unsupportedMessage)
             return false
         }
         phase = .loading
@@ -59,6 +84,9 @@ public final class HostUsageStore {
             usageEnabled = config.usage?.enabled ?? true
             guard usageEnabled else {
                 phase = .failed("Usage is off on this host. Ask the daemon to turn it on.")
+                // The host answered the question. The throttle applies, so opening the drawer does
+                // not re-ask a policy that changes on the host's own schedule.
+                lastLoadedAt = Date()
                 return false
             }
         } else {
@@ -71,6 +99,7 @@ public final class HostUsageStore {
         } else {
             await legacyReports()
         }
+        if phase == .ready { lastLoadedAt = Date() }
         return phase == .ready
     }
 
@@ -113,9 +142,7 @@ public final class HostUsageStore {
             reports = collected
             phase = .ready
         } catch {
-            let message = hostUsageErrorText(error)
-            self.error = message
-            phase = .failed(message)
+            fail(error)
         }
     }
 
@@ -127,9 +154,7 @@ public final class HostUsageStore {
             reports = response.providers.map { legacyEntry($0, fetchedAt: response.fetchedAt) }
             phase = .ready
         } catch {
-            let message = hostUsageErrorText(error)
-            self.error = message
-            phase = .failed(message)
+            fail(error)
         }
     }
 
@@ -156,6 +181,19 @@ public final class HostUsageStore {
             sourceLabel: provider.displayName,
             icon: nil,
             report: report)
+    }
+
+    /// One failure path for both transports. A cancellation is not a failure: the caller withdrew
+    /// (the sidebar's `.task(id:)` was replaced, the sheet closed), so the store goes back to idle
+    /// and the next trigger loads again instead of showing an error the user never caused.
+    private func fail(_ error: Error) {
+        if error is CancellationError || Task.isCancelled {
+            phase = .idle
+            return
+        }
+        let message = hostUsageErrorText(error)
+        self.error = message
+        phase = .failed(message)
     }
 
     private func hostUsageErrorText(_ error: Error) -> String {

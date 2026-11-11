@@ -53,7 +53,10 @@ struct ClaudeUsageReportsSheet: View {
         case .failed(let message):
             EmptyState(
                 title: "Usage isn't available right now.",
-                message: message
+                message: message,
+                // Upstream `providerUsage.retry` (en.ts:2253). The list — and its pull to
+                // refresh — is not drawn in this state, so this is the only way back.
+                action: (title: "Try again", run: { Task { await refresh() } })
             )
             .padding(24)
         case .ready:

@@ -64,8 +64,8 @@ struct RootView: View {
         }
     }
 
-    private var colorScheme: ColorScheme? {
-        (ClaudeAppearance(rawValue: appearance) ?? .system).colorScheme
+    private var appearanceChoice: ClaudeAppearance {
+        ClaudeAppearance(rawValue: appearance) ?? .system
     }
 
     @ViewBuilder private func connectForm(status: ConnectView.Status) -> some View {
@@ -89,7 +89,7 @@ struct RootView: View {
     }
 
     private var pureBlack: Bool {
-        (ClaudeAppearance(rawValue: appearance) ?? .system).isPureBlack
+        appearanceChoice.isPureBlack
     }
 
     var body: some View {
@@ -131,7 +131,14 @@ struct RootView: View {
         .environment(\.codeSizeStep, codeStep)
         .environment(\.pureBlack, pureBlack)
         .environment(\.accent, ClaudeAccent(rawValue: accent) ?? .claude)
-        .preferredColorScheme(colorScheme)
+        // Light / Dark / Pure black / System is a window trait, not a SwiftUI preference: the
+        // Settings sheet is its own hosting controller and has to follow while it is open (H4 §3).
+        // No `.preferredColorScheme` here: it cannot reach a presented sheet, and it cannot return
+        // to the OS style at all.
+        .background {
+            WindowAppearance(style: UIUserInterfaceStyle(appearanceChoice))
+                .frame(width: 0, height: 0)
+        }
         .environment(\.hostSwitch, model.hostContext)
         .sheet(isPresented: $model.addHostRequested) {
             AddHostMethodsSheet(

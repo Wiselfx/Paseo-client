@@ -568,8 +568,9 @@ struct EmptyMain: View {
     }
 
     var body: some View {
-        // Same geometry as `LaunchSkeleton`: the header is pinned to the top and the hero is
-        // centred in the space the draft's composer will take (E2 §3.1).
+        // Same geometry as `LaunchSkeleton` and the draft: the header is the page's first row,
+        // pinned top-leading, and the hero is centred in the space the draft's composer will take
+        // (E2 §3.1, H4 §1).
         HomeHeroLayout {
             ShellHeader(leading: .sidebar(onOpenSidebar)) {
                 Color.clear
