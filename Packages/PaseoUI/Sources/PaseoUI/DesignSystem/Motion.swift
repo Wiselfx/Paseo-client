@@ -42,6 +42,10 @@ enum Motion: CaseIterable {
         .timingCurve(0.165, 0.84, 0.44, 1, duration: duration)
     }
 
+    /// The `.fade` duration for UIKit callers (`UIView.animate`, animator caps): SwiftUI
+    /// `Animation` values cannot cross into UIKit, so the number lives here once.
+    static var uiFadeDuration: Double { 0.2 }
+
     /// Under Reduce Motion everything stops except `fade` (opacity is allowed) and `settle`,
     /// which becomes a plain short ease.
     func resolved(reduceMotion: Bool) -> Animation? {

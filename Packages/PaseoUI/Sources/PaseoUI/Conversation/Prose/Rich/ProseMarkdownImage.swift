@@ -6,19 +6,18 @@ import UIKit
 ///
 /// Remote (`http`, `https`, and also `data:`/`blob:` — a markdown image is always an *image*
 /// request, whatever the extension says) goes through `RichRemoteImage` and the shared
-/// `RemoteImageLoader`: sized `URLCache`, a `Paseo/…` User-Agent, downsampled decode off main,
-/// SVG through the snapshot renderer, and an honest failure card. Anything else is a workspace
-/// path, read through the caller's `localImageLoader` (8 MiB daemon read cap) → `RichLocalImage`
-/// with the same viewer; a failed/missing read falls back to the path chip.
+/// `MediaPipeline`: sized `URLCache`, a `Paseo/…` User-Agent, the incremental size probe,
+/// downsampled decode off main, SVG through the snapshot renderer, and an honest failure card.
+/// Anything else is a workspace path → `RichLocalImage`, which reads through the same pipeline
+/// (daemon fetch, disk cache) with the same viewer; a failed/missing read falls back to the chip.
 struct ProseMarkdownImage: View {
     let image: MarkdownImage
-    let localImageLoader: ((String) async -> UIImage?)?
 
     var body: some View {
         if isRemote {
             RichRemoteImage(urlString: image.source, alt: image.alt)
         } else {
-            RichLocalImage(path: localPath, alt: image.alt, loader: localImageLoader)
+            RichLocalImage(path: localPath, alt: image.alt)
         }
     }
 

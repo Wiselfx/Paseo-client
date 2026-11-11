@@ -69,6 +69,12 @@ public final class HostSession {
     public let forgeSearch: ForgeSearchStore
 
     private let client: any DaemonClient
+    /// Whether the daemon is reached through the relay (G2 §12): relay traffic is slow and
+    /// metered, so large media waits for a tap. The same endpoint flag the upload chunking
+    /// (R18) already keys off.
+    public var isRelayConnection: Bool {
+        (client as? DaemonConnection)?.endpoint.relay != nil
+    }
     private var conversations: [String: ConversationStore] = [:]
     /// Parsed `updatedAt` per agent id, kept in step with `agents`, so the sort comparator and the
     /// binary-search insertion never parse a date string.

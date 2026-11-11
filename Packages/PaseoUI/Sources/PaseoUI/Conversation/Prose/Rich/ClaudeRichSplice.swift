@@ -31,6 +31,25 @@ enum RichContentCache {
     }
 }
 
+extension RichContentBlock {
+    /// The card family's stable kind key (G1 §1.4): with the block's start offset it identifies
+    /// a card across streaming re-renders, so a newly detected block never re-runs an older
+    /// card's entrance. The range itself is the position; this is the kind.
+    var cardKindKey: String {
+        switch self {
+        case .linkCard: "link"
+        case .youTubePlayer: "youtube"
+        case .youTubeInline: "youtube-inline"
+        case .bareImageURL: "image"
+        case .localImage: "local-image"
+        case .localFileLink: "file"
+        case .rawSVG: "svg"
+        case .visualize: "visualize"
+        case .mapCard: "map"
+        }
+    }
+}
+
 /// Splits `source` into the Markdown chunks between rich-content blocks and the blocks
 /// themselves, in document order. The source is first split into block-level units
 /// (paragraphs, headings, lists, quotes, fences) by `RichContentDetector.splitIntoBlocks`,

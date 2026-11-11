@@ -196,9 +196,8 @@ struct RichSVGCard: View {
     @State private var image: UIImage?
     @State private var showSource = false
     @State private var showViewer = false
-    @State private var controlsVisible = true
-    @State private var showShare = false
     @State private var width: CGFloat = 0
+    @Namespace private var zoom
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
 
@@ -217,7 +216,7 @@ struct RichSVGCard: View {
     private var heightCap: CGFloat { viewportHeight * 0.6 }
 
     var body: some View {
-        RichCard {
+        PaseoCard(content:
             VStack(alignment: .leading, spacing: 10) {
                 header
                 if showSource {
@@ -225,24 +224,26 @@ struct RichSVGCard: View {
                 } else {
                     drawing
                 }
-            }
-        }
+            })
         .background { widthReader }
         .task(id: renderKey) { await render() }
         .fullScreenCover(isPresented: $showViewer) {
             if let image {
-                RichImageViewer(
-                    fileName: "drawing.svg",
-                    alt: "SVG drawing",
-                    uiImage: image,
-                    urlString: nil,
-                    controlsVisible: $controlsVisible,
-                    onShare: { showShare = true },
-                    onClose: { showViewer = false })
+                MediaViewerView(
+                    items: [
+                        MediaViewerItem(
+                            id: "svg:\(code.hashValue)",
+                            thumbnail: image,
+                            fullSource: nil,
+                            fileName: "drawing.svg",
+                            alt: "SVG drawing",
+                            filePath: nil)
+                    ],
+                    sourceID: "svg:\(code.hashValue)",
+                    namespace: zoom,
+                    onClose: { showViewer = false },
+                    selection: .constant(0))
             }
-        }
-        .sheet(isPresented: $showShare) {
-            if let image { ActivityView(items: [image]) }
         }
     }
 
@@ -275,8 +276,8 @@ struct RichSVGCard: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: heightCap)
                 .contentShape(.rect)
+                .matchedTransitionSource(id: "svg:\(code.hashValue)", in: zoom)
                 .onTapGesture {
-                    controlsVisible = true
                     showViewer = true
                 }
                 .accessibilityLabel("SVG drawing, tap to open")

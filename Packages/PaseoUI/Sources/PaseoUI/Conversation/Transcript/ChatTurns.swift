@@ -11,8 +11,6 @@ import UIKit
 struct ClaudeTurnView: View {
     let turn: Turn
     let onMarkdown: (MarkdownAction) -> Void
-    /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
-    var localImageLoader: ((String) async -> UIImage?)? = nil
     /// The seqEnd of the match flash this row should paint, if any.
     var highlightedSeq: Int?
     /// The seqEnd of the current match; work groups containing it expand.
@@ -180,7 +178,7 @@ struct ClaudeTurnView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(turnSummaryLabel)
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: message.text, onAction: onMarkdown, localImageLoader: localImageLoader)
+                ClaudeProse(markdown: message.text, onAction: onMarkdown)
             } else {
                 // A turn with no answer section (all work / no prose): keep it honest.
                 Text("This turn ended without a reply.")
@@ -219,7 +217,7 @@ struct ClaudeTurnView: View {
                     ForEach(bodySegments) { segment in
                         ClaudeSegmentView(
                             segment: segment, turnIsRunning: isRunning,
-                            onMarkdown: onMarkdown, localImageLoader: localImageLoader,
+                            onMarkdown: onMarkdown,
                             highlightedSeq: highlightedSeq, findTarget: findTarget,
                             onOpenFile: onOpenFile)
                     }
@@ -227,7 +225,7 @@ struct ClaudeTurnView: View {
                 .transition(.opacity.combined(with: .offset(y: -2)))
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: message.text, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: isRunning)
+                ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: isRunning)
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
             }
@@ -345,8 +343,6 @@ struct ClaudeSegmentView: View {
     let segment: Turn.Segment
     let turnIsRunning: Bool
     let onMarkdown: (MarkdownAction) -> Void
-    /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
-    var localImageLoader: ((String) async -> UIImage?)? = nil
     var highlightedSeq: Int?
     var findTarget: Int?
     var onOpenFile: ((String) -> Void)?
@@ -360,7 +356,7 @@ struct ClaudeSegmentView: View {
                 highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
-                ClaudeProse(markdown: message.text, onAction: onMarkdown, localImageLoader: localImageLoader, isStreaming: turnIsRunning)
+                ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: turnIsRunning)
                     .id("row:\(row.seqEnd)")
                     .background {
                         RoundedRectangle(cornerRadius: Radius.md)
@@ -504,7 +500,6 @@ struct TurnRow: View, Equatable {
         ClaudeTurnView(
             turn: turn,
             onMarkdown: actions.markdown,
-            localImageLoader: actions.loadImage,
             highlightedSeq: flashSeq,
             findTarget: findSeq,
             onOpenFile: actions.openFile,

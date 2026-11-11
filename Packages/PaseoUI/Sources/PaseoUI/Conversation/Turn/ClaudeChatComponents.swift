@@ -270,25 +270,22 @@ struct ClaudeUserBubble: View {
 struct ClaudeProse: View {
     var markdown: String
     var onAction: (MarkdownAction) -> Void
-    /// Reads a workspace image through the daemon (M5b); nil renders local image paths as chips.
-    var localImageLoader: ((String) async -> UIImage?)? = nil
     /// True while the producing turn is running — assistant prose arriving live fades in.
     var isStreaming: Bool = false
 
     var body: some View {
         ClaudeRevealProse(
             markdown: markdown, theme: Self.theme(), onAction: onAction,
-            isStreaming: isStreaming, localImageLoader: localImageLoader,
+            isStreaming: isStreaming,
             imageContent: proseImageContent)
     }
 
-    /// `![alt](url)` → `ProseMarkdownImage`; remote hosts ride the shared `RemoteImageLoader`,
-    /// workspace paths the caller's loader. Always non-nil so prose images render instead of
-    /// degrading to text.
+    /// `![alt](url)` → `ProseMarkdownImage`; remote hosts and workspace paths both ride the
+    /// shared `MediaPipeline`. Always non-nil so prose images render instead of degrading
+    /// to text.
     private var proseImageContent: (MarkdownImage) -> AnyView {
-        let loader = localImageLoader
-        return { image in
-            AnyView(ProseMarkdownImage(image: image, localImageLoader: loader))
+        { image in
+            AnyView(ProseMarkdownImage(image: image))
         }
     }
 

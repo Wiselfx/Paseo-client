@@ -40,6 +40,23 @@ enum Space {
 enum Metrics {
     /// The minimum touch target: every icon-only control reaches it.
     static let hitSize: CGFloat = 44
+    /// The card press depth (G1 §1.2): content settles to 98 % while held.
+    static let cardPressScale: CGFloat = 0.98
+    /// The row card's floor (G1 §1.1): 56 pt including the card's own padding.
+    static let rowCardMinHeight: CGFloat = 56
+    /// The animated-badge capsule insets (G3 §4.6: the GIF bugle on a photo).
+    static let badgeHPadding: CGFloat = 6
+    static let badgeVPadding: CGFloat = 2
+    /// The viewer chrome's per-button width (G3 §4.6): icon plus 44 pt hit area.
+    static let viewerChromeButtonWidth: CGFloat = 48
+    /// The drag-down dismiss threshold (G3 §4.6, R-3): travel past 120 pt, or a 800 pt/s
+    /// flick, dismisses; anything less springs home.
+    static let dismissDistance: CGFloat = 120
+    static let dismissVelocity: CGFloat = 800
+    /// The dismiss/spring-home animator caps (G3 §4.6): the `UISpringTimingParameters`
+    /// (dampingRatio 1, velocity-matched) drive the curve; these bound its length.
+    static let dismissDuration: Double = 0.25
+    static let springHomeDuration: Double = 0.32
 }
 
 /// The sidebar's rows.

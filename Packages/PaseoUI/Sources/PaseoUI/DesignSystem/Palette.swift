@@ -177,6 +177,10 @@ enum Palette {
 
     /// The glyph on an accent fill: white in both themes, for both accents.
     static let onAccent = Color(uiColor: UIColor { _ in .white })
+    /// The animated-badge wash (G3 §4.6): black at 60 % in both themes, so the GIF bugle
+    /// reads on light and dark photos alike; the text is always white.
+    static let mediaBadge = Color.black.opacity(0.6)
+    static let onMediaBadge = Color.white
 
     // MARK: DSH tokens
 

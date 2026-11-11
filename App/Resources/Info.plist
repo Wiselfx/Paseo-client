@@ -44,6 +44,8 @@
 	<string>Paseo connects to the agent daemon on your network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Paseo uses the microphone to dictate into the composer.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Paseo saves images you choose to your photo library.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Paseo uses on-device speech recognition to dictate into the composer.</string>
 	<key>UILaunchScreen</key>

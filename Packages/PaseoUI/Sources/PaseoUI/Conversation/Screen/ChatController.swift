@@ -2,6 +2,7 @@
 import Observation
 import PaseoStore
 import SwiftUI
+import Synchronization
 import UIKit
 import UniformTypeIdentifiers
 
@@ -160,6 +161,9 @@ struct TranscriptJump: Equatable {
 
     /// The transcript's verbs, put in the environment by `ChatScreen`.
     let actions: ChatActions
+    /// The cards' verbs (G1 §1.2): the same instance for the screen's life, so it is never
+    /// part of any row's `==`. Wired once in `configureActions`; cards read values from it.
+    let richActions = RichActions()
 
     // Sheet routing.
     var sheet: ClaudeChatSheet?
@@ -242,8 +246,9 @@ struct TranscriptJump: Equatable {
         cache.totalCostLimit = 48 * 1024 * 1024
         return cache
     }()
-    /// One prose image loader, so its identity is stable across body evaluations (finding #13).
-    private let imageLoaderBox = ImageLoaderBox()
+    /// The §12 network signal (G2). Owned here so its life matches the conversation's; cards
+    /// read only the derived condition on `RichActions` (R-1).
+    private var pathMonitor: NetworkPathMonitor?
 
     enum SlashCommandState {
         case idle, loading, ready
@@ -299,11 +304,144 @@ struct TranscriptJump: Equatable {
         actions.retract = { [weak self] row in
             self?.retractMessage(userRow: row)
         }
-        actions.loadImage = { [weak self] path in
-            await self?.loadImage(path: path)
+        richActions.daemonWorkspaceID = store.agent?.workspaceId
+        richActions.openFile = { [weak self] path in
+            self?.openFileViewer(at: path)
+        }
+        richActions.addImageToChat = { [weak self] fileName, data in
+            guard let self else { return }
+            self.attachmentStore.addImage(
+                data: data, fileName: fileName, to: self.store.agentId, store: self.store)
+        }
+        // The pipeline's only daemon entry: socket bytes in, decoded pixels out. The fetch
+        // reads the live agent at call time and runs off main inside the driver. Registered
+        // per workspace (last registration wins) and unregistered in `deinit`, so a stale
+        // controller never answers — or blocks — another conversation's images.
+        richActions.linkCondition = MediaLinkCondition(
+            isRelay: session.isRelayConnection, offline: false)
+        if let workspaceID = store.agent?.workspaceId {
+            daemonFetchRegistration.retain(workspaceID: workspaceID)
+            Task { @MainActor [weak self] in
+                let token = await MediaPipeline.shared.registerDaemonFetch(
+                    for: workspaceID,
+                    { [weak self] ref, maxBytes in
+                        // The resolver runs off the main actor; the store, the session and
+                        // the checkout are main-actor isolated, so it hops once into
+                        // `fetchDaemonMedia`, which suspends on the socket (never blocks).
+                        await self?.fetchDaemonMedia(ref: ref, maxBytes: maxBytes) ?? .unavailable
+                    })
+                self?.daemonFetchRegistration.retain(token: token)
+                self?.startMediaLinkUpdates()
+            }
+        } else {
+            startMediaLinkUpdates()
         }
         refreshAvailability()
         startAvailabilityTracking()
+        startConnectionRefresh()
+    }
+
+    /// One daemon read for the media pipeline (G2). A resolver is registered *for* its
+    /// workspace and the checkout is per workspace, not per agent, so the only check is
+    /// that the workspace descriptor still exists.
+    private func fetchDaemonMedia(ref: DaemonFileRef, maxBytes: Int) async -> DaemonMediaResult {
+        guard
+            let descriptor = self.session.workspaceDirectory.workspace(
+                id: ref.workspaceID)
+        else { return .unavailable }
+        let checkout = self.session.checkout(for: descriptor)
+        do {
+            let file = try await checkout.files.fetch(
+                ref.path, maxBytes: maxBytes)
+            guard file.encoding == .base64, let content = file.content,
+                let data = Data(
+                    base64Encoded: content,
+                    options: [.ignoreUnknownCharacters])
+            else { return .unavailable }
+            return .bytes(
+                DaemonFileBytes(data: data, revision: file.revision))
+        } catch let error as PaseoStoreError {
+            // The daemon stats before it transfers: over `maxBytes` it
+            // answers "File is too large to display" with no file. That
+            // text is the frozen reference's, so the match is
+            // upstream-string-dependent — the one place that may know it.
+            if case .missingFile(_, let message) = error,
+                message?.localizedCaseInsensitiveContains("too large")
+                    == true
+            {
+                return .tooLarge
+            }
+            return .unavailable
+        } catch {
+            return .unavailable
+        }
+    }
+
+    /// The workspace id plus the registration token, for `deinit`. A small box so
+    /// the values survive without isolation: written once in `configureActions`, read
+    /// when the controller goes away. Unregistration only removes the entry holding its
+    /// own token, so a dead controller never unregisters its successor.
+    private let daemonFetchRegistration = DaemonFetchRegistration()
+
+    deinit {
+        // A dead controller must not resolve another screen's images. The actor hop
+        // cannot run synchronously here, so the unregister rides an unstructured task
+        // carrying only values (never self).
+        let registration = daemonFetchRegistration.snapshot()
+        if let workspaceID = registration.workspaceID, let token = registration.token {
+            Task {
+                await MediaPipeline.shared.unregisterDaemonFetch(
+                    for: workspaceID, token: token)
+            }
+        }
+    }
+
+    // MARK: Media link condition (G2 §12)
+
+    /// The host session can switch direct ↔ relay on reconnect: refresh the derived
+    /// condition on every connection change. One write per change, never per frame;
+    /// path changes arrive through the monitor and refresh the same way.
+    private func startConnectionRefresh() {
+        withObservationTracking {
+            _ = session.connection
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshLinkCondition(
+                    interface: self.pathMonitor?.interface ?? .wifi,
+                    constrained: self.pathMonitor?.constrained ?? false,
+                    offline: self.pathMonitor?.offline ?? false)
+                self.startConnectionRefresh()
+            }
+        }
+    }
+
+    private func startMediaLinkUpdates() {
+        let monitor = NetworkPathMonitor()
+        monitor.onChange = { [weak self] interface, constrained, _, offline in
+            guard let self else { return }
+            self.refreshLinkCondition(
+                interface: interface, constrained: constrained, offline: offline)
+        }
+        pathMonitor = monitor
+        refreshLinkCondition(
+            interface: monitor.interface, constrained: monitor.constrained,
+            offline: monitor.offline)
+    }
+
+    private func refreshLinkCondition(
+        interface: NetworkPathMonitor.Interface, constrained: Bool, offline: Bool
+    ) {
+        let linkInterface: MediaLinkCondition.Interface
+        switch interface {
+        case .wifi: linkInterface = .wifi
+        case .cellular: linkInterface = .cellular
+        case .wired: linkInterface = .wired
+        case .other: linkInterface = .other
+        }
+        richActions.linkCondition = MediaLinkCondition(
+            interface: linkInterface, constrained: constrained,
+            isRelay: session.isRelayConnection, offline: offline)
     }
 
     // MARK: Turn actions
@@ -996,13 +1134,6 @@ struct TranscriptJump: Equatable {
         return width
     }
 
-    /// The prose image loader. One closure for the controller's life, so `ClaudeProse` keeps its
-    /// input identity (finding #13).
-    var localImageLoader: ((String) async -> UIImage?)? {
-        imageLoaderBox.loader { [weak self] path in
-            await self?.loadImage(path: path)
-        }
-    }
 
 
     // MARK: Outline and end-of-transcript requests
@@ -1106,15 +1237,22 @@ struct TranscriptJump: Equatable {
     }
 }
 
-/// Holds one image loader closure for the prose view. Main-actor only; the box carries the same
-/// escape hatch as the other view-side caches.
-final class ImageLoaderBox: @unchecked Sendable {
-    private var loader: ((String) async -> UIImage?)?
+/// The pipeline registration ticket: workspace id plus the token that owns the entry.
+/// Written once, read in `deinit`. `Mutex`-guarded (the codebase's lock) so the box is
+/// `Sendable` without isolation acrobatics.
+final class DaemonFetchRegistration: @unchecked Sendable {
+    private let state = Mutex<(workspaceID: String?, token: UUID?)>((nil, nil))
 
-    func loader(_ build: @escaping (String) async -> UIImage?) -> (String) async -> UIImage? {
-        if let loader { return loader }
-        self.loader = build
-        return build
+    func retain(workspaceID: String? = nil, token: UUID? = nil) {
+        state.withLock {
+            if let workspaceID { $0.workspaceID = workspaceID }
+            if let token { $0.token = token }
+        }
+    }
+
+    func snapshot() -> (workspaceID: String?, token: UUID?) {
+        state.withLock { $0 }
     }
 }
+
 #endif
