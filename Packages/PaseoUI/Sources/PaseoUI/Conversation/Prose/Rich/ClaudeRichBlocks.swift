@@ -491,101 +491,318 @@ struct InlineYouTubePlayer: UIViewRepresentable {
 
 // MARK: - Images (§1.3–§1.5)
 
-/// A remote image URL, loaded lazily when it scrolls into view. Tap opens the
-/// full-screen viewer (ClaudeMediaViewer, reused).
+/// A remote image URL (H5 §2). One shared loader, one card.
 ///
-/// E3 §3.5: full width, the image's own aspect ratio, capped at 60 % of the screen height; the
-/// placeholder reserves a 4:3 box and the one change to the real ratio animates.
+/// E3 §3.5 stays: full width, the image's own aspect ratio, capped at 60 % of the container
+/// height. What changed is everything behind that:
+///
+/// - the loader keeps the decoded image and its shape, so scrolling back draws it on the first
+///   frame — no placeholder, no re-download, no layout shift;
+/// - the box is reserved from the known aspect ratio before the bytes land, and the single
+///   change from the 4:3 guess to the real ratio is animated with `Motion.disclosure`;
+/// - a row that scrolls away mid-load does not end in a broken card: the fetch finishes into
+///   the cache and the card is instant when it returns;
+/// - failure says what happened and offers Retry and Open link, instead of a bare URL string.
 struct RichRemoteImage: View {
     let urlString: String
     let alt: String
 
+    @State private var image: UIImage?
+    /// Known before the pixels: from the cache, or from the image once it lands.
+    @State private var aspectRatio: CGFloat?
+    @State private var failure: RemoteImageFailure?
+    @State private var width: CGFloat = 0
+    @State private var retryToken = 0
+    /// The URL the state above belongs to. SwiftUI can hand this view a different block; when it
+    /// does, the old picture must not be drawn for the new link.
+    @State private var stateURL: String?
     @State private var showViewer = false
     @State private var controlsVisible = true
     @State private var showShare = false
-    @State private var loaded = false
     /// The container's height, for the 60 % cap, known before the first frame (`RichViewport`).
     @Environment(\.richViewportHeight) private var viewportHeight
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
+
+    init(urlString: String, alt: String) {
+        self.urlString = urlString
+        self.alt = alt
+        // First frame: whatever the session already knows about this URL. A cache read is
+        // O(1), so the row has no "empty" frame to flash when it scrolls back.
+        let identity = RemoteImageLoader.cacheIdentity(for: urlString)
+        let cached = RemoteImageLoader.cached(for: identity)
+        _image = State(initialValue: cached?.image)
+        _aspectRatio = State(initialValue: cached?.aspectRatio ?? RemoteImageLoader.cachedAspect(for: identity))
+    }
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
 
+    /// The ratio the box reserves: the image's own when we know it, else the old 4:3 guess.
+    private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
+
     private var fileName: String {
-        URL(string: urlString)?.lastPathComponent.nilIfEmpty ?? "image"
+        RemoteImageLoader.target(for: urlString)?.lastPathComponent.nilIfEmpty ?? "image"
+    }
+
+    private var host: String? {
+        RemoteImageLoader.target(for: urlString)?.host
+    }
+
+    /// Only an http(s) link is worth sending to Safari; a `data:` or `blob:` one is not.
+    private var webURL: URL? {
+        guard let url = RemoteImageLoader.target(for: urlString) else { return nil }
+        let scheme = url.scheme?.lowercased()
+        return scheme == "http" || scheme == "https" ? url : nil
+    }
+
+    /// One load per (URL, pixel bucket, retry). Nothing here runs per scroll frame.
+    private var loadKey: String {
+        "\(urlString)|\(RemoteImageSizing.pixelWidth(points: width, scale: displayScale))|\(retryToken)"
+    }
+
+    /// What the card's box is doing, as one value: a placeholder at a reserved ratio, the image
+    /// at its own, or the failure row. Motion runs only when this changes.
+    private struct Layout: Equatable {
+        let aspectRatio: CGFloat
+        let stage: Int
+    }
+
+    private var layout: Layout {
+        Layout(aspectRatio: reservedAspect, stage: image != nil ? 2 : (failure != nil ? 1 : 0))
     }
 
     var body: some View {
-        AsyncImage(url: URL(string: urlString)) { phase in
-            switch phase {
-            case .empty:
-                placeholder
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: heightCap)
-                    .background(Palette.codeSurface)
-                    .clipShape(.rect(cornerRadius: Radius.md))
-                    .contentShape(.rect)
-                    .onTapGesture {
-                        controlsVisible = true
-                        showViewer = true
-                    }
-                    .onAppear { loaded = true }
-            case .failure:
-                brokenCard
-            @unknown default:
-                placeholder
+        stage
+            .frame(maxWidth: .infinity)
+            .background { widthReader }
+            .animation(
+                Motion.disclosure.resolved(reduceMotion: reduceMotion),
+                value: layout)
+            .task(id: loadKey) { await load() }
+            .fullScreenCover(isPresented: $showViewer) {
+                RichImageViewer(
+                    fileName: fileName,
+                    alt: alt.isEmpty ? fileName : alt,
+                    uiImage: image,
+                    aspectRatio: aspectRatio,
+                    urlString: urlString,
+                    controlsVisible: $controlsVisible,
+                    onShare: { showShare = true },
+                    onClose: { showViewer = false })
             }
-        }
-        .frame(maxWidth: .infinity)
-        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: loaded)
-        .fullScreenCover(isPresented: $showViewer) {
-            RichImageViewer(
-                fileName: fileName,
-                alt: alt.isEmpty ? fileName : alt,
-                uiImage: nil,
-                urlString: urlString,
-                controlsVisible: $controlsVisible,
-                onShare: {
-                    showShare = true
-                },
-                onClose: { showViewer = false })
-        }
-        .sheet(isPresented: $showShare) {
-            ActivityView(items: [URL(string: urlString) as Any])
+            .sheet(isPresented: $showShare) {
+                shareSheet
+            }
+    }
+
+    @ViewBuilder private var stage: some View {
+        if let image {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .background(Palette.codeSurface)
+                .clipShape(.rect(cornerRadius: Radius.md))
+                .contentShape(.rect)
+                .onTapGesture {
+                    controlsVisible = true
+                    showViewer = true
+                }
+                .accessibilityLabel(alt.isEmpty ? "Image" : alt)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Opens the image full screen")
+                // A context menu is the only way to the link without a second gesture language.
+                .contextMenu {
+                    if webURL != nil { copyLinkButton }
+                    shareButton
+                    if webURL != nil { openLinkButton }
+                }
+        } else if let failure {
+            failureCard(failure)
+        } else {
+            placeholder
         }
     }
 
     private var placeholder: some View {
         Rectangle()
             .fill(Palette.codeSurface)
-            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .aspectRatio(reservedAspect, contentMode: .fit)
             .frame(maxWidth: .infinity, maxHeight: heightCap)
             .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
                 ProgressView().controlSize(.small).tint(Palette.secondaryInk)
             }
+            .accessibilityLabel(alt.isEmpty ? "Loading image" : "Loading image: \(alt)")
     }
 
-    private var brokenCard: some View {
-        HStack(spacing: 10) {
+    /// What went wrong, in the user's words, with the two things worth doing about it.
+    private func failureCard(_ failure: RemoteImageFailure) -> some View {
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: "photo")
                 .font(.glyph(.large, weight: .light))
                 .foregroundStyle(Palette.secondaryInk)
-            Text(urlString)
-                .font(.paseo(.codeCaption))
-                .foregroundStyle(Palette.secondaryInk)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Couldn't load image")
+                    .font(.paseo(.caption, weight: .medium))
+                    .foregroundStyle(Palette.ink)
+                Text(detail(for: failure))
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            Button("Retry") { retry() }
+                .buttonStyle(.plain)
+                .font(.paseo(.caption, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Try loading the image again")
+            if webURL != nil {
+                Button {
+                    if let webURL { openURL(webURL) }
+                } label: {
+                    Image(systemName: "safari")
+                        .font(.glyph(.small))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open link")
+                .accessibilityHint("Opens \(host ?? "the link") in Safari")
+            }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
                 .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
         }
+        .accessibilityElement(children: .contain)
+    }
+
+    /// "host · what happened", the one line the card has room for.
+    private func detail(for failure: RemoteImageFailure) -> String {
+        guard let host else { return failure.message }
+        return "\(host) · \(failure.message)"
+    }
+
+    @ViewBuilder private var shareSheet: some View {
+        if let image {
+            // The image itself, so the share sheet offers Save Image and Copy.
+            ActivityView(items: [image])
+        } else if let webURL {
+            // Not loaded yet: the link is all we honestly have.
+            ActivityView(items: [webURL])
+        }
+    }
+
+    private var copyLinkButton: some View {
+        Button {
+            UIPasteboard.general.string = urlString
+            Haptics.light()
+        } label: {
+            Label("Copy link", systemImage: "link")
+        }
+    }
+
+    private var openLinkButton: some View {
+        Button {
+            if let webURL { openURL(webURL) }
+        } label: {
+            Label("Open link", systemImage: "safari")
+        }
+    }
+
+    private var shareButton: some View {
+        Button {
+            showShare = true
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    /// The card's inner width, for decoding at the size it will be drawn at. Published only
+    /// when it actually changes — never per scroll frame.
+    private var widthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { width = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
+        }
+    }
+
+    private func retry() {
+        Haptics.light()
+        failure = nil
+        retryToken += 1
+    }
+
+    @MainActor
+    private func load() async {
+        if stateURL != urlString { adoptState(for: urlString) }
+        // No width yet: a fetch at a guessed size would only be thrown away.
+        guard width > 1 else { return }
+        let pixelWidth = RemoteImageSizing.pixelWidth(points: width, scale: displayScale)
+        let ignoresFailureCache = retryToken > 0
+        let outcome = await RemoteImageLoader.shared.load(
+            urlString: urlString, pixelWidth: pixelWidth,
+            ignoreFailureCache: ignoresFailureCache)
+        // The row may have gone; the loader already cached the result for its return.
+        guard !Task.isCancelled else { return }
+        switch outcome {
+        case .image(let payload):
+            image = payload.image
+            aspectRatio = payload.aspectRatio
+            failure = nil
+        case .svg(let source, let knownAspect):
+            await renderSVG(source, knownAspect: knownAspect)
+        case .failure(let reason):
+            failure = reason
+        }
+    }
+
+    /// Point the card at a URL it has not drawn yet, starting from whatever is cached.
+    private func adoptState(for urlString: String) {
+        stateURL = urlString
+        let identity = RemoteImageLoader.cacheIdentity(for: urlString)
+        let cached = RemoteImageLoader.cached(for: identity)
+        image = cached?.image
+        aspectRatio = cached?.aspectRatio ?? RemoteImageLoader.cachedAspect(for: identity)
+        failure = nil
+    }
+
+    /// SVG has no `UIImage` decoder; the shared offscreen `WKWebView` draws it instead, at the
+    /// card's width, and its `viewBox` reserves the box while that happens.
+    @MainActor
+    private func renderSVG(_ source: String, knownAspect: CGFloat?) async {
+        let identity = RemoteImageLoader.cacheIdentity(for: urlString)
+        if let knownAspect {
+            aspectRatio = knownAspect
+            RemoteImageLoader.rememberAspect(knownAspect, for: identity)
+        }
+        let dark = colorScheme == .dark
+        let html = RichHTMLDocument.rawSVG(source: source, dark: dark)
+        guard
+            let rendered = await RichSnapshotQueue.shared.snapshot(
+                html: html, width: width, scale: displayScale)
+        else {
+            failure = .decoding
+            return
+        }
+        guard !Task.isCancelled else { return }
+        image = rendered
+        let size = rendered.size
+        let ratio = size.height > 0 ? size.width / size.height : 1
+        aspectRatio = ratio
+        RemoteImageLoader.rememberAspect(ratio, for: identity)
     }
 }
 
@@ -671,15 +888,32 @@ struct RichImageViewer: View {
     let fileName: String
     let alt: String
     let uiImage: UIImage?
+    var aspectRatio: CGFloat? = nil
     let urlString: String?
     @Binding var controlsVisible: Bool
     let onShare: () -> Void
     let onClose: () -> Void
 
+    /// Only used when the card could not hand the pixels over (the image was evicted between
+    /// the tap and the cover appearing). Same loader, so a hit is instant.
+    @State private var remoteImage: UIImage?
+    @State private var remoteFailed = false
+
+    private var shownImage: UIImage? { uiImage ?? remoteImage }
+
+    /// The canvas frame: the real shape as soon as anything knows it, instead of a square.
+    private var shownAspectRatio: Double {
+        if let shownImage, shownImage.size.height > 0 {
+            return Double(shownImage.size.width / shownImage.size.height)
+        }
+        if let aspectRatio, aspectRatio.isFinite, aspectRatio > 0 { return Double(aspectRatio) }
+        return 1
+    }
+
     var body: some View {
         let media = ClaudeMedia(
             id: "rich-\(fileName)", fileName: fileName, accessibilityDescription: alt,
-            aspectRatio: uiImage.map { Double($0.size.width / max($0.size.height, 1)) } ?? 1)
+            aspectRatio: shownAspectRatio)
         ClaudeMediaViewer(
             item: media,
             controlsVisible: controlsVisible,
@@ -694,23 +928,40 @@ struct RichImageViewer: View {
                 default: break
                 }
             })
+        .task { await loadRemote() }
     }
 
     @ViewBuilder
     private var viewerContent: some View {
-        if let uiImage {
-            Image(uiImage: uiImage).resizable().aspectRatio(contentMode: .fit)
-        } else if let urlString {
-            AsyncImage(url: URL(string: urlString)) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: .fit)
-                default:
-                    ProgressView().tint(.white)
-                }
+        if let shownImage {
+            Image(uiImage: shownImage).resizable().aspectRatio(contentMode: .fit)
+        } else if remoteFailed {
+            VStack(spacing: 8) {
+                Text("Couldn't load image")
+                    .font(.paseo(.headline))
+                    .foregroundStyle(.white)
+                Text(urlString.flatMap { RemoteImageLoader.target(for: $0)?.host } ?? urlString ?? "")
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
             }
         } else {
-            Color.clear
+            ProgressView().tint(.white)
+        }
+    }
+
+    /// The card usually hands the pixels over; this is the fallback for when it could not.
+    @MainActor
+    private func loadRemote() async {
+        guard shownImage == nil, urlString != nil, remoteImage == nil else { return }
+        let outcome = await RemoteImageLoader.shared.load(urlString: urlString ?? "", pixelWidth: 2048)
+        guard !Task.isCancelled else { return }
+        switch outcome {
+        case .image(let payload): remoteImage = payload.image
+        case .svg:
+            // The viewer zooms pixels; an SVG here has already been drawn by the card.
+            remoteFailed = true
+        case .failure: remoteFailed = true
         }
     }
 }
