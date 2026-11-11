@@ -21,7 +21,15 @@ per-frame cost unless the ticket spells them out. Needs a strict reviewer.
 |---|---|---|
 | UX research (doc 14) | B+ | A good, opinionated plan with real sources. Overran the length cap. Blocked twice by a safety classifier and couldn't recover, so the lead wrote §8–15; the user rescued its draft. |
 
-## Pi · (next round)
+## Pi · `opencode-go/deepseek-v4.1-flash` (H-round)
 
 | Ticket | Grade | Root causes | Lead catches | Rounds | Notes |
 |---|---|---|---|---|---|
+| H1 voice | A | Excellent: `int16ChannelData` pointer array sent as audio; level path; tap lifecycle | 3 (probe could prompt any agent → claude guard; display link at 120 Hz; 2 init compile errors fixed by lead) | 2 + lead fix | Live wire proof end to end. Its refusal test pointed the probe at the lead's Claude agent (read-only lookup, nothing sent) — still a rule breach in spirit. |
+| H2 transcript + header | A | Correct, three runway causes + exact back-to-end sequence | 0 | 1 | Best design work this round: pure state machine in Core, constant-height bar, honest "Unsure" list. |
+| H3 composer | B+ | Correct | 2 (O(n) char-estimate scan per keystroke; `layoutManager` access forces TextKit 1 — lead fixed) | 2 + lead fix | Good extraction and off-main file reads. Weak instinct for keystroke cost and TextKit. |
+| H4 splash/usage/appearance | B+ | Correct (window trait); splash cause plausible, unproven | 3 (sidebar R-1, forced refresh on drawer open, project file missing → gate fail) | 3 | Solid; launch-colour catch was proactive. |
+| H5 images | A− | Excellent corpus with live curl | 3 (failure-height jump, longest-side downsample blur, Double/CGFloat gate error) | 3 | Best diagnosis; fixed its found items well. |
+| HB bug hunt (Muse Spark 1.3, pi, high) | B | 6 small real fixes, all verified | 0 | 1 | Real but modest; good systemic notes (error channel per store, poll without change check, optimistic UI). |
+
+**Harness average:** A−. Pi workers were stronger than OMP on diagnosis and design; still miss Apple-specific traps (TextKit, project files, numeric bridging) that only the gate or the lead catch.

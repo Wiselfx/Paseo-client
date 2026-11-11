@@ -5,30 +5,31 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 ## Next session starts here (2026-11-11)
 
-**H-round IN FLIGHT (2026-11-11 ~18:45 UTC): device feedback 3 on IPA 5584843 (10 bugs).**
-Tickets `docs/tickets/_H-common.md`, `H1`–`H5`. Workers: Pi + `opencode-go/deepseek-v4.1-flash`,
-one worktree each under `/home/paseo/.paseo/worktrees/0264elgj/<branch>`:
-- H1 voice end to end (bug 1) — `h1-voice`, agent `83e3f858-09a0-4489-88cd-c2924d79b774` (thinking max)
-- H2 send runway, back-to-end with keyboard, auto-hiding header (bugs 2, 9, 10) — `h2-transcript`, `b48fd6aa-7524-4862-a108-88d4ac81ba0b` (max)
-- H3 context meter always on, expand button in the corner (bugs 3, 6) — `h3-composer`, `25bbd6b1-c405-4451-925c-2da4f96bb7ac`
-- H4 splash without the button, sidebar usage, appearance in sheets (bugs 4, 5, 8) — `h4-shell`, `5c57d3e9-5f2f-4b23-822f-a7941c25528e`
-- H5 remote images: shared loader, SVG, corpus (bug 7) — `h5-images`, `8ff4267e-f925-419c-a89d-09201f2afd9f`
-H1 and H3 both edit `ChatComposer.swift` (disjoint regions): merge H3 first, then H1. Upstream
-reference = `/home/paseo/dev/paseo-upstream-ref` (read-only, v0.16.0-beta.1); the lab is off-limits.
-Review every diff in full before gate/merge; add scorecard rows (Pi section).
-Bug hunter (LongCat, read-only): DISCARDED by the user as low quality (1 P2 + 1 P3 over the whole codebase); agent archived, report deleted.
-
-The previous lead session ended after many compactions; this section is its handoff. Read it,
-then the E-round section below, then memory (`MEMORY.md` index loads automatically).
-
-**Where we are**
-- E-round (E1/E2/E3 + E1b/E2b/E3b) is merged on `foundation`. Mac gate green, PaseoCore 1114 tests
-  green. Code head `5584843`; every later commit is docs only.
-- **The user is device-testing `/Users/Shared/Paseo-ipas/Paseo-20261111-0955-5584843.ipa`.** Wait
-  for their report. Don't build a new IPA unless app code changed.
-- If the IPA checks out, the next round is the rich UI plan: `docs/research/14-rich-ui-plan.md` §5
-  (tickets G1–G23, order at the end of §5). `-full.md` has the uncapped version plus the rescued
-  draft (Appendix A).
+**H-round MERGED (2026-11-11): device feedback 3, all 10 bugs + bug-hunt fixes.** Code head
+`ffd4db6`, Mac gate green, PaseoCore 1171 green. **IPA for the user:
+`/Users/Shared/Paseo-ipas/Paseo-20261111-1403-ffd4db6.ipa`.** Tickets `docs/tickets/_H-common.md`,
+`H1`–`H5`. Workers (Pi + DeepSeek v4.1 flash, idle, context intact): H1 `83e3f858`, H2 `b48fd6aa`,
+H3 `25bbd6b1`, H4 `5c57d3e9`, H5 `8ff4267e`; bug hunter Muse Spark 1.3 (pi) `c1aee993`
+(worktree `h-bughunt`). Upstream reference = `/home/paseo/dev/paseo-upstream-ref` (read-only,
+v0.16.0-beta.1); the lab is off-limits.
+- H1 voice: root cause `int16ChannelData` copied the channel-pointer array (heap addresses) to the
+  daemon; UIKit display-link meter; start/stop lifecycle; category leak. Live wire proof via
+  `paseo-probe voice` (refuses claude agents). Playback only verifiable on device.
+- H2: runway only shrinks (PaseoCore `TranscriptChromeState`), back-to-end on the stable viewport,
+  focus no longer yanks from history, auto-hiding sans header with a constant bar height.
+- H3: context meter always in its slot (own Equatable view); expand control in the card corner,
+  tallness from the field's own layout (lead fix: never touch `layoutManager`, keeps TextKit 2);
+  picked files read off main.
+- H4: splash = canvas + hero; appearance via window `overrideUserInterfaceStyle`; usage footer
+  extracted, state-driven loads; launch-screen colour.
+- H5: shared `RemoteImageLoader` (cache, UA, downsample, SVG, honest failures, boxed failure
+  height); inline images tappable; YouTube stills.
+- HB: permission-card timeout, schedules poll, file overwrite loop, provider save errors, Go key,
+  schedule load error.
+**Pending with the user:** device test of this IPA; approval of new copy (H5 failure strings, H4
+Settings footer clause + 2 VoiceOver hints, HB file-version message). Open from reports:
+`ChatController.outlineItems` rebuilt per read (move to store); optimistic permission line vs an
+amnesiac store (decision); 6 pre-existing style-lint hits in Prose.
 
 **Blocked on the user before writing G tickets** (doc 14 §5, "One decision message"):
 1. IPA signing: free or paid team (gates G14–G21: widgets, extensions, Live Activity).
