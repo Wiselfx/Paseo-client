@@ -321,7 +321,16 @@ struct WorkspaceFileViewer: View {
                 savedFlash = false
             }
         case .conflict(let modifiedAt):
-            conflictModifiedAt = modifiedAt ?? ""
+            if let modifiedAt, !modifiedAt.isEmpty {
+                conflictModifiedAt = modifiedAt
+            } else {
+                // The daemon reported a conflict without a version. Overwrite needs a real
+                // expectation (the wire forbids blind writes), so re-read to learn the
+                // current version before asking. If that still yields nothing, Overwrite
+                // explains instead of looping back into another conflict.
+                await files.read(relativePath)
+                conflictModifiedAt = files.file?.modifiedAt ?? ""
+            }
             showConflict = true
         case .failed(let message):
             saveFailure = message
@@ -342,8 +351,9 @@ struct WorkspaceFileViewer: View {
 
     /// The user chose Overwrite: save with the current on-disk version as the expectation.
     private func overwriteForConflict() async {
-        guard let text = editText, !conflictModifiedAt.isEmpty else {
-            await saveEdit()
+        guard let text = editText else { return }
+        guard !conflictModifiedAt.isEmpty else {
+            saveFailure = "The host didn't report the file's current version. Reload to see the latest, then re-apply your edits."
             return
         }
         isSaving = true
