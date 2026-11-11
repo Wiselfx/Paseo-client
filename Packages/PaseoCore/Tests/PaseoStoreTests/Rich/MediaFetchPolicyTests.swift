@@ -24,16 +24,16 @@ struct MediaFetchPolicyTests {
             name: "wifi thumbnail auto", kind: .thumbnail, knownBytes: nil,
             condition: MediaLinkCondition(interface: .wifi), expected: .automatic),
         Case(
-            name: "wifi small image auto", kind: .image, knownBytes: 200 * kb,
+            name: "wifi small image auto", kind: .daemonImage, knownBytes: 200 * kb,
             condition: MediaLinkCondition(interface: .wifi), expected: .automatic),
         Case(
-            name: "wifi unknown image auto (cap enforces)", kind: .image, knownBytes: nil,
+            name: "wifi unknown image auto (cap enforces)", kind: .remoteImage, knownBytes: nil,
             condition: MediaLinkCondition(interface: .wifi), expected: .automatic),
         Case(
-            name: "wifi 5 MB image auto", kind: .image, knownBytes: 5 * mb,
+            name: "wifi 5 MB image auto", kind: .daemonImage, knownBytes: 5 * mb,
             condition: MediaLinkCondition(interface: .wifi), expected: .automatic),
         Case(
-            name: "wifi large image tap", kind: .image, knownBytes: 6 * mb,
+            name: "wifi large image tap", kind: .daemonImage, knownBytes: 6 * mb,
             condition: MediaLinkCondition(interface: .wired), expected: .tapToDownload),
         Case(
             name: "wifi video tap", kind: .video, knownBytes: nil,
@@ -49,10 +49,10 @@ struct MediaFetchPolicyTests {
             condition: MediaLinkCondition(interface: .wifi), expected: .automatic),
         // Cellular, not constrained: same as Wi-Fi, with the size shown on the tap box.
         Case(
-            name: "cellular small image auto", kind: .image, knownBytes: 4 * mb,
+            name: "cellular small image auto", kind: .daemonImage, knownBytes: 4 * mb,
             condition: MediaLinkCondition(interface: .cellular), expected: .automatic),
         Case(
-            name: "cellular large image tap", kind: .image, knownBytes: 20 * mb,
+            name: "cellular large image tap", kind: .daemonImage, knownBytes: 20 * mb,
             condition: MediaLinkCondition(interface: .cellular), expected: .tapToDownload),
         Case(
             name: "cellular video tap", kind: .video, knownBytes: nil,
@@ -66,7 +66,7 @@ struct MediaFetchPolicyTests {
             condition: MediaLinkCondition(interface: .wifi, constrained: true),
             expected: .automatic),
         Case(
-            name: "constrained small image tap", kind: .image, knownBytes: 100 * kb,
+            name: "constrained small image tap", kind: .daemonImage, knownBytes: 100 * kb,
             condition: MediaLinkCondition(interface: .wifi, constrained: true),
             expected: .tapToDownload),
         Case(
@@ -84,17 +84,30 @@ struct MediaFetchPolicyTests {
             condition: MediaLinkCondition(interface: .wifi, isRelay: true),
             expected: .automatic),
         Case(
-            name: "relay 1 MB image auto", kind: .image, knownBytes: 1 * mb,
+            name: "relay 1 MB image auto", kind: .daemonImage, knownBytes: 1 * mb,
             condition: MediaLinkCondition(interface: .wifi, isRelay: true),
             expected: .automatic),
         Case(
-            name: "relay 2 MB image tap", kind: .image, knownBytes: 2 * mb,
+            name: "relay 2 MB image tap", kind: .daemonImage, knownBytes: 2 * mb,
             condition: MediaLinkCondition(interface: .wifi, isRelay: true),
             expected: .tapToDownload),
         Case(
-            name: "relay unknown image tap", kind: .image, knownBytes: nil,
+            name: "relay unknown image tap", kind: .daemonImage, knownBytes: nil,
             condition: MediaLinkCondition(interface: .cellular, isRelay: true),
             expected: .tapToDownload),
+        // A remote https image never touches the relay: the host link is irrelevant.
+        Case(
+            name: "relay remote unknown image auto", kind: .remoteImage, knownBytes: nil,
+            condition: MediaLinkCondition(interface: .wifi, isRelay: true),
+            expected: .automatic),
+        Case(
+            name: "relay remote large image tap", kind: .remoteImage, knownBytes: 20 * mb,
+            condition: MediaLinkCondition(interface: .cellular, isRelay: true),
+            expected: .tapToDownload),
+        Case(
+            name: "relay daemon small image auto", kind: .daemonImage, knownBytes: 500 * kb,
+            condition: MediaLinkCondition(interface: .wifi, isRelay: true),
+            expected: .automatic),
         Case(
             name: "relay video tap", kind: .video, knownBytes: 500 * kb,
             condition: MediaLinkCondition(interface: .wifi, isRelay: true),
@@ -109,7 +122,7 @@ struct MediaFetchPolicyTests {
             expected: .automatic),
         // Offline: everything stays cached.
         Case(
-            name: "offline image cacheOnly", kind: .image, knownBytes: nil,
+            name: "offline image cacheOnly", kind: .daemonImage, knownBytes: nil,
             condition: MediaLinkCondition(interface: .wifi, offline: true),
             expected: .cacheOnly),
         Case(
@@ -136,11 +149,13 @@ struct MediaFetchPolicyTests {
         let relay = MediaLinkCondition(interface: .wifi, isRelay: true)
         let constrained = MediaLinkCondition(interface: .wifi, constrained: true)
         let offline = MediaLinkCondition(interface: .wifi, offline: true)
-        #expect(mediaDownloadCap(kind: .image, condition: wifi) == 5 * Self.mb)
-        #expect(mediaDownloadCap(kind: .image, condition: cellular) == 5 * Self.mb)
-        #expect(mediaDownloadCap(kind: .image, condition: relay) == 1 * Self.mb)
-        #expect(mediaDownloadCap(kind: .image, condition: constrained) == nil)
-        #expect(mediaDownloadCap(kind: .image, condition: offline) == nil)
+        #expect(mediaDownloadCap(kind: .daemonImage, condition: wifi) == 5 * Self.mb)
+        #expect(mediaDownloadCap(kind: .daemonImage, condition: cellular) == 5 * Self.mb)
+        #expect(mediaDownloadCap(kind: .daemonImage, condition: relay) == 1 * Self.mb)
+        #expect(mediaDownloadCap(kind: .remoteImage, condition: wifi) == 5 * Self.mb)
+        #expect(mediaDownloadCap(kind: .remoteImage, condition: relay) == 5 * Self.mb)
+        #expect(mediaDownloadCap(kind: .daemonImage, condition: constrained) == nil)
+        #expect(mediaDownloadCap(kind: .daemonImage, condition: offline) == nil)
         #expect(mediaDownloadCap(kind: .thumbnail, condition: wifi) == nil)
         #expect(mediaDownloadCap(kind: .video, condition: wifi) == nil)
         #expect(mediaDownloadCap(kind: .youTube, condition: wifi) == nil)

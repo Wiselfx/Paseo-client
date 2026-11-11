@@ -24,8 +24,11 @@ public enum MediaFetchPolicy: Equatable, Sendable {
 public enum MediaKind: Equatable, Sendable {
     /// Favicons, OG leftovers, anything ≤ 200 KB by construction. Always cheap.
     case thumbnail
-    /// A transcript image: remote URL or daemon file.
-    case image
+    /// A remote image: fetched by the phone straight from the internet, never through
+    /// the relay. Follows the Wi-Fi/cellular/Low Data rules whatever the host link is.
+    case remoteImage
+    /// A daemon image: read through the host session, so the relay rules apply to it.
+    case daemonImage
     /// A video file (G11): the full download always waits; the poster is decided in G11.
     case video
     /// An audio file (G11): same as video.
@@ -87,7 +90,7 @@ public func mediaFetchPolicy(
     switch kind {
     case .thumbnail:
         return .automatic
-    case .image:
+    case .daemonImage:
         if condition.isRelay {
             // Relay traffic is metered twice over: ≤ 1 MB rides along, the rest waits.
             // Unknown counts as over: it cannot prove it fits.
@@ -96,6 +99,11 @@ public func mediaFetchPolicy(
         }
         // Wi-Fi, cellular, wired: ≤ 5 MB auto; unknown proceeds (the cap enforces it
         // mid-stream and flips the card to tap-to-download with the learned size).
+        if let knownBytes, knownBytes > 5 * 1024 * 1024 { return .tapToDownload }
+        return .automatic
+    case .remoteImage:
+        // Never touches the relay: the host link is irrelevant. Otherwise the same
+        // 5 MB rule as daemon images on a direct link.
         if let knownBytes, knownBytes > 5 * 1024 * 1024 { return .tapToDownload }
         return .automatic
     case .video, .audio:
@@ -114,7 +122,10 @@ public func mediaDownloadCap(kind: MediaKind, condition: MediaLinkCondition) -> 
     switch kind {
     case .thumbnail, .youTube, .linkPreview:
         return nil
-    case .image:
+    case .remoteImage:
+        if condition.offline || condition.constrained { return nil }
+        return 5 * 1024 * 1024
+    case .daemonImage:
         if condition.offline || condition.constrained { return nil }
         return condition.isRelay ? 1 * 1024 * 1024 : 5 * 1024 * 1024
     case .video, .audio:

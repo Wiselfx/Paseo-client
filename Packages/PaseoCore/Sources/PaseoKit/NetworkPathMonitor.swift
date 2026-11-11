@@ -36,9 +36,9 @@ public final class NetworkPathMonitor {
     /// Called on every path change (main actor), after the published values update.
     public var onChange: (@Sendable (Interface, Bool, Bool, Bool) -> Void)?
 
-    /// Touched from `deinit` (nonisolated) as well as the main actor. `NWPathMonitor` is
-    /// used from its own queue throughout and `cancel()` is safe from anywhere.
-    nonisolated(unsafe) private let monitor = NWPathMonitor()
+    /// `NWPathMonitor` is Sendable, so plain `nonisolated` covers both the main-actor
+    /// use and the `deinit` cancel.
+    nonisolated private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "paseo.network-path", qos: .utility)
 
     public init() {

@@ -307,37 +307,91 @@ struct TranscriptJump: Equatable {
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
         }
-        richActions.addToChat = { [weak self] fileName, data in
+        richActions.addImageToChat = { [weak self] fileName, data in
             guard let self else { return }
             self.attachmentStore.addImage(
                 data: data, fileName: fileName, to: self.store.agentId, store: self.store)
         }
-        // The pipeline's only daemon entry: socket bytes (64 MB cap) in, decoded pixels out.
-        // The hook reads the live agent at call time and runs off main inside the driver.
+        // The pipeline's only daemon entry: socket bytes in, decoded pixels out. The fetch
+        // reads the live agent at call time and runs off main inside the driver. Registered
+        // per workspace (last registration wins) and unregistered in `deinit`, so a stale
+        // controller never answers — or blocks — another conversation's images.
         richActions.linkCondition = MediaLinkCondition(
             isRelay: session.isRelayConnection, offline: false)
-        Task { @MainActor [weak self] in
-            await MediaPipeline.shared.setDaemonFetch({ [weak self] ref in
-                guard let self, let agent = self.store.agent,
-                    agent.workspaceID == ref.workspaceID,
-                    let descriptor = self.session.workspaceDirectory.workspace(id: ref.workspaceID)
-                else { return nil }
-                let checkout = self.session.checkout(for: descriptor)
-                guard
-                    let file = try? await checkout.files.fetch(
-                        ref.path, maxBytes: Int(MediaPipeline.maxDaemonBytes)),
-                    file.encoding == .base64, let content = file.content,
-                    let data = Data(base64Encoded: content, options: [.ignoreUnknownCharacters])
-                else { return nil }
-                return DaemonFileBytes(data: data, revision: file.revision)
-            })
-            self?.startMediaLinkUpdates()
+        if let workspaceID = store.agent?.workspaceId {
+            registeredWorkspaceID = workspaceID
+            Task { @MainActor [weak self] in
+                await MediaPipeline.shared.registerDaemonFetch(for: workspaceID, { [weak self] ref, maxBytes in
+                    guard let self, let agent = self.store.agent,
+                        agent.workspaceId == ref.workspaceID,
+                        let descriptor = self.session.workspaceDirectory.workspace(id: ref.workspaceID)
+                    else { return .unavailable }
+                    let checkout = self.session.checkout(for: descriptor)
+                    do {
+                        guard
+                            let file = try await checkout.files.fetch(ref.path, maxBytes: maxBytes),
+                            file.encoding == .base64, let content = file.content,
+                            let data = Data(base64Encoded: content, options: [.ignoreUnknownCharacters])
+                        else { return .unavailable }
+                        return .bytes(DaemonFileBytes(data: data, revision: file.revision))
+                    } catch let error as PaseoStoreError {
+                        // The daemon stats before it transfers: over `maxBytes` it answers
+                        // "File is too large to display" with no file. That text is the
+                        // frozen reference's, so the match is upstream-string-dependent —
+                        // the one place that may know it.
+                        if case .missingFile(_, let message) = error,
+                            message?.localizedCaseInsensitiveContains("too large") == true
+                        {
+                            return .tooLarge
+                        }
+                        return .unavailable
+                    } catch {
+                        return .unavailable
+                    }
+                })
+                self?.startMediaLinkUpdates()
+            }
+        } else {
+            startMediaLinkUpdates()
         }
         refreshAvailability()
         startAvailabilityTracking()
+        startConnectionRefresh()
+    }
+
+    /// The workspace this controller registered, for `deinit`. Written once in
+    /// `configureActions`; read without isolation when the controller goes away.
+    nonisolated(unsafe) private var registeredWorkspaceID: String?
+
+    deinit {
+        // A dead controller must not resolve another screen's images. The actor hop
+        // cannot run synchronously here, so the unregister rides an unstructured task
+        // carrying only the id (never self). Until it lands, the entry's own weak-self
+        // agent check fails closed with `.unavailable` — never a memoized failure.
+        if let workspaceID = registeredWorkspaceID {
+            Task { await MediaPipeline.shared.unregisterDaemonFetch(for: workspaceID) }
+        }
     }
 
     // MARK: Media link condition (G2 §12)
+
+    /// The host session can switch direct ↔ relay on reconnect: refresh the derived
+    /// condition on every connection change. One write per change, never per frame;
+    /// path changes arrive through the monitor and refresh the same way.
+    private func startConnectionRefresh() {
+        withObservationTracking {
+            _ = session.connection
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshLinkCondition(
+                    interface: self.pathMonitor?.interface ?? .wifi,
+                    constrained: self.pathMonitor?.constrained ?? false,
+                    offline: self.pathMonitor?.offline ?? false)
+                self.startConnectionRefresh()
+            }
+        }
+    }
 
     private func startMediaLinkUpdates() {
         let monitor = NetworkPathMonitor()

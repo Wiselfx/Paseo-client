@@ -617,7 +617,7 @@ struct RichRemoteImage: View {
     /// card flips to tap-to-download with the learned size.
     private var policy: MediaFetchPolicy {
         mediaFetchPolicy(
-            kind: .image, knownBytes: nil,
+            kind: .remoteImage, knownBytes: nil,
             condition: richActions?.linkCondition ?? .assumed)
     }
 
@@ -625,7 +625,7 @@ struct RichRemoteImage: View {
     private var capBytes: Int64? {
         guard !tappedLoad else { return nil }
         return mediaDownloadCap(
-            kind: .image, condition: richActions?.linkCondition ?? .assumed)
+            kind: .remoteImage, condition: richActions?.linkCondition ?? .assumed)
     }
 
     /// The reserved box with a download action instead of bytes (§12): the policy said wait
@@ -712,10 +712,10 @@ struct RichRemoteImage: View {
                     if showsAnimationBadge {
                         Text(MediaPipeline.target(for: urlString)?.pathExtension.uppercased() ?? "GIF")
                             .font(.paseo(.codeCaption))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.black.opacity(0.6), in: .capsule)
+                            .foregroundStyle(Palette.onMediaBadge)
+                            .padding(.horizontal, Metrics.badgeHPadding)
+                            .padding(.vertical, Metrics.badgeVPadding)
+                            .background(Palette.mediaBadge, in: .capsule)
                             .padding(Space.sm)
                             .accessibilityHidden(true)
                     }
@@ -1045,9 +1045,10 @@ struct RichLocalImage: View {
     @Environment(\.richActions) private var richActions
     @State private var image: UIImage?
     @State private var aspectRatio: CGFloat?
-    @State private var failed = false
-    @State private var loaded = false
+    @State private var failure: MediaFailure?
+    @State private var keepsFailureBox = false
     @State private var tappedLoad = false
+    @State private var retryToken = 0
     @State private var downloadProgress: Double?
     @State private var width: CGFloat = 0
     @State private var showViewer = false
@@ -1090,8 +1091,14 @@ struct RichLocalImage: View {
 
     private var policy: MediaFetchPolicy {
         mediaFetchPolicy(
-            kind: .image, knownBytes: nil,
+            kind: .daemonImage, knownBytes: nil,
             condition: richActions?.linkCondition ?? .assumed)
+    }
+
+    private var capBytes: Int64? {
+        guard !tappedLoad else { return nil }
+        return mediaDownloadCap(
+            kind: .daemonImage, condition: richActions?.linkCondition ?? .assumed)
     }
 
     /// What the card's box is doing, as one value, so motion runs only when this changes.
@@ -1104,17 +1111,20 @@ struct RichLocalImage: View {
         var stage = 0
         if image != nil {
             stage = 2
-        } else if failed {
-            stage = 3
         } else if showsTapBox {
             stage = 4
+        } else if failure != nil {
+            stage = keepsFailureBox ? 3 : 1
         }
         return Layout(aspectRatio: reservedAspect, stage: stage)
     }
 
     private var showsTapBox: Bool {
-        guard image == nil, !failed, !loaded else { return false }
-        if tappedLoad { return false }
+        guard image == nil, !tappedLoad else { return false }
+        if let failure {
+            if case .tooLarge = failure { return true }
+            return false
+        }
         return policy == .tapToDownload
     }
 
@@ -1135,10 +1145,14 @@ struct RichLocalImage: View {
                     .accessibilityLabel(alt.isEmpty ? fileName : alt)
                     .accessibilityAddTraits(.isButton)
                     .accessibilityHint("Opens the image full screen")
-            } else if failed || loaded {
-                RichPathChip(path: path, glyph: "photo")
             } else if showsTapBox {
                 tapBox
+            } else if let failure {
+                if keepsFailureBox {
+                    boxedFailure(failure)
+                } else {
+                    RichPathChip(path: path, glyph: "photo")
+                }
             } else {
                 Rectangle()
                     .fill(Palette.codeSurface)
@@ -1172,10 +1186,10 @@ struct RichLocalImage: View {
         }
     }
 
-    /// One load per (path, pixel bucket, tap). Nothing here runs per scroll frame.
+    /// One load per (path, pixel bucket, tap, retry). Nothing here runs per scroll frame.
     private var loadKey: String {
         let bucket = MediaSizing.pixelWidth(points: width, scale: displayScale)
-        return "\(path)|\(bucket)|\(tappedLoad)"
+        return "\(path)|\(bucket)|\(tappedLoad)|\(retryToken)"
     }
 
     /// The card's inner width, for decoding at the size it will be drawn at. Published only
@@ -1220,18 +1234,65 @@ struct RichLocalImage: View {
         .accessibilityHint("Downloads the image")
     }
 
+    /// The kept box with the failure line, like the remote card: the reader watched the
+    /// placeholder, so the box stays and only the inside is honest. Retry refetches.
+    private func boxedFailure(_ failure: MediaFailure) -> some View {
+        Rectangle()
+            .fill(Palette.codeSurface)
+            .aspectRatio(reservedAspect, contentMode: .fit)
+            .frame(maxWidth: .infinity, maxHeight: heightCap)
+            .clipShape(.rect(cornerRadius: Radius.md))
+            .overlay {
+                HStack(alignment: .center, spacing: Space.sm) {
+                    Image(systemName: "photo")
+                        .font(.glyph(.large, weight: .light))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: Space.xs) {
+                        Text("Couldn't load image")
+                            .font(.paseo(.caption, weight: .medium))
+                            .foregroundStyle(Palette.ink)
+                        Text(path)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer(minLength: Space.sm)
+                    Button("Retry") { retry() }
+                        .buttonStyle(.plain)
+                        .font(.paseo(.caption, weight: .medium))
+                        .foregroundStyle(Palette.ink)
+                        .frame(minWidth: Metrics.hitSize, minHeight: Metrics.hitSize)
+                        .accessibilityLabel("Try loading the image again")
+                }
+                .padding(.horizontal, Space.md)
+                .accessibilityElement(children: .contain)
+            }
+    }
+
     private func startTappedLoad() {
         Haptics.light()
         tappedLoad = true
-        failed = false
+        failure = nil
+        keepsFailureBox = true
         downloadProgress = nil
+    }
+
+    private func retry() {
+        Haptics.light()
+        // An explicit retry is the reader's fetch: the gate and the ceiling stop applying.
+        tappedLoad = true
+        failure = nil
+        keepsFailureBox = true
+        downloadProgress = nil
+        retryToken += 1
     }
 
     @MainActor
     private func load() async {
         guard let ref else {
-            // No workspace (a preview): the chip is the honest rendering.
-            loaded = true
+            // No workspace (a preview): a chip was already drawn, nothing to load.
             return
         }
         guard width > 1 else { return }
@@ -1239,19 +1300,18 @@ struct RichLocalImage: View {
             switch policy {
             case .tapToDownload: return
             case .cacheOnly:
-                if image == nil { failed = true }
-                loaded = true
+                if image == nil, failure == nil { failure = .offline }
                 return
             case .automatic: break
             }
         }
+        // The placeholder is on screen from here: a failure keeps its box.
+        keepsFailureBox = true
         let pixelWidth = MediaSizing.pixelWidth(points: width, scale: displayScale)
-        let cap = tappedLoad
-            ? nil
-            : mediaDownloadCap(
-                kind: .image, condition: richActions?.linkCondition ?? .assumed)
         for await event in await MediaPipeline.shared.events(
-            source: .daemon(ref), pixelWidth: pixelWidth, capBytes: cap)
+            source: .daemon(ref), pixelWidth: pixelWidth, capBytes: capBytes,
+            ignoreFailureCache: retryToken > 0,
+            allowStaleDisk: policy == .cacheOnly)
         {
             guard !Task.isCancelled else { return }
             switch event {
@@ -1267,12 +1327,11 @@ struct RichLocalImage: View {
                 case .image(let payload):
                     image = payload.image
                     aspectRatio = payload.aspectRatio
-                    loaded = true
+                    failure = nil
                 case .svg(let source, let knownAspect):
                     await renderDaemonSVG(source, knownAspect: knownAspect, ref: ref)
-                case .failure:
-                    failed = true
-                    loaded = true
+                case .failure(let reason):
+                    failure = reason
                 }
             }
         }
@@ -1290,15 +1349,14 @@ struct RichLocalImage: View {
             let rendered = await RichSnapshotQueue.shared.snapshot(
                 html: html, width: width, scale: displayScale)
         else {
-            failed = true
-            loaded = true
+            failure = .decoding
             return
         }
         guard !Task.isCancelled else { return }
         image = rendered
         let size = rendered.size
         if size.height > 0 { aspectRatio = size.width / size.height }
-        loaded = true
+        failure = nil
     }
 }
 

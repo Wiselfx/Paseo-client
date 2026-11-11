@@ -2,6 +2,7 @@
 import CryptoKit
 import Foundation
 import ImageIO
+import Synchronization
 import UIKit
 
 // MARK: - Results
@@ -125,6 +126,22 @@ struct DaemonFileBytes: Sendable {
     var revision: String?
 }
 
+/// What a daemon read resolves to. `tooLarge` is the daemon refusing `maxBytes` (it stats
+/// the file first and never transfers it); `unavailable` is everything else.
+///
+/// The refusal arrives as `PaseoStoreError.missingFile` carrying the daemon's own text
+/// ("File is too large to display" on the frozen reference); matching it is upstream-
+/// string-dependent and documented at the single mapping site, in the controller.
+enum DaemonMediaResult: Sendable {
+    case bytes(DaemonFileBytes)
+    case tooLarge
+    case unavailable
+}
+
+/// One workspace's daemon read: bytes (with revision) for a ref, bounded by `maxBytes`.
+/// Set by the owning controller; last registration per workspace wins.
+typealias DaemonMediaFetch = @Sendable (DaemonFileRef, Int) async -> DaemonMediaResult
+
 // MARK: - Sizing
 
 enum MediaSizing {
@@ -151,9 +168,9 @@ enum MediaSizing {
 /// What G2 adds:
 /// - an incremental size probe (`CGImageSourceCreateIncremental` fed by a streaming data
 ///   task) that publishes the true size **before** the download finishes;
-/// - the daemon-file source (`FileExplorerRequest(mode: .file, acceptBinary: true, maxBytes:
-///   64 MB)` behind `daemonFetch`), cached on disk in `Caches/daemon-media/<sha256>`, LRU
-///   at 500 MB;
+/// - the daemon-file source (`FileExplorerRequest(mode: .file, acceptBinary: true)` behind
+///   per-workspace resolvers, the request capped before transfer), cached on disk in
+///   `Caches/daemon-media/<sha256>`, LRU at 500 MB;
 /// - the streaming event shape (`size` → `progress` → `final`), shared per key so adjacent
 ///   cards never download the same bytes twice;
 /// - the in-flight ceiling (`capBytes`, from `mediaDownloadCap`): past it the stream aborts
@@ -185,6 +202,73 @@ actor MediaPipeline {
     /// back as the compact failure row instead of flashing a placeholder first.
     nonisolated(unsafe) private static let failures = NSCache<NSString, MediaFailureMemo>()
 
+    /// One step of the streaming download: the response first (always), then body chunks.
+    /// `URLSession` guarantees the order per task, so the driver validates the status
+    /// before a single body byte is kept.
+    enum StreamStep: Sendable {
+        case response(HTTPURLResponse)
+        case chunk(Data)
+    }
+
+    /// Routes one data task's response and chunks into a stream. `Mutex`-guarded (the
+    /// codebase's lock): delegate callbacks arrive on the session queue, never the actor.
+    ///
+    /// Why a delegate at all: `URLSession.AsyncBytes` iterates `UInt8`, so a per-byte loop
+    /// would run the probe, the ceiling and an actor hop per byte — O(n²) over the header
+    /// and millions of hops per image. The delegate yields real network chunks, and the
+    /// driver's per-chunk work is O(1): append, one ceiling compare, one probe until the
+    /// size is known, and an actor hop only when the 10 % bucket flips.
+    private final class MediaStreamDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable
+    {
+        static let shared = MediaStreamDelegate()
+        private let streams = Mutex<[Int: AsyncThrowingStream<StreamStep, Error>.Continuation]>(
+            [:])
+
+        func openStream(for task: URLSessionDataTask) -> AsyncThrowingStream<StreamStep, Error> {
+            AsyncThrowingStream { continuation in
+                self.streams.withLock { $0[task.taskIdentifier] = continuation }
+                // An early exit (the ceiling) releases the stream; termination stops the
+                // socket. A finished task cancels a finished task: a no-op.
+                continuation.onTermination = { _ in task.cancel() }
+                task.resume()
+            }
+        }
+
+        func urlSession(
+            _ session: URLSession, dataTask: URLSessionDataTask,
+            didReceive response: URLResponse,
+            completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+        ) {
+            guard let http = response as? HTTPURLResponse else {
+                completionHandler(.cancel)
+                return
+            }
+            streams.withLock { $0[dataTask.taskIdentifier] }?.yield(.response(http))
+            completionHandler(.allow)
+        }
+
+        func urlSession(
+            _ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data
+        ) {
+            streams.withLock { $0[dataTask.taskIdentifier] }?.yield(.chunk(data))
+        }
+
+        func urlSession(
+            _ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?
+        ) {
+            let continuation = streams.withLock { $0.removeValue(forKey: task.taskIdentifier) }
+            if let error {
+                if (error as? URLError)?.code == .cancelled {
+                    continuation?.finish()
+                } else {
+                    continuation?.finish(throwing: error)
+                }
+            } else {
+                continuation?.finish()
+            }
+        }
+    }
+
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
         let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
@@ -196,7 +280,11 @@ actor MediaPipeline {
         configuration.timeoutIntervalForResource = 60
         configuration.httpMaximumConnectionsPerHost = 4
         configuration.httpAdditionalHeaders = ["User-Agent": userAgent()]
-        return URLSession(configuration: configuration)
+        // A delegate data task populates `URLCache` like any other, for a default config
+        // with a cacheable response — relied on for scroll-back and relaunches.
+        return URLSession(
+            configuration: configuration, delegate: MediaStreamDelegate.shared,
+            delegateQueue: nil)
     }()
 
     /// One flight per (source, pixel bucket): every card showing the same bytes shares it.
@@ -208,11 +296,14 @@ actor MediaPipeline {
     }
 
     private var flights: [String: Flight] = [:]
-    /// The daemon read, set once by the conversation controller. Nil outside a conversation
-    /// (previews never render daemon files — the card gates on `RichActions` first, so the
-    /// driver treats a missing hook as unreachable and fails closed).
-    /// Nil means unreachable (a preview): the driver fails closed with `.other`.
-    private var daemonFetch: (@Sendable (DaemonFileRef) async -> DaemonFileBytes?)?
+    /// Daemon reads, one per workspace. Every controller registers its workspace on
+    /// configure and unregisters on dealloc; last registration per workspace wins. A
+    /// missing resolver is "not reachable yet", never a memoized failure.
+    private var resolvers: [String: DaemonMediaFetch] = [:]
+    /// Live keys fetched this launch. The disk entry for a path is served only when
+    /// validated here or requested as the offline fallback: a first view in a new session
+    /// always refetches, so an agent-edited file never serves last launch's bytes.
+    private var validatedThisSession: Set<String> = []
 
     init() {
         Self.decoded.countLimit = Self.imageCacheCountLimit
@@ -228,9 +319,18 @@ actor MediaPipeline {
         }
     }
 
-    /// Sets the daemon read. Called once per conversation controller, with a stable closure.
-    func setDaemonFetch(_ fetch: (@Sendable (DaemonFileRef) async -> DaemonFileBytes?)?) {
-        daemonFetch = fetch
+    /// Registers the workspace's daemon read. Called by each conversation controller with
+    /// a stable closure; unregistered when it goes away.
+    func registerDaemonFetch(for workspaceID: String, _ fetch: DaemonMediaFetch) {
+        resolvers[workspaceID] = fetch
+    }
+
+    func unregisterDaemonFetch(for workspaceID: String) {
+        resolvers.removeValue(forKey: workspaceID)
+    }
+
+    private func resolver(for workspaceID: String) -> DaemonMediaFetch? {
+        resolvers[workspaceID]
     }
 
     /// The app's identity on the wire. Wikimedia answers **403** to a request with no
@@ -277,9 +377,12 @@ actor MediaPipeline {
     /// - `ignoreFailureCache`: a Retry/extraordinary reload bypasses the failure memo.
     func events(
         source: MediaSource, pixelWidth: Int, capBytes: Int64? = nil,
-        ignoreFailureCache: Bool = false, maxSide: Double = 2048, cacheResult: Bool = true
+        ignoreFailureCache: Bool = false, maxSide: Double = 2048, cacheResult: Bool = true,
+        allowStaleDisk: Bool = false
     ) async -> AsyncStream<MediaEvent> {
-        let key = streamKey(source: source, pixelWidth: pixelWidth)
+        // The cap belongs to whoever started the flight: a tap (cap nil) keys differently
+        // from a gated load, so an explicit fetch always downloads fully.
+        let key = streamKey(source: source, pixelWidth: pixelWidth, capBytes: capBytes)
         let identity = Self.identityKey(source: source)
 
         // The same picture at another bucket (a rotation, a sheet): right for the first
@@ -302,11 +405,16 @@ actor MediaPipeline {
         // An SVG-ish or data: source resolves without the network; the daemon path resolves
         // through its own fetch. Only http(s) streams below.
         if case .remote(let url) = source, url.scheme?.lowercased() == "data" {
-            return await Self.single(decodeDataURL(url, pixelWidth: pixelWidth))
+            return await Self.single(Self.decodeDataURL(url, pixelWidth: pixelWidth))
         }
         if case .remote(let url) = source, url.scheme?.lowercased() == "blob" {
             // A blob handle only means something inside the browser that made it.
             return Self.single(.final(.failure(.unsupportedScheme("blob"))))
+        }
+        if case .daemon(let ref) = source, resolvers[ref.workspaceID] == nil {
+            // No resolver: unreachable, not broken — fail closed with no flight, no memo,
+            // no report. The card retries when a controller registers.
+            return Self.single(.final(.failure(.other)))
         }
 
         let (stream, continuation) = AsyncStream<MediaEvent>.makeStream()
@@ -314,18 +422,19 @@ actor MediaPipeline {
         continuation.onTermination = { _ in
             Task { await MediaPipeline.shared.detach(id: id, key: key) }
         }
-        // Sharing subsumes the old in-flight cap: one flight per (content, bucket) however
-        // many cards watch it, and the entry is dropped when the driver reports. Distinct
-        // content still downloads concurrently (per-host connection limits apply).
+        // Sharing subsumes the old in-flight cap: one flight per (content, bucket, cap)
+        // however many cards watch it, and the entry is dropped when the driver reports.
+        // Distinct content still downloads concurrently (per-host connection limits apply).
         var flight = flights[key] ?? Flight()
         let isNew = flights[key] == nil
         flight.watchers[id] = continuation
         flights[key] = flight
         if isNew {
-            Task.detached { [source, pixelWidth, key, capBytes, maxSide, cacheResult] in
+            Task.detached {
+                [source, pixelWidth, key, capBytes, maxSide, cacheResult, allowStaleDisk] in
                 await MediaPipeline.drive(
                     source: source, pixelWidth: pixelWidth, key: key, capBytes: capBytes,
-                    maxSide: maxSide, cacheResult: cacheResult)
+                    maxSide: maxSide, cacheResult: cacheResult, allowStaleDisk: allowStaleDisk)
             }
         }
         if let aspect = MediaMetadataCache.aspectRatio(for: identity) {
@@ -395,14 +504,27 @@ actor MediaPipeline {
         }
     }
 
+    /// Fans a driverless outcome out to a flight's watchers with no cache writes: the
+    /// no-resolver path (missing, not broken) must never memoize.
+    private func reportUnresolved(key: String) {
+        let flight = flights.removeValue(forKey: key)
+        guard let flight else { return }
+        for continuation in flight.watchers.values {
+            continuation.yield(.final(.failure(.other)))
+            continuation.finish()
+        }
+    }
+
     private func reportFinal(key: String, identity: String, outcome: MediaOutcome, cache: Bool = true) {
         let flight = flights.removeValue(forKey: key)
         switch outcome {
         case .image(let payload):
+            // Both entries carry the real cost: an evicted bucket entry must not leave
+            // the bitmap surviving uncounted, or `totalCostLimit` stops bounding memory.
             if cache {
-                Self.decoded.setObject(
-                    payload, forKey: key as NSString, cost: Self.cost(of: payload))
-                Self.decoded.setObject(payload, forKey: identity as NSString, cost: 0)
+                let cost = Self.cost(of: payload)
+                Self.decoded.setObject(payload, forKey: key as NSString, cost: cost)
+                Self.decoded.setObject(payload, forKey: identity as NSString, cost: cost)
             }
             MediaMetadataCache.remember(payload.aspectRatio, for: identity)
             Self.forgetFailure(key)
@@ -438,7 +560,7 @@ actor MediaPipeline {
     /// display size off main. Reports back through the actor; the actor fans out to watchers.
     private static func drive(
         source: MediaSource, pixelWidth: Int, key: String, capBytes: Int64?,
-        maxSide: Double, cacheResult: Bool
+        maxSide: Double, cacheResult: Bool, allowStaleDisk: Bool
     ) async {
         switch source {
         case .remote(let url):
@@ -448,7 +570,7 @@ actor MediaPipeline {
         case .daemon(let ref):
             await driveDaemon(
                 ref: ref, pixelWidth: pixelWidth, key: key, capBytes: capBytes,
-                maxSide: maxSide, cacheResult: cacheResult)
+                maxSide: maxSide, cacheResult: cacheResult, allowStaleDisk: allowStaleDisk)
         case .data(let bytes, _):
             await finishImageData(
                 data: bytes, pixelWidth: pixelWidth, key: key,
@@ -465,87 +587,99 @@ actor MediaPipeline {
         var request = URLRequest(
             url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 20)
         request.setValue("image/avif,image/webp,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
-        let bytes: URLSession.AsyncBytes
-        let response: URLResponse
-        do {
-            // Not a child task of the caller: scrolling away does not cancel the bytes we
-            // are about to want on the way back.
-            (bytes, response) = try await session.bytes(for: request)
-        } catch let error as URLError {
-            await shared.reportFinal(key: key, identity: identity, outcome: .final(mapURLError(error)))
-            return
-        } catch {
-            await shared.reportFinal(key: key, identity: identity, outcome: .final(.failure(.other)))
-            return
-        }
-        let http = response as? HTTPURLResponse
-        if let http, !(200..<300).contains(http.statusCode) {
-            await shared.reportFinal(
-                key: key, identity: identity,
-                outcome: .final(.failure(.http(http.statusCode))))
-            return
-        }
-        let contentType = http?.value(forHTTPHeaderField: "Content-Type")?.lowercased()
-        let expected = response.expectedContentLength
-        // The ceiling for this stream: the policy cap, inside the hard wire cap. An SVG-ish
-        // response only ever needs its 2 MB.
-        var ceiling = min(capBytes ?? Int64(maxBytes), Int64(maxBytes))
-        if contentType?.contains("svg") == true || isSVGHint(url) {
-            ceiling = min(ceiling, Int64(maxSVGBytes))
-        }
-
+        // Not a child task of the caller: scrolling away does not cancel the bytes we
+        // are about to want on the way back.
+        let task = session.dataTask(with: request)
+        let stream = MediaStreamDelegate.shared.openStream(for: task)
         var data = Data()
         // `nil` when WebKit cannot start the source; the size events just never fire and the
         // final decode decides, exactly like a response with no size hints.
         let probe: CGImageSource? = CGImageSourceCreateIncremental(nil)
         let svgHinted = isSVGHint(url)
         var sizeSent = false
+        var ceiling = Int64(maxBytes)
+        var contentType: String?
+        var expected: Int64 = -1
+        var lastBucket = -1
         do {
-            for try await chunk in bytes {
-                data.append(chunk)
-                if Int64(data.count) > ceiling {
-                    await shared.reportFinal(
-                        key: key, identity: identity,
-                        outcome: .final(.failure(.tooLarge(bytes: Int64(data.count)))))
-                    return
-                }
-                if !sizeSent, let probe {
-                    CGImageSourceUpdateData(probe, data as CFData, false)
-                    if let size = incrementalSize(probe), size.height > 0 {
-                        sizeSent = true
-                        let aspect = size.width / size.height
-                        await shared.reportSize(key: key, aspect: aspect, identity: identity)
-                    } else if svgHinted, looksLikeSVG(data) {
-                        // Markup, not pixels: no incremental size to learn; the viewBox
-                        // parse at the end reserves the box.
-                        sizeSent = true
+            for try await step in stream {
+                switch step {
+                case .response(let http):
+                    guard (200..<300).contains(http.statusCode) else {
+                        task.cancel()
+                        await shared.reportFinal(
+                            key: key, identity: identity,
+                            outcome: .failure(.http(http.statusCode)))
+                        return
                     }
-                }
-                if expected > 0 {
-                    await shared.reportProgress(
-                        key: key, fraction: Double(data.count) / Double(expected))
+                    contentType = http.value(forHTTPHeaderField: "Content-Type")?.lowercased()
+                    // The ceiling for this stream: the policy cap, inside the hard wire
+                    // cap. An SVG-ish response only ever needs its 2 MB.
+                    ceiling = min(capBytes ?? Int64(maxBytes), Int64(maxBytes))
+                    if contentType?.contains("svg") == true || svgHinted {
+                        ceiling = min(ceiling, Int64(maxSVGBytes))
+                    }
+                    expected = http.expectedContentLength
+                    if expected > 0 {
+                        data.reserveCapacity(Int(min(expected, ceiling)))
+                    }
+                case .chunk(let piece):
+                    data.append(contentsOf: piece)
+                    if Int64(data.count) > ceiling {
+                        // Explicit: stop the socket now, don't wait for termination.
+                        task.cancel()
+                        await shared.reportFinal(
+                            key: key, identity: identity,
+                            outcome: .failure(.tooLarge(bytes: Int64(data.count))))
+                        return
+                    }
+                    if !sizeSent, let probe {
+                        CGImageSourceUpdateData(probe, data as CFData, false)
+                        if let size = incrementalSize(probe), size.height > 0 {
+                            sizeSent = true
+                            await shared.reportSize(
+                                key: key, aspect: size.width / size.height,
+                                identity: identity)
+                        } else if svgHinted, looksLikeSVG(data) {
+                            // Markup, not pixels: no incremental size to learn; the viewBox
+                            // parse at the end reserves the box.
+                            sizeSent = true
+                        }
+                    }
+                    if expected > 0 {
+                        // The bucket lives in the driver: the actor only hears a flip.
+                        let bucket = Int(
+                            (Double(data.count) / Double(expected) * 10).rounded(.down))
+                        if bucket != lastBucket {
+                            lastBucket = bucket
+                            await shared.reportProgress(
+                                key: key,
+                                fraction: min(max(Double(data.count) / Double(expected), 0), 1))
+                        }
+                    }
                 }
             }
         } catch {
-            await shared.reportFinal(key: key, identity: identity, outcome: .final(.failure(.other)))
+            await shared.reportFinal(
+                key: key, identity: identity, outcome: mapStreamError(error))
             return
         }
         if data.count > maxBytes {
             await shared.reportFinal(
                 key: key, identity: identity,
-                outcome: .final(.failure(.tooLarge(bytes: Int64(data.count)))))
+                outcome: .failure(.tooLarge(bytes: Int64(data.count))))
             return
         }
         if contentType?.contains("svg") == true || (isSVGHint(url) && looksLikeSVG(data)) {
             guard data.count <= maxSVGBytes else {
                 await shared.reportFinal(
                     key: key, identity: identity,
-                    outcome: .final(.failure(.tooLarge(bytes: Int64(data.count)))))
+                    outcome: .failure(.tooLarge(bytes: Int64(data.count))))
                 return
             }
             guard let source = text(data), looksLikeSVG(data) else {
                 await shared.reportFinal(
-                    key: key, identity: identity, outcome: .final(.failure(.decoding)))
+                    key: key, identity: identity, outcome: .failure(.decoding))
                 return
             }
             let outcome = MediaOutcome.svg(
@@ -553,7 +687,7 @@ actor MediaPipeline {
             if let aspect = RichSVGIntrinsic.aspectRatio(of: source) {
                 await shared.reportSize(key: key, aspect: aspect, identity: identity)
             }
-            await shared.reportFinal(key: key, identity: identity, outcome: .final(outcome))
+            await shared.reportFinal(key: key, identity: identity, outcome: outcome)
             return
         }
         guard
@@ -562,12 +696,12 @@ actor MediaPipeline {
             let isImageType = contentType?.hasPrefix("image/") == true
             await shared.reportFinal(
                 key: key, identity: identity,
-                outcome: .final(.failure(isImageType ? .decoding : .notAnImage(contentType: contentType))))
+                outcome: .failure(isImageType ? .decoding : .notAnImage(contentType: contentType)))
             return
         }
         await shared.reportSize(key: key, aspect: payload.aspectRatio, identity: identity)
         await shared.reportFinal(
-            key: key, identity: identity, outcome: .final(.image(payload)),
+            key: key, identity: identity, outcome: .image(payload),
             cache: cacheResult)
     }
 
@@ -575,8 +709,8 @@ actor MediaPipeline {
     /// parse per chunk until the size is known — cheap, and it stops the moment it answers.
     private static func incrementalSize(_ probe: CGImageSource) -> CGSize? {
         guard let props = CGImageSourceCopyPropertiesAtIndex(probe, 0, nil) as? [CFString: Any],
-            let width = (props[kCGImageSourcePixelWidth] as? NSNumber)?.doubleValue,
-            let height = (props[kCGImageSourcePixelHeight] as? NSNumber)?.doubleValue,
+            let width = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+            let height = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue,
             width > 0, height > 0
         else { return nil }
         return CGSize(width: width, height: height)
@@ -584,72 +718,65 @@ actor MediaPipeline {
 
     private static func driveDaemon(
         ref: DaemonFileRef, pixelWidth: Int, key: String, capBytes: Int64?,
-        maxSide: Double, cacheResult: Bool
+        maxSide: Double, cacheResult: Bool, allowStaleDisk: Bool
     ) async {
         let identity = liveKey(ref: ref)
-        guard let fetch = await shared.daemonFetch else {
-            // Unreachable through the cards (they gate on the host values first); fail closed.
-            await shared.reportFinal(key: key, identity: identity, outcome: .final(.failure(.other)))
+        guard let fetch = await shared.resolver(for: ref.workspaceID) else {
+            // Unregistered mid-flight: unreachable, not broken — fan out with no memo.
+            await shared.reportUnresolved(key: key)
             return
         }
         // Memory first (the live key holds this session's freshest bytes per path), then
-        // disk: the revisioned entry when the revision is known — authoritative for that
-        // version — else the unrevisioned entry. A revisioned miss is a real miss: the bytes
-        // changed, so stale disk must not serve.
+        // disk — but only when validated this session, or as the offline fallback. A first
+        // view in a new session always refetches: the daemon has no cheap per-file stat,
+        // and a parent listing per image would cost more than the fetch it saves.
+        if await shared.validatedContains(identity) || allowStaleDisk,
+            let cached = diskRead(key: diskKey(ref: ref, revision: ref.revision))
+        {
+            await finishImageData(
+                data: cached, pixelWidth: pixelWidth, key: key, identity: identity,
+                capBytes: nil, maxSide: maxSide, cacheResult: cacheResult)
+            return
+        }
+        // The cap is the request's ceiling, so an oversize file is never transferred.
+        let requestCap = Int(min(capBytes ?? maxDaemonBytes, maxDaemonBytes))
         let fetchResult: DaemonFileBytes
-        if let revision = ref.revision, let cached = diskRead(key: diskKey(ref: ref, revision: revision)) {
+        if let revision = ref.revision,
+            let cached = diskRead(key: diskKey(ref: ref, revision: revision))
+        {
             fetchResult = DaemonFileBytes(data: cached, revision: revision)
-        } else if ref.revision == nil, let cached = diskRead(key: diskKey(ref: ref, revision: nil)) {
-            fetchResult = DaemonFileBytes(data: cached, revision: nil)
         } else {
-            guard let fetched = await fetch(ref) else {
+            switch await fetch(ref, requestCap) {
+            case .bytes(let fetched):
+                fetchResult = fetched
+                await shared.noteValidated(identity)
+                diskWrite(data: fetched.data, key: diskKey(ref: ref, revision: fetched.revision))
+            case .tooLarge:
                 await shared.reportFinal(
-                    key: key, identity: identity, outcome: .final(.failure(.other)))
+                    key: key, identity: identity, outcome: .failure(.tooLarge(bytes: nil)))
+                return
+            case .unavailable:
+                await shared.reportFinal(
+                    key: key, identity: identity, outcome: .failure(.other))
                 return
             }
-            fetchResult = fetched
-            if Int64(fetchResult.data.count) > maxDaemonBytes {
-                await shared.reportFinal(
-                    key: key, identity: identity,
-                    outcome: .final(.failure(.tooLarge(bytes: Int64(fetchResult.data.count)))))
-                return
-            }
-            diskWrite(data: fetchResult.data, key: diskKey(ref: ref, revision: fetchResult.revision))
         }
         await finishImageData(
             data: fetchResult.data, pixelWidth: pixelWidth, key: key, identity: identity,
-            capBytes: capBytes, maxSide: maxSide, cacheResult: cacheResult)
+            capBytes: nil, maxSide: maxSide, cacheResult: cacheResult)
     }
 
-    /// The shared tail for fetched bytes: ceiling, SVG routing, width-exact off-main decode.
-    private static func finishImageData(
-        data: Data, pixelWidth: Int, key: String, identity: String, capBytes: Int64?,
-        maxSide: Double, cacheResult: Bool
-    ) async {
-        if let capBytes, Int64(data.count) > capBytes {
-            await shared.reportFinal(
-                key: key, identity: identity,
-                outcome: .final(.failure(.tooLarge(bytes: Int64(data.count)))))
-            return
-        }
-        if looksLikeSVG(data), let source = text(data) {
-            let aspect = RichSVGIntrinsic.aspectRatio(of: source)
-            let outcome = MediaOutcome.svg(source: source, aspectRatio: aspect)
-            if let aspect { await shared.reportSize(key: key, aspect: aspect, identity: identity) }
-            await shared.reportFinal(key: key, identity: identity, outcome: .final(outcome))
-            return
-        }
-        guard
-            let payload = MediaPayload.decode(data: data, pixelWidth: pixelWidth, maxSide: maxSide)
-        else {
-            await shared.reportFinal(
-                key: key, identity: identity, outcome: .final(.failure(.decoding)))
-            return
-        }
-        await shared.reportSize(key: key, aspect: payload.aspectRatio, identity: identity)
-        await shared.reportFinal(
-            key: key, identity: identity, outcome: .final(.image(payload)),
-            cache: cacheResult)
+    private func validatedContains(_ liveKey: String) -> Bool {
+        validatedThisSession.contains(liveKey)
+    }
+
+    private func noteValidated(_ liveKey: String) {
+        validatedThisSession.insert(liveKey)
+    }
+
+    private static func mapStreamError(_ error: Error) -> MediaFailure {
+        if let urlError = error as? URLError { return mapURLError(urlError) }
+        return .other
     }
 
     private static func mapURLError(_ error: URLError) -> MediaFailure {
@@ -666,9 +793,10 @@ actor MediaPipeline {
 
     // MARK: Keys
 
-    /// The flight key: one stream per (content, decode bucket).
-    private func streamKey(source: MediaSource, pixelWidth: Int) -> String {
-        "\(Self.identityKey(source: source))|\(pixelWidth)"
+    /// The flight key: one stream per (content, decode bucket, cap). The cap is part of
+    /// the key so a tap never inherits a gated flight's ceiling.
+    private func streamKey(source: MediaSource, pixelWidth: Int, capBytes: Int64?) -> String {
+        "\(Self.identityKey(source: source))|\(pixelWidth)|\(capBytes.map(String.init) ?? "full")"
     }
 
     /// The content identity: the normalized URL, the daemon live key, or the caller's data

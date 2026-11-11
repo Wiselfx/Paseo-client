@@ -26,10 +26,6 @@ final class RichActions {
     /// The workspace daemon files resolve against (workspaceId). Nil outside a conversation:
     /// without it, local images render as path chips.
     var daemonWorkspaceID: String?
-    /// Puts a value (a URL string, a code block) into the composer as an attachment or quote.
-    /// No-op until a later ticket wires it (G3 "Add to chat").
-    var addToChat: (String) -> Void = { _ in }
-
     /// Ordinary links: the host's handler (file links open the viewer, the rest fall through).
     /// Defaults to the application opener so a card without a host still does the obvious thing.
     var openURL: (URL) -> Void = { url in UIApplication.shared.open(url) }
@@ -46,7 +42,7 @@ final class RichActions {
     }
     /// Adds an image to the composer tray (G3): the file name plus JPEG bytes, through the
     /// existing attachment path. No-op until the host sets it.
-    var addToChat: (String, Data) -> Void = { _, _ in }
+    var addImageToChat: (String, Data) -> Void = { _, _ in }
     /// Saves an image to Photos. Needs `NSPhotoLibraryAddUsageDescription` (G3 adds it);
     /// until then the system prompt speaks for itself on first use.
     var saveImage: (UIImage) -> Void = { image in
@@ -201,7 +197,7 @@ struct PaseoRowCard<Accessory: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 accessory
             }
-            .frame(minHeight: 56 - Space.md * 2)
+            .frame(minHeight: Metrics.rowCardMinHeight - Space.md * 2)
         )
     }
 }
@@ -222,7 +218,7 @@ struct PaseoCardButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed ? Metrics.cardPressScale : 1)
             .animation(
                 Motion.feedback.resolved(reduceMotion: reduceMotion),
                 value: configuration.isPressed)
@@ -237,8 +233,8 @@ struct PaseoCardButtonStyle: ButtonStyle {
 ///
 /// Local presentation (a sheet, a source toggle, an in-app browser) arrives as the `on…`
 /// closures, which flip view-local state; cross-cutting verbs (copy, save, external open,
-/// Show in Files) go through `RichActions` from the environment. The selection haptic fires
-/// when the menu appears (the D5 vocabulary: `selection()` on a long-press menu appearing).
+/// Show in Files) go through `RichActions` from the environment. No haptic here: the system
+/// already plays one when a context menu appears.
 extension View {
     func paseoCardMenu(
         openTitle: String? = nil,
@@ -327,7 +323,6 @@ private struct PaseoCardMenuModifier: ViewModifier {
                     }
                 }
             }
-            .onAppear { Haptics.selection() }
         }
     }
 }
