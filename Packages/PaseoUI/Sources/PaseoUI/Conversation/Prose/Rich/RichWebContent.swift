@@ -210,11 +210,11 @@ struct RichSVGCard: View {
     /// From `viewBox`, else `width`/`height`; nil when the drawing carries neither.
     private var intrinsicAspectRatio: CGFloat? { RichSVGIntrinsic.aspectRatio(of: code) }
 
-    /// The window's height, for the 60 % cap (see `RichViewportHeight`); nil before layout.
-    @State private var viewportHeight: CGFloat = 0
+    /// The container's height, for the 60 % cap, known before the first frame (`RichViewport`).
+    @Environment(\.richViewportHeight) private var viewportHeight
 
     /// A tall drawing shrinks to fit instead of pushing the turn away.
-    private var heightCap: CGFloat? { viewportHeight > 0 ? viewportHeight * 0.6 : nil }
+    private var heightCap: CGFloat { viewportHeight * 0.6 }
 
     var body: some View {
         RichCard {
@@ -228,7 +228,6 @@ struct RichSVGCard: View {
             }
         }
         .background { widthReader }
-        .background { RichViewportHeight { viewportHeight = $0 } }
         .task(id: renderKey) { await render() }
         .fullScreenCover(isPresented: $showViewer) {
             if let image {
@@ -294,11 +293,10 @@ struct RichSVGCard: View {
     /// The size the drawing will take, from its own ratio, so the card does not jump when the
     /// snapshot arrives. Falls back to the old 120 pt strip for a drawing with no size hints.
     private var placeholderHeight: CGFloat {
-        let cap = heightCap ?? .greatestFiniteMagnitude
-        guard let ratio = intrinsicAspectRatio else { return min(120, cap) }
+        guard let ratio = intrinsicAspectRatio else { return min(120, heightCap) }
         // Before layout the width is unknown; assume a phone-width card.
         let assumedWidth = width > 1 ? width : 350
-        return min(assumedWidth / ratio, cap)
+        return min(assumedWidth / ratio, heightCap)
     }
 
     /// The card's inner width, for rendering the drawing at its real size instead of a guess.

@@ -157,6 +157,8 @@ struct WorkspaceFileViewer: View {
         } action: { size in
             stageSize = size
         }
+        // A markdown preview can hold images and HTML: cap them against this viewer, not a screen.
+        .environment(\.richViewportHeight, stageSize.height > 1 ? stageSize.height : 800)
         .confirmationDialog(
             "Discard changes?",
             isPresented: Binding(

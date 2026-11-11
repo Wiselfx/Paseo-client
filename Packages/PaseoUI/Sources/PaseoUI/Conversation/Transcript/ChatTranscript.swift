@@ -220,6 +220,8 @@ struct TranscriptView: View {
                     handleScroll(metrics, proxy: proxy)
                 }
                 .environment(\.claudeProcessCap, min(400, geometry.size.height * 0.5))
+                // Rich cards cap media at 60 %/70 % of the transcript's own height (E3b).
+                .environment(\.richViewportHeight, geometry.size.height)
             }
         }
     }
