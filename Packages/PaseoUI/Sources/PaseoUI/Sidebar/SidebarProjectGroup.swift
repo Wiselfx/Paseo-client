@@ -41,8 +41,10 @@ extension PaseoSidebar {
             .buttonStyle(.plain)
             .accessibilityLabel("New session in \(title)")
         }
-        .padding(.top, 18)
-        .padding(.bottom, 6)
+        // A collapsed group is a 44 pt hit row at the sidebar's action-row pitch: 8 pt above,
+        // nothing below (E2b §11). The workspace rows carry their own vertical padding, so the
+        // first one does not crowd the header when the group expands.
+        .padding(.top, Space.sm)
         .contextMenu {
             // PLAN §RH order: open-variants, edit verbs, copy, then the destructive verb.
             Button("New session", systemImage: "plus") { newSession(in: group) }

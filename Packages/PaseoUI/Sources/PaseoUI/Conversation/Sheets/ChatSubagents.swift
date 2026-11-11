@@ -82,7 +82,7 @@ enum SubagentStatusWord {
 
     static func dot(_ status: ProviderSubagent.Status) -> Color {
         switch status {
-        case .running: Palette.orange
+        case .running: Palette.accentInk
         case .completed: Palette.successInk
         case .failed: Palette.failureInk
         case .canceled, .unknown: Palette.tertiaryInk

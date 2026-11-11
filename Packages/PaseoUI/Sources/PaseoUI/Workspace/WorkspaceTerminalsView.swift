@@ -80,7 +80,9 @@ struct WorkspaceTerminalsView: View {
                 scriptsSection(scripts)
             }
         }
-        .background(Palette.background)
+        // One canvas for the whole workspace panel: the terminal page sits on the panel fill,
+        // and the emulator's own background matches it (E2b §3).
+        .background(Palette.panel)
         .task {
             await store.open(workspaceId: workspaceId, cwd: workspace.cwd)
             guard !Task.isCancelled else { return }

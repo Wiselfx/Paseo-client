@@ -41,9 +41,6 @@ struct TranscriptView: View {
     @State private var historyLoadInFlight = false
     /// The transcript's viewport height, for the outline rail's slot math.
     @State private var transcriptHeight: CGFloat = 0
-    /// The composer bar's inset, so "back to the end" clears it. Written when it changes (the
-    /// keyboard, mostly), never per scroll frame.
-    @State private var bottomInset: CGFloat = 0
     /// Turns the lazy stack has mounted (reading position) and the last one that appeared.
     @State private var scrollTrack = TranscriptScrollTrack()
     /// M7i turn rail: shown while scrolling (and hides shortly after), never always-on.
@@ -167,7 +164,6 @@ struct TranscriptView: View {
                     }
                 }
                 .overlay(alignment: .trailing) { outlineRail }
-                .overlay(alignment: .bottom) { backToEnd }
                 .onChange(of: controller.find.isOpen) { _, isOpen in
                     if isOpen { restoreFindAnchor(proxy: proxy) } else { restoreScroll(proxy: proxy) }
                 }
@@ -221,7 +217,6 @@ struct TranscriptView: View {
                         contentHeight: geometry.contentSize.height,
                         offsetY: geometry.contentOffset.y,
                         viewportHeight: geometry.bounds.height,
-                        bottomInset: geometry.contentInsets.bottom,
                         visibleHeight: geometry.bounds.height - geometry.contentInsets.top
                             - geometry.contentInsets.bottom)
                 } action: { _, metrics in
@@ -357,7 +352,6 @@ struct TranscriptView: View {
         if transcriptHeight != metrics.viewportHeight {
             transcriptHeight = metrics.viewportHeight
         }
-        if bottomInset != metrics.bottomInset { bottomInset = metrics.bottomInset }
         scrollTrack.contentOffset = metrics.offsetY
         scrollTrack.distanceFromBottom = metrics.distanceFromBottom
         if scrollTrack.visibleHeight != metrics.visibleHeight {
@@ -521,8 +515,6 @@ struct TranscriptView: View {
         var offsetY: CGFloat
         /// The scroll view's own height, chrome and safe areas included.
         var viewportHeight: CGFloat
-        /// The composer bar's inset: where the content you can see ends.
-        var bottomInset: CGFloat
         /// The space the bars leave for content: the runway's and the follow rules' viewport.
         var visibleHeight: CGFloat
     }
@@ -680,39 +672,6 @@ struct TranscriptView: View {
 
     // MARK: Chrome
 
-    /// "Back to the end": offered once you are more than a screen from the end (D1 §3). It fades
-    /// and scales in from 0.9 through `Motion.fade`, and tapping it turns follow back on at once.
-    /// Hidden, it stays in place, so nothing else can move when it comes and goes.
-    private var backToEnd: some View {
-        let shows = controller.showsBackToEnd && !controller.find.isOpen
-        return Button {
-            controller.returnToEnd()
-        } label: {
-            Image(systemName: "arrow.down")
-                .font(.glyph(.regular, weight: .semibold))
-                .foregroundStyle(Palette.ink)
-                .frame(width: 34, height: 34)
-                .frame(width: 44, height: 44)
-                .background(Palette.panel, in: .circle)
-                .overlay {
-                    Circle().strokeBorder(Palette.cardBorder, lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
-                .frame(width: 44, height: 44)
-                .contentShape(.rect)
-        }
-        .buttonStyle(BackToEndPressStyle())
-        // Above the composer bar, which the scroll view carries as its bottom inset.
-        .padding(.bottom, bottomInset + Space.sm)
-        .opacity(shows ? 1 : 0)
-        .scaleEffect(shows ? 1 : 0.9)
-        .allowsHitTesting(shows)
-        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: shows)
-        .accessibilityHidden(!shows)
-        .accessibilityIdentifier("transcript.backToEnd")
-        .accessibilityLabel("Back to the end")
-    }
-
     /// U5: the prompt rail — every prompt of the conversation as a tick at the trailing edge,
     /// drawn over the transcript with no reserved margin. It appears while scrolling and for a
     /// moment after; its 24 pt touch strip is live while it shows.
@@ -822,6 +781,49 @@ struct SendRunway: Equatable {
     var measured = false
     /// The glide to `.top` is owed: it waits for a measured viewport.
     var pendingGlide = false
+}
+
+/// "Back to the end": offered once you are more than a screen from the end (D1 §3). It fades and
+/// scales in from 0.9 through `Motion.fade`, and tapping it turns follow back on at once. Hidden,
+/// it stays in place, so nothing else can move when it comes and goes.
+///
+/// It is hosted by the composer bar, not the transcript (E2b §9): the bar already moves with the
+/// keyboard and grows with the composer, so the button is always `Space.sm` above the card with no
+/// inset arithmetic. The old placement padded the scroll view's overlay by
+/// `geometry.contentInsets.bottom`, which the bottom `safeAreaBar` already contributes to the
+/// scroll view's frame, so the composer (and the keyboard) was counted twice.
+struct TranscriptBackToEndButton: View {
+    let controller: ChatController
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let shows = controller.showsBackToEnd && !controller.find.isOpen
+        Button {
+            controller.returnToEnd()
+        } label: {
+            Image(systemName: "arrow.down")
+                .font(.glyph(.regular, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 34, height: 34)
+                .frame(width: 44, height: 44)
+                .background(Palette.panel, in: .circle)
+                .overlay {
+                    Circle().strokeBorder(Palette.cardBorder, lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(BackToEndPressStyle())
+        .opacity(shows ? 1 : 0)
+        .scaleEffect(shows ? 1 : 0.9)
+        .allowsHitTesting(shows)
+        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: shows)
+        .accessibilityHidden(!shows)
+        .accessibilityIdentifier("transcript.backToEnd")
+        .accessibilityLabel("Back to the end")
+    }
 }
 
 /// Touch-down answers on the back-to-end circle: it scales in on `Motion.feedback` like the

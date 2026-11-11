@@ -58,10 +58,15 @@ struct PaseoTerminalView: UIViewRepresentable {
         let scrollback = PaseoTerminalScrollback.current()
         view.changeScrollback(scrollback)
         context.coordinator.appliedScrollback = scrollback
-        // The palette's ink on its canvas, in both schemes, so the terminal always reads as a
-        // terminal.
+        // The palette's ink on the panel's canvas, in both schemes, so the terminal always reads
+        // as a terminal and the page has no band (E2b §3). Re-resolved on every trait change.
         view.nativeForegroundColor = UIColor(Palette.ink)
-        view.nativeBackgroundColor = UIColor(Palette.background)
+        view.nativeBackgroundColor = PaseoTerminalBackground.resolved(view.traitCollection)
+        let backgroundTraits: [UITrait] = [UITraitUserInterfaceStyle.self, PureBlackTrait.self]
+        view.registerForTraitChanges(backgroundTraits) {
+            (view: TerminalView, _: UITraitCollection) in
+            view.nativeBackgroundColor = PaseoTerminalBackground.resolved(view.traitCollection)
+        }
         context.coordinator.view = view
         // The virtual key bar replaces SwiftTerm's built-in one: our keys, our haptics. Built once
         // here, never in `updateUIView`: rebuilding it would drop the keyboard's accessory view
@@ -77,10 +82,25 @@ struct PaseoTerminalView: UIViewRepresentable {
         context.coordinator.setVisible(isVisible)
         context.coordinator.select(terminalId: terminalId)
         context.coordinator.setUpload(upload)
+        // `makeUIView` builds the view before it inherits the hosting traits; this resolves the
+        // panel fill once it is in the hierarchy. Trait changes after that go through the
+        // registration in `makeUIView`.
+        let background = PaseoTerminalBackground.resolved(uiView.traitCollection)
+        if uiView.nativeBackgroundColor != background {
+            uiView.nativeBackgroundColor = background
+        }
     }
 
     static func dismantleUIView(_ uiView: TerminalView, coordinator: Coordinator) {
         coordinator.teardown()
+    }
+}
+
+/// The terminal's canvas: the same panel fill as every other workspace tab, resolved for the
+/// traits the emulator currently sees (E2b §3).
+private enum PaseoTerminalBackground {
+    static func resolved(_ traits: UITraitCollection) -> UIColor {
+        UIColor(Palette.panel).resolvedColor(with: traits)
     }
 }
 

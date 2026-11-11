@@ -33,8 +33,11 @@ struct DraftChatView: View {
     /// no workspace at all (§3.1). The draft has no scroll content, so only the header is a bar
     /// (D1 §1).
     private var column: some View {
-        VStack(spacing: 0) {
+        HomeHeroLayout {
+            header
+        } hero: {
             stage
+        } footer: {
             if needsProject {
                 addProjectAction
             } else {
@@ -42,7 +45,6 @@ struct DraftChatView: View {
                 composer
             }
         }
-        .safeAreaBar(edge: .top) { header }
         // No background here: the shell's rounded card is the canvas (UX-SPEC §1.1).
         .foregroundStyle(Palette.ink)
         .tint(Palette.ink)
@@ -123,6 +125,10 @@ struct DraftChatView: View {
             .accessibilityIdentifier("draft.addProject")
         }
         .padding(.bottom, 40)
+        // Top the footer up to the normal resting chrome (28 + 4 + 48 + 8 = 88): the hero must
+        // not move when the host has no workspace, and `HomeHeroLayout` shares this strip with
+        // the speaking draft (E2b §2).
+        .padding(.bottom, Space.xs)
     }
 
     // MARK: Workspace line
