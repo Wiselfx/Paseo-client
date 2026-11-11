@@ -1303,3 +1303,406 @@ Repo (facts this plan relies on):
 - Download route without `Range`: `paseo-reference/packages/server/src/server/bootstrap.ts:869-925`.
 - Upstream Mermaid host and runtime: `paseo-reference/packages/app/src/components/markdown/fence/mermaid/`.
 - Local-only notification limits: `docs/research/10-notifications.md`.
+
+---
+
+# Addendum (2026-11-11, appended by the lead)
+
+The research pass couldn't write these sections, so the lead wrote them from this plan, the repo
+and the upstream reference. Nothing above was changed. Section numbers continue from §7.
+
+## 8. What competent apps do
+
+These are the patterns that well-built chat, assistant and developer apps converge on for rich
+answers. No single app is the model; each pattern is here because it solves a real problem. Apple's
+HIG is cited where it states the same rule.
+
+### 8.1 In the transcript
+
+- **Text stays the spine; rich blocks are punctuation.**
+  - Good apps never turn an answer into a dashboard. A card appears only where the content *is* the
+    object: an image, a diagram, a file, a link the user will open.
+  - Everything else stays prose. A card that only restates the prose is noise.
+- **One card grammar.**
+  - Every rich block shares the same container, corner, border, header anatomy and long-press menu.
+  - Users learn the grammar once. A new kind feels familiar on first sight.
+  - Apps that give every block its own chrome look assembled, not designed.
+- **Reserve space before content arrives.**
+  - Size comes from metadata (dimensions, `viewBox`, aspect ratio, a fixed 16:9) before any bytes
+    load. Only the inside fades in; the frame never moves.
+  - A transcript that jumps while you read is the most visible sign of an unpolished chat app.
+- **Progressive fidelity.**
+  - Placeholder → low-resolution → full, each a crossfade in the same frame.
+  - Heavy renderers (web views, players, diagram runtimes) start only when the block is on screen,
+    and are torn down or pooled when it's far away.
+- **Tap opens, long-press offers.**
+  - A tap does the one obvious thing: full screen for media, open for a link, play for audio.
+  - Secondary actions (copy, save, share, open externally, view source) live in a context menu
+    with a preview (HIG: Context menus). There are no visible button rows on every card.
+- **Full screen is a place, not a popup.**
+  - Images, diagrams and artifacts open in a viewer that zooms from the card's frame and drags down
+    to dismiss back into it. Zoom and pan are native, Live Text works, and share is one tap.
+  - The return transition lands exactly where the user left the transcript.
+- **Inline media plays inline.**
+  - Video and audio play in place with system controls. Leaving the app to play a clip is treated
+    as a failure.
+  - Only one thing plays at a time. Scrolling far away pauses it.
+  - Audio respects the silent switch unless the user started it.
+- **Artifacts get a home.**
+  - Generated documents, diagrams and pages open as full-screen pages, with source, copy, share and
+    reload.
+  - The transcript keeps a compact card that points to it. Big content never lives in a scrolling
+    box inside a scrolling box.
+- **Code and diffs read like code.**
+  - Monospace, horizontal scroll instead of wrapping (wrap as an option), visible line counts, a
+    copy button on the block, and syntax colour that respects light and dark.
+  - Diffs show counts first and expand on demand.
+- **Status is quiet and truthful.**
+  - Running work shows elapsed time and the current step. It doesn't use fake progress bars.
+  - Finished work collapses to a one-line summary that can be reopened.
+  - Errors say what failed and offer the one retry that makes sense.
+- **Tables respect the screen.**
+  - Wide tables scroll horizontally inside their block, with the first column pinned where that
+    helps. They never shrink text to fit, and the page never scrolls sideways.
+
+### 8.2 Outside the app
+
+- **Glances, not mini-apps.**
+  - Widgets show the one or two facts a person checks most (here: which agents need me, which
+    are running) and deep-link straight to them (HIG: Widgets).
+  - They say how fresh they are, and never pretend to be live when they aren't.
+- **Live Activities are for a bounded task the user is waiting on** (HIG: Live Activities).
+  - They have a clear start and end, a compact state, and they end promptly when the task ends.
+  - An activity that keeps counting after the work stopped teaches the user to ignore it.
+- **The Lock Screen is a privacy boundary.**
+  - Content that could be private (prompts, file names, message text) is redacted when locked by
+    default.
+  - Consequential actions (approve, delete, send) require unlocking (HIG: Privacy).
+- **Notifications carry enough to decide, and act only when it's safe.**
+  - The title says who needs you; the body says what for. A thumbnail is attached when an image is
+    the point.
+  - Actions that change things require authentication.
+- **Shortcuts, Spotlight and Controls are entry points, not features.**
+  - They open the right screen fast: a new agent, the agent needing attention, a project.
+  - They expose the app's nouns (agents, projects) as App Entities, so the system can find them.
+- **Respect the network.**
+  - Media doesn't auto-download in Low Data Mode or on expensive links. Large downloads ask
+    first.
+  - Thumbnails are small and cached. Failure is graceful and offline-aware.
+
+### 8.3 What this means for Paseo
+
+Every item above already maps onto §1–§5:
+- §1.1 is the card grammar;
+- §1.3 is reserving space;
+- §1.6 is lazy renderers;
+- §4.6 is the full-screen place;
+- C8 and G5 give artifacts a home;
+- §3 sets the glance and privacy rules.
+
+Two gaps were not covered above, and §9 and §12 add them: wide tables (§9.1), and network
+etiquette (§12).
+
+## 9. Lower-priority card refinements
+
+Do these after Phase 1. Each one is small, uses `PaseoCard` or the prose renderer, and needs no
+protocol change unless stated.
+
+### 9.1 Wide Markdown tables
+
+- **Today.** The table renderer measures columns (`MarkdownTableMetrics.swift`). A table wider than
+  the prose column has nowhere to go.
+- **Build:**
+  - A table wider than the column scrolls horizontally inside its own block (a `ScrollView(.horizontal)`
+    with `.scrollBounceBehavior(.basedOnSize)`), with a trailing fade edge that shows more exists.
+  - The first column is pinned when it is a label column: every cell in it is short text (≤ 24
+    characters), and the table has 4 or more columns.
+  - A tap on the table's header strip opens it full screen (both axes scroll, pinch to zoom
+    text), reusing the §4.6 viewer shell.
+  - Never shrink the font to fit. Never wrap a numeric cell.
+- **Perf.** Column widths are computed once per table in the document model (already memoised),
+  never in `body`.
+- **Size:** S.
+
+### 9.2 The todo / plan card
+
+- **Data.** Have:
+  - `TimelineItem.todo(TodoList)`: items with `text`, `completed`, `status`
+    (`pending`/`in_progress`/`completed`) and `activeForm` (`Timeline.swift:83-93`);
+  - the `plan(text:)` tool detail (`Timeline.swift:162`).
+- **Build:**
+  - One row card per todo list:
+    - the header reads "N of M done", with a thin progress bar in `Palette.secondaryInk`;
+    - the in-progress item shows its `activeForm` text with the shimmer the status line already
+      uses;
+    - completed items are struck through in `tertiaryInk`.
+  - It collapses to the header once every item is done.
+  - Successive todo updates in one turn replace the card in place. One card per turn, never a
+    stack of snapshots.
+- **Plan text** (`plan` tool, or a `plan` permission's `metadata.planText`) renders as prose in a
+  quiet quote-wash block with a "Plan" header. It shares the permission card's preview (§9.3).
+- **Size:** S.
+
+### 9.3 Previews in the permission card
+
+- **Data.** Have, on `AgentPermissionRequest` (`Permissions.swift:12-38`):
+  - `kind`, `name`, `title`, `description`;
+  - `input` (raw provider JSON);
+  - `detail` (a normalised `ToolCallDetail` when the daemon could build one);
+  - `suggestions`, `actions`;
+  - `metadata` (`planText`).
+- **Build** a preview slot above the permission card's buttons, chosen from `detail` first:
+  - **Edit / write:** a mini diff (the first 8 changed lines, the counts, "Show all" opens the
+    full diff sheet).
+  - **Shell:** the command in a mono block, the cwd as meta.
+  - **Plan:** the plan text (§9.2), collapsed to 6 lines with "Show more".
+  - **Fetch / web:** the URL as a link row, the domain as meta.
+  - **Question:** the question form as today.
+  - **Anything else:** the `input` JSON, pretty-printed and collapsed to 6 lines.
+- **Rule.** `suggestions` widen authority: show them as a separate, explicit choice, never
+  pre-selected (this is already in the doc comment; the card must honour it).
+- **Size:** M.
+
+### 9.4 Subagent cards
+
+- **Data.**
+  - Have: `ProviderSubagent` (`Subagents.swift:10-24`) with `title`, `description`, `status`,
+    `toolCallId`, `subtitle`, `parentSubagentId` (when nesting is supported), and the timeline
+    via `agent.provider_subagents.timeline.get`.
+  - E3 §1 fixes the loading.
+- **Build:**
+  - The tool call that spawned a subagent (matched by `toolCallId`) renders as a row card:
+    - the subagent's title;
+    - a status dot;
+    - the provider-owned `subtitle` (never parsed);
+    - elapsed time while running;
+    - a chevron.
+  - A tap opens the subagent's timeline as a pushed page with the transcript's own renderer
+    (read-only, no composer).
+  - Nested subagents show as an indented list in that page's header, not as nested cards.
+- **Size:** M (after E3).
+
+### 9.5 Images in user bubbles
+
+- **Data.**
+  - **Partial.** The wire `user_message` item carries only `text`, `messageId` and
+    `clientMessageId` (upstream `protocol/src/agent-types.ts:403`). Attachments are not echoed
+    back.
+  - So images are known only for messages this client sent in this session (the local tray at
+    send time, keyed by `clientMessageId`).
+  - History from another client or an earlier launch: **needs protocol** (attachments on
+    `user_message`, or a lookup by message id).
+- **Build:**
+  - Messages sent from this device keep their images:
+    - the composer tray's thumbnails move into a strip above the bubble text: up to 4 squares at
+      64 pt, `Radius.sm`, "+N" on the last;
+    - they stay keyed by `clientMessageId` in a small on-disk cache (the thumbnails only, LRU
+      50 MB) so a relaunch keeps them.
+  - A tap opens the §4.6 viewer.
+  - Where nothing is known, the bubble shows nothing extra. Never a broken placeholder.
+- **Size:** S (local), plus an upstream ask in G23.
+
+## 10. Data needs
+
+For each item: what it needs, and whether the protocol has it today.
+- **Have:** works with today's messages.
+- **Partial:** works for some cases; the limit is stated.
+- **Needs:** requires a daemon or protocol change. It goes to the G23 upstream ask list, never a
+  client hack.
+
+| Item | Needs | Status | Source / field |
+|---|---|---|---|
+| C1 Image | the URL or workspace path; bytes | Have | prose URL; `FileExplorerRequest` + `acceptBinary` |
+| C2 Gallery | the same as C1, ≥ 2 adjacent | Have | the document model |
+| C3 Video, remote | the URL | Have | prose URL; AVPlayer streams |
+| C3 Video, local ≤ 64 MB | the bytes | Partial | socket read capped at 64 MB; download-then-play |
+| C3 Video, local > 64 MB or streaming | ranged reads | Needs | `/api/files/download` has no `Range` (`bootstrap.ts:869-925`) |
+| C4 Audio | the same as C3 | Have / Partial | the same as C3 |
+| C5 YouTube | the video id | Have | prose URL |
+| C6 Link | the URL; OG metadata | Have | client-side fetch |
+| C7 GitHub link, same repo | number, title, state, labels | Have | `ForgeSearch` |
+| C7 GitHub link, other repo | the same | Partial | OG fallback; "get PR by URL": Needs (not worth it) |
+| C8 Web artifact | the markup | Have | prose |
+| C9 Mermaid | the fence source | Have | prose (detector change, G4) |
+| C10 File | the path, read, size | Have / Partial | path + read: Have; size: parent listing on appear |
+| C11 Turn changes | per-file counts | Have | tool-call `unifiedDiff` / `oldString` / `newString` |
+| C12 Terminal output | the raw output | Have | tool-call output (ANSI kept) |
+| C13 PR & checks | checks, state, review | Have | `checks`, `checksStatus`, `reviewDecision`, `isDraft` |
+| C15 Media sheet | every media ref in the chat | Partial | loaded turns; older via `before` paging |
+| C16 Context and cost charts | per-turn usage | Partial | `turn_completed` / `usage_updated` live only; history: Needs |
+| §9.2 Todo / plan | items, status | Have | `TimelineItem.todo`, `plan` detail |
+| §9.3 Permission preview | the normalised detail | Have | `AgentPermissionRequest.detail`, `input`, `metadata` |
+| §9.4 Subagent card | list + timeline | Have | `agent.provider_subagents.list` / `.timeline.get` |
+| §9.5 User bubble images, this device | the tray at send | Have (local) | `clientMessageId` |
+| §9.5 User bubble images, history | attachments on the message | Needs | `user_message` has no attachments |
+| §11 Notification thumbnail | the image bytes at alert time | Partial | local notifications only; push: Needs (Expo payload has no attachment) |
+| 3.1 Widgets | the agent list snapshot | Have | `FetchAgentsRequest` → `GlanceSnapshot` |
+| 3.2 Live Activity while suspended | server-driven updates | Needs | no APNs `liveactivity` push type |
+| 3.4 App Intents / Spotlight | agents and projects | Have | the directory |
+| 3.5 Permission notification actions | respond while backgrounded | Partial | needs a socket in the extension or app; see §13 |
+| 3.7 Closed-app alerts | a push path | Partial | Expo `register_push_token`; paid account (decision) |
+
+## 11. Notification image thumbnails
+
+**When.** A local notification the app posts ("agent finished", "needs you") gets a thumbnail
+only if the turn it describes produced an image the user would want to see:
+- the last image block in the final assistant message;
+- or a screenshot the agent attached.
+- Never an avatar, never a decorative image, never a provider logo.
+
+**How.**
+- `UNNotificationAttachment` with a downscaled JPEG: longest side 600 px, quality 0.8, ≤ 300 KB.
+  - It's written to a temp file in `Caches/notification-media` (the system copies it; delete it
+    after `add` returns).
+  - The image comes from the §4.1 pipeline's cache only. **Never download for a notification.**
+    If the image isn't already decoded and cached, there's no thumbnail.
+- Lock Screen privacy follows the §3 setting. When "show agent names on the Lock Screen" is off,
+  no thumbnail either.
+- Push (if G21 lands):
+  - Expo's payload carries no attachment, so remote notifications get thumbnails only through a
+    Notification Service Extension that fetches from the daemon.
+  - That needs `mutable-content`, which the daemon doesn't send: **Needs**. Don't build it.
+
+**Size:** S. Part of G19 or standalone after G2.
+
+## 12. Network etiquette: no surprise downloads
+
+**The rule.** Media downloads automatically only when the connection is cheap. Otherwise the card
+shows what it would load and waits for a tap.
+
+| Connection | Thumbnails ≤ 200 KB | Images ≤ 5 MB | Images > 5 MB, video, audio | YouTube, link previews |
+|---|---|---|---|---|
+| Wi-Fi / Ethernet, not constrained | auto | auto | tap (video: poster auto) | auto |
+| Cellular, not constrained | auto | auto | tap, showing the size | auto |
+| **Low Data Mode** (`isConstrained`) | auto | tap | tap | tap: a text-only link row |
+| **Relay** connection | auto | auto ≤ 1 MB, else tap | tap | auto (it doesn't use the relay) |
+| Offline | cache only | cache only | cache only | a text-only row |
+
+**Rules:**
+- **Detection.** One `NWPathMonitor` in PaseoKit publishes `isConstrained`, `isExpensive` and the
+  interface type as a small `@Observable` value. The relay vs direct decision comes from the
+  host session (it knows how it connected). Cards read one derived enum, `MediaFetchPolicy`, never
+  the raw path (R-1).
+- **Why the relay is special.** Relay traffic goes through a third-party server, end-to-end
+  encrypted, and is slower. Large daemon-file reads through it are slow and cost the relay
+  operator. Daemon files over 1 MB therefore wait for a tap on the relay, whatever the network.
+- **The tap state.**
+  - The reserved frame (§1.3) with a centred download glyph, the size if known ("2.4 MB"), and the
+    file name.
+  - One tap fetches it, with a progress ring in the same frame.
+  - New copy, which needs approval (§15).
+- **Never** prefetch off-screen media on a constrained or relay path. On unconstrained Wi-Fi,
+  prefetch at most 1 screen ahead.
+- **Settings.** No new setting in v1. The policy is fixed. If the user asks, a single "Download
+  media automatically: Always / Wi-Fi only / Never" row can come later.
+- **Size:** S. Part of G2.
+
+## 13. Risk register and test strategy
+
+### 13.1 Risks
+
+| # | Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|---|
+| R1 | Web views multiply and scrolling stutters | Medium | High | Hard cap of 2 live web views (§1.6); lazy creation on appear; snapshot when off screen; a perf gate in review |
+| R2 | Layout jumps when media loads | Medium | High | Size reserved from metadata; fixed ratios for video and YouTube; frames never animate after first layout; a review check |
+| R3 | Main-thread image decoding | Medium | High | §4.1 pipeline: `CGImageSource` thumbnails off main at display size; the cache keyed by URL + size |
+| R4 | Mermaid runtime size and startup | High | Medium | Bundle once (decision); one shared offscreen web view renders → snapshot image; never a live view per diagram |
+| R5 | Untrusted HTML artifacts reach the network or the app | Medium | High | Non-persistent data store; no message handlers except the height reporter; navigation intercepted; a CSP; no file URLs |
+| R6 | The Live Activity lies (it keeps running after the turn ended) | High without push | High (trust) | Gated on the G17 spike; a stale-date on every update; it ends on background expiry |
+| R7 | Lock Screen leaks prompts and file names | Medium | High | `.privacySensitive()` everywhere, the setting off by default, no thumbnails when off |
+| R8 | Signing limits break extensions (7-day profiles, App ID caps) | High on a free team | Medium | Decision before G14; extensions behind a build flag so the main app ships without them |
+| R9 | Video over 64 MB can't play | Certain | Low | A clear "Too large to preview" row with open/share; the upstream `Range` ask |
+| R10 | Surprise data use on cellular, Low Data Mode or the relay | Medium | Medium | The §12 policy |
+| R11 | Protocol drift: a new item kind breaks a card | Medium | Medium | Lenient decoding per item (E3 rule); unknown → an "unsupported item" row |
+| R12 | Third-party embeds change (YouTube error 152/153, oEmbed limits) | Medium | Low | A thumbnail-first card always works; the player is an enhancement; "Open in YouTube" fallback |
+| R13 | Accessibility regressions in custom cards | Medium | Medium | Card-level accessibility element with a combined label; actions as accessibility actions; a VoiceOver pass per ticket |
+| R14 | Memory pressure with many images | Medium | Medium | Bounded caches (memory 64 MB, disk 300 MB LRU); purge on the memory warning |
+
+### 13.2 Test strategy
+
+**Unit (Linux, `swift test`, in PaseoStore / PaseoCore).** Every pure piece gets tests before its
+UI ticket starts:
+- `RichContentDetector`: Mermaid on (with the user's sign-off for the changed test), galleries,
+  video and audio extensions, the own-paragraph rule;
+- `TurnChangeSummary`: diff counts, write = all added, incremental append equals a full rebuild;
+- `AnsiText` and `TestSummaryParser` against captured outputs (scrubbed);
+- `GlanceSnapshot`: Codable round-trip, the throttle rules;
+- `MediaFetchPolicy`: the full §12 table as a parameterised test;
+- the size reservation: `viewBox` / width / height parsing, the aspect fallback;
+- the todo-card reducer: replace in place, collapse when done.
+
+**Snapshot-by-reasoning (no Xcode here).** Every UI ticket's final message includes the card at 3
+widths (320, 393, 430 pt), in light, dark and pure black, at the default and the largest Dynamic
+Type. That's the worker's described layout. The lead verifies it on the Mac gate (simulator
+screenshots) before merge.
+
+**Performance checks in review:**
+- the number of live `WKWebView`s while scrolling a 20-card fixture: never more than 2;
+- no decode on main: all decode calls go through the pipeline actor (grep-checked);
+- no `body` reads of a whole store (R-1);
+- for scrolling, a fixture conversation with mixed cards (`paseo-probe` can seed one on a
+  `pi`/`beam-free` agent; **never on a Claude agent**). The user's device run is the final judge.
+
+**Device checklist (the user, per IPA):**
+- scroll a long mixed chat on 120 Hz, and look for hitches;
+- open and close the viewer from every card kind;
+- play YouTube inline, then scroll away (it pauses);
+- Low Data Mode on (cards wait);
+- the relay connection (large files wait);
+- VoiceOver over each card;
+- Lock Screen redaction.
+
+## 14. More rejected ideas
+
+These come on top of §6.
+- **Reactions, likes or ratings on assistant turns.** There's no daemon concept to send them to,
+  and the user is the only reader.
+- **Animated "typing" effects or reveal animations on cards.** The prose reveal already exists;
+  cards appearing with their own flourish is noise and costs frames.
+- **Auto-playing video or GIF-like loops in the transcript.** They're distracting, cost battery,
+  and break the §12 network rule. Video shows a poster until tapped.
+- **A media-only tab in the main UI.** The conversation media sheet (C15) covers it without
+  another navigation level.
+- **Inline editing of artifacts** (editing HTML or Mermaid in the app). It's a new feature, and
+  the agent is the editor.
+- **Cross-device handoff of a playing video.** It's rare, and Handoff adds entitlements.
+- **3D / USDZ Quick Look in the transcript.** Agents almost never produce it; a file card with
+  Quick Look covers the rare case.
+- **AI-generated card summaries or titles** (on device or remote). That's invented copy, and it's
+  unpredictable.
+- **Custom haptics per card kind.** Haptics stay the D5 vocabulary; cards use `light()` on copy
+  and nothing else.
+- **Background audio for agent output** (keep playing when locked). It needs the background audio
+  mode for marginal value, and invites App Review questions.
+- **A widget that shows the last message text.** It's private by nature, and stale by design.
+
+## 15. New copy for the user's approval
+
+None of these strings exist today. They need approval before their tickets merge. Where upstream
+`en.ts` has an equivalent, the ticket uses upstream's text instead, and the string drops from this
+list.
+
+| Where | String |
+|---|---|
+| Card: download state | "Tap to download · {size}" |
+| Card: too large | "Too large to preview" |
+| Card: unsupported item | "This item can't be shown here" |
+| Card: load failed | "Couldn't load" / action "Try again" (check upstream first) |
+| Video / YouTube menu | "Open in YouTube" |
+| Viewer | "Save to Photos", "Copy image", "Show text" (Live Text) |
+| Artifact page | "View source", "Reload", "Open in Safari" |
+| Mermaid | "Diagram" (card title fallback), "Couldn't render diagram" |
+| Turn changes card | "{n} files changed" |
+| Test chip | "{passed} passed · {failed} failed" |
+| Todo card | "{done} of {total} done", "Plan" |
+| Permission preview | "Show all", "Show more" |
+| Subagent card | "Subagent" (title fallback) |
+| Media sheet | "Media in this chat", "Files", "Links" |
+| Charts | "Context", "Cost", "Data starts {date}" |
+| Widget | "Agents", "Needs you", "Running", "Updated {time}", "Open Paseo to refresh" |
+| Widget empty | "No agents running" |
+| Live Activity | "Agents at work", "{n} running", "Waiting for you" |
+| Control | "New agent" |
+| Setting (§3) | "Show agent names on the Lock Screen" |
+| Notification action (G19, if approved) | "Allow", "Deny" (upstream wording if present) |
+| Share extension (G20, if approved) | "Send to Paseo", "Choose agent" |
