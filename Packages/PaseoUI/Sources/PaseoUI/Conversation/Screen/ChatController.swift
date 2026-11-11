@@ -865,28 +865,13 @@ struct TranscriptJump: Equatable {
             data: data, fileName: fileName, to: store.agentId, store: store)
     }
 
+    /// Attaches files picked in Files. Each pill appears at once in the `.decoding` phase (which
+    /// also holds Send) and its bytes are read off the main actor
+    /// (`ComposerAttachmentStore.addFile`): `Data(contentsOf:)` here froze the composer for the
+    /// length of the read, which for an iCloud file is a download.
     func attachFileURLs(_ urls: [URL]) {
         for url in urls {
-            let name = url.lastPathComponent
-            guard url.startAccessingSecurityScopedResource() else {
-                showToast("Couldn't open \(name).")
-                continue
-            }
-            defer { url.stopAccessingSecurityScopedResource() }
-            guard let data = try? Data(contentsOf: url) else {
-                showToast("Couldn't read \(name).")
-                continue
-            }
-            guard data.count <= ConversationUpload.maxBytes else {
-                showToast("\(name) is too large (50 MB max).")
-                continue
-            }
-            let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
-                ?? "application/octet-stream"
-            let item = ComposerAttachmentItem(
-                fileName: name, mimeType: mimeType, byteCount: data.count,
-                data: data, thumbnail: nil)
-            attachmentStore.add(item, to: store.agentId, store: store)
+            attachmentStore.addFile(url: url, to: store.agentId, store: store)
         }
     }
 

@@ -775,29 +775,40 @@ struct ComposerView: View {
             controller.attachFileURLs(urls)
             return
         }
-        for url in urls {
-            let name = url.lastPathComponent
-            guard url.startAccessingSecurityScopedResource() else {
-                localAttachmentError = "Couldn't open \(name)."
-                continue
+        // The picker's files are read off the main actor (`PickedFileLoader`): a 40 MB file, or an
+        // iCloud file that still has to download, used to freeze this screen inside
+        // `Data(contentsOf:)`. Each tile is in the tray from the tap — `.decoding` also holds Send
+        // while the bytes load, so a tap cannot overtake the file.
+        Task {
+            for url in urls {
+                let name = url.lastPathComponent
+                var item = ComposerAttachmentItem(
+                    fileName: name, mimeType: "application/octet-stream", byteCount: 0,
+                    data: Data(), thumbnail: nil, phase: .decoding)
+                localTray.append(item)
+                switch await PickedFileLoader.load(url, maxBytes: ConversationUpload.maxBytes) {
+                case .success(let file):
+                    item.mimeType = file.mimeType
+                    item.data = file.data
+                    item.byteCount = file.data.count
+                    item.phase = .pending
+                    // A tile the user removed while it loaded stays removed.
+                    if let index = localTray.firstIndex(where: { $0.id == item.id }) {
+                        localTray[index] = item
+                    }
+                case .failure(.unopenable):
+                    localTray.removeAll { $0.id == item.id }
+                    localAttachmentError = "Couldn't open \(name)."
+                case .failure(.unreadable):
+                    localTray.removeAll { $0.id == item.id }
+                    localAttachmentError = "Couldn't read \(name)."
+                case .failure(.tooLarge):
+                    localTray.removeAll { $0.id == item.id }
+                    localAttachmentError = "\(name) is too large (50 MB max)."
+                }
             }
-            defer { url.stopAccessingSecurityScopedResource() }
-            guard let data = try? Data(contentsOf: url) else {
-                localAttachmentError = "Couldn't read \(name)."
-                continue
-            }
-            guard data.count <= ConversationUpload.maxBytes else {
-                localAttachmentError = "\(name) is too large (50 MB max)."
-                continue
-            }
-            let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
-                ?? "application/octet-stream"
-            localTray.append(
-                ComposerAttachmentItem(
-                    fileName: name, mimeType: mimeType, byteCount: data.count, data: data,
-                    thumbnail: nil))
+            pumpLocalUploads()
         }
-        pumpLocalUploads()
     }
 
     private func handlePickedPhotos(_ selection: [PhotosPickerItem]) {

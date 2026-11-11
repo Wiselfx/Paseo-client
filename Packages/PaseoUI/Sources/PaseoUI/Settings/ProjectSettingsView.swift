@@ -699,13 +699,15 @@ struct ProjectSettingsView: View {
     }
 
     private func setUpload(fromFileURL url: URL) async {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else {
+        // Read off the main actor: an icon picked from an iCloud Drive folder still has to
+        // download, and this ran that read on the main actor (`PickedFileLoader`).
+        guard case .success(let file) = await PickedFileLoader.load(
+            url, maxBytes: ConversationUpload.maxBytes)
+        else {
             Haptics.failure()
             return
         }
-        await setUpload(data: data)
+        await setUpload(data: file.data)
     }
 
     private func setUpload(data: Data) async {
