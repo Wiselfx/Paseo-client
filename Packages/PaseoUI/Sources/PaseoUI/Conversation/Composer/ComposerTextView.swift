@@ -271,7 +271,7 @@ final class ComposerUITextView: UITextView {
         let scrolls = content.height > cap + 0.5
         if isScrollEnabled != scrolls { isScrollEnabled = scrolls }
         // Sizing laid the text out: this is the cheapest moment to read the line count it produced.
-        evaluateTallness()
+        evaluateTallness(contentHeight: content.height)
         return CGSize(width: width, height: ceil(height))
     }
 
@@ -289,8 +289,8 @@ final class ComposerUITextView: UITextView {
     /// only remove lines, so disappearing cannot climb into the show threshold. The field is stuck
     /// at `lineLimit` and scrolls, but `usedRect` is the whole document, so the count is the
     /// draft's, not the visible part's.
-    private func evaluateTallness() {
-        let lines = visualLineCount()
+    private func evaluateTallness(contentHeight: CGFloat) {
+        let lines = visualLineCount(contentHeight: contentHeight)
         let tall =
             isTall
             ? lines > ComposerMetrics.expandHideLines : lines >= ComposerMetrics.expandShowLines
@@ -299,12 +299,14 @@ final class ComposerUITextView: UITextView {
         onTallChanged?(tall)
     }
 
-    /// The draft's visual line count as UIKit laid it out: the used height of the laid-out text
-    /// divided by the font's line height. One fragment per line, so the quotient is an integer
-    /// up to sub-point error, which is what the rounding is for. Empty text still counts one.
-    private func visualLineCount() -> Int {
+    /// The draft's visual line count as UIKit laid it out: the laid-out text height (the content
+    /// height minus the container insets) divided by the font's line height, rounded. Measured from
+    /// the height UIKit already computed, never through `layoutManager`: touching `layoutManager`
+    /// on a TextKit 2 text view permanently drops it into TextKit 1 compatibility mode (slower
+    /// layout, IME and Writing Tools regressions). Empty text still counts one.
+    private func visualLineCount(contentHeight: CGFloat) -> Int {
         guard let lineHeight = font?.lineHeight, lineHeight > 0 else { return 1 }
-        let used = layoutManager.usedRect(for: textContainer).height
+        let used = contentHeight - textContainerInset.top - textContainerInset.bottom
         return max(1, Int((used / lineHeight).rounded()))
     }
 
@@ -336,8 +338,8 @@ final class ComposerUITextView: UITextView {
             CGSize(width: width, height: .greatestFiniteMagnitude)
         ).height
         placeholderLabel.frame = CGRect(x: inset.left, y: inset.top, width: width, height: height)
-        // The text container is laid out here: this is where the draft's line count is known.
-        evaluateTallness()
+        // The text is laid out here: `contentSize` is the whole document at the current width.
+        evaluateTallness(contentHeight: contentSize.height)
     }
 
     // MARK: Paste
