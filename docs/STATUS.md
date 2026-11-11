@@ -5,6 +5,18 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 ## Next session starts here (2026-11-11)
 
+**H-round IN FLIGHT (2026-11-11 ~18:45 UTC): device feedback 3 on IPA 5584843 (10 bugs).**
+Tickets `docs/tickets/_H-common.md`, `H1`–`H5`. Workers: Pi + `opencode-go/deepseek-v4.1-flash`,
+one worktree each under `/home/paseo/.paseo/worktrees/0264elgj/<branch>`:
+- H1 voice end to end (bug 1) — `h1-voice`, agent `83e3f858-09a0-4489-88cd-c2924d79b774` (thinking max)
+- H2 send runway, back-to-end with keyboard, auto-hiding header (bugs 2, 9, 10) — `h2-transcript`, `b48fd6aa-7524-4862-a108-88d4ac81ba0b` (max)
+- H3 context meter always on, expand button in the corner (bugs 3, 6) — `h3-composer`, `25bbd6b1-c405-4451-925c-2da4f96bb7ac`
+- H4 splash without the button, sidebar usage, appearance in sheets (bugs 4, 5, 8) — `h4-shell`, `5c57d3e9-5f2f-4b23-822f-a7941c25528e`
+- H5 remote images: shared loader, SVG, corpus (bug 7) — `h5-images`, `8ff4267e-f925-419c-a89d-09201f2afd9f`
+H1 and H3 both edit `ChatComposer.swift` (disjoint regions): merge H3 first, then H1. Upstream
+reference = `/home/paseo/dev/paseo-upstream-ref` (read-only, v0.16.0-beta.1); the lab is off-limits.
+Review every diff in full before gate/merge; add scorecard rows (Pi section).
+
 The previous lead session ended after many compactions; this section is its handoff. Read it,
 then the E-round section below, then memory (`MEMORY.md` index loads automatically).
 
