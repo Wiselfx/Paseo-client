@@ -74,7 +74,7 @@ private struct WaveformMeter: UIViewRepresentable {
     let accessibilityText: String?
 
     func makeUIView(context: Context) -> WaveformMeterView {
-        WaveformMeterView()
+        WaveformMeterView(frame: .zero)
     }
 
     func updateUIView(_ view: WaveformMeterView, context: Context) {
@@ -131,6 +131,10 @@ final class WaveformMeterView: UIView {
         clipsToBounds = true
         contentMode = .redraw
         isAccessibilityElement = false
+    }
+
+    required init?(coder: NSCoder) {
+        return nil
     }
 
     // MARK: Inputs (from `updateUIView`)
