@@ -24,7 +24,8 @@ enum ImageDownsampler {
         let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
         // 5…8 rotate by 90°: what is stored as width is drawn as height.
         return (5...8).contains(orientation)
-            ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+            ? CGSize(width: CGFloat(height), height: CGFloat(width))
+            : CGSize(width: CGFloat(width), height: CGFloat(height))
     }
 
     /// Longest side at most `maxPixelSize`; never upscales. Animated GIFs yield frame 0 only.
@@ -41,8 +42,11 @@ enum ImageDownsampler {
             // the picture still appears, only possibly smaller.
             return thumbnail(source, maxSide: maxSide)
         }
-        let longest = max(size.width, size.height)
-        let scale = min(1, pixelWidth / size.width, maxSide / longest)
+        // Explicit Double for all the arithmetic: `CGSize` is CGFloat, and the implicit
+        // CGFloat↔Double bridge does not cover every expression (optionals, three-way `min`).
+        let drawnWidth = Double(size.width)
+        let longest = max(drawnWidth, Double(size.height))
+        let scale = min(1, pixelWidth / drawnWidth, maxSide / longest)
         return thumbnail(source, maxSide: longest * scale)
     }
 

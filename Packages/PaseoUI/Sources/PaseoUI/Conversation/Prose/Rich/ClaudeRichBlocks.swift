@@ -322,13 +322,19 @@ struct YouTubeRichCard: View {
     /// a bare `AsyncImage`, the same defect the image cards had).
     @State private var still: UIImage?
     @State private var stillFailed = false
+    /// The card's real width, measured once per layout so the still is decoded at the size it
+    /// is drawn at (never a guessed 320/430 pt).
+    @State private var width: CGFloat = 0
 
     private let playback = InlineYouTubePlayback.shared
     private var isPlaying: Bool { playback.activeID == reference.id }
 
-    private var stillURL: String? {
-        guard !isPlaying else { return nil }
-        return RichContentDetector.youTubeThumbnailURL(id: reference.id)
+    /// One decode per (URL, pixel bucket). Nil while playing — the player covers the still —
+    /// and until the width is known.
+    private var stillKey: String? {
+        guard !isPlaying, width > 1 else { return nil }
+        let pixels = RemoteImageSizing.pixelWidth(points: width, scale: displayScale)
+        return "\(RichContentDetector.youTubeThumbnailURL(id: reference.id))|\(pixels)"
     }
 
     var body: some View {
@@ -345,6 +351,7 @@ struct YouTubeRichCard: View {
             }
             .frame(maxWidth: full ? .infinity : 320, alignment: .leading)
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .background { widthReader }
             .background(Color.black)
             .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
@@ -418,17 +425,28 @@ struct YouTubeRichCard: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("Play YouTube video \(reference.id)")
         // The box is already reserved by the card's 16:9 frame, so the still can land whenever.
-        .task(id: stillURL) { await loadStill() }
+        .task(id: stillKey) { await loadStill() }
+    }
+
+    /// The card's inner width, measured on the frame it is actually drawn in. Published only
+    /// when it changes; nothing here runs per scroll frame.
+    private var widthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { width = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
+        }
     }
 
     /// One decode per URL, through the same loader (and cache) as every other remote image.
     /// A failed thumbnail is a decorative miss, not an error worth a card.
     @MainActor
     private func loadStill() async {
-        guard let stillURL, still == nil else { return }
-        let pixelWidth = RemoteImageSizing.pixelWidth(points: full ? 430 : 320, scale: displayScale)
+        guard width > 1, still == nil else { return }
+        let url = RichContentDetector.youTubeThumbnailURL(id: reference.id)
         let outcome = await RemoteImageLoader.shared.load(
-            urlString: stillURL, pixelWidth: pixelWidth)
+            urlString: url,
+            pixelWidth: RemoteImageSizing.pixelWidth(points: width, scale: displayScale))
         guard !Task.isCancelled else { return }
         switch outcome {
         case .image(let payload): still = payload.image

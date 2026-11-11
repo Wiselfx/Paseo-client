@@ -175,9 +175,10 @@ actor RemoteImageLoader {
         decoded.object(forKey: urlString as NSString)
     }
 
-    /// The aspect ratio known for a URL, even after its pixels were evicted.
+    /// The aspect ratio known for a URL, even after its pixels were evicted. `NSNumber` hands
+    /// back `Double`; convert explicitly (`Double?` is not implicitly a `CGFloat?`).
     static func cachedAspect(for urlString: String) -> CGFloat? {
-        shapes.object(forKey: urlString as NSString)?.doubleValue
+        shapes.object(forKey: urlString as NSString).map { CGFloat($0.doubleValue) }
     }
 
     /// A failure this URL is still remembered for, or nil when it is unknown or expired.
