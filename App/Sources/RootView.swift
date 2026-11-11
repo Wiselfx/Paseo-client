@@ -11,6 +11,7 @@ struct RootView: View {
     /// The system text size; Content size shifts it and Code size shifts code containers.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(ClaudeAppearance.storageKey) private var appearance = ClaudeAppearance.system.rawValue
+    @AppStorage(ClaudeAccent.storageKey) private var accent = ClaudeAccent.claude.rawValue
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
     @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
     /// First-run welcome: shown before the first successful host connection, and only while
@@ -129,6 +130,7 @@ struct RootView: View {
         .dynamicTypeSize(dynamicTypeSize.shifted(by: contentStep))
         .environment(\.codeSizeStep, codeStep)
         .environment(\.pureBlack, pureBlack)
+        .environment(\.accent, ClaudeAccent(rawValue: accent) ?? .claude)
         .preferredColorScheme(colorScheme)
         .environment(\.hostSwitch, model.hostContext)
         .sheet(isPresented: $model.addHostRequested) {

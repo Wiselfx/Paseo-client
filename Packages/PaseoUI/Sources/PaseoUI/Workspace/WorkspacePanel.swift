@@ -123,7 +123,9 @@ struct WorkspacePanel: View {
             ClaudeDivider()
             dismissableContent
         }
-        // Canvas comes from the shell's rounded, full-bleed card (UX-SPEC §1.1).
+        // One canvas for every panel page and pushed page (E2 §5): the panel fill, the same one
+        // the Changes tab draws. The shell card behind it is never what shows through.
+        .background { Palette.panel.ignoresSafeArea() }
         .environment(\.mentionInChat, onMentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
         .onChange(of: initialTerminalId) { _, terminalId in

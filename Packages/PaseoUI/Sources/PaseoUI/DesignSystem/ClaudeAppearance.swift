@@ -20,6 +20,15 @@ public enum ClaudeAppearance: String, CaseIterable, Sendable {
     public var isPureBlack: Bool { self == .pureBlack }
 }
 
+/// The accent choice: the Claude clay (default) or Paseo green. It changes only the accent
+/// tokens, never the theme; `RootView` publishes it through the `\.accent` trait, so a switch
+/// redraws live.
+public enum ClaudeAccent: String, CaseIterable, Sendable {
+    case claude = "Claude", paseo = "Paseo"
+
+    public static let storageKey = "paseo.accent"
+}
+
 /// Content text size on top of Dynamic Type, and code font size. Both are relative steps stored
 /// as their raw value; `RootView` shifts Dynamic Type by them, so settings apply live without
 /// rebuilding the shell.

@@ -194,7 +194,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         // The only haptic on the bar: a latched modifier is a mode, and you can feel it.
         Haptics.selection()
         terminalView.controlModifier.toggle()
-        button.tintColor = terminalView.controlModifier ? UIColor(Palette.orange) : Self.ink
+        button.tintColor = terminalView.controlModifier ? UIColor(Palette.accentInk) : Self.ink
     }
 
     private func toggleKeyboard() {

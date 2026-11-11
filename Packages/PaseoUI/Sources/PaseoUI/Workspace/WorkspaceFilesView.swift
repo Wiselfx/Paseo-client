@@ -36,10 +36,16 @@ struct WorkspaceFilesView: View {
                         onBack: { openFile = nil },
                         backLabel: backLabel(for: relPath), onReveal: { reveal(relPath: relPath) })
                     .id(relPath)
+                    // The viewer draws no canvas of its own; it must sit on the panel's, not on
+                    // the window's black (E2 §5).
+                    .background(Palette.panel)
                 }
                 // The panel header already owns the back chevron and the workspace title.
                 .toolbar(.hidden, for: .navigationBar)
         }
+        // The Files page and every pushed folder/file share the panel canvas (E2 §5): without
+        // this the window's black shows through in dark and pure black.
+        .background(Palette.panel)
         .onAppear { shellDrawer?.panelHandlesBack = !path.isEmpty }
         .onChange(of: path) { _, newPath in
             shellDrawer?.panelHandlesBack = !newPath.isEmpty
@@ -152,6 +158,9 @@ private struct WorkspaceFilesDirectoryList: View {
         }
         // Every pushed folder draws its own header row; the system bar would duplicate it.
         .toolbar(.hidden, for: .navigationBar)
+        // The page owns the canvas too: a NavigationStack's own background must never be what
+        // shows in dark or pure black (E2 §5).
+        .background(Palette.panel)
         .task { await refresh() }
         .onChange(of: listing) { _, _ in syncReveal() }
         .onChange(of: revealTarget) { _, _ in syncReveal() }

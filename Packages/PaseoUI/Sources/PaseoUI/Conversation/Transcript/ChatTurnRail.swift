@@ -23,6 +23,11 @@ struct ChatOutlineItem: Identifiable, Hashable {
 /// slot crossing, prepared on touch-down, throttled on dense rails; releasing on a prompt jumps
 /// there with one light impact; dragging off the rail gives nothing.
 struct ChatOutlineRail: View {
+    /// U5 rail, shelved 2026-11-11 by the user; flip to re-enable. When false the rail is not
+    /// mounted, `revealTurnRail()` does nothing and no outline fetch happens for the rail alone.
+    /// The code and the "Jump to message…" sheet stay.
+    static let promptRailEnabled = false
+
     let items: [ChatOutlineItem]
     let activeSeq: Int?
     /// Height of the transcript viewport, for the slot math and the 80% column.

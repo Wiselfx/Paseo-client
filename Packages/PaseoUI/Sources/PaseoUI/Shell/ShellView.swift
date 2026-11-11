@@ -52,12 +52,16 @@ public struct ShellView: View {
     /// here changes while a finger is down.
     @State private var drawer = ShellDrawer()
     @State private var toastCenter = ToastCenter()
+    /// False until the first `onAppear` has picked the agent or created the draft: the first
+    /// frame is the launch skeleton, never a home greeting that is then replaced (E2 §3.3).
+    @State private var homeSettled = false
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.codeSizeStep) private var codeSizeStep
     @Environment(\.pureBlack) private var pureBlack
+    @Environment(\.accent) private var accent
     @Environment(\.hostSwitch) private var hostSwitch
     @Environment(\.notificationPermissionAction) private var requestNotificationPermission
     @Environment(\.notificationTestAction) private var notificationTestAction
@@ -94,6 +98,7 @@ public struct ShellView: View {
                 showDefaultDraftIfIdle()
                 handleNotificationTarget()
                 handleDeepLinkTarget()
+                homeSettled = true
             }
             .onDisappear {
                 session.hostSettings.stopPresence()
@@ -128,6 +133,10 @@ public struct ShellView: View {
                 .environment(\.hostSwitch, hostSwitch)
                 .environment(\.codeSizeStep, codeSizeStep)
                 .environment(\.pureBlack, pureBlack)
+                // Same reason as `pureBlack`: a hosting controller built inside the shell does
+                // not inherit the app's SwiftUI environment, so the accent must be re-applied to
+                // every subtree or the bridged trait would write its default (E2 §2.2).
+                .environment(\.accent, accent)
                 .environment(\.notificationPermissionAction, requestNotificationPermission)
                 .environment(\.notificationTestAction, notificationTestAction)
                 .dynamicTypeSize(dynamicTypeSize)
@@ -178,6 +187,14 @@ public struct ShellView: View {
                         onSubmit: { submission in submitDraft(submission) }
                     )
                     .id(draftId)
+                } else if !homeSettled
+                    || (!session.workspaceDirectory.hasLoaded
+                        && session.workspaceDirectory.error == nil)
+                {
+                    // Still deciding between a chat and a draft: the launch frame stays up. A
+                    // home greeting must never appear and then be replaced by the same greeting
+                    // on the very next frame (E2 §3.3).
+                    LaunchSkeleton()
                 } else {
                     EmptyMain(session: session, onOpenSidebar: { drawer.open(.sidebar) })
                 }
@@ -551,24 +568,22 @@ struct EmptyMain: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        // Same geometry as `LaunchSkeleton`: the header is pinned to the top and the hero is
+        // centred in the space the draft's composer will take (E2 §3.1).
+        HomeHeroLayout {
             ShellHeader(leading: .sidebar(onOpenSidebar)) {
                 Color.clear
             } trailing: {
                 Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }
-            ZStack {
-                ClaudeHomeHero()
-                if let error = session.agentsError {
-                    VStack {
-                        Spacer()
-                        InlineBanner(
-                            .failure, title: error, action: ("Try again", refreshAgents)
-                        )
-                        .padding(.horizontal, Space.lg)
-                        .padding(.bottom, Space.xl)
-                    }
-                }
+        } hero: {
+            ClaudeHomeHero()
+        }
+        .overlay(alignment: .bottom) {
+            if let error = session.agentsError {
+                InlineBanner(.failure, title: error, action: ("Try again", refreshAgents))
+                    .padding(.horizontal, Space.lg)
+                    .padding(.bottom, Space.xl)
             }
         }
     }

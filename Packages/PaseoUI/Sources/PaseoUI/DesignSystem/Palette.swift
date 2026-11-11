@@ -36,6 +36,41 @@ extension PureBlackKey: UITraitBridgedEnvironmentKey {
     }
 }
 
+/// The colour accent as a UIKit trait, exactly like `PureBlackTrait`: the accent tokens are
+/// dynamic `UIColor` providers that read it, so a switch redraws in place — no rebuild and no
+/// `@AppStorage` read in any leaf body.
+struct AccentTrait: UITraitDefinition {
+    static let defaultValue = ClaudeAccent.claude
+    static let identifier = "com.wiselfx.paseoclient.accent"
+}
+
+extension UITraitCollection {
+    var accent: ClaudeAccent { self[AccentTrait.self] }
+}
+
+/// The SwiftUI side of the trait: `RootView` sets `\.accent`, and SwiftUI bridges it into the
+/// UIKit trait collections its hosting views see.
+struct AccentKey: EnvironmentKey {
+    static let defaultValue = ClaudeAccent.claude
+}
+
+extension EnvironmentValues {
+    public var accent: ClaudeAccent {
+        get { self[AccentKey.self] }
+        set { self[AccentKey.self] = newValue }
+    }
+}
+
+extension AccentKey: UITraitBridgedEnvironmentKey {
+    static func read(from traitCollection: UITraitCollection) -> ClaudeAccent {
+        traitCollection.accent
+    }
+
+    static func write(to mutableTraits: inout any UIMutableTraits, value: ClaudeAccent) {
+        mutableTraits[AccentTrait.self] = value
+    }
+}
+
 /// The app's palette (ClaudeUI's tokens extended with the DSH turn tokens; see
 /// `docs/research/08-dsh-live-observation.md` §5, which overrides doc 06).
 enum Palette {
@@ -50,8 +85,8 @@ enum Palette {
                 : UIColor(red: 252 / 255, green: 252 / 255, blue: 251 / 255, alpha: 1)
         })
     }
-    /// The sidebar's canvas, one step below the chat: #0B0B0B in dark, #F9F9F7 in light
-    /// (OCU §12.4, §12.5).
+    /// The sidebar's canvas, one step below the chat: #0B0B0B in dark, #F4F3EF in light
+    /// (Claude's sidebar; OCU §12.4, §12.5).
     static var sidebar: Color {
         Color(uiColor: UIColor { traits in
             if traits[PureBlackTrait.self] {
@@ -59,7 +94,7 @@ enum Palette {
             }
             return traits.userInterfaceStyle == .dark
                 ? UIColor(red: 11 / 255, green: 11 / 255, blue: 11 / 255, alpha: 1)
-                : UIColor(red: 249 / 255, green: 249 / 255, blue: 247 / 255, alpha: 1)
+                : UIColor(red: 244 / 255, green: 243 / 255, blue: 239 / 255, alpha: 1)
         })
     }
     /// Cards: #FFFFFF in light, #1A1A19 in dark (OCU §12.4).
@@ -107,6 +142,41 @@ enum Palette {
             })
     }
     static let orange = Color(red: 217 / 255, green: 119 / 255, blue: 87 / 255)
+
+    // MARK: Accent
+
+    /// The accent fill: the send button and live voice. Claude is the clay in both themes;
+    /// Paseo is upstream's `#20744A`, one step lighter in dark so it keeps contrast on #151515.
+    /// Brand marks keep `orange`.
+    static var accent: Color {
+        Color(uiColor: UIColor { traits in
+            switch traits[AccentTrait.self] {
+            case .claude:
+                return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
+            case .paseo:
+                return traits.userInterfaceStyle == .dark
+                    ? UIColor(red: 46 / 255, green: 138 / 255, blue: 92 / 255, alpha: 1)
+                    : UIColor(red: 32 / 255, green: 116 / 255, blue: 74 / 255, alpha: 1)
+            }
+        })
+    }
+
+    /// Accent-coloured glyphs and text. Paseo's dark value is upstream's `accentBright`.
+    static var accentInk: Color {
+        Color(uiColor: UIColor { traits in
+            switch traits[AccentTrait.self] {
+            case .claude:
+                return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
+            case .paseo:
+                return traits.userInterfaceStyle == .dark
+                    ? UIColor(red: 124 / 255, green: 203 / 255, blue: 160 / 255, alpha: 1)
+                    : UIColor(red: 32 / 255, green: 116 / 255, blue: 74 / 255, alpha: 1)
+            }
+        })
+    }
+
+    /// The glyph on an accent fill: white in both themes, for both accents.
+    static let onAccent = Color(uiColor: UIColor { _ in .white })
 
     // MARK: DSH tokens
 
@@ -184,8 +254,10 @@ enum Palette {
                 ? UIColor(white: 1, alpha: 0.06)
                 : UIColor(red: 240 / 255, green: 239 / 255, blue: 236 / 255, alpha: 1)
         })
-    /// `--dsh-claude-chip`, the hover/pressed plate.
-    static let chip = adaptive(light: 0.965, dark: 0.14)
+    /// `--dsh-claude-chip`, the hover/pressed plate. The selected sidebar row reads through this
+    /// token; on the darker #F4F3EF canvas the plate steps down to 0.93 so the pill stays visible
+    /// (was 0.965 on #F9F9F7).
+    static let chip = adaptive(light: 0.93, dark: 0.14)
     /// `--dsw-alias-state-warn-label`: #DD8629 both themes.
     static let warning = Color(red: 221 / 255, green: 134 / 255, blue: 41 / 255)
     /// The unread / finished-in-background dot.

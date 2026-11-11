@@ -57,7 +57,7 @@ struct FullScreenComposer: View {
                     dismiss()
                 }
                 .font(.paseo(.callout, weight: .semibold))
-                .foregroundStyle(trimmedEmpty ? Palette.secondaryInk : Palette.orange)
+                .foregroundStyle(trimmedEmpty ? Palette.secondaryInk : Palette.accentInk)
                 .disabled(trimmedEmpty)
                 .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
                 .accessibilityLabel(isRunning ? "Send and steer" : "Send message")
@@ -69,7 +69,7 @@ struct FullScreenComposer: View {
             TextEditor(text: $draft)
                 .font(.paseo(.body))
                 .foregroundStyle(Palette.ink)
-                .tint(Palette.orange)
+                .tint(Palette.accentInk)
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 10)
                 .padding(.top, 8)
