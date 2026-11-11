@@ -118,7 +118,7 @@ struct SpeechProviderSheet: View {
                             .frame(width: 160)
                         }
                         .padding(.horizontal, 16)
-                        .frame(height: 60)
+                        .frame(minHeight: 60)
                         .accessibilityIdentifier("settings.voice.provider")
                         if let hint = setByHint(fields[.provider]) {
                             Text(hint)

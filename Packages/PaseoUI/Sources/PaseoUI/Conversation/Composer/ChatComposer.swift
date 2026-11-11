@@ -310,6 +310,7 @@ struct ComposerView: View {
             } else {
                 if composerExpanded { attachmentTray }
                 if composerExpanded { dictationDeniedBanner }
+                if composerExpanded { dictationFailureBanner }
                 if composerExpanded, let error = errorText {
                     Text(error)
                         .font(.paseo(.footnote))
@@ -422,6 +423,21 @@ struct ComposerView: View {
     /// One string in both modes, from upstream `composer.placeholders.mobile` (en.ts:117).
     private var placeholder: String {
         controller?.composerPrompt ?? "Message, @files, /commands"
+    }
+
+    /// Upstream `message.dictation.failed`: "Dictation failed: {{error}}", with `retry`.
+    @ViewBuilder private var dictationFailureBanner: some View {
+        if let failure = activeDictation?.failure {
+            InlineBanner(
+                .failure, title: failure.title, message: failure.message, systemImage: "mic.slash",
+                action: ("Retry dictation", {
+                    activeDictation?.dismissFailure()
+                    if let dictation = activeDictation {
+                        dictation.toggle(currentDraft: text)
+                    }
+                }))
+                .accessibilityIdentifier("composer.dictation.failed")
+        }
     }
 
     @ViewBuilder private var dictationDeniedBanner: some View {
@@ -593,7 +609,10 @@ struct ComposerView: View {
     /// Nothing while voice mode owns the mic (E1 §3): a second owner would set the session's
     /// category to `.measurement` and its teardown would deactivate voice mode's session.
     @ViewBuilder private var dictateButton: some View {
-        if !voiceActiveForAgent, let dictation = activeDictation {
+        // Also hidden while the lane is starting: `isVoiceMode` only becomes true once the daemon
+        // accepts, and dictation must never own the mic inside that window — it would switch the
+        // session category out from under the capture that is about to start.
+        if !voiceActiveForAgent, voice?.phase != .starting, let dictation = activeDictation {
             ComposerMicButton(isListening: dictation.isListening) {
                 if dictation.isListening {
                     dictation.stop(keepingDraft: true)
@@ -1250,12 +1269,14 @@ struct VoiceBar: View {
             .accessibilityLabel(voice.isMuted ? "Unmute voice" : "Mute voice")
             .accessibilityIdentifier("composer.voice.mute")
 
-            // The live level fills everything between the two circles (E1 §2.3).
+            // The live level fills everything between the two circles (E1 §2.3). The bar reads
+            // the level from its own ring at draw time; this view never reads `voice.volume`, so
+            // an audio buffer cannot re-evaluate the composer (H1 §3).
             LiveWaveform(
                 buffer: engine.waveform, isActive: !voice.isMuted,
                 barWidth: ComposerMetrics.waveformBarWidth, barGap: ComposerMetrics.waveformBarGap,
                 maxBarHeight: ComposerMetrics.waveformHeight,
-                accessibilityText: "Voice volume, \(Int((voice.volume * 100).rounded())) percent")
+                accessibilityText: "Voice volume")
                 .accessibilityIdentifier("composer.voice.volume")
 
             Button {
@@ -1506,8 +1527,9 @@ struct DictationOverlay: View {
             .accessibilityLabel("Cancel dictation")
             .accessibilityIdentifier("composer.dictation.cancel")
 
-            // E1 §2.3: the meter takes every point the row does not need. The bar count comes
-            // from the width once at layout, never per frame.
+            // E1 §2.3: the meter takes every point the row does not need. A `Spacer` here used to
+            // split that space with it (the meter got ~half the row); the bar count comes from
+            // the width once at layout, never per frame.
             meter
 
             Text(formattedDuration)
@@ -1515,8 +1537,6 @@ struct DictationOverlay: View {
                 .monospacedDigit()
                 .foregroundStyle(Palette.ink)
                 .accessibilityIdentifier("composer.dictation.timer")
-
-            Spacer(minLength: 0)
 
             actionButton(
                 "pencil", label: "Insert transcription",
@@ -1673,19 +1693,29 @@ struct ComposerVoiceWiring: ViewModifier {
                 .onChange(of: voice.error) { _, message in
                     guard let message else { return }
                     VoiceLog.log.error("lane: \(message, privacy: .public)")
+                    // A lane that was up and then failed (a resync the daemon refused, a stop
+                    // that errored) used to fail silently: the bar just disappeared. A start
+                    // refusal is already toasted by `toggleVoiceMode`.
+                    if voice.isVoiceMode || voice.phase != .disabled {
+                        controller.showToast(message)
+                    }
                 }
                 .onChange(of: voice.isSpeaking) { _, speaking in
                     VoiceLog.log.info("daemon VAD: speaking=\(speaking)")
                 }
                 .onChange(of: voice.isMuted) { _, muted in
                     // Muting clears the meter, like the store's own telemetry reset.
-                    if muted { controller.voiceEngine.waveform.reset() }
+                    if muted { controller.voiceEngine.meter.reset() }
                 }
                 .onChange(of: voice.phase) { _, phase in
                     VoiceLog.log.info(
                         "lane phase: \(String(describing: phase), privacy: .public)")
                     switch phase {
-                    case .listening, .waiting, .playing:
+                    // Only `.listening` needs a capture start: the engine keeps recording through
+                    // `.waiting` and `.playing` (the daemon needs the mic for barge-in), so a
+                    // start on every phase change was three Tasks that all returned at the
+                    // engine's guard.
+                    case .listening:
                         Task { await startCapture() }
                     default:
                         controller.voiceEngine.stopCapture()

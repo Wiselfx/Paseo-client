@@ -45,7 +45,7 @@ struct VoicePage: View {
             } else {
                 Section {
                     LoadingState("Loading…")
-                        .frame(height: 160)
+                        .frame(minHeight: 160)
                         .panelRow(Palette.background)
                 }
             }
