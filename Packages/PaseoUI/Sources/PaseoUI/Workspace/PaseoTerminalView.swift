@@ -61,11 +61,12 @@ struct PaseoTerminalView: UIViewRepresentable {
         // The palette's ink on the panel's canvas, in both schemes, so the terminal always reads
         // as a terminal and the page has no band (E2b §3). Re-resolved on every trait change.
         view.nativeForegroundColor = UIColor(Palette.ink)
-        view.nativeBackgroundColor = PaseoTerminalBackground.resolved(view.traitCollection)
+        PaseoTerminalBackground.apply(to: view, coordinator: context.coordinator)
         let backgroundTraits: [UITrait] = [UITraitUserInterfaceStyle.self, PureBlackTrait.self]
         view.registerForTraitChanges(backgroundTraits) {
-            (view: TerminalView, _: UITraitCollection) in
-            view.nativeBackgroundColor = PaseoTerminalBackground.resolved(view.traitCollection)
+            [weak coordinator = context.coordinator] (view: TerminalView, _: UITraitCollection) in
+            guard let coordinator else { return }
+            PaseoTerminalBackground.apply(to: view, coordinator: coordinator)
         }
         context.coordinator.view = view
         // The virtual key bar replaces SwiftTerm's built-in one: our keys, our haptics. Built once
@@ -85,10 +86,10 @@ struct PaseoTerminalView: UIViewRepresentable {
         // `makeUIView` builds the view before it inherits the hosting traits; this resolves the
         // panel fill once it is in the hierarchy. Trait changes after that go through the
         // registration in `makeUIView`.
-        let background = PaseoTerminalBackground.resolved(uiView.traitCollection)
-        if uiView.nativeBackgroundColor != background {
-            uiView.nativeBackgroundColor = background
-        }
+        // Keyed by the scheme, never by comparing `UIColor`s: two equal colours in different
+        // colour spaces compare unequal, and re-setting SwiftTerm's background repaints the
+        // whole emulator on every update (lead fix at the E2b merge).
+        PaseoTerminalBackground.apply(to: uiView, coordinator: context.coordinator)
     }
 
     static func dismantleUIView(_ uiView: TerminalView, coordinator: Coordinator) {
@@ -98,9 +99,17 @@ struct PaseoTerminalView: UIViewRepresentable {
 
 /// The terminal's canvas: the same panel fill as every other workspace tab, resolved for the
 /// traits the emulator currently sees (E2b §3).
+@MainActor
 private enum PaseoTerminalBackground {
-    static func resolved(_ traits: UITraitCollection) -> UIColor {
-        UIColor(Palette.panel).resolvedColor(with: traits)
+    /// Sets the panel fill only when the scheme it resolves for changed: dark, light or pure
+    /// black. Every other call is a two-field compare.
+    static func apply(to view: TerminalView, coordinator: PaseoTerminalCoordinator) {
+        let traits = view.traitCollection
+        let key = PaseoTerminalCoordinator.BackgroundKey(
+            style: traits.userInterfaceStyle, pureBlack: traits.pureBlack)
+        guard coordinator.appliedBackground != key else { return }
+        coordinator.appliedBackground = key
+        view.nativeBackgroundColor = UIColor(Palette.panel).resolvedColor(with: traits)
     }
 }
 
@@ -159,6 +168,12 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     weak var view: TerminalView?
     /// The scrollback the view was last configured with — live re-application on change.
     var appliedScrollback = PaseoTerminalScrollback.defaultValue
+    /// The scheme the emulator's background was last resolved for (E2b lead fix).
+    struct BackgroundKey: Equatable {
+        var style: UIUserInterfaceStyle
+        var pureBlack: Bool
+    }
+    var appliedBackground: BackgroundKey?
     /// The font size the view was last configured with — live re-application on a Code size
     /// change, without touching the emulator buffer (scrollback survives).
     var appliedFontSize = PaseoTerminalFont.baseSize

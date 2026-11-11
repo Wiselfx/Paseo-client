@@ -94,12 +94,13 @@ public struct ChatScreen: View {
             ComposerView(
                 mode: .conversation, store: store, controller: controller,
                 focused: $composerFocused)
-                .overlay(alignment: .top) {
-                    // A guide of `bottom + Space.sm` on the overlay's top edge puts the button's
-                    // bottom Space.sm above the composer's top, centred horizontally.
-                    TranscriptBackToEndButton(controller: controller)
-                        .alignmentGuide(.top) { $0[.bottom] + Space.sm }
-                }
+        }
+        // On the whole bar, not the composer: the subagent pill sits above the composer, and the
+        // button must clear it too (lead fix at the E2b merge). A guide of `bottom + Space.sm` on
+        // the overlay's top edge puts the button's bottom Space.sm above the bar's top.
+        .overlay(alignment: .top) {
+            TranscriptBackToEndButton(controller: controller)
+                .alignmentGuide(.top) { $0[.bottom] + Space.sm }
         }
     }
 }
