@@ -14,9 +14,11 @@ final class DictationController: NSObject {
     private(set) var isListening = false
     /// Permissions were denied (or no recognizer for the locale). Inline note in the composer.
     private(set) var isDenied = false
-    /// Smoothed 0…1 from the input tap; drives the quiet mic pulse and the overlay meter.
-    private(set) var level: Float = 0
     /// The dictation's live levels (D2 §4), drawn by `LiveWaveform` in the overlay.
+    ///
+    /// This is the only carrier of the level (E1 §2.4): it is a plain reference the `Canvas`
+    /// reads when it draws. An `@Observable` level here was read by the composer's body, so
+    /// every audio buffer re-evaluated the whole composer.
     let waveform = LiveWaveformBuffer()
     /// Seconds since recording started; the overlay's `mm:ss` timer.
     private(set) var duration: TimeInterval = 0
@@ -24,6 +26,8 @@ final class DictationController: NSObject {
     /// The host assigns this once and mirrors the emitted text into the draft verbatim.
     var onDraft: ((String) -> Void)?
 
+    /// The smoothed level that feeds `waveform`; not observed, because nothing draws it directly.
+    @ObservationIgnored private var smoothedLevel: Float = 0
     private var engine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var recognition: SFSpeechRecognitionTask?
@@ -68,7 +72,7 @@ final class DictationController: NSObject {
         committed = ""
         currentPartial = ""
         duration = 0
-        level = 0
+        smoothedLevel = 0
         waveform.reset()
 
         let engine = AVAudioEngine()
@@ -161,7 +165,7 @@ final class DictationController: NSObject {
         request = nil
         recognition = nil
         isListening = false
-        level = 0
+        smoothedLevel = 0
         waveform.reset()
         duration = 0
         // Off-main, like activation: `setActive(false)` waits on the audio server too.
@@ -173,18 +177,18 @@ final class DictationController: NSObject {
         engine.inputNode.removeTap(onBus: 0)
         pendingDeactivation = Task { await Self.deactivateSession() }
         isListening = false
-        level = 0
+        smoothedLevel = 0
         waveform.reset()
         duration = 0
     }
 
     private func updateLevel(_ raw: Float) {
         // `measurement` mode has AGC off, so raw RMS sits around 0.005–0.03: map it into the
-        // speech band, then ease it (attack 0.6, release 0.15) so the bars move with the words
-        // instead of creeping along the floor (D2 §4).
-        let target = AudioLevel.normalized(rms: raw)
-        level = AudioLevel.smoothed(level, towards: target)
-        waveform.push(level)
+        // mode's band, then ease it (attack 0.6, release 0.15) so the bars move with the words
+        // instead of creeping along the floor (D2 §4, E1 §2.2).
+        let target = AudioLevel.normalized(rms: raw, band: .dictation)
+        smoothedLevel = AudioLevel.smoothed(smoothedLevel, towards: target)
+        waveform.push(smoothedLevel)
         if raw > 0.012 { lastHeard = Date() }
     }
 
@@ -235,7 +239,12 @@ final class DictationController: NSObject {
         try session.setActive(true, options: .notifyOthersOnDeactivation)
     }
 
+    /// Never deactivates the session realtime voice is recording through (E1 §3): dictation's
+    /// teardown is deferred, so it can land milliseconds after voice mode activated the same
+    /// shared session — which killed the mic mid-conversation.
     nonisolated private static func deactivateSession() async {
+        let voiceOwnsSession = await MainActor.run { MicrophoneSessionOwner.voiceCaptureActive }
+        guard !voiceOwnsSession else { return }
         try? AVAudioSession.sharedInstance().setActive(
             false, options: .notifyOthersOnDeactivation)
     }
@@ -275,5 +284,16 @@ final class DictationController: NSObject {
         }
         return sqrt(sum / Float(length))
     }
+}
+
+/// Which subsystem owns the app's shared audio session (E1 §3).
+///
+/// Dictation and realtime voice both put `AVAudioSession` into `.playAndRecord`. Dictation's
+/// teardown is deferred off-main and can land after voice mode has activated the same session,
+/// so it reads this flag first and stands down instead of stopping the microphone mid-reply.
+@MainActor
+enum MicrophoneSessionOwner {
+    /// True while `VoiceAudioEngine` is capturing.
+    static var voiceCaptureActive = false
 }
 #endif

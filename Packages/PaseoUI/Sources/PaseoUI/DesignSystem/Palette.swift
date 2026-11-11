@@ -89,6 +89,13 @@ enum Palette {
             $0.userInterfaceStyle == .dark
                 ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 0.79, alpha: 1)
         })
+    /// The composer's lift in light: black at 6 % (E1 §4). In dark the card is lighter than the
+    /// canvas already, and a black shadow under it would just muddy the edge.
+    static let composerShadow = Color(
+        uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(white: 0, alpha: 0) : UIColor(white: 0, alpha: 0.06)
+        })
     static func adaptive(light: Double, dark: Double, pureBlack: Double? = nil) -> Color {
         Color(
             uiColor: UIColor { traits in
