@@ -18,8 +18,9 @@ struct ClaudeRevealProse: View {
     /// True while the producing turn is running — i.e. prose is actively arriving.
     let isStreaming: Bool
     var localImageLoader: ((String) async -> UIImage?)? = nil
-    /// Renders `![alt](url)` paragraphs: remote http(s) via AsyncImage; workspace paths through
-    /// the local loader. `nil` renders images as text.
+    /// Renders `![alt](url)` paragraphs: remote images through `RemoteImageLoader` (the shared
+    /// cache, downsample and SVG path); workspace paths through the local loader. `nil` renders
+    /// images as text.
     var imageContent: ((MarkdownImage) -> AnyView)? = nil
 
     static let minOpacity: Double = 0.2

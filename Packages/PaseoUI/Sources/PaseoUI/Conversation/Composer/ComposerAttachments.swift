@@ -219,21 +219,11 @@ enum ComposerImageProcessor {
         return (jpeg, scaled)
     }
 
-    /// Decode + downscale with ImageIO, without a full `UIImage` pass: `CGImageSource` reads the
-    /// header, creates one thumbnail at `maxPixelSize` and never materializes the full bitmap.
-    /// Safe off main (audit B N7).
+    /// Decode + downscale with ImageIO, without a full `UIImage` pass: `ImageDownsampler` reads
+    /// the header, creates one thumbnail at `maxPixelSize` and never materializes the full
+    /// bitmap. Safe off main (audit B N7). One implementation for the app (H5 round 2).
     nonisolated static func thumbnail(data: Data, maxPixelSize: Double) -> UIImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(1, maxPixelSize),
-        ]
-        guard
-            let cgImage = CGImageSourceCreateThumbnailAtIndex(
-                source, 0, options as CFDictionary)
-        else { return nil }
-        return UIImage(cgImage: cgImage)
+        ImageDownsampler.image(data: data, maxPixelSize: maxPixelSize)
     }
 
     /// Byte count for display.

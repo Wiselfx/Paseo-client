@@ -1,6 +1,5 @@
 #if canImport(UIKit)
 import Foundation
-import ImageIO
 import SwiftUI
 import UIKit
 
@@ -20,6 +19,19 @@ final class RemoteImagePayload: @unchecked Sendable {
     init(image: UIImage, aspectRatio: CGFloat) {
         self.image = image
         self.aspectRatio = aspectRatio.isFinite && aspectRatio > 0 ? aspectRatio : 1
+    }
+}
+
+/// A remembered failure and when it happened. `NSCache` stores objects and the card's first
+/// body pass must be able to ask "did this URL fail a moment ago?" without an actor hop, so the
+/// memo lives outside the actor like the decoded image does.
+final class RemoteFailureMemo: @unchecked Sendable {
+    let failure: RemoteImageFailure
+    let at: Date
+
+    init(failure: RemoteImageFailure, at: Date) {
+        self.failure = failure
+        self.at = at
     }
 }
 
@@ -112,6 +124,10 @@ actor RemoteImageLoader {
     /// lets the card's first frame read it without an actor hop.
     nonisolated(unsafe) private static let decoded = NSCache<NSString, RemoteImagePayload>()
     nonisolated(unsafe) private static let shapes = NSCache<NSString, NSNumber>()
+    /// Recent failures, by URL and by URL + pixel bucket. Bounded and time-limited; `Retry`
+    /// bypasses it. Readable from the card's first frame, so a card that failed last time comes
+    /// back as the compact failure row instead of flashing a placeholder first.
+    nonisolated(unsafe) private static let failures = NSCache<NSString, RemoteFailureMemo>()
 
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
@@ -128,12 +144,12 @@ actor RemoteImageLoader {
     }()
 
     private var inFlight: [String: Task<RemoteImageOutcome, Never>] = [:]
-    private var recentFailures: [String: (failure: RemoteImageFailure, at: Date)] = [:]
 
     init() {
         Self.decoded.countLimit = Self.imageCacheCountLimit
         Self.decoded.totalCostLimit = Self.imageCacheCostLimit
         Self.shapes.countLimit = 512
+        Self.failures.countLimit = 32
     }
 
     /// The app's identity on the wire. Wikimedia answers **403** to a request with no
@@ -164,6 +180,14 @@ actor RemoteImageLoader {
         shapes.object(forKey: urlString as NSString)?.doubleValue
     }
 
+    /// A failure this URL is still remembered for, or nil when it is unknown or expired.
+    static func cachedFailure(for urlString: String) -> RemoteImageFailure? {
+        guard let memo = failures.object(forKey: urlString as NSString),
+            Date().timeIntervalSince(memo.at) < failureTTL
+        else { return nil }
+        return memo.failure
+    }
+
     /// Remember a shape learned some other way (an SVG's `viewBox`, a snapshot).
     static func rememberAspect(_ aspectRatio: CGFloat, for urlString: String) {
         guard aspectRatio.isFinite, aspectRatio > 0 else { return }
@@ -190,10 +214,8 @@ actor RemoteImageLoader {
             Self.decoded.setObject(cached, forKey: key as NSString, cost: 0)
             return .image(cached)
         }
-        if !ignoreFailureCache, let memo = recentFailures[key],
-            Date().timeIntervalSince(memo.at) < Self.failureTTL
-        {
-            return .failure(memo.failure)
+        if !ignoreFailureCache, let failure = Self.cachedFailure(for: key) {
+            return .failure(failure)
         }
 
         let task: Task<RemoteImageOutcome, Never>
@@ -212,14 +234,21 @@ actor RemoteImageLoader {
             Self.decoded.setObject(payload, forKey: identity as NSString, cost: 0)
             Self.shapes.setObject(
                 NSNumber(value: Double(payload.aspectRatio)), forKey: identity as NSString)
-            recentFailures[key] = nil
+            Self.forgetFailure(key)
+            Self.forgetFailure(identity)
         case .failure(let failure):
-            if recentFailures.count >= 32 { recentFailures.removeAll(keepingCapacity: true) }
-            recentFailures[key] = (failure, Date())
+            let memo = RemoteFailureMemo(failure: failure, at: Date())
+            Self.failures.setObject(memo, forKey: key as NSString)
+            Self.failures.setObject(memo, forKey: identity as NSString)
         case .svg:
-            recentFailures[key] = nil
+            Self.forgetFailure(key)
+            Self.forgetFailure(identity)
         }
         return outcome
+    }
+
+    private static func forgetFailure(_ key: String) {
+        failures.removeObject(forKey: key as NSString)
     }
 
     private static func cost(of payload: RemoteImagePayload) -> Int {
@@ -282,9 +311,8 @@ actor RemoteImageLoader {
 
     // MARK: Decode (off main, downsampled)
 
-    /// One ImageIO pass: read the header, make one thumbnail at `pixelWidth`, never materialise
-    /// the full bitmap. A 4000 px photo costs a 1200 px buffer, not 48 MB on the main actor.
-    /// An animated GIF yields its first frame and stops there.
+    /// One ImageIO pass at the card's width (`ImageDownsampler`), never a full-size bitmap. A
+    /// 4000 px photo costs a 1200 px buffer, not 48 MB. An animated GIF yields its first frame.
     private static func decode(_ data: Data, pixelWidth: Int) async -> RemoteImagePayload? {
         await Task.detached(priority: .userInitiated) {
             RemoteImagePayload.decode(data: data, pixelWidth: pixelWidth)
@@ -362,23 +390,13 @@ actor RemoteImageLoader {
 }
 
 extension RemoteImagePayload {
-    /// The downsample itself, off the loader's actor: read the header, one thumbnail, one
-    /// `UIImage`. Runs on the cooperative pool, never on the main actor. (The composer has its
-    /// own twin of this in `ComposerImageProcessor.thumbnail`; they differ in what they return.)
+    /// The downsample itself, off the loader's actor and off main. Width-exact: a tall portrait
+    /// is decoded so its **width** matches the card, not its longest side (H5 round 2 review).
     static func decode(data: Data, pixelWidth: Int) -> RemoteImagePayload? {
-        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions),
-            CGImageSourceGetCount(source) > 0
+        guard
+            let image = ImageDownsampler.image(
+                data: data, pixelWidth: Double(pixelWidth), maxSide: 2048)
         else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(1, pixelWidth),
-        ]
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-        else { return nil }
-        let image = UIImage(cgImage: cgImage)
         let size = image.size
         guard size.width > 0, size.height > 0 else { return nil }
         return RemoteImagePayload(image: image, aspectRatio: size.width / size.height)

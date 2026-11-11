@@ -35,6 +35,13 @@ enum Space {
     static let xxxl: CGFloat = 32
 }
 
+/// Touch targets and other numbers more than one surface draws, so nothing has to re-invent
+/// Apple's 44 pt minimum (H5's image card actions, the prose viewers).
+enum Metrics {
+    /// The minimum touch target: every icon-only control reaches it.
+    static let hitSize: CGFloat = 44
+}
+
 /// The composer's shape, measured from Claude's composer (screenshots at 3×, E1 §4).
 ///
 /// Every number the card and its rows draw comes from here, so the draft and the conversation

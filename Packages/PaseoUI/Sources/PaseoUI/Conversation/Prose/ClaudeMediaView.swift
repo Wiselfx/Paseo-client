@@ -12,6 +12,9 @@
     public struct ClaudeMediaViewer: View {
         public var item: ClaudeMedia
         public var controlsVisible: Bool
+        /// Whether the host does anything with `.edit`. A viewer inside prose has no editor, and
+        /// a pencil that does nothing is worse than no pencil (H5 round 2).
+        public var showsEditAction: Bool
         public var mediaContent: (ClaudeMedia, ClaudeMediaPresentation) -> AnyView
         public var onAction: (ClaudeMediaAction) -> Void
 
@@ -22,12 +25,13 @@
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         public init(
-            item: ClaudeMedia, controlsVisible: Bool,
+            item: ClaudeMedia, controlsVisible: Bool, showsEditAction: Bool = true,
             mediaContent: @escaping (ClaudeMedia, ClaudeMediaPresentation) -> AnyView,
             onAction: @escaping (ClaudeMediaAction) -> Void
         ) {
             self.item = item
             self.controlsVisible = controlsVisible
+            self.showsEditAction = showsEditAction
             self.mediaContent = mediaContent
             self.onAction = onAction
         }
@@ -94,15 +98,17 @@
                         Spacer(minLength: 8)
                         if isImage {
                             HStack(spacing: 0) {
-                                Button {
-                                    onAction(.edit(item))
-                                } label: {
-                                    Image(systemName: "pencil")
-                                        .font(.paseo(.body))
-                                        .frame(width: 48, height: 44)
+                                if showsEditAction {
+                                    Button {
+                                        onAction(.edit(item))
+                                    } label: {
+                                        Image(systemName: "pencil")
+                                            .font(.paseo(.body))
+                                            .frame(width: 48, height: 44)
+                                    }
+                                    .accessibilityLabel("Edit image")
+                                    .accessibilityIdentifier("media.viewer.edit")
                                 }
-                                .accessibilityLabel("Edit image")
-                                .accessibilityIdentifier("media.viewer.edit")
                                 Button {
                                     onAction(.share(item))
                                 } label: {

@@ -315,9 +315,21 @@ struct YouTubeRichCard: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
+    @Environment(\.displayScale) private var displayScale
+
+    /// The 16:9 card's still. Decoded once through the shared loader and cached by URL, so
+    /// scrolling past and back does not re-download or re-flash it (H5 round 2: this used to be
+    /// a bare `AsyncImage`, the same defect the image cards had).
+    @State private var still: UIImage?
+    @State private var stillFailed = false
 
     private let playback = InlineYouTubePlayback.shared
     private var isPlaying: Bool { playback.activeID == reference.id }
+
+    private var stillURL: String? {
+        guard !isPlaying else { return nil }
+        return RichContentDetector.youTubeThumbnailURL(id: reference.id)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -369,26 +381,22 @@ struct YouTubeRichCard: View {
 
     private var thumbnail: some View {
         ZStack {
-            AsyncImage(
-                url: URL(string: RichContentDetector.youTubeThumbnailURL(id: reference.id))
-            ) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle().fill(Palette.codeSurface)
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: .fill)
-                case .failure:
-                    Rectangle().fill(Palette.codeSurface)
-                        .overlay {
+            if let still {
+                Image(uiImage: still)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipped()
+            } else {
+                Rectangle()
+                    .fill(Palette.codeSurface)
+                    .overlay {
+                        if stillFailed {
                             Image(systemName: "photo")
                                 .font(.glyph(.xlarge, weight: .light))
                                 .foregroundStyle(Palette.secondaryInk)
                         }
-                @unknown default:
-                    Rectangle().fill(Palette.codeSurface)
-                }
+                    }
             }
-            .clipped()
 
             Circle()
                 .fill(.black.opacity(0.55))
@@ -409,6 +417,24 @@ struct YouTubeRichCard: View {
         .accessibilityElement()
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("Play YouTube video \(reference.id)")
+        // The box is already reserved by the card's 16:9 frame, so the still can land whenever.
+        .task(id: stillURL) { await loadStill() }
+    }
+
+    /// One decode per URL, through the same loader (and cache) as every other remote image.
+    /// A failed thumbnail is a decorative miss, not an error worth a card.
+    @MainActor
+    private func loadStill() async {
+        guard let stillURL, still == nil else { return }
+        let pixelWidth = RemoteImageSizing.pixelWidth(points: full ? 430 : 320, scale: displayScale)
+        let outcome = await RemoteImageLoader.shared.load(
+            urlString: stillURL, pixelWidth: pixelWidth)
+        guard !Task.isCancelled else { return }
+        switch outcome {
+        case .image(let payload): still = payload.image
+        case .failure: stillFailed = true
+        case .svg: stillFailed = true
+        }
     }
 
     private func openInYouTube() {
@@ -511,6 +537,9 @@ struct RichRemoteImage: View {
     /// Known before the pixels: from the cache, or from the image once it lands.
     @State private var aspectRatio: CGFloat?
     @State private var failure: RemoteImageFailure?
+    /// True while this card is the one that showed the placeholder: its failure then keeps the
+    /// reserved box instead of collapsing to a 56 pt row and pulling the rest of the turn up.
+    @State private var keepsFailureBox = true
     @State private var width: CGFloat = 0
     @State private var retryToken = 0
     /// The URL the state above belongs to. SwiftUI can hand this view a different block; when it
@@ -531,10 +560,33 @@ struct RichRemoteImage: View {
         self.alt = alt
         // First frame: whatever the session already knows about this URL. A cache read is
         // O(1), so the row has no "empty" frame to flash when it scrolls back.
+        let seed = Self.seed(for: urlString)
+        _image = State(initialValue: seed.image)
+        _aspectRatio = State(initialValue: seed.aspectRatio)
+        _failure = State(initialValue: seed.failure)
+        _keepsFailureBox = State(initialValue: seed.keepsBox)
+    }
+
+    /// What the caches say about a URL before anything is drawn.
+    private struct Seed {
+        let image: UIImage?
+        let aspectRatio: CGFloat?
+        let failure: RemoteImageFailure?
+        /// A card that has not drawn the placeholder (a cache hit) may show the compact failure
+        /// row; one that has must keep its box so nothing under it moves.
+        let keepsBox: Bool
+    }
+
+    private static func seed(for urlString: String) -> Seed {
         let identity = RemoteImageLoader.cacheIdentity(for: urlString)
         let cached = RemoteImageLoader.cached(for: identity)
-        _image = State(initialValue: cached?.image)
-        _aspectRatio = State(initialValue: cached?.aspectRatio ?? RemoteImageLoader.cachedAspect(for: identity))
+        let memo = RemoteImageLoader.cachedFailure(for: identity)
+        let image = cached?.image
+        return Seed(
+            image: image,
+            aspectRatio: cached?.aspectRatio ?? RemoteImageLoader.cachedAspect(for: identity),
+            failure: image == nil ? memo : nil,
+            keepsBox: image == nil && memo == nil)
     }
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
@@ -563,14 +615,21 @@ struct RichRemoteImage: View {
     }
 
     /// What the card's box is doing, as one value: a placeholder at a reserved ratio, the image
-    /// at its own, or the failure row. Motion runs only when this changes.
+    /// at its own, or a failure that either keeps the box or is compact. Motion runs only when
+    /// this changes.
     private struct Layout: Equatable {
         let aspectRatio: CGFloat
         let stage: Int
     }
 
     private var layout: Layout {
-        Layout(aspectRatio: reservedAspect, stage: image != nil ? 2 : (failure != nil ? 1 : 0))
+        var stage = 0
+        if image != nil {
+            stage = 2
+        } else if failure != nil {
+            stage = keepsFailureBox ? 3 : 1
+        }
+        return Layout(aspectRatio: reservedAspect, stage: stage)
     }
 
     var body: some View {
@@ -620,7 +679,11 @@ struct RichRemoteImage: View {
                     if webURL != nil { openLinkButton }
                 }
         } else if let failure {
-            failureCard(failure)
+            if keepsFailureBox {
+                boxedFailure(failure)
+            } else {
+                compactFailure(failure)
+            }
         } else {
             placeholder
         }
@@ -639,13 +702,42 @@ struct RichRemoteImage: View {
     }
 
     /// What went wrong, in the user's words, with the two things worth doing about it.
-    private func failureCard(_ failure: RemoteImageFailure) -> some View {
-        HStack(alignment: .center, spacing: 10) {
+    ///
+    /// Two forms, one behaviour: a card that showed the placeholder keeps the placeholder's
+    /// height (H5 round 2 review — a 270 pt box must not collapse to 56 pt under the reader),
+    /// a card that was created already failed takes the compact row.
+    private func boxedFailure(_ failure: RemoteImageFailure) -> some View {
+        Rectangle()
+            .fill(Palette.codeSurface)
+            .aspectRatio(reservedAspect, contentMode: .fit)
+            .frame(maxWidth: .infinity, maxHeight: heightCap)
+            .clipShape(.rect(cornerRadius: Radius.md))
+            .overlay {
+                failureContent(failure)
+                    .padding(.horizontal, Space.md)
+                    .padding(.vertical, Space.sm)
+            }
+    }
+
+    private func compactFailure(_ failure: RemoteImageFailure) -> some View {
+        failureContent(failure)
+            .padding(.horizontal, Space.md)
+            .padding(.vertical, Space.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
+            }
+    }
+
+    private func failureContent(_ failure: RemoteImageFailure) -> some View {
+        HStack(alignment: .center, spacing: Space.sm) {
             Image(systemName: "photo")
                 .font(.glyph(.large, weight: .light))
                 .foregroundStyle(Palette.secondaryInk)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.xs) {
                 Text("Couldn't load image")
                     .font(.paseo(.caption, weight: .medium))
                     .foregroundStyle(Palette.ink)
@@ -655,12 +747,12 @@ struct RichRemoteImage: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: Space.sm)
             Button("Retry") { retry() }
                 .buttonStyle(.plain)
                 .font(.paseo(.caption, weight: .medium))
                 .foregroundStyle(Palette.ink)
-                .frame(minWidth: 44, minHeight: 44)
+                .frame(minWidth: Metrics.hitSize, minHeight: Metrics.hitSize)
                 .accessibilityLabel("Try loading the image again")
             if webURL != nil {
                 Button {
@@ -669,21 +761,13 @@ struct RichRemoteImage: View {
                     Image(systemName: "safari")
                         .font(.glyph(.small))
                         .foregroundStyle(Palette.secondaryInk)
-                        .frame(width: 44, height: 44)
+                        .frame(width: Metrics.hitSize, height: Metrics.hitSize)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open link")
                 .accessibilityHint("Opens \(host ?? "the link") in Safari")
             }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
         }
         .accessibilityElement(children: .contain)
     }
@@ -742,6 +826,8 @@ struct RichRemoteImage: View {
     private func retry() {
         Haptics.light()
         failure = nil
+        // A retry shows the placeholder again, so a second failure must keep its box.
+        keepsFailureBox = true
         retryToken += 1
     }
 
@@ -772,11 +858,11 @@ struct RichRemoteImage: View {
     /// Point the card at a URL it has not drawn yet, starting from whatever is cached.
     private func adoptState(for urlString: String) {
         stateURL = urlString
-        let identity = RemoteImageLoader.cacheIdentity(for: urlString)
-        let cached = RemoteImageLoader.cached(for: identity)
-        image = cached?.image
-        aspectRatio = cached?.aspectRatio ?? RemoteImageLoader.cachedAspect(for: identity)
-        failure = nil
+        let seed = Self.seed(for: urlString)
+        image = seed.image
+        aspectRatio = seed.aspectRatio
+        failure = seed.failure
+        keepsFailureBox = seed.keepsBox
     }
 
     /// SVG has no `UIImage` decoder; the shared offscreen `WKWebView` draws it instead, at the
@@ -917,6 +1003,8 @@ struct RichImageViewer: View {
         ClaudeMediaViewer(
             item: media,
             controlsVisible: controlsVisible,
+            // Prose images have no editor; the pencil would be dead.
+            showsEditAction: false,
             mediaContent: { _, _ in
                 AnyView(viewerContent)
             },
@@ -936,7 +1024,7 @@ struct RichImageViewer: View {
         if let shownImage {
             Image(uiImage: shownImage).resizable().aspectRatio(contentMode: .fit)
         } else if remoteFailed {
-            VStack(spacing: 8) {
+            VStack(spacing: Space.sm) {
                 Text("Couldn't load image")
                     .font(.paseo(.headline))
                     .foregroundStyle(.white)
