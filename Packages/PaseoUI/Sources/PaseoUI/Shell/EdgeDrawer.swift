@@ -12,9 +12,24 @@ enum EdgeDrawer {
     /// progress (§1.1) — a card that covers the screen has the screen's own shape.
     static let cornerRadius: CGFloat = 55
 
-    /// The scrim over a covered surface: 0.25 in light, 0.55 in dark, scaled by progress (§1.1).
+    /// The scrim over a covered surface is gone (E2 §1): the front card keeps its own colour and
+    /// the depth comes from its shadow. Kept as the one place a scrim would be computed.
     static func scrimOpacity(_ progress: CGFloat, dark: Bool) -> Double {
-        Double(min(max(progress, 0), 1)) * (dark ? 0.55 : 0.25)
+        0
+    }
+
+    /// The front card's shadow: black at 10 % in light, 45 % in dark, a 24 pt blur along the
+    /// leading edge (the panel mirrors it). Opacity follows the drawer progress, so it grows
+    /// with the finger and the settle instead of popping in at the end.
+    static let shadowRadius: CGFloat = 24
+    static let shadowOpacityLight: Double = 0.10
+    static let shadowOpacityDark: Double = 0.45
+    static let leadingShadowOffset = CGSize(width: -2, height: 0)
+    static let trailingShadowOffset = CGSize(width: 2, height: 0)
+
+    static func shadowOpacity(_ progress: CGFloat, dark: Bool) -> Float {
+        let amount = Double(min(max(progress, 0), 1))
+        return Float(amount * (dark ? shadowOpacityDark : shadowOpacityLight))
     }
 }
 #endif

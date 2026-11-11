@@ -85,14 +85,14 @@ struct ComposerPrimaryButton: View {
         .frame(width: 36, height: 36)
         .frame(width: 44, height: 44)
         .contentShape(.rect)
-        .animation(Motion.swap.resolved(reduceMotion: reduceMotion), value: state)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: state)
     }
 
     @ViewBuilder private var content: some View {
         if state == .voiceActive, let waveform {
             LiveWaveform(
                 buffer: waveform, isActive: !isMuted, barCount: 5, barWidth: 2.5, barGap: 1.5,
-                maxBarHeight: 14, tint: Palette.background)
+                maxBarHeight: 14, tint: Palette.onAccent)
         } else {
             Image(systemName: symbol)
                 .font(.glyph(.regular, weight: .semibold))
@@ -141,19 +141,21 @@ struct ComposerPrimaryButton: View {
         }
     }
 
-    /// Orange is reserved for live voice; the send is ink, like Claude's white-on-dark circle.
+    /// The accent is the send (Claude's send is the accent circle) and live voice. Idle voice and
+    /// stop stay ink; unavailable is the neutral plate (E2 §2.3).
     private var fill: Color {
         switch state {
-        case .voiceActive: Palette.orange
+        case .send, .voiceActive: Palette.accent
         case .unavailable: Palette.chip
-        case .voice, .send, .stop: Palette.ink
+        case .voice, .stop: Palette.ink
         }
     }
 
     private var glyph: Color {
         switch state {
         case .unavailable: Palette.tertiaryInk
-        case .voice, .send, .stop, .voiceActive: Palette.background
+        case .send, .voiceActive: Palette.onAccent
+        case .voice, .stop: Palette.background
         }
     }
 

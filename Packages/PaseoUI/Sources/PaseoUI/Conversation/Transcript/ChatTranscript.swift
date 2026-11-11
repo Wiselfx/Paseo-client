@@ -628,7 +628,7 @@ struct TranscriptView: View {
     /// One task per reveal cycle: a scroll frame pushes the deadline out instead of cancelling and
     /// restarting a Task every frame (finding #18).
     private func revealTurnRail() {
-        guard controller.outlineAvailable else { return }
+        guard ChatOutlineRail.promptRailEnabled, controller.outlineAvailable else { return }
         if !turnNavVisible { turnNavVisible = true }
         scrollTrack.turnNavIdleDeadline = Date().addingTimeInterval(Self.turnNavIdleDuration)
         guard scrollTrack.turnNavIdleTask == nil else { return }
@@ -685,7 +685,9 @@ struct TranscriptView: View {
     /// drawn over the transcript with no reserved margin. It appears while scrolling and for a
     /// moment after; its 24 pt touch strip is live while it shows.
     @ViewBuilder private var outlineRail: some View {
-        if case .ready = store.phase, controller.outlineAvailable {
+        if ChatOutlineRail.promptRailEnabled, case .ready = store.phase,
+            controller.outlineAvailable
+        {
             ChatOutlineRail(
                 items: controller.outlineItems,
                 activeSeq: store.promptOutline.activeSeq,

@@ -86,39 +86,49 @@ public struct ConnectView: View {
     public var body: some View {
         ZStack {
             Palette.background.ignoresSafeArea()
-            VStack(spacing: 18) {
-                Spacer(minLength: 12)
-                VStack(spacing: 6) {
-                    Text("Paseo").font(.paseo(.largeTitle))
-                    Text("Connect to your host")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                }
-                Group {
-                    if showAddForm || hosts.isEmpty {
-                        directForm
-                    } else {
-                        savedHostsList
-                    }
-                }
-                if case .failed(let message) = status {
-                    Text(message)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.failureInk)
+            // The whole page scrolls, never a box inside it: one host must not need a scroll, and
+            // many hosts must not be trapped in a fixed-height frame (E2 §4).
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: 18) {
+                        VStack(spacing: 6) {
+                            Text("Paseo").font(.paseo(.largeTitle))
+                            Text("Connect to your host")
+                                .font(.paseo(.callout))
+                                .foregroundStyle(Palette.secondaryInk)
+                        }
+                        Group {
+                            if showAddForm || hosts.isEmpty {
+                                directForm
+                            } else {
+                                savedHostsList
+                            }
+                        }
+                        if case .failed(let message) = status {
+                            Text(message)
+                                .font(.paseo(.footnote))
+                                .foregroundStyle(Palette.failureInk)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                                .transition(.opacity)
+                        }
+                        if showAddForm || hosts.isEmpty { connectButton }
+                        Spacer(minLength: 24)
+                        Text(
+                            "Use your machine's LAN or Tailscale address. Set a password with `paseo daemon set-password`."
+                        )
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.captionInk)
                         .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .transition(.opacity)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 12)
+                    }
+                    .padding(.top, 12)
+                    // Fits: the spacer above pins the hint to the bottom. Doesn't fit: the page
+                    // grows and scrolls as one (`.scrollBounceBehavior(.basedOnSize)`).
+                    .frame(minHeight: proxy.size.height)
                 }
-                if showAddForm || hosts.isEmpty { connectButton }
-                Spacer()
-                Text(
-                    "Use your machine's LAN or Tailscale address. Set a password with `paseo daemon set-password`."
-                )
-                .font(.paseo(.caption))
-                .foregroundStyle(Palette.captionInk)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 12)
+                .scrollBounceBehavior(.basedOnSize)
             }
         }
         .foregroundStyle(Palette.ink)
@@ -149,9 +159,13 @@ public struct ConnectView: View {
 
     // MARK: Saved hosts
 
+    /// A content-sized card, not a `List`: one host must not scroll and the card must never cut
+    /// its own last row (E2 §4). The List-only swipe-to-delete is replaced by the existing
+    /// context-menu "Forget" (same confirmation); no new copy.
     private var savedHostsList: some View {
-        List {
-            ForEach(hosts) { host in
+        RowGroup {
+            ForEach(Array(hosts.enumerated()), id: \.element.id) { index, host in
+                if index > 0 { RowDivider() }
                 ListRow(
                     title: host.label,
                     subtitle: host.urlLine,
@@ -162,13 +176,6 @@ public struct ConnectView: View {
                     }
                 )
                 .disabled(connecting)
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        forgetTarget = host
-                    } label: {
-                        Label("Forget", systemImage: "trash")
-                    }
-                }
                 .contextMenu {
                     Button {
                         renameText = host.label
@@ -184,14 +191,12 @@ public struct ConnectView: View {
                 }
                 .accessibilityIdentifier("connect.saved.\(host.id.uuidString)")
             }
+            RowDivider()
             ListRow(title: "Add host", systemImage: "plus.circle") {
                 showAddForm = true
             }
             .accessibilityIdentifier("connect.addHost")
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .frame(height: min(60 * CGFloat(hosts.count + 1) + 8, 380))
         .padding(.horizontal, Space.lg)
     }
 
