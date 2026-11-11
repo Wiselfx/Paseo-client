@@ -16,7 +16,9 @@ struct DraftChatView: View {
     /// The composer's send; the shell owns creation (D2 §3).
     var onSubmit: (DraftSubmission) -> Void
 
-    @FocusState private var focused: Bool
+    /// The composer's focus (E1 §1): a plain flag, because the composer's field is a
+    /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
+    @State private var composerFocused = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -103,7 +105,7 @@ struct DraftChatView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Tapping the page outside the composer drops the keyboard (V5 §2). Simultaneous, so the
         // workspace-line menu and the hero's own controls still take their taps.
-        .simultaneousGesture(TapGesture().onEnded { focused = false })
+        .simultaneousGesture(TapGesture().onEnded { composerFocused = false })
         .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: draft.pendingPrompt)
     }
 
@@ -193,8 +195,8 @@ struct DraftChatView: View {
     /// hands the prompt to the shell, which creates the agent and swaps the conversation in.
     private var composer: some View {
         ComposerView(
-            draft: draft, session: session, onSubmit: onSubmit, focused: $focused)
-        .padding(.bottom, 8)
+            draft: draft, session: session, onSubmit: onSubmit, focused: $composerFocused)
+        .padding(.bottom, Space.sm)
     }
 
     // MARK: Catalogue

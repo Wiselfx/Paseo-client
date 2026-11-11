@@ -32,7 +32,11 @@ struct ComposerView: View {
     let onSubmit: ((DraftSubmission) -> Void)?
 
     @Binding var text: String
-    @FocusState.Binding var focused: Bool
+    /// The composer's focus. A plain `Bool`, not `@FocusState`: nothing SwiftUI-focusable is
+    /// bound to it (`ComposerTextView` is a `UITextView`), and SwiftUI drops writes to a
+    /// `FocusState` with no view bound to it — which is what resigned the field on every
+    /// keystroke (E1 §1).
+    @Binding var focused: Bool
 
     /// Draft mode's own tray: there is no agent id to key the shared store by yet, and a draft
     /// uploads through the session's channel before the create request.
@@ -60,7 +64,7 @@ struct ComposerView: View {
 
     init(
         mode: ComposerMode, store: ConversationStore, controller: ChatController,
-        focused: FocusState<Bool>.Binding
+        focused: Binding<Bool>
     ) {
         self.mode = mode
         self.store = store
@@ -75,7 +79,7 @@ struct ComposerView: View {
     /// The draft screen's composer: the same card, before its agent exists (R6 §5).
     init(
         draft: DraftSession, session: HostSession, onSubmit: @escaping (DraftSubmission) -> Void,
-        focused: FocusState<Bool>.Binding
+        focused: Binding<Bool>
     ) {
         self.mode = .draft(draft)
         self.store = nil
@@ -96,7 +100,11 @@ struct ComposerView: View {
             }
             composerCard
         }
-        .padding(.horizontal, isDraft && !composerExpanded ? 16 : 8)
+        .padding(.horizontal, isDraft && !composerExpanded ? Space.lg : ComposerMetrics.sideInset)
+        // The pill's wider margin is part of the same disclosure as its height and corner: the
+        // card widens while it grows, so the field slides instead of jumping (E1 §4).
+        .animation(
+            Motion.disclosure.resolved(reduceMotion: reduceMotion), value: composerExpanded)
         .onGeometryChange(for: CGFloat.self) { geometry in
             geometry.size.height
         } action: { height in
@@ -296,7 +304,7 @@ struct ComposerView: View {
     // MARK: Card
 
     private var composerCard: some View {
-        VStack(alignment: .leading, spacing: composerExpanded ? 8 : 0) {
+        VStack(alignment: .leading, spacing: composerExpanded ? ComposerMetrics.fieldRowGap : 0) {
             if let dictation = activeDictation, dictation.isListening {
                 dictationOverlay(dictation)
             } else {
@@ -383,9 +391,9 @@ struct ComposerView: View {
     /// one structural position and the keyboard holds when the pill grows (§4.1).
     @ViewBuilder private var fieldRow: some View {
         if isDraft {
-            HStack(spacing: 8) {
+            HStack(spacing: ComposerMetrics.controlSpacing) {
                 composerTextField
-                    .padding(.leading, composerExpanded ? 0 : 44)
+                    .padding(.leading, composerExpanded ? 0 : ComposerMetrics.hitSize)
                     .overlay(alignment: .leading) {
                         if !composerExpanded { composerAddMenu }
                     }
@@ -402,8 +410,7 @@ struct ComposerView: View {
         // applied there; ⌘↩ still belongs to the send button.
         ComposerTextView(
             text: $text,
-            isFocused: focused,
-            focus: $focused,
+            isFocused: $focused,
             placeholder: placeholder,
             lineLimit: composerFieldLineLimit
         ) { images in
@@ -435,7 +442,7 @@ struct ComposerView: View {
     // MARK: Row 2
 
     private var composerControlRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: ComposerMetrics.controlSpacing) {
             composerAddMenu
             composerModelChip
             fastModeChip
@@ -444,6 +451,10 @@ struct ComposerView: View {
             dictateButton
             composerPrimary
         }
+        // The 44 pt hit frames hang into the card's padding, so the 36 pt circles sit 8 pt from
+        // the card's edge, concentric with its corner (E1 §4).
+        .padding(.horizontal, -ComposerMetrics.controlOverhang)
+        .padding(.bottom, -ComposerMetrics.controlOverhang)
         // The ring appears at 70 %: the row moves into place instead of snapping.
         .animation(
             Motion.feedback.resolved(reduceMotion: reduceMotion), value: contextPercent == nil)
@@ -480,10 +491,10 @@ struct ComposerView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.glyph(.regular, weight: .regular))
-                .frame(width: 36, height: 36)
+                .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
                 .foregroundStyle(Palette.ink)
                 .background(Palette.chip, in: .circle)
-                .frame(width: 44, height: 44)
+                .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                 .contentShape(.rect)
         }
         .accessibilityLabel("Add to agent")
@@ -531,9 +542,10 @@ struct ComposerView: View {
                         .font(.paseo(.footnote, weight: .semibold))
                 }
                 .foregroundStyle(Palette.ink)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 44)
+                .padding(.horizontal, ComposerMetrics.chipPadding)
+                .frame(minHeight: ComposerMetrics.controlSize)
                 .background(Palette.chip, in: .capsule)
+                .frame(minHeight: ComposerMetrics.hitSize)
             }
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Fast mode on; turn off")
@@ -560,8 +572,8 @@ struct ComposerView: View {
                             .minimumScaleFactor(0.8)
                     }
                     .opacity(percent >= 90 ? 1 : 0.6)
-                    .frame(width: 36, height: 36)
-                    .frame(width: 44, height: 44)
+                    .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
+                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                     .contentShape(.rect)
             }
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
@@ -578,17 +590,16 @@ struct ComposerView: View {
         return percent
     }
 
-    private var dictateButton: some View {
-        let dictation = activeDictation
-        return ComposerMicButton(
-            isListening: dictation?.isListening ?? false,
-            level: Double(dictation?.level ?? 0)
-        ) {
-            guard let dictation else { return }
-            if dictation.isListening {
-                dictation.stop(keepingDraft: true)
-            } else {
-                dictation.toggle(currentDraft: text)
+    /// Nothing while voice mode owns the mic (E1 §3): a second owner would set the session's
+    /// category to `.measurement` and its teardown would deactivate voice mode's session.
+    @ViewBuilder private var dictateButton: some View {
+        if !voiceActiveForAgent, let dictation = activeDictation {
+            ComposerMicButton(isListening: dictation.isListening) {
+                if dictation.isListening {
+                    dictation.stop(keepingDraft: true)
+                } else {
+                    dictation.toggle(currentDraft: text)
+                }
             }
         }
     }
@@ -622,8 +633,16 @@ struct ComposerView: View {
         if hasUploadingAttachment { return .unavailable }
         if !trimmedText.isEmpty || !readyAttachments.isEmpty { return .send }
         if store?.isRunning == true { return .stop }
-        if voice?.isVoiceAvailable == true { return .voice }
+        if voiceCanStart { return .voice }
         return .unavailable
+    }
+
+    /// The host advertises realtime voice — even when it cannot run it this second (a missing
+    /// model, a provider setting). The control stays live so a tap says why (E1 §3.5), instead
+    /// of a disabled circle that swallows the tap and explains nothing.
+    private var voiceCanStart: Bool {
+        guard let voice else { return false }
+        return voice.isVoiceAvailable || !voice.unavailableReason.isEmpty
     }
 
     private var primaryIsEnabled: Bool {
@@ -946,8 +965,10 @@ struct ComposerView: View {
             return
         }
         Haptics.selection()
+        VoiceLog.log.info("lane: start requested for \(store.agentId, privacy: .public)")
         Task {
             let ok = await voice.start(agentId: store.agentId)
+            VoiceLog.log.info("lane: start returned \(ok)")
             if !ok {
                 if voice.missingModelIds.isEmpty {
                     controller.showToast(voice.error ?? "Voice mode is not available.")
@@ -1212,29 +1233,30 @@ struct VoiceBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: ComposerMetrics.controlSpacing) {
             Button {
                 Haptics.selection()
                 voice.setMuted(!voice.isMuted)
             } label: {
                 Image(systemName: voice.isMuted ? "mic.slash.fill" : "mic.fill")
                     .font(.glyph(.regular, weight: .medium))
-                    .frame(width: 36, height: 36)
+                    .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
                     .foregroundStyle(.white)
                     .background(voice.isMuted ? Palette.failureInk : Palette.chip, in: .circle)
-                    .frame(width: 44, height: 44)
+                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                     .contentShape(.rect)
             }
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel(voice.isMuted ? "Unmute voice" : "Mute voice")
             .accessibilityIdentifier("composer.voice.mute")
 
+            // The live level fills everything between the two circles (E1 §2.3).
             LiveWaveform(
                 buffer: engine.waveform, isActive: !voice.isMuted,
+                barWidth: ComposerMetrics.waveformBarWidth, barGap: ComposerMetrics.waveformBarGap,
+                maxBarHeight: ComposerMetrics.waveformHeight,
                 accessibilityText: "Voice volume, \(Int((voice.volume * 100).rounded())) percent")
                 .accessibilityIdentifier("composer.voice.volume")
-
-            Spacer(minLength: 0)
 
             Button {
                 Haptics.selection()
@@ -1242,10 +1264,10 @@ struct VoiceBar: View {
             } label: {
                 Image(systemName: "stop.fill")
                     .font(.glyph(.regular, weight: .medium))
-                    .frame(width: 36, height: 36)
+                    .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
                     .foregroundStyle(.white)
                     .background(Palette.failureInk, in: .circle)
-                    .frame(width: 44, height: 44)
+                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                     .contentShape(.rect)
             }
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
@@ -1253,8 +1275,8 @@ struct VoiceBar: View {
             .accessibilityIdentifier("composer.voice.stop")
             .disabled(voice.phase == .stopping)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        // The circles sit 8 pt from the card's edge, like every other row (E1 §4).
+        .padding(.horizontal, -ComposerMetrics.controlOverhang)
     }
 }
 
@@ -1282,20 +1304,27 @@ enum ComposerFieldLimit {
 struct ComposerCardChrome: ViewModifier {
     let expanded: Bool
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private var radius: CGFloat { expanded ? Radius.composer : Radius.composerPill }
+
+    /// The soft lift Claude's card has in light (E1 §4); nothing in dark.
+    private var shadow: Color { colorScheme == .dark ? .clear : Palette.composerShadow }
 
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, expanded ? 8 : 12)
-            .padding(.vertical, expanded ? 8 : 0)
-            .frame(minHeight: 48)
-            .background(
-                Palette.composer,
-                in: .rect(cornerRadius: radius, style: .continuous)
-            )
+            .padding(.horizontal, ComposerMetrics.sideInset)
+            .padding(.vertical, expanded ? ComposerMetrics.verticalInset : 0)
+            .frame(minHeight: ComposerMetrics.pillHeight)
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(Palette.composer)
+                    .shadow(color: shadow, radius: ComposerMetrics.shadowRadius,
+                            y: ComposerMetrics.shadowY)
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Palette.composerBorder, lineWidth: 0.7)
+                    .stroke(Palette.composerBorder, lineWidth: ComposerMetrics.hairline)
             }
     }
 }
@@ -1323,12 +1352,12 @@ struct ComposerModelChip: View {
     var body: some View {
         Button(action: action) {
             chipLabels
-                .padding(.horizontal, 14)
+                .padding(.horizontal, ComposerMetrics.chipPadding)
                 // 36 pt at the default type size; taller type grows it rather than clipping.
-                .frame(minHeight: 36)
+                .frame(minHeight: ComposerMetrics.controlSize)
                 .background(Palette.chip, in: .capsule)
                 // Hit area: the capsule stays 36 pt tall, the touch target is 44.
-                .frame(minHeight: 44)
+                .frame(minHeight: ComposerMetrics.hitSize)
                 .contentShape(.rect)
         }
         .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
@@ -1421,10 +1450,12 @@ struct ProviderGlyph: View {
 
 /// The dictation mic: ink on `chip`, and a filled ink circle while it listens (no accent on a
 /// control, §0.1). The draft and the live conversation draw the same control.
+///
+/// It no longer takes the input level (E1 §2.4): the composer's body read `DictationController
+/// .level`, which changes on every audio buffer, so SwiftUI re-evaluated the whole composer at
+/// 30 Hz. The level now reaches the screen only through the waveform's own `Canvas`.
 struct ComposerMicButton: View {
     let isListening: Bool
-    /// 0…1 input level while listening.
-    let level: Double
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1433,22 +1464,15 @@ struct ComposerMicButton: View {
         Button(action: action) {
             Image(systemName: isListening ? "mic.fill" : "mic")
                 .font(.glyph(.regular, weight: .medium))
-                .frame(width: 36, height: 36)
+                .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
                 .foregroundStyle(isListening ? Palette.background : Palette.ink)
                 .background(isListening ? Palette.ink : Palette.chip, in: .circle)
-                .frame(width: 44, height: 44)
+                .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                 .contentShape(.rect)
-                .scaleEffect(scale)
-                .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: level)
         }
         .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
         .accessibilityLabel(isListening ? "Stop dictation" : "Dictate")
         .accessibilityIdentifier("composer.dictate")
-    }
-
-    private var scale: CGFloat {
-        guard isListening, !reduceMotion else { return 1 }
-        return 1 + CGFloat(level) * 0.18
     }
 }
 
@@ -1468,21 +1492,24 @@ struct DictationOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: ComposerMetrics.controlSpacing) {
             Button(action: onCancel) {
                 Image(systemName: "xmark")
                     .font(.glyph(.regular, weight: .medium))
-                    .frame(width: 36, height: 36)
+                    .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
                     .foregroundStyle(Palette.ink)
                     .background(Palette.chip, in: .circle)
-                    .frame(width: 44, height: 44)
+                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                     .contentShape(.rect)
             }
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
             .accessibilityLabel("Cancel dictation")
             .accessibilityIdentifier("composer.dictation.cancel")
 
+            // E1 §2.3: the meter takes every point the row does not need. The bar count comes
+            // from the width once at layout, never per frame.
             meter
+
             Text(formattedDuration)
                 .font(.paseo(.callout, weight: .semibold))
                 .monospacedDigit()
@@ -1498,12 +1525,16 @@ struct DictationOverlay: View {
                 "arrow.up", label: "Insert transcription and send",
                 identifier: "composer.dictation.insertAndSend", action: onAcceptAndSend)
         }
-        .frame(height: 52)
+        .frame(height: ComposerMetrics.hitSize)
+        .padding(.horizontal, -ComposerMetrics.controlOverhang)
     }
 
-    /// The live level, the same waveform the voice bar draws (D2 §4).
+    /// The live level, the same waveform the voice bar draws (D2 §4), filling the row (E1 §2.3).
     private var meter: some View {
-        LiveWaveform(buffer: buffer, isActive: true, barCount: 18)
+        LiveWaveform(
+            buffer: buffer, isActive: true,
+            barWidth: ComposerMetrics.waveformBarWidth, barGap: ComposerMetrics.waveformBarGap,
+            maxBarHeight: ComposerMetrics.waveformHeight)
     }
 
     private func actionButton(
@@ -1512,10 +1543,10 @@ struct DictationOverlay: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.glyph(.regular, weight: .semibold))
-                .frame(width: 36, height: 36)
+                .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
                 .foregroundStyle(Palette.background)
                 .background(Palette.ink, in: .circle)
-                .frame(width: 44, height: 44)
+                .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                 .contentShape(.rect)
         }
         .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
@@ -1621,6 +1652,9 @@ struct ComposerVoiceWiring: ViewModifier {
         let content: C
         let controller: ChatController
 
+        /// One line per voice-mode run, at the first chunk the daemon sends back.
+        @State private var firstReplyLogged = false
+
         var body: some View {
             content
                 .task {
@@ -1632,11 +1666,24 @@ struct ComposerVoiceWiring: ViewModifier {
                     // bound, so a composer opened on a live lane still records (D2 §4).
                     if voice.isVoiceMode { await startCapture() }
                 }
+                .onChange(of: voice.lastPlaybackError) { _, message in
+                    guard let message else { return }
+                    VoiceLog.log.error("playback: \(message, privacy: .public)")
+                }
+                .onChange(of: voice.error) { _, message in
+                    guard let message else { return }
+                    VoiceLog.log.error("lane: \(message, privacy: .public)")
+                }
+                .onChange(of: voice.isSpeaking) { _, speaking in
+                    VoiceLog.log.info("daemon VAD: speaking=\(speaking)")
+                }
                 .onChange(of: voice.isMuted) { _, muted in
                     // Muting clears the meter, like the store's own telemetry reset.
                     if muted { controller.voiceEngine.waveform.reset() }
                 }
                 .onChange(of: voice.phase) { _, phase in
+                    VoiceLog.log.info(
+                        "lane phase: \(String(describing: phase), privacy: .public)")
                     switch phase {
                     case .listening, .waiting, .playing:
                         Task { await startCapture() }
@@ -1647,6 +1694,11 @@ struct ComposerVoiceWiring: ViewModifier {
                 }
                 .onChange(of: voice.nextAudioChunk) { _, chunk in
                     guard let chunk else { return }
+                    if !firstReplyLogged {
+                        firstReplyLogged = true
+                        VoiceLog.log.info(
+                            "reply: first \(chunk.data.count)-byte chunk (\(chunk.format, privacy: .public))")
+                    }
                     controller.voiceEngine.enqueue(chunk) { ok in
                         if ok {
                             voice.didPlayChunk(id: chunk.id)

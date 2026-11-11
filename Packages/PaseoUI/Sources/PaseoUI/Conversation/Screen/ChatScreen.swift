@@ -19,7 +19,9 @@ public struct ChatScreen: View {
     /// Everything that is not a SwiftUI handle. Created once per open agent (the shell applies
     /// `.id(agentId)`, so a switch builds a fresh screen and a fresh controller).
     @State private var controller: ChatController
-    @FocusState private var focused: Bool
+    /// The composer's focus (E1 §1): a plain flag, because the composer's field is a
+    /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
+    @State private var composerFocused = false
     @Environment(\.toast) private var toast
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -54,8 +56,11 @@ public struct ChatScreen: View {
             // ordinary links fall through to the host's handler unchanged.
             .environment(\.openURL, controller.fileLinkAction(host: openURL))
             .environment(\.chatActions, controller.actions)
-            .modifier(ChatInputWiring(store: store, controller: controller, focused: $focused))
-            .modifier(UserActivityWiring(store: store, controller: controller, focused: $focused))
+            .modifier(
+                ChatInputWiring(store: store, controller: controller, focused: $composerFocused))
+            .modifier(
+                UserActivityWiring(
+                    store: store, controller: controller, focused: $composerFocused))
             .modifier(MascotDriver(store: store, session: session, controller: controller))
             .modifier(ChatSheets(store: store, session: session, controller: controller))
             .onAppear {
@@ -86,7 +91,8 @@ public struct ChatScreen: View {
         VStack(spacing: 0) {
             SubagentPill(store: store, controller: controller)
             ComposerView(
-                mode: .conversation, store: store, controller: controller, focused: $focused)
+                mode: .conversation, store: store, controller: controller,
+                focused: $composerFocused)
         }
     }
 }
@@ -103,7 +109,7 @@ public typealias ClaudeChatView = ChatScreen
 struct ChatInputWiring: ViewModifier {
     let store: ConversationStore
     let controller: ChatController
-    @FocusState.Binding var focused: Bool
+    @Binding var focused: Bool
 
     /// Inline images decode at the screen's width in pixels; `UIScreen.main` is deprecated on
     /// iOS 26, so the scale comes from the environment (D1 §4).
@@ -141,7 +147,7 @@ struct ChatInputWiring: ViewModifier {
 struct UserActivityWiring: ViewModifier {
     let store: ConversationStore
     let controller: ChatController
-    @FocusState.Binding var focused: Bool
+    @Binding var focused: Bool
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

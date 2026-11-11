@@ -8,11 +8,13 @@ import UIKit
 /// shortcut), and the same accessibility identifier.
 struct ComposerTextView: UIViewRepresentable {
     @Binding var text: String
-    /// The `@FocusState` value. The composer's body reads it to build this view, so a focus
-    /// change re-runs `updateUIView` — the only place `becomeFirstResponder` can be called.
-    let isFocused: Bool
-    /// Where the field reports the keyboard's own begin/end back to SwiftUI.
-    let focus: FocusState<Bool>.Binding
+    /// The composer's focus, plus where the field reports UIKit's begin/end back (E1 §1).
+    ///
+    /// A plain `Bool`, not `@FocusState`: SwiftUI only writes a `FocusState` through a
+    /// focusable SwiftUI view, and a `UIViewRepresentable` is not one. The whole composer used
+    /// to share one `@FocusState` with no view bound to it, so UIKit's `true` was dropped, and
+    /// the next keystroke's `updateUIView` saw `false` and resigned the field.
+    @Binding var isFocused: Bool
     /// The same string the `TextField`'s prompt showed.
     let placeholder: String
     /// The field grows to this many lines, then scrolls inside itself.
@@ -37,13 +39,20 @@ struct ComposerTextView: UIViewRepresentable {
         uiView.onPasteImages = onPasteImages
         uiView.lineLimit = lineLimit
         uiView.applyStyle(placeholder: placeholder)
-        if uiView.text != text {
+        // An external write (a mention, a dictation, a restored draft after a failed create)
+        // leaves the caret at the end, where the user was typing. Never while the IME is
+        // composing: replacing `text` drops a CJK/dictation composition on the floor, and
+        // moving `selectedRange` mid-composition breaks the marked range UIKit is drawing.
+        if uiView.markedTextRange == nil, uiView.text != text {
             uiView.text = text
-            // An external write (a mention, a dictation, a restored draft after a failed create)
-            // leaves the caret at the end, where the user was typing.
             uiView.selectedRange = NSRange(location: (text as NSString).length, length: 0)
         }
-        bridgeFocus(uiView)
+        // Record what SwiftUI just rendered before the bridge decides: a re-render that
+        // carries the same value is a snapshot, not a command (E1 §1.3).
+        let coordinator = context.coordinator
+        coordinator.renderedFocusChanged = coordinator.lastRenderedFocus != isFocused
+        coordinator.lastRenderedFocus = isFocused
+        bridgeFocus(uiView, coordinator: coordinator)
         uiView.updatePlaceholder(visible: text.isEmpty)
     }
 
@@ -54,11 +63,26 @@ struct ComposerTextView: UIViewRepresentable {
         return uiView.fittedSize(width: width)
     }
 
-    /// `@FocusState` → first responder. The delegate reports the other direction.
-    private func bridgeFocus(_ uiView: ComposerUITextView) {
+    /// SwiftUI → first responder, **edge-triggered** (E1 §1).
+    ///
+    /// `updateUIView` runs on every keystroke (the text binding changed), and a level-triggered
+    /// bridge would act on whatever `isFocused` held at that moment. This acts only on an edge:
+    /// the value must differ from the one last applied, so a text change or a style pass can
+    /// never move the responder chain.
+    ///
+    /// The one exception is what the tick used to do by accident: while UIKit's begin/end is
+    /// travelling back through the binding, every render carries the *old* value. A render that
+    /// repeats the value seen at the event is that snapshot, so it waits; a render that changed
+    /// is a newer command from the app (send, tap-outside) and it wins.
+    private func bridgeFocus(_ uiView: ComposerUITextView, coordinator: Coordinator) {
+        if coordinator.pendingEcho != nil {
+            guard coordinator.renderedFocusChanged else { return }
+            coordinator.pendingEcho = nil
+        }
+        guard isFocused != coordinator.lastAppliedFocus else { return }
+        coordinator.lastAppliedFocus = isFocused
         if isFocused {
-            guard !uiView.isFirstResponder else { return }
-            uiView.becomeFirstResponder()
+            if !uiView.isFirstResponder { uiView.becomeFirstResponder() }
         } else if uiView.isFirstResponder {
             uiView.resignFirstResponder()
         }
@@ -70,9 +94,25 @@ struct ComposerTextView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: ComposerTextView
+        /// The focus value UIKit is in: what the bridge last applied, or what the delegate last
+        /// reported. Updated immediately on begin/end, so the echo of its own deferred write is
+        /// never mistaken for a command (E1 §1.3).
+        var lastAppliedFocus = false
+        /// The value SwiftUI rendered at the previous `updateUIView`.
+        var lastRenderedFocus: Bool
+        /// Whether this render changed that value.
+        var renderedFocusChanged = false
+        /// A delegate write on its way back through the binding. While it is pending, renders
+        /// repeat the pre-event value and must not be read as commands.
+        var pendingEcho: (stale: Bool, focused: Bool)?
 
         init(parent: ComposerTextView) {
             self.parent = parent
+            // A fresh `UITextView` is never first responder, whatever the state says: starting
+            // from `false` is what lets a composer restored with focus take it on the first
+            // update instead of believing it already has.
+            self.lastAppliedFocus = false
+            self.lastRenderedFocus = parent.isFocused
         }
 
         func textViewDidChange(_ textView: UITextView) {
@@ -81,20 +121,39 @@ struct ComposerTextView: UIViewRepresentable {
             (textView as? ComposerUITextView)?.updatePlaceholder(visible: textView.text.isEmpty)
         }
 
-        // The writes are deferred one main-actor turn: UIKit calls these from inside
+        // The write is deferred one main-actor turn: UIKit calls these from inside
         // `becomeFirstResponder()`/`resignFirstResponder()`, which `updateUIView` may call in the
         // middle of a SwiftUI update, and writing a binding there is "state during view update".
+        // `lastAppliedFocus` is recorded now, so nothing can fight what UIKit just did.
         func textViewDidBeginEditing(_ textView: UITextView) {
-            guard !parent.focus.wrappedValue else { return }
-            Task { @MainActor [weak self] in
-                self?.parent.focus.wrappedValue = true
-            }
+            syncFocus(from: textView)
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
-            guard parent.focus.wrappedValue else { return }
-            Task { @MainActor [weak self] in
-                self?.parent.focus.wrappedValue = false
+            syncFocus(from: textView)
+        }
+
+        /// UIKit began/ended editing. `lastAppliedFocus` records it now; the binding follows one
+        /// main-actor turn later, with the **responder state when the write lands**, so a
+        /// dismissal that happened in between (send, a sheet, tap-outside) is not undone by a
+        /// stale echo. If the app already wrote a different value meanwhile, the echo stands
+        /// down and that write wins.
+        private func syncFocus(from textView: UITextView) {
+            let focused = textView.isFirstResponder
+            let stale = parent.isFocused
+            guard stale != focused || lastAppliedFocus != focused else { return }
+            lastAppliedFocus = focused
+            pendingEcho = (stale: stale, focused: focused)
+            Task { @MainActor [weak self, weak textView] in
+                guard let self, let echo = self.pendingEcho else { return }
+                self.pendingEcho = nil
+                // Someone wrote the binding after the event: a newer command, not our snapshot.
+                guard self.parent.isFocused == echo.stale else { return }
+                let nowFocused = textView?.isFirstResponder ?? echo.focused
+                if self.parent.isFocused != nowFocused {
+                    self.parent.isFocused = nowFocused
+                }
+                self.lastAppliedFocus = nowFocused
             }
         }
     }
@@ -126,7 +185,9 @@ final class ComposerUITextView: UITextView {
         textColor = UIColor(Palette.ink)
         tintColor = UIColor(Palette.ink)
         adjustsFontForContentSizeCategory = true
-        textContainerInset = UIEdgeInsets(top: 7, left: 6, bottom: 1, right: 6)
+        textContainerInset = UIEdgeInsets(
+            top: ComposerMetrics.textInsetTop, left: ComposerMetrics.textInsetLeading,
+            bottom: ComposerMetrics.textInsetBottom, right: ComposerMetrics.textInsetLeading)
         textContainer.lineFragmentPadding = 0
         placeholderLabel.textColor = UIColor(Palette.secondaryInk)
         placeholderLabel.numberOfLines = 1
