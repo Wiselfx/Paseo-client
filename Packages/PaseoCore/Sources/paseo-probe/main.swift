@@ -65,10 +65,15 @@ let usage = """
                                file's first line, showing the reply
       git-ops [cwd]            commits ahead of base + commit file diff (default /tmp/fixture-sandbox)
       fs-ops [cwd]             fs.entry create/rename/duplicate/delete + conflict-checked write
-      attachments-search <agentId> [query]
-                               full stack: search the conversation, list provider subagents and
-                               send a message with a structured text attachment (default query
-                               "ready")
+      attachments-search <agentId> [query] [--send]
+                               full stack: search the conversation and list provider subagents;
+                               with --send, also sends a message with a structured text
+                               attachment (default query "ready"). Without --send nothing is
+                               written to the agent. Never point it at a real agent.
+      subagents <agentId> [raw]
+                               E3 probe: provider subagent list and each subagent's tail
+                               timeline, printed as typed values plus decode errors; `raw`
+                               also prints the wire JSON
       lifecycle                  create two throwaway agents in /tmp/fixture-sandbox, archive,
                                unarchive, rename and delete them, and list the history
       usage                        provider plan usage reports and the context meter: prints
@@ -306,6 +311,11 @@ func runInfo(_ connection: DaemonConnection) async throws {
     print("version: \(info.version ?? "-")")
     print("protocolVersion: \(info.protocolVersion.map(String.init) ?? "-")")
     print("ownedSubscriptions: feature=\(info.hasFeature(OwnedSubscriptions.feature)) client=\(OwnedSubscriptions.isEnabled) modern=\(info.supportsOwnedSubscriptions)")
+    let features = (info.features ?? [:]).compactMapValues { value -> Bool? in
+        guard case .bool(let on) = value else { return nil }
+        return on
+    }
+    print("features: \(features.filter(\.value).keys.sorted().joined(separator: ", "))")
 }
 
 func runAgents(_ connection: DaemonConnection) async throws {
@@ -443,8 +453,10 @@ do {
         guard let agentId = arguments.commandArguments.first else {
             throw ProbeError("attachments-search needs an <agentId>")
         }
-        let query = arguments.commandArguments.dropFirst().first ?? "ready"
-        try await runAttachmentsSearch(connection, agentId: agentId, query: query)
+        let rest = Array(arguments.commandArguments.dropFirst())
+        let query = rest.first(where: { !$0.hasPrefix("--") }) ?? "ready"
+        try await runAttachmentsSearch(
+            connection, agentId: agentId, query: query, send: rest.contains("--send"))
     case "rewind":
         guard let agentId = arguments.commandArguments.first else {
             throw ProbeError("rewind needs an <agentId>")
@@ -455,6 +467,13 @@ do {
         } else {
             try await runRewind(connection, agentId: agentId, messageId: nil, scope: nil)
         }
+    case "subagents":
+        guard let agentId = arguments.commandArguments.first else {
+            throw ProbeError("subagents needs an <agentId>")
+        }
+        try await runProviderSubagents(
+            connection, agentId: agentId,
+            raw: arguments.commandArguments.dropFirst().first == "raw")
     case "lifecycle":
         try await runLifecycle(connection, cwd: arguments.commandArguments.first ?? "/tmp/fixture-sandbox")
     default:
@@ -1383,6 +1402,9 @@ func runRewind(_ connection: DaemonConnection, agentId: String, messageId: Strin
     print("server features.rewind=\(session.isRewindSupportedByHost)")
     let caps = store.rewindCapabilities
     print("snapshot capabilities: conversation=\(caps.conversation) files=\(caps.files) both=\(caps.both) menu=\(caps.menu)")
+    // Optional: nil means the daemon omitted the flag, which is not the same as false.
+    let raw = store.agent?.capabilities
+    print("raw flags: conversation=\(String(describing: raw?.supportsRewindConversation)) files=\(String(describing: raw?.supportsRewindFiles)) both=\(String(describing: raw?.supportsRewindBoth))")
 
     for row in store.timeline.rows {
         if case .userMessage(let message) = row.item {
@@ -1412,7 +1434,9 @@ func runRewind(_ connection: DaemonConnection, agentId: String, messageId: Strin
 // MARK: - T12: attachments, search and subagents
 
 @MainActor
-func runAttachmentsSearch(_ connection: DaemonConnection, agentId: String, query: String) async throws {
+func runAttachmentsSearch(
+    _ connection: DaemonConnection, agentId: String, query: String, send: Bool
+) async throws {
     try await connection.connect()
     let session = HostSession(client: connection)
     await session.start()
@@ -1435,6 +1459,13 @@ func runAttachmentsSearch(_ connection: DaemonConnection, agentId: String, query
         print("  seq=\(location.seq) role=\(location.role) count=\(location.count ?? 1)")
     }
 
+    // Sending writes into a real conversation. It only happens when the caller asks with
+    // `--send`, and such a probe must target a throwaway sandbox agent.
+    guard send else {
+        print("send skipped (pass --send to write to the agent)")
+        session.closeConversation(agentId)
+        return
+    }
     let attachment = AgentAttachment.text(
         .init(text: "T12 probe attachment: hello from the sandbox.", title: "T12 probe"))
     await store.sendWithAttachments(
@@ -1731,4 +1762,85 @@ func runProjectConfig(_ connection: DaemonConnection, repoRoot: String) async th
     } else {
         print("icon skipped (project not found for \(repoRoot))")
     }
+}
+
+// MARK: - E3: provider subagents
+
+/// Same wire type as `ProviderSubagentListRequest`, decoded as an open `JSONValue` so a field the
+/// typed model rejects still prints.
+private struct RawSubagentListRequest: PaseoRequest {
+    static let type = "agent.provider_subagents.list.request"
+    static let responseType = "agent.provider_subagents.list.response"
+    var requestId = ""
+    var parentAgentId: String
+    typealias Response = JSONValue
+}
+
+private struct RawSubagentTimelineRequest: PaseoRequest {
+    static let type = "agent.provider_subagents.timeline.get.request"
+    static let responseType = "agent.provider_subagents.timeline.get.response"
+    var requestId = ""
+    var parentAgentId: String
+    var subagentId: String
+    var direction: String
+    var limit: Int
+    typealias Response = JSONValue
+}
+
+private func prettyJSON(_ value: JSONValue) -> String {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    guard let data = try? encoder.encode(value),
+        let text = String(data: data, encoding: .utf8)
+    else { return "<unencodable>" }
+    return text
+}
+
+private func reencoded(_ value: JSONValue) -> Data {
+    (try? JSONEncoder().encode(value)) ?? Data()
+}
+
+@MainActor
+func runProviderSubagents(_ connection: DaemonConnection, agentId: String, raw: Bool) async throws {
+    try await connection.connect()
+    let listRaw = try await connection.send(
+        RawSubagentListRequest(parentAgentId: agentId), timeout: .seconds(30))
+    if raw {
+        print("--- list payload ---")
+        print(prettyJSON(listRaw))
+    }
+    do {
+        let list = try JSONDecoder().decode(
+            ProviderSubagentListRequest.Response.self, from: reencoded(listRaw))
+        print("list decoded: \(list.subagents.count) subagents error=\(list.error ?? "none")")
+        for subagent in list.subagents {
+            print(
+                "  \(subagent.id) provider=\(subagent.provider) status=\(subagent.status) "
+                    + "toolCallId=\(subagent.toolCallId ?? "-") title=\(subagent.title ?? "-") "
+                    + "parentSubagentId=\(subagent.parentSubagentId ?? "-")")
+        }
+        for subagent in list.subagents {
+            let timelineRaw = try await connection.send(
+                RawSubagentTimelineRequest(
+                    parentAgentId: agentId, subagentId: subagent.id, direction: "tail", limit: 50),
+                timeout: .seconds(30))
+            if raw {
+                print("--- timeline \(subagent.id) ---")
+                print(prettyJSON(timelineRaw))
+            }
+            do {
+                let page = try JSONDecoder().decode(
+                    ProviderSubagentTimelineRequest.Response.self, from: reencoded(timelineRaw))
+                print(
+                    "timeline \(String(subagent.id.prefix(12))) rows=\(page.rows.count) "
+                        + "error=\(page.error ?? "none") epoch=\(page.epoch) "
+                        + "kinds=\(page.rows.map { itemType($0.item) }.joined(separator: ","))")
+            } catch {
+                print("timeline \(String(subagent.id.prefix(12))) DECODE FAILED: \(error)")
+            }
+        }
+    } catch {
+        print("list DECODE FAILED: \(error)")
+    }
+    connection.disconnect()
 }

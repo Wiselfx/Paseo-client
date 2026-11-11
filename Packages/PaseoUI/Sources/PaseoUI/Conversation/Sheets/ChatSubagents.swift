@@ -394,7 +394,8 @@ struct ChatSubagentTimelineView: View {
                     .padding(.top, 60)
                     .frame(maxWidth: .infinity)
                 } else if rows.isEmpty {
-                    EmptyState(title: "No timeline rows yet.")
+                    // Upstream's timeline panel empty line (`en.ts:233`, `agentStream.empty`).
+                    EmptyState(title: "Start chatting with this agent...")
                         .padding(.top, 60)
                 } else {
                     ForEach(rows, id: \.seq) { row in

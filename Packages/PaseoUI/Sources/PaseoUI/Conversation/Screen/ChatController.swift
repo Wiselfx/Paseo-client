@@ -34,14 +34,10 @@ import UniformTypeIdentifiers
     /// Reads a workspace image for prose. Decoded off main and cached by (workspace, path).
     var loadImage: (String) async -> UIImage? = { _ in nil }
 
-    /// Host supports forking and the shell can open the new agent.
-    var canFork = false
-    /// The provider can rewind the conversation, so Edit/Rerun exist.
-    var canRewrite = false
-    /// The rewind scopes the provider offers on your bubbles.
-    var rewindChoices: [RewindScope] = []
-    /// True while a fork RPC is in flight; the controls disable.
-    var forkInFlightActive = false
+    /// What this agent and host can actually do with a turn, as one value the rows compare
+    /// (R-2). Recomputed by `ChatController` when the agent snapshot, the host features or the
+    /// workspace capabilities change — never in a row body (R-1).
+    var availability = TurnActionAvailability()
 
     private let store: ConversationStore
 
@@ -70,6 +66,38 @@ extension EnvironmentValues {
         get { self[ChatActionsKey.self] }
         set { self[ChatActionsKey.self] = newValue }
     }
+}
+
+// MARK: - Turn action availability
+
+/// What the open agent can actually do with a turn. One value, computed once per agent/host
+/// capability change by `ChatController` and passed to rows (R-2), so a provider that cannot
+/// rewind or fork never shows an action that would fail.
+///
+/// Upstream's conditions:
+/// - **Rewind** (`use-rewind-capabilities.ts:32-56`, `message.tsx:531`): the agent's
+///   `capabilities.supportsRewind*` flags, under the host's `features.rewind`. Our
+///   `rewindMenuScopes` is exactly that list.
+/// - **Edit / Rerun** (`composer-restore.tsx`): rewind to the conversation, then restore the
+///   text. Offered when the conversation scope can be rewound.
+/// - **Fork** (`use-fork-agent.ts`: `useHostFeature(serverId, "agentForkContext")`): the host
+///   feature and a shell that can open the new agent. A completed turn pins a boundary
+///   (`turn-boundary.ts:9-24`), which needs `features.agentForkContextCursor` — the only
+///   boundary this client sends (`ForkContextRequest.boundaryCursor`). The running turn forks
+///   with no boundary and needs neither.
+/// - **Retract this message / Delete this turn** are forks at a cut row (DSH
+///   `message-actions.ts:195-260`): the same boundary fork as a completed turn, *not* rewind.
+struct TurnActionAvailability: Sendable, Equatable {
+    /// Scopes the provider offers on your bubbles, in menu order; empty hides rewind.
+    var rewindChoices: [RewindScope] = []
+    /// Edit/Rerun exist: the conversation can be rewound.
+    var canRewrite = false
+    /// Fork with no boundary: the running turn's footer (`turn-footer.tsx:38-46`).
+    var canForkInFlight = false
+    /// Fork pinned to a boundary: the completed turn's footer, retract, delete this turn.
+    var canForkAtBoundary = false
+    /// The workspace target is offered beside the tab target: the host can create one.
+    var canForkWorkspace = false
 }
 
 // MARK: - Find state
@@ -196,6 +224,8 @@ struct TranscriptJump: Equatable {
     var toastCenter: ToastCenter?
 
     private var draftSaveTask: Task<Void, Never>?
+    /// Re-arms itself on each agent/host capability change; see `startAvailabilityTracking`.
+    private var availabilityTask: Task<Void, Never>?
     /// Inline images, by `(workspaceId, path)`.
     private let imageCache = NSCache<NSString, UIImage>()
     /// One prose image loader, so its identity is stable across body evaluations (finding #13).
@@ -258,9 +288,64 @@ struct TranscriptJump: Equatable {
         actions.loadImage = { [weak self] path in
             await self?.loadImage(path: path)
         }
-        actions.canFork = session.isForkContextSupportedByHost && onForkAgent != nil
-        actions.canRewrite = canRewrite
-        actions.rewindChoices = rewindMenuScopes
+        refreshAvailability()
+        startAvailabilityTracking()
+    }
+
+    // MARK: Turn actions
+
+    /// The current availability value, O(1) in agent capabilities and host features.
+    var turnActionAvailability: TurnActionAvailability {
+        let choices = rewindMenuScopes
+        let canFork = session.isForkContextSupportedByHost && onForkAgent != nil
+        return TurnActionAvailability(
+            rewindChoices: choices,
+            canRewrite: canRewrite,
+            canForkInFlight: canFork,
+            // Our fork only pins a cursor boundary, which needs the host's cursor feature.
+            canForkAtBoundary: canFork
+                && session.serverInfo?.hasFeature("agentForkContextCursor") == true,
+            canForkWorkspace: canFork && session.workspaceDirectory.supportsWorkspaceCreate)
+    }
+
+    /// Publishes the value and re-arms observation of the three inputs that can change it: the
+    /// host features, this agent's snapshot (capabilities), and the workspace directory's
+    /// create support. One task per controller; changes are rare, so this costs nothing per
+    /// scroll frame or keystroke.
+    private func startAvailabilityTracking() {
+        guard availabilityTask == nil else { return }
+        availabilityTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                // Never hold `self` across the wait: a closed screen must deallocate, and the
+                // task is owned by it.
+                let inputs = { [weak self] () -> (HostSession, ConversationStore)? in
+                    guard let self else { return nil }
+                    self.refreshAvailability()
+                    return (self.session, self.store)
+                }()
+                guard let (session, store) = inputs else { return }
+                await ChatController.nextAvailabilityChange(session: session, store: store)
+            }
+        }
+    }
+
+    private func refreshAvailability() {
+        let next = turnActionAvailability
+        if actions.availability != next { actions.availability = next }
+    }
+
+    private static func nextAvailabilityChange(
+        session: HostSession, store: ConversationStore
+    ) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            withObservationTracking {
+                _ = session.serverInfo
+                _ = store.agent
+                _ = session.workspaceDirectory.supportsWorkspaceCreate
+            } onChange: {
+                continuation.resume()
+            }
+        }
     }
 
     // MARK: Toast
@@ -474,8 +559,6 @@ struct TranscriptJump: Equatable {
 
     /// Forks into the chosen target and opens the new agent.
     func forkInto(_ target: ClaudeForkTarget, boundary: Int?) async {
-        actions.forkInFlightActive = true
-        defer { actions.forkInFlightActive = false }
         switch target {
         case .tab:
             await openForkedAgent(

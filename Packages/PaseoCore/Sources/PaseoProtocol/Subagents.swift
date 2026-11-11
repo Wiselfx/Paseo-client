@@ -164,6 +164,29 @@ public struct ProviderSubagentTimelineRequest: PaseoRequest {
                 public var startSeq: Int
                 public var endSeq: Int
             }
+
+            private enum K: String, CodingKey {
+                case item, timestamp, seq, seqStart, seqEnd, sourceSeqRanges
+            }
+
+            /// Lenient per item (E3 §1.3). An unknown kind already decodes to `.unknown`, but a
+            /// *known* kind with one malformed field (a `tool_call` without `callId`, a `todo`
+            /// whose items are not objects) makes `TimelineItem` throw. One such row must not
+            /// fail the page: it becomes an `.unknown` row the sheet draws as "Unknown item".
+            public init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: K.self)
+                timestamp = (try? c.decode(String.self, forKey: .timestamp)) ?? ""
+                seq = (try? c.decode(Int.self, forKey: .seq)) ?? 0
+                seqStart = try? c.decodeIfPresent(Int.self, forKey: .seqStart)
+                seqEnd = try? c.decodeIfPresent(Int.self, forKey: .seqEnd)
+                sourceSeqRanges = try? c.decodeIfPresent([SeqRange].self, forKey: .sourceSeqRanges)
+                if let decoded = try? c.decode(TimelineItem.self, forKey: .item) {
+                    item = decoded
+                } else {
+                    let raw = (try? c.decode(JSONValue.self, forKey: .item)) ?? .null
+                    item = .unknown(type: raw["type"]?.stringValue ?? "unsupported", raw: raw)
+                }
+            }
         }
 
         public struct Window: Sendable, Hashable, Decodable {

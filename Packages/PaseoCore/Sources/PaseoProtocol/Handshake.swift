@@ -23,6 +23,12 @@ public enum ClientCapabilities {
     /// "provider_subagents"`); a camelCase key is silently ignored by the daemon, so the
     /// subagent list never refreshed and the chat pill never appeared.
     public static let providerSubagents = "provider_subagents"
+    /// The daemon renders a provider subagent's timeline as ordinary projected rows and sends
+    /// `hasOlder`/`hasNewer` only to clients advertising this capability. Without it the daemon
+    /// answers every `agent.provider_subagents.timeline.get.request` with a single canned row,
+    /// "Please upgrade the Paseo app to view this subagent conversation."
+    /// (`server/src/server/session.ts:8583-8615`, `CLIENT_CAPS.projectedSubagentTimeline`).
+    public static let projectedSubagentTimeline = "projected_subagent_timeline"
     /// Every behavior this client actually implements. No `binary_chunking_v1` sends (we never
     /// chunk). `owned_subscriptions` and its `workspace_setup_observation` companion are
     /// advertised only while `OwnedSubscriptions.isEnabled`; every subscription path in the
@@ -34,6 +40,7 @@ public enum ClientCapabilities {
             helloRejection: true,
             terminalChunkedReplay: true,
             providerSubagents: true,
+            projectedSubagentTimeline: true,
         ]
         if OwnedSubscriptions.isEnabled {
             capabilities[OwnedSubscriptions.capability] = true

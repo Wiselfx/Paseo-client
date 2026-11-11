@@ -32,6 +32,8 @@ struct WorkspaceFileViewer: View {
     @State private var conflictModifiedAt = ""
     @State private var savedFlash = false
     @State private var previewAsSource = false
+    /// A link tapped inside an HTML preview: opened in an in-app Safari sheet, never in the preview.
+    @State private var previewLink: URL?
     @State private var shareTarget: SharePayload?
     @State private var isSharing = false
     @State private var shareFailure: String?
@@ -166,6 +168,15 @@ struct WorkspaceFileViewer: View {
         }
         .sheet(item: $shareTarget) { target in
             ActivityView(items: [target.url])
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { previewLink != nil },
+                set: { if !$0 { previewLink = nil } })
+        ) {
+            if let previewLink {
+                SafariView(url: previewLink).ignoresSafeArea()
+            }
         }
         .fileExporter(
             isPresented: Binding(
@@ -589,7 +600,9 @@ struct WorkspaceFileViewer: View {
                     icon: "doc.text", title: "File too large to preview",
                     detail: "\(WorkspaceFileFormat.bytes(file?.size ?? 0)) · Switch to Source.")
             } else {
-                sandboxedPreview(WorkspaceFileWebDocument.html(text, dark: colorScheme == .dark))
+                sandboxedPreview(
+                    WorkspaceFileWebDocument.html(text, dark: colorScheme == .dark),
+                    allowsScripts: true)
             }
         } else {
             unsupportedView(
@@ -623,11 +636,14 @@ struct WorkspaceFileViewer: View {
         }
     }
 
-    /// The file preview web view: scrollable, filling the viewer, page JavaScript off.
-    private func sandboxedPreview(_ html: String) -> some View {
+    /// The file preview web view: scrollable, filling the viewer. An HTML page runs its own
+    /// JavaScript in a non-persistent store (E3 §3.3): without it most real pages are blank. SVG
+    /// stays script-free. A top-level navigation opens in Safari, never inside the preview.
+    private func sandboxedPreview(_ html: String, allowsScripts: Bool = false) -> some View {
         SandboxedHTMLView(
             html: html, heightFloor: 0, heightCeiling: 0, onHeightChange: { _ in },
-            fillsFrame: true, allowsScripts: false
+            fillsFrame: true, allowsScripts: allowsScripts,
+            onExternalNavigation: allowsScripts ? { url in previewLink = url } : nil
         )
     }
 

@@ -42,6 +42,10 @@ struct ClaudeTurnView: View {
     /// DSH "Retract this message": called with the turn's prompt row (same cut as Delete) — the
     /// transcript puts the text back in the new session's composer.
     var onRetract: ((TimelineRow) -> Void)? = nil
+    /// Retract needs the same boundary fork as Delete, not rewind (E3 §2).
+    var canRetract: Bool = false
+    /// The fork menu offers "Fork in a new workspace" beside the tab target.
+    var canForkWorkspace: Bool = false
     /// False for every turn except the most recent one; only that turn never collapses.
     var isLatestTurn: Bool = true
 
@@ -138,9 +142,10 @@ struct ClaudeTurnView: View {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
                 if let sender = message.sender { sentByLine(sender) }
                 let rewindable = message.messageId != nil && !rewindChoices.isEmpty
-                // Retract forks the same cut as Edit, so it needs a message the daemon
-                // acknowledged — and never while the turn is still producing (DSH hides it).
-                let retractible = rewindable && !row.isPending && !isRunning
+                // Retract forks at the cut row, so it needs a boundary fork — not rewind — plus a
+                // message the daemon acknowledged, and never while the turn still produces (DSH).
+                let retractible = canRetract && message.messageId != nil && !row.isPending
+                    && !isRunning
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
@@ -191,9 +196,10 @@ struct ClaudeTurnView: View {
                 // The provider has to acknowledge the prompt before it can be rewound to.
                 if let sender = message.sender { sentByLine(sender) }
                 let rewindable = message.messageId != nil && !rewindChoices.isEmpty
-                // Retract forks the same cut as Edit, so it needs a message the daemon
-                // acknowledged — and never while the turn is still producing (DSH hides it).
-                let retractible = rewindable && !row.isPending && !isRunning
+                // Retract forks at the cut row, so it needs a boundary fork — not rewind — plus a
+                // message the daemon acknowledged, and never while the turn still produces (DSH).
+                let retractible = canRetract && message.messageId != nil && !row.isPending
+                    && !isRunning
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
@@ -231,7 +237,9 @@ struct ClaudeTurnView: View {
                         ClaudeCopyButton(text: copyText, label: "Copy response")
                     }
                     if let onFork, let forkTarget = finalProse {
-                        ClaudeForkMenu { target in await onFork(target, forkTarget) }
+                        ClaudeForkMenu(allowsWorkspace: canForkWorkspace) { target in
+                            await onFork(target, forkTarget)
+                        }
                     }
                     if let onDeleteTurn, let userRow = turn.userMessage {
                         ClaudeTurnActionButton(
@@ -283,7 +291,9 @@ struct ClaudeTurnView: View {
                 .accessibilityHint(
                     isExpanded ? "Collapses the work in this turn" : "Shows the work in this turn")
                 if let onForkInFlight {
-                    ClaudeForkMenu { target in await onForkInFlight(target) }
+                    ClaudeForkMenu(allowsWorkspace: canForkWorkspace) { target in
+                        await onForkInFlight(target)
+                    }
                 }
                 ClaudeChevron(expanded: isExpanded)
             }
@@ -379,6 +389,10 @@ enum ClaudeForkTarget: Sendable {
 /// can start a second fork. Upstream puts the spinner **inside** the pending item and keeps it
 /// enabled; a SwiftUI menu item cannot host a `ProgressView`, so the spinner lives on the trigger.
 struct ClaudeForkMenu: View {
+    /// False hides the workspace target: this host cannot create one, so offering it would only
+    /// fail after the tap (E3 §2). Declared before `onFork` so the trailing closure still binds
+    /// to it.
+    var allowsWorkspace = true
     var onFork: (ClaudeForkTarget) async -> Void
     @State private var pending: ClaudeForkTarget?
 
@@ -386,10 +400,12 @@ struct ClaudeForkMenu: View {
         Menu {
             Button("Fork in a new tab", systemImage: "arrow.branch") { run(.tab) }
                 .disabled(pending != nil)
-            Button("Fork in a new workspace", systemImage: "square.on.square.dashed") {
-                run(.workspace)
+            if allowsWorkspace {
+                Button("Fork in a new workspace", systemImage: "square.on.square.dashed") {
+                    run(.workspace)
+                }
+                .disabled(pending != nil)
             }
-            .disabled(pending != nil)
         } label: {
             ClaudeTurnActionGlyph(systemImage: "arrow.branch", busy: pending != nil)
         }
@@ -463,6 +479,9 @@ struct ClaudeTurnActionButton: View {
 /// and its subviews; this row only decides what the row is told.
 struct TurnRow: View, Equatable {
     let turn: Turn
+    /// The agent/host capability value rows draw; part of `==` so a capability change re-renders
+    /// the row even though its content did not change (E3 §2).
+    let availability: TurnActionAvailability
     let isLatest: Bool
     /// The seqEnd of the current find match, non-nil only when it is inside this turn.
     let findSeq: Int?
@@ -476,7 +495,8 @@ struct TurnRow: View, Equatable {
     /// Compared off the main actor, so the conformance does not cross isolation: every compared
     /// input is a plain value (`Turn` is `Sendable`), and `actions` is not part of `==`.
     nonisolated static func == (lhs: TurnRow, rhs: TurnRow) -> Bool {
-        lhs.turn == rhs.turn && lhs.isLatest == rhs.isLatest && lhs.findSeq == rhs.findSeq
+        lhs.turn == rhs.turn && lhs.availability == rhs.availability
+            && lhs.isLatest == rhs.isLatest && lhs.findSeq == rhs.findSeq
             && lhs.flashSeq == rhs.flashSeq && lhs.isLanding == rhs.isLanding
     }
 
@@ -488,15 +508,17 @@ struct TurnRow: View, Equatable {
             highlightedSeq: flashSeq,
             findTarget: findSeq,
             onOpenFile: actions.openFile,
-            rewindChoices: actions.rewindChoices,
-            onRewind: actions.rewind,
-            canRewrite: actions.canRewrite,
+            rewindChoices: availability.rewindChoices,
+            onRewind: availability.rewindChoices.isEmpty ? nil : actions.rewind,
+            canRewrite: availability.canRewrite,
             onEdit: actions.edit,
             onRerun: actions.rerun,
-            onFork: actions.fork,
-            onForkInFlight: actions.forkInFlight,
-            onDeleteTurn: actions.deleteTurn,
-            onRetract: actions.retract,
+            onFork: availability.canForkAtBoundary ? actions.fork : nil,
+            onForkInFlight: availability.canForkInFlight ? actions.forkInFlight : nil,
+            onDeleteTurn: availability.canForkAtBoundary ? actions.deleteTurn : nil,
+            onRetract: availability.canForkAtBoundary ? actions.retract : nil,
+            canRetract: availability.canForkAtBoundary,
+            canForkWorkspace: availability.canForkWorkspace,
             isLatestTurn: isLatest
         )
         .overlay(alignment: .top) {

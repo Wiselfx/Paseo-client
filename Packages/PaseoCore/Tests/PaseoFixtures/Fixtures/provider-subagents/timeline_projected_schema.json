@@ -1,0 +1,75 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent.provider_subagents.timeline.get.response",
+    "payload": {
+      "direction": "tail",
+      "endCursor": { "epoch": "epoch_fixture_projected", "seq": 6 },
+      "epoch": "epoch_fixture_projected",
+      "error": null,
+      "gap": false,
+      "hasNewer": false,
+      "hasOlder": true,
+      "parentAgentId": "agent_parent_fixture",
+      "projection": "projected",
+      "provider": "claude",
+      "requestId": "req_provider_subagents_projected",
+      "reset": false,
+      "rows": [
+        {
+          "item": { "text": "Fixture task two", "type": "user_message" },
+          "seq": 1,
+          "seqEnd": 1,
+          "seqStart": 1,
+          "timestamp": "2026-11-11T14:50:34.000Z"
+        },
+        {
+          "item": { "text": "A fixture reasoning line.", "type": "reasoning" },
+          "seq": 2,
+          "seqEnd": 2,
+          "seqStart": 2,
+          "timestamp": "2026-11-11T14:50:35.000Z"
+        },
+        {
+          "item": {
+            "callId": "tool_fixture_1",
+            "detail": {
+              "command": "ls",
+              "output": "fixture.txt",
+              "type": "shell"
+            },
+            "name": "Bash",
+            "status": "completed",
+            "type": "tool_call"
+          },
+          "seq": 4,
+          "seqEnd": 4,
+          "seqStart": 3,
+          "sourceSeqRanges": [{ "endSeq": 3, "startSeq": 3 }],
+          "timestamp": "2026-11-11T14:50:36.000Z"
+        },
+        {
+          "item": {
+            "items": [{ "completed": false, "text": "Fixture todo" }],
+            "type": "todo"
+          },
+          "seq": 5,
+          "seqEnd": 5,
+          "seqStart": 5,
+          "timestamp": "2026-11-11T14:50:37.000Z"
+        },
+        {
+          "item": { "text": "Fixture answer.", "type": "assistant_message" },
+          "seq": 6,
+          "seqEnd": 6,
+          "seqStart": 6,
+          "timestamp": "2026-11-11T14:50:38.000Z"
+        }
+      ],
+      "staleCursor": false,
+      "startCursor": { "epoch": "epoch_fixture_projected", "seq": 1 },
+      "subagentId": "toolu_fixture_2",
+      "window": { "maxSeq": 6, "minSeq": 1, "nextSeq": 7 }
+    }
+  }
+}

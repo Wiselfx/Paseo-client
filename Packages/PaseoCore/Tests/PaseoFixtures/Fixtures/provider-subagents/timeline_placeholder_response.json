@@ -1,0 +1,34 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent.provider_subagents.timeline.get.response",
+    "payload": {
+      "direction": "tail",
+      "endCursor": { "epoch": "epoch_fixture_timeline", "seq": 3 },
+      "epoch": "epoch_fixture_timeline",
+      "error": null,
+      "gap": false,
+      "hasNewer": false,
+      "hasOlder": false,
+      "parentAgentId": "agent_parent_fixture",
+      "projection": "projected",
+      "provider": "claude",
+      "requestId": "req_provider_subagents_timeline",
+      "reset": false,
+      "rows": [
+        {
+          "item": {
+            "text": "Please upgrade the Paseo app to view this subagent conversation.",
+            "type": "assistant_message"
+          },
+          "seq": 3,
+          "timestamp": "2026-11-11T14:55:12.137Z"
+        }
+      ],
+      "staleCursor": false,
+      "startCursor": { "epoch": "epoch_fixture_timeline", "seq": 1 },
+      "subagentId": "toolu_fixture_1",
+      "window": { "maxSeq": 3, "minSeq": 1, "nextSeq": 4 }
+    }
+  }
+}

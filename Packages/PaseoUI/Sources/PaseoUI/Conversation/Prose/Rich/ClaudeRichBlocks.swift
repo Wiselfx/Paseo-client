@@ -4,6 +4,7 @@ import MapKit
 import PaseoStore
 import SwiftUI
 import UIKit
+import WebKit
 
 /// ClaudeUI card chrome for rich-content blocks: 14 pt radius, 0.5 pt hairline border,
 /// the panel surface in both themes. `ClaudeCard` draws 10 pt, which predates the rich
@@ -45,11 +46,26 @@ struct ClaudeRichBlockView: View {
         case .rawSVG(let source, _):
             RichSVGCard(code: source)
         case .visualize(let code, _):
-            RichWebCard(kind: .visualize, code: code)
+            RichWebCard(code: code)
         case .mapCard(let reference, _):
             RichMapCard(reference: reference)
         }
     }
+}
+
+/// Shared rich-media caps (E3 §3): an image takes at most 60 % of the screen height, an HTML
+/// card at most 70 %. The screen comes from the attached scene, not `UIScreen.main` (deprecated).
+enum RichMediaMetrics {
+    static var screenHeight: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        return scene?.screen.bounds.height ?? 844
+    }
+
+    /// Images and SVG drawings.
+    static var heightCap: CGFloat { screenHeight * 0.6 }
+    /// HTML cards in chat.
+    static var htmlHeightCap: CGFloat { screenHeight * 0.7 }
 }
 
 // MARK: - Map card (M17)
@@ -79,8 +95,6 @@ struct RichMapCard: View {
     @Environment(\.openURL) private var openURL
     @State private var snapshot: UIImage?
 
-    private let typography = ClaudeTypography()
-
     private var targetURL: URL? {
         if let lat = reference.latitude, let lng = reference.longitude {
             return URL(string: "https://maps.apple.com/?ll=\(lat),\(lng)")
@@ -103,7 +117,7 @@ struct RichMapCard: View {
                             Rectangle().fill(Palette.codeSurface)
                                 .overlay {
                                     Image(systemName: "map")
-                                        .font(.system(size: 24, weight: .light))
+                                        .font(.glyph(.xlarge, weight: .light))
                                         .foregroundStyle(Palette.secondaryInk)
                                 }
                         }
@@ -114,10 +128,10 @@ struct RichMapCard: View {
                     .clipShape(.rect(cornerRadius: Radius.md))
                     HStack(spacing: 6) {
                         Image(systemName: "mappin")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.glyph(.small, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
                         Text(caption)
-                            .font(typography.sans(12))
+                            .font(.paseo(.caption))
                             .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
                     }
@@ -186,8 +200,6 @@ struct RichLinkCard: View {
 
     @State private var metadata: LPLinkMetadata?
     @State private var showSafari = false
-
-    private let typography = ClaudeTypography()
 
     var body: some View {
         RichCard {
@@ -260,16 +272,16 @@ struct RichLinkCard: View {
                 .frame(width: 32, height: 32)
                 .overlay {
                     Image(systemName: "link")
-                        .font(.system(size: 15, weight: .regular))
+                        .font(.glyph(.regular))
                         .foregroundStyle(Palette.secondaryInk)
                 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(RichContentDetector.domain(for: url))
-                    .font(typography.sans(13, weight: .semibold))
+                    .font(.paseo(.footnote, weight: .semibold))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 Text(RichContentDetector.displayURL(url))
-                    .font(typography.sans(12))
+                    .font(.paseo(.caption))
                     .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -300,82 +312,195 @@ struct LinkPreviewView: UIViewRepresentable {
 
 // MARK: - YouTube (§1.2)
 
-/// Thumbnail card with a play glyph; tapping opens the watch URL. Full blocks take the
-/// whole width at 4:3, in-sentence blocks are 16:9 capped at 320 pt — the spec's two
-/// placements, both with the hqdefault poster.
+/// One inline player at a time across the transcript (E3 §3.4). Switching the active id rebuilds
+/// the previous card without its web view, which tears the player down and stops playback.
+@MainActor
+@Observable
+final class InlineYouTubePlayback {
+    static let shared = InlineYouTubePlayback()
+    var activeID: String?
+}
+
+/// Thumbnail card at 16:9, full width; tapping swaps it in place for an inline player. The web
+/// view is created by the tap, never for every card, and is destroyed when the card scrolls away.
+/// "Open in YouTube" in the context menu keeps the old external path.
 struct YouTubeRichCard: View {
     let reference: YouTubeReference
     let full: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
 
-    private let typography = ClaudeTypography()
+    private let playback = InlineYouTubePlayback.shared
+    private var isPlaying: Bool { playback.activeID == reference.id }
 
     var body: some View {
-        Button {
-            if let target = URL(string: RichContentDetector.youTubeWatchURL(id: reference.id)) {
-                openURL(target)
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                ZStack {
-                    // hqdefault letterboxes 16:9 inside 4:3; fill crop keeps it full-bleed.
-                    AsyncImage(url: URL(string: RichContentDetector.youTubeThumbnailURL(id: reference.id))) { phase in
-                        switch phase {
-                        case .empty:
-                            Rectangle().fill(Palette.codeSurface)
-                        case .success(let image):
-                            image.resizable().aspectRatio(contentMode: .fill)
-                        case .failure:
-                            Rectangle().fill(Palette.codeSurface)
-                                .overlay {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 24, weight: .light))
-                                        .foregroundStyle(Palette.secondaryInk)
-                                }
-                        @unknown default:
-                            Rectangle().fill(Palette.codeSurface)
-                        }
-                    }
-                    .frame(maxWidth: full ? .infinity : 320)
-                    .aspectRatio(full ? 4.0 / 3.0 : 16.0 / 9.0, contentMode: .fit)
-                    .clipped()
-
-                    Circle()
-                        .fill(.black.opacity(0.55))
-                        .frame(width: 34, height: 34)
-                        .overlay {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .offset(x: 1)
-                        }
-                        .accessibilityHidden(true)
-                }
-                .frame(maxWidth: full ? .infinity : 320, alignment: .leading)
-                .clipShape(.rect(cornerRadius: Radius.md))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                        .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
-                }
-                if full {
-                    HStack(spacing: 6) {
-                        Image(systemName: "play")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Palette.secondaryInk)
-                        Text("youtube.com · \(reference.id)")
-                            .font(typography.sans(12))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 4)
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack {
+                if isPlaying {
+                    InlineYouTubePlayer(referenceID: reference.id)
+                        .accessibilityLabel("YouTube video \(reference.id)")
+                        .transition(.opacity)
+                } else {
+                    thumbnail
+                        .transition(.opacity)
                 }
             }
             .frame(maxWidth: full ? .infinity : 320, alignment: .leading)
-            .contentShape(.rect)
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .background(Color.black)
+            .clipShape(.rect(cornerRadius: Radius.md))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
+            }
+            .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: isPlaying)
+            .onScrollVisibilityChange(threshold: 0.05) { visible in
+                // Far enough off screen: destroy the player rather than let audio keep running.
+                if !visible, isPlaying { playback.activeID = nil }
+            }
+            if full {
+                HStack(spacing: 6) {
+                    Image(systemName: "play")
+                        .font(.glyph(.small, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
+                    Text("youtube.com · \(reference.id)")
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if isPlaying {
+                        Button("Close") { playback.activeID = nil }
+                            .font(.paseo(.caption, weight: .medium))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: full ? .infinity : 320, alignment: .leading)
+    }
+
+    private var thumbnail: some View {
+        ZStack {
+            AsyncImage(
+                url: URL(string: RichContentDetector.youTubeThumbnailURL(id: reference.id))
+            ) { phase in
+                switch phase {
+                case .empty:
+                    Rectangle().fill(Palette.codeSurface)
+                case .success(let image):
+                    image.resizable().aspectRatio(contentMode: .fill)
+                case .failure:
+                    Rectangle().fill(Palette.codeSurface)
+                        .overlay {
+                            Image(systemName: "photo")
+                                .font(.glyph(.xlarge, weight: .light))
+                                .foregroundStyle(Palette.secondaryInk)
+                        }
+                @unknown default:
+                    Rectangle().fill(Palette.codeSurface)
+                }
+            }
+            .clipped()
+
+            Circle()
+                .fill(.black.opacity(0.55))
+                .frame(width: 34, height: 34)
+                .overlay {
+                    Image(systemName: "play.fill")
+                        .font(.glyph(.regular, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .offset(x: 1)
+                }
+                .accessibilityHidden(true)
+        }
+        .contentShape(.rect)
+        .onTapGesture { playback.activeID = reference.id }
+        .contextMenu {
+            Button("Open in YouTube", systemImage: "play.rectangle") { openInYouTube() }
+        }
+        .accessibilityElement()
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel("Play YouTube video \(reference.id)")
+    }
+
+    private func openInYouTube() {
+        if let target = URL(string: RichContentDetector.youTubeWatchURL(id: reference.id)) {
+            openURL(target)
+        }
+    }
+}
+
+/// The inline player (E3 §3.4): `youtube-nocookie.com` embed in a one-line document whose
+/// `baseURL` is an https origin, so YouTube sees a referrer (without one it refuses with error
+/// 152/153). Inline playback, no gesture required to start, no page scroll.
+struct InlineYouTubePlayer: UIViewRepresentable {
+    let referenceID: String
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.websiteDataStore = .nonPersistent()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.isOpaque = false
+        webView.backgroundColor = .black
+        webView.scrollView.backgroundColor = .black
+        webView.navigationDelegate = context.coordinator
+        webView.loadHTMLString(Self.document(for: referenceID), baseURL: Self.origin)
+        context.coordinator.loadedOrigin = Self.origin
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {}
+
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        // Leaving the hierarchy would usually be enough; stopping the load and dropping the
+        // delegate makes sure the media session ends with the view.
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.pauseAllMediaPlayback {}
+    }
+
+    /// The referrer origin YouTube expects; the document itself is inline HTML.
+    static let origin = URL(string: "https://www.youtube-nocookie.com")
+
+    static func document(for id: String) -> String {
+        // An id is alphanumerics plus `-`/`_`; anything else is dropped before it reaches markup.
+        let embedID = id.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        return """
+            <!DOCTYPE html><html><head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}
+            iframe{border:0;display:block;width:100%;height:100%}</style>
+            </head><body>
+            <iframe src="https://www.youtube-nocookie.com/embed/\(embedID)?playsinline=1&autoplay=1&rel=0&modestbranding=1"
+              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+              allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            </body></html>
+            """
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var loadedOrigin: URL?
+
+        /// The document load is allowed; a main-frame navigation away from it (YouTube's own
+        /// "Watch on YouTube") is cancelled — the card's menu opens the app instead.
+        func webView(
+            _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction
+        ) async -> WKNavigationActionPolicy {
+            guard let frame = navigationAction.targetFrame, frame.isMainFrame else { return .allow }
+            if navigationAction.navigationType == .other, loadedOrigin != nil { return .allow }
+            return .cancel
+        }
     }
 }
 
@@ -383,6 +508,9 @@ struct YouTubeRichCard: View {
 
 /// A remote image URL, loaded lazily when it scrolls into view. Tap opens the
 /// full-screen viewer (ClaudeMediaViewer, reused).
+///
+/// E3 §3.5: full width, the image's own aspect ratio, capped at 60 % of the screen height; the
+/// placeholder reserves a 4:3 box and the one change to the real ratio animates.
 struct RichRemoteImage: View {
     let urlString: String
     let alt: String
@@ -390,6 +518,8 @@ struct RichRemoteImage: View {
     @State private var showViewer = false
     @State private var controlsVisible = true
     @State private var showShare = false
+    @State private var loaded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var fileName: String {
         URL(string: urlString)?.lastPathComponent.nilIfEmpty ?? "image"
@@ -404,8 +534,7 @@ struct RichRemoteImage: View {
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 320, alignment: .center)
+                    .frame(maxWidth: .infinity, maxHeight: RichMediaMetrics.heightCap)
                     .background(Palette.codeSurface)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .contentShape(.rect)
@@ -413,6 +542,7 @@ struct RichRemoteImage: View {
                         controlsVisible = true
                         showViewer = true
                     }
+                    .onAppear { loaded = true }
             case .failure:
                 brokenCard
             @unknown default:
@@ -420,6 +550,7 @@ struct RichRemoteImage: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: loaded)
         .fullScreenCover(isPresented: $showViewer) {
             RichImageViewer(
                 fileName: fileName,
@@ -440,8 +571,8 @@ struct RichRemoteImage: View {
     private var placeholder: some View {
         Rectangle()
             .fill(Palette.codeSurface)
-            .frame(maxWidth: .infinity)
-            .frame(height: 320)
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .frame(maxWidth: .infinity, maxHeight: RichMediaMetrics.heightCap)
             .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
                 ProgressView().controlSize(.small).tint(Palette.secondaryInk)
@@ -451,10 +582,10 @@ struct RichRemoteImage: View {
     private var brokenCard: some View {
         HStack(spacing: 10) {
             Image(systemName: "photo")
-                .font(.system(size: 18, weight: .light))
+                .font(.glyph(.large, weight: .light))
                 .foregroundStyle(Palette.secondaryInk)
             Text(urlString)
-                .font(ClaudeTypography().mono(11))
+                .font(.paseo(.codeCaption))
                 .foregroundStyle(Palette.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -482,6 +613,7 @@ struct RichLocalImage: View {
     @State private var showViewer = false
     @State private var controlsVisible = true
     @State private var showShare = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var fileName: String {
         (path as NSString).lastPathComponent.nilIfEmpty ?? "image"
@@ -493,8 +625,7 @@ struct RichLocalImage: View {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 320, alignment: .center)
+                    .frame(maxWidth: .infinity, maxHeight: RichMediaMetrics.heightCap)
                     .background(Palette.codeSurface)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .contentShape(.rect)
@@ -507,14 +638,15 @@ struct RichLocalImage: View {
             } else {
                 Rectangle()
                     .fill(Palette.codeSurface)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 320)
+                    .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: RichMediaMetrics.heightCap)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .overlay {
                         ProgressView().controlSize(.small).tint(Palette.secondaryInk)
                     }
             }
         }
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: image)
         .task {
             guard let loader else {
                 loaded = true
@@ -597,8 +729,6 @@ struct RichPathChip: View {
     let path: String
     var glyph: String = "doc.text"
 
-    private let typography = ClaudeTypography()
-
     var body: some View {
         Button {
             UIPasteboard.general.string = path
@@ -606,16 +736,16 @@ struct RichPathChip: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: glyph)
-                    .font(.system(size: 14, weight: .regular))
+                    .font(.glyph(.small))
                     .foregroundStyle(Palette.secondaryInk)
                 Text(path)
-                    .font(typography.mono(12))
+                    .font(.paseo(.codeSmall))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 8)
                 Image(systemName: "doc.on.doc")
-                    .font(.system(size: 12, weight: .regular))
+                    .font(.glyph(.small))
                     .foregroundStyle(Palette.secondaryInk)
             }
             .padding(.vertical, 10)
@@ -632,45 +762,38 @@ struct RichPathChip: View {
     }
 }
 
-// MARK: - Raw SVG and the visualize fence (§1.6, §2)
-
-enum RichWebKind {
-    case visualize, svg
-}
+// MARK: - The visualize fence (§1.6, §2)
 
 /// A ` ```visualize ` block: a sandboxed WKWebView sized to its content, with a "View source"
 /// toggle that swaps in the raw source with a copy button.
+///
+/// E3 §3.2: the height follows the reported content up to 70 % of the screen height, animated
+/// once per settled layout (the reporter debounces 100 ms and ignores sub-2-pt moves); past the
+/// cap an "Open" button shows the page full screen.
 ///
 /// The live web view exists only while the card is on screen and a slot is free (R9 §2). Off
 /// screen the card draws its last snapshot, which is taken as it leaves; that keeps a long
 /// transcript from holding one web process per card.
 struct RichWebCard: View {
-    let kind: RichWebKind
     let code: String
 
     @State private var showSource = false
-    @State private var contentHeight: CGFloat
+    @State private var showFullScreen = false
+    @State private var contentHeight: CGFloat = 240
+    @State private var overflows = false
     @State private var isVisible = false
     @State private var holdsSlot = false
     @State private var snapshot: UIImage?
     @State private var width: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
-    private let typography = ClaudeTypography()
-
-    init(kind: RichWebKind, code: String) {
-        self.kind = kind
-        self.code = code
-        _contentHeight = State(initialValue: kind == .visualize ? 240 : 80)
-    }
+    /// A page that wants more than this gets the "Open" affordance instead.
+    private var heightCap: CGFloat { RichMediaMetrics.htmlHeightCap }
 
     /// Built once per (content, scheme) instead of on every `body` pass.
     private var document: String {
-        let dark = colorScheme == .dark
-        switch kind {
-        case .visualize: return RichHTMLDocument.visualize(code: code, dark: dark)
-        case .svg: return RichHTMLDocument.rawSVG(source: code, dark: dark)
-        }
+        RichHTMLDocument.visualize(code: code, dark: colorScheme == .dark)
     }
 
     private var showsLive: Bool { isVisible && holdsSlot }
@@ -683,6 +806,9 @@ struct RichWebCard: View {
                     source
                 } else {
                     stage
+                    if overflows {
+                        openFullScreenButton
+                    }
                 }
             }
         }
@@ -691,12 +817,20 @@ struct RichWebCard: View {
         .onDisappear { setVisible(false) }
         .onScrollVisibilityChange(threshold: 0.1) { visible in setVisible(visible) }
         .task(id: snapshotKey) { await captureSnapshotIfNeeded() }
+        .sheet(isPresented: $showFullScreen) {
+            SheetScaffold("Visualization", detents: .large) {
+                SandboxedHTMLView(
+                    html: document, heightFloor: 0, heightCeiling: .greatestFiniteMagnitude,
+                    onHeightChange: { _ in }, fillsFrame: true)
+                    .ignoresSafeArea(edges: .bottom)
+            }
+        }
     }
 
     private var header: some View {
         HStack {
-            Text(kind == .visualize ? "Visualization" : "SVG")
-                .font(typography.sans(12, weight: .medium))
+            Text("Visualization")
+                .font(.paseo(.caption, weight: .medium))
                 .foregroundStyle(Palette.secondaryInk)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
@@ -704,7 +838,7 @@ struct RichWebCard: View {
                 showSource.toggle()
             } label: {
                 Text(showSource ? "Hide source" : "View source")
-                    .font(typography.mono(11))
+                    .font(.paseo(.codeCaption))
                     .foregroundStyle(Palette.secondaryInk)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 10)
@@ -719,12 +853,15 @@ struct RichWebCard: View {
         if showsLive {
             SandboxedHTMLView(
                 html: document,
-                heightFloor: kind == .visualize ? 80 : 30,
-                heightCeiling: kind == .visualize ? 800 : 400
-            ) { newHeight in
-                contentHeight = newHeight
-            }
+                heightFloor: 80,
+                heightCeiling: heightCap,
+                onHeightChange: { newHeight in
+                    contentHeight = newHeight
+                },
+                onOverflowChange: { overflows = $0 }
+            )
             .frame(height: contentHeight)
+            .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: contentHeight)
         } else if let snapshot {
             Image(uiImage: snapshot)
                 .resizable()
@@ -738,11 +875,25 @@ struct RichWebCard: View {
         }
     }
 
+    private var openFullScreenButton: some View {
+        Button {
+            showFullScreen = true
+        } label: {
+            Label("Open", systemImage: "arrow.up.left.and.arrow.down.right")
+                .font(.paseo(.caption, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open visualization full screen")
+    }
+
     private var source: some View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView {
                 Text(code)
-                    .font(typography.mono(11))
+                    .font(.paseo(.codeCaption))
                     .foregroundStyle(Palette.ink)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -755,7 +906,7 @@ struct RichWebCard: View {
                     Haptics.light()
                 } label: {
                     Label("Copy source", systemImage: "doc.on.doc")
-                        .font(typography.sans(12, weight: .medium))
+                        .font(.paseo(.caption, weight: .medium))
                         .foregroundStyle(Palette.secondaryInk)
                 }
                 .buttonStyle(.plain)
@@ -800,7 +951,7 @@ struct RichWebCard: View {
                 guard let rendered else { return }
                 RichSnapshotCache.store(rendered, for: key)
                 snapshot = rendered
-                contentHeight = max(height, min(rendered.size.height, 800))
+                contentHeight = max(height, min(rendered.size.height, heightCap))
             }
         }
     }
