@@ -395,7 +395,7 @@ public struct ConnectView: View {
                 .font(.paseo(.body))
                 .textContentType(.password)
                 .submitLabel(.go)
-                .onSubmit(onConnect)
+                .onSubmit { if canConnect { onConnect() } }
             }
         }
         .padding(.horizontal, 16)

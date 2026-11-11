@@ -16,6 +16,10 @@ struct ClaudePermissionCard: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var answering = false
+    /// The optimistic quiet line is reported at most once per request: a retry after the
+    /// answer timeout must not append a second line with the same id (the parent renders
+    /// them in a `ForEach`, where duplicate ids are undefined behaviour).
+    @State private var didReportAnswer = false
     @State private var questionState = QuestionFormState()
 
     private var isPlan: Bool { request.kind == .plan }
@@ -49,6 +53,17 @@ struct ClaudePermissionCard: View {
             }
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .task(id: answering) {
+            guard answering else { return }
+            // The answer is fire-and-forget by protocol: `agent_permission_response` carries
+            // no correlated reply, so a lost frame never surfaces as an error and no
+            // `agent_permission_resolved` event ever arrives. Without this timeout the card
+            // would sit on its spinner with dead buttons forever. When the card is still
+            // mounted after the timeout the answer never landed, so the user can answer again.
+            try? await Task.sleep(for: Self.answerTimeout)
+            guard !Task.isCancelled else { return }
+            answering = false
+        }
     }
 
     // MARK: Tool cards (generic permission requests)
@@ -247,6 +262,11 @@ struct ClaudePermissionCard: View {
 
     // MARK: Buttons
 
+    /// How long the card waits for the daemon's `agent_permission_resolved` event before it
+    /// lets the user answer again. Normal confirmation is near-instant; a lost answer frame
+    /// never resolves, so this is generous rather than tight.
+    private static let answerTimeout: Duration = .seconds(10)
+
     private func answerButton(
         title: String, variant: AgentPermissionAction.Variant, response: AgentPermissionResponse
     ) -> some View {
@@ -259,7 +279,10 @@ struct ClaudePermissionCard: View {
             let requestId = request.id
             let line = ResolutionLine.text(for: response, request: request)
             Task { await store.respond(to: requestId, with: response) }
-            onAnswered(AnsweredPermission(id: requestId, line: line))
+            if !didReportAnswer {
+                didReportAnswer = true
+                onAnswered(AnsweredPermission(id: requestId, line: line))
+            }
         } label: {
             Text(title)
                 .font(.paseo(.callout, weight: .medium))

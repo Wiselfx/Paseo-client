@@ -63,7 +63,11 @@ public final class SchedulesStore {
                 phase = .failed(error)
                 return
             }
-            schedules = response.schedules
+            // No push events for schedules: the list polls. Publish only on real change so
+            // a quiet poll neither re-evaluates every row nor disturbs the reader's scroll.
+            if response.schedules != schedules {
+                schedules = response.schedules
+            }
             error = nil
             phase = .ready
         } catch {
