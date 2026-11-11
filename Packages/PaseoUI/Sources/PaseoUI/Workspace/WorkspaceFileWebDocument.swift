@@ -1,12 +1,13 @@
 #if canImport(UIKit)
 import Foundation
 
-/// Sandboxed documents for the Files viewer's SVG and HTML previews (UX spec §6).
+/// Sandboxed documents for the Files viewer's SVG and HTML previews (UX spec §6, E3 §3.3).
 ///
-/// Both are offline documents: the CSP allows inline styles and `data:`/`blob:` images only,
-/// blocks every script (`script-src 'none'`) and every network fetch (`default-src 'none'`,
-/// `connect-src 'none'`), so a preview never runs code from the workspace or calls out.
-/// No height reporter is injected: the viewer's web view fills its frame and scrolls.
+/// SVG stays a static document: inline styles and `data:`/`blob:` images only, no script, no
+/// network. HTML runs the page's own scripts — most real pages build their content with
+/// JavaScript — in a non-persistent data store, and may fetch subresources over https so CDN
+/// libraries load. No height reporter is injected: the viewer's web view fills its frame and
+/// scrolls, and a top-level navigation opens in Safari instead (`SandboxedHTMLView`).
 enum WorkspaceFileWebDocument {
     /// An SVG file, inline in a minimal document, fitted to the width of the view.
     static func svg(_ source: String, dark: Bool) -> String {
@@ -20,7 +21,7 @@ enum WorkspaceFileWebDocument {
             <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:">
             <style>:root { color-scheme: \(scheme); }
             html, body { margin: 0; padding: 0; background: transparent; }
-            svg { max-width: 100%; height: auto; display: block; }
+            svg { width: 100%; height: auto; display: block; }
             </style>
             </head>
             <body>
@@ -42,7 +43,7 @@ enum WorkspaceFileWebDocument {
         return """
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; script-src 'none'; connect-src 'none'; media-src data: blob:; frame-src 'none'; object-src 'none'; base-uri 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; connect-src https:; media-src https: data: blob:; frame-src https:; object-src 'none'; base-uri 'none'">
             <style>:root { color-scheme: \(scheme); }
             html, body { background: transparent; color: \(text); font-family: -apple-system, sans-serif; }
             </style>

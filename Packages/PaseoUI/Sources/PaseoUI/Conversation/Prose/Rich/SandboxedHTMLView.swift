@@ -29,21 +29,26 @@ struct ActivityView: UIViewControllerRepresentable {
 /// A sandboxed, non-scrollable `WKWebView` sized to its content.
 ///
 /// The HTML document is built by the caller (`RichHTMLDocument`); it reports its content
-/// height through the `vizHeight` script message handler, which this view clamps and
-/// forwards to `onHeightChange`. Navigation policy allows only non-link loads: taps on
-/// links are cancelled, and the documents carry a no-network CSP, so rich cards never
-/// make a request a reader didn't ask for.
+/// height through the `vizHeight` script message handler, which debounces, clamps and
+/// forwards to `onHeightChange`, plus whether the content still exceeds the ceiling. Navigation
+/// policy allows only non-link loads: taps on links are cancelled, and the documents carry a
+/// no-network CSP, so rich cards never make a request a reader didn't ask for.
 struct SandboxedHTMLView: UIViewRepresentable {
     let html: String
     let heightFloor: CGFloat
     let heightCeiling: CGFloat
     var onHeightChange: (CGFloat) -> Void
+    /// True when the reported content is taller than `heightCeiling`: the card offers "Open".
+    var onOverflowChange: ((Bool) -> Void)? = nil
     /// A file preview is a document, not a rich card: it fills its frame and scrolls. Rich cards
     /// keep the default (sized to their reported content height).
     var fillsFrame: Bool = false
-    /// File previews render untrusted markup with page JavaScript off. Rich cards need the
-    /// height reporter, so they keep it on.
+    /// File previews render the workspace's own markup; scripts are on (a static page is blank)
+    /// in a non-persistent data store, and navigation away opens in Safari.
     var allowsScripts: Bool = true
+    /// Called for a top-level navigation that isn't the document itself (a link tap, a form
+    /// post, a redirect). File previews open the URL in an in-app Safari sheet instead.
+    var onExternalNavigation: ((URL) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onHeightChange: onHeightChange, floor: heightFloor, ceiling: heightCeiling)
@@ -53,6 +58,11 @@ struct SandboxedHTMLView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.add(context.coordinator, name: "vizHeight")
         configuration.defaultWebpagePreferences.allowsContentJavaScript = allowsScripts
+        if allowsScripts {
+            // A preview of the user's own file: nothing to persist, nothing shared with the app.
+            configuration.websiteDataStore = .nonPersistent()
+            configuration.allowsInlineMediaPlayback = true
+        }
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.scrollView.isScrollEnabled = fillsFrame
@@ -67,8 +77,11 @@ struct SandboxedHTMLView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.onHeightChange = onHeightChange
+        context.coordinator.onOverflowChange = onOverflowChange
+        context.coordinator.onExternalNavigation = onExternalNavigation
         context.coordinator.floor = heightFloor
         context.coordinator.ceiling = heightCeiling
+        context.coordinator.allowsExternalNavigation = onExternalNavigation != nil
         webView.scrollView.isScrollEnabled = fillsFrame
         webView.scrollView.bounces = fillsFrame
         if context.coordinator.loadedHTML != html {
@@ -85,9 +98,19 @@ struct SandboxedHTMLView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var onHeightChange: (CGFloat) -> Void
+        var onOverflowChange: ((Bool) -> Void)?
+        var onExternalNavigation: ((URL) -> Void)?
+        var allowsExternalNavigation = false
         var floor: CGFloat
         var ceiling: CGFloat
         var loadedHTML: String?
+
+        /// The last height handed to `onHeightChange`; reports closer than 2 pt are ignored.
+        private var lastHeight: CGFloat?
+        private var reportedOverflow = false
+        /// Debounces the height reporter: scripts lay out in bursts, and one animated height
+        /// change when they settle beats a jump per burst.
+        private var pendingReport: Task<Void, Never>?
 
         init(onHeightChange: @escaping (CGFloat) -> Void, floor: CGFloat, ceiling: CGFloat) {
             self.onHeightChange = onHeightChange
@@ -101,17 +124,55 @@ struct SandboxedHTMLView: UIViewRepresentable {
             guard message.name == "vizHeight",
                 let value = (message.body as? NSNumber)?.doubleValue ?? message.body as? Double
             else { return }
-            onHeightChange(min(max(CGFloat(value), floor), ceiling))
+            scheduleReport(CGFloat(value))
         }
 
-        // The initial document load is the only navigation allowed; everything the
-        // content itself triggers (links, redirects) is cancelled.
+        private func scheduleReport(_ raw: CGFloat) {
+            pendingReport?.cancel()
+            pendingReport = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(100))
+                guard !Task.isCancelled, let self else { return }
+                self.publish(raw)
+            }
+        }
+
+        private func publish(_ raw: CGFloat) {
+            let height = min(max(raw, floor), ceiling)
+            let overflows = raw > ceiling
+            if overflows != reportedOverflow {
+                reportedOverflow = overflows
+                onOverflowChange?(overflows)
+            }
+            // Sub-2-pt moves are layout noise; ignore them so the card never jitters.
+            if let lastHeight, abs(lastHeight - height) < 2 { return }
+            lastHeight = height
+            onHeightChange(height)
+        }
+
+        /// The first main-frame load is the document itself and is allowed; every later one (a
+        /// link, a form post, a redirect) is cancelled — or, for a file preview, handed to Safari.
+        /// Sub-frames are part of the document and load normally.
+        private var loadedDocument = false
+
         func webView(
             _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction
         ) async -> WKNavigationActionPolicy {
-            if navigationAction.navigationType == .linkActivated { return .cancel }
-            if navigationAction.targetFrame == nil { return .cancel }
-            return .allow
+            guard let target = navigationAction.targetFrame else {
+                // A new window: `target="_blank"`. A preview opens it in Safari.
+                if allowsExternalNavigation, let url = navigationAction.request.url {
+                    onExternalNavigation?(url)
+                }
+                return .cancel
+            }
+            if !target.isMainFrame { return .allow }
+            if !loadedDocument {
+                loadedDocument = true
+                return .allow
+            }
+            if allowsExternalNavigation, let url = navigationAction.request.url {
+                onExternalNavigation?(url)
+            }
+            return .cancel
         }
     }
 }
@@ -165,7 +226,10 @@ enum RichHTMLDocument {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
         <style>:root { color-scheme: \(scheme); }
         html, body { margin: 0; padding: 0; background: transparent; }
-        svg { max-width: 100%; height: auto; display: block; }
+        /* Full width: a viewBox-only <svg> is 300x150 by default and would letterbox inside
+           the card. height:auto follows the intrinsic ratio from the viewBox or the
+           width/height attributes. */
+        svg { width: 100%; height: auto; display: block; }
         </style>
         </head>
         <body>

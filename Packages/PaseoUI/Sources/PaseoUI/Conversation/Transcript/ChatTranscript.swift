@@ -241,9 +241,13 @@ struct TranscriptView: View {
         // turn scans its rows.
         let findSeq = controller.find.isOpen ? controller.findSeq : nil
         let flashSeq = controller.find.isOpen ? controller.find.flash : nil
+        // One read of the turn-action value for every row: it changes when the agent or host
+        // capabilities change, not per turn, and `TurnRow` compares it (E3 §2).
+        let availability = controller.actions.availability
         ForEach(store.turns) { turn in
             TurnRow(
                 turn: turn,
+                availability: availability,
                 isLatest: turn.id == lastId,
                 findSeq: findSeq.flatMap { turn.containsRow(seqEnd: $0) ? $0 : nil },
                 flashSeq: flashSeq.flatMap { turn.containsRow(seqEnd: $0) ? $0 : nil },

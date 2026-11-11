@@ -17,6 +17,9 @@ import Testing
                     "hello_rejection": true,
                     "terminal_chunked_replay": true,
                     "provider_subagents": true,
+                    // E3: without it the daemon answers every provider-subagent timeline request
+                    // with the "Please upgrade the Paseo app" placeholder row.
+                    "projected_subagent_timeline": true,
                     "owned_subscriptions": true,
                     "workspace_setup_observation": true,
                     // M15: realtime voice mode is implemented (`VoiceModeSession`), so the
