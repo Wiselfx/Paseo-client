@@ -5,6 +5,20 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 ## Next session starts here (2026-11-11)
 
+**G-round IN FLIGHT (launched 2026-11-11, after the H-round).** Contract: `docs/tickets/G-rich-ui.md`
+(the rich UI plan made coherent; decisions D1–D8 taken by the lead on the user's delegation:
+Mermaid bundled, Live Activity / Share ext / Expo deferred, extensions built but not embedded,
+notification Allow/Deny off by default, §15 copy approved with upstream-first, permission line only
+after daemon confirmation; H-round new copy approved). ONE worker: Muse Spark 1.3 contributor on Pi
+(thinking high), agent `3d870bb3-a496-4dbe-a6e1-a7f28f0f7e29`, worktree
+`/home/paseo/.paseo/worktrees/0264elgj/g-rich-ui`, branch `g-rich-ui`.
+**Lead loop (repeat per phase A→B(G4+G5)→B(rest)→C→D→E):** on its stop report → read the FULL diff
+against `G-rich-ui.md` §0 (mission-critical) → send exact fixes back to the same agent → push the
+branch, merge into `merge-check` off foundation, gate build → ff foundation, PaseoCore tests →
+reply "continue to <next phase>". Add a scorecard row per phase. Build an IPA after Phase A and
+after Phase B. Known worker traps to check every round: `G-rich-ui.md` §4.
+
+
 **H-round MERGED (2026-11-11): device feedback 3, all 10 bugs + bug-hunt fixes.** Code head
 `ffd4db6`, Mac gate green, PaseoCore 1171 green. **IPA for the user:
 `/Users/Shared/Paseo-ipas/Paseo-20261111-1403-ffd4db6.ipa`.** Tickets `docs/tickets/_H-common.md`,
