@@ -200,6 +200,7 @@ struct RichSVGCard: View {
     @State private var showShare = false
     @State private var width: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
 
     private var dark: Bool { colorScheme == .dark }
 
@@ -209,8 +210,11 @@ struct RichSVGCard: View {
     /// From `viewBox`, else `width`/`height`; nil when the drawing carries neither.
     private var intrinsicAspectRatio: CGFloat? { RichSVGIntrinsic.aspectRatio(of: code) }
 
-    /// 60 % of the screen height: a tall drawing shrinks to fit instead of pushing the turn away.
-    private var heightCap: CGFloat { RichMediaMetrics.heightCap }
+    /// The window's height, for the 60 % cap (see `RichViewportHeight`); nil before layout.
+    @State private var viewportHeight: CGFloat = 0
+
+    /// A tall drawing shrinks to fit instead of pushing the turn away.
+    private var heightCap: CGFloat? { viewportHeight > 0 ? viewportHeight * 0.6 : nil }
 
     var body: some View {
         RichCard {
@@ -224,6 +228,7 @@ struct RichSVGCard: View {
             }
         }
         .background { widthReader }
+        .background { RichViewportHeight { viewportHeight = $0 } }
         .task(id: renderKey) { await render() }
         .fullScreenCover(isPresented: $showViewer) {
             if let image {
@@ -289,10 +294,11 @@ struct RichSVGCard: View {
     /// The size the drawing will take, from its own ratio, so the card does not jump when the
     /// snapshot arrives. Falls back to the old 120 pt strip for a drawing with no size hints.
     private var placeholderHeight: CGFloat {
-        guard let ratio = intrinsicAspectRatio else { return min(120, heightCap) }
+        let cap = heightCap ?? .greatestFiniteMagnitude
+        guard let ratio = intrinsicAspectRatio else { return min(120, cap) }
         // Before layout the width is unknown; assume a phone-width card.
         let assumedWidth = width > 1 ? width : 350
-        return min(assumedWidth / ratio, heightCap)
+        return min(assumedWidth / ratio, cap)
     }
 
     /// The card's inner width, for rendering the drawing at its real size instead of a guess.
@@ -318,7 +324,7 @@ struct RichSVGCard: View {
             return
         }
         let rendered = await RichSnapshotQueue.shared.snapshot(
-            html: document, width: width, scale: UIScreen.main.scale)
+            html: document, width: width, scale: displayScale)
         guard let rendered else { return }
         RichSnapshotCache.store(rendered, for: key)
         image = rendered

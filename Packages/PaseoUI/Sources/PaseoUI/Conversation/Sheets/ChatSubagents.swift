@@ -370,7 +370,9 @@ struct ChatSubagentsSheet: View {
     }
 }
 
-/// One provider subagent's timeline, read-only: the tail page, plain rows.
+/// One provider subagent's timeline, read-only: the tail page, plain rows, and older pages
+/// prepended as the reader reaches the top (`E3b`): the row they were looking at stays pinned to
+/// the top, so the new rows never push it down. One older request in flight at a time.
 struct ChatSubagentTimelineView: View {
     let subagents: ConversationSubagents
     let subagent: ProviderSubagent
@@ -378,53 +380,117 @@ struct ChatSubagentTimelineView: View {
     @State private var rows: [ProviderSubagentTimelineRequest.Response.Row] = []
     @State private var loading = true
     @State private var error: String?
+    @State private var olderError: String?
+    @State private var loadingOlder = false
+    @State private var hasOlder = false
+    /// The oldest row loaded: the page before it is what "older" means.
+    @State private var startCursor: TimelineCursor?
+
+    private static let pageSize = 50
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                if loading && rows.isEmpty {
-                    LoadingState()
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    if loading && rows.isEmpty {
+                        LoadingState()
+                            .padding(.top, 60)
+                    } else if let error {
+                        VStack(spacing: Space.md) {
+                            InlineBanner(
+                                .failure, title: error,
+                                action: ("Try again", { Task { await load() } }))
+                        }
                         .padding(.top, 60)
-                } else if let error {
-                    VStack(spacing: Space.md) {
-                        InlineBanner(
-                            .failure, title: error,
-                            action: ("Try again", { Task { await load() } }))
-                    }
-                    .padding(.top, 60)
-                    .frame(maxWidth: .infinity)
-                } else if rows.isEmpty {
-                    // Upstream's timeline panel empty line (`en.ts:233`, `agentStream.empty`).
-                    EmptyState(title: "Start chatting with this agent...")
-                        .padding(.top, 60)
-                } else {
-                    ForEach(rows, id: \.seq) { row in
-                        timelineRow(row)
+                        .frame(maxWidth: .infinity)
+                    } else if rows.isEmpty {
+                        // Upstream's timeline panel empty line (`en.ts:233`, `agentStream.empty`).
+                        EmptyState(title: "Start chatting with this agent...")
+                            .padding(.top, 60)
+                    } else {
+                        olderBoundary(proxy)
+                        ForEach(rows, id: \.seq) { row in
+                            timelineRow(row)
+                        }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 18)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 18)
+            .background(Palette.background)
+            .navigationTitle(rowTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .task { await load() }
         }
-        .background(Palette.background)
-        .navigationTitle(rowTitle)
-        .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
     }
 
     private var rowTitle: String {
         subagent.title ?? subagent.description ?? subagent.provider
     }
 
+    /// The top of the loaded history: a spinner while the older page arrives, a failure the
+    /// reader can retry, or a zero-height trigger that fires when it scrolls into view.
+    @ViewBuilder
+    private func olderBoundary(_ proxy: ScrollViewProxy) -> some View {
+        if loadingOlder {
+            HStack {
+                Spacer(minLength: 0)
+                ProgressView().controlSize(.small).tint(Palette.secondaryInk)
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 24)
+        } else if let olderError {
+            InlineBanner(
+                .failure, title: olderError,
+                action: ("Try again", { Task { await loadOlder(proxy) } }))
+        } else if hasOlder {
+            Color.clear
+                .frame(height: 1)
+                .accessibilityHidden(true)
+                .onAppear { Task { await loadOlder(proxy) } }
+        }
+    }
+
+    @MainActor
     private func load() async {
         loading = true
-        if let page = await subagents.timelinePage(for: subagent.id, limit: 50) {
+        if let page = await subagents.timelinePage(for: subagent.id, limit: Self.pageSize) {
             rows = page.rows
+            startCursor = page.startCursor
+            hasOlder = page.hasOlder ?? false
+            olderError = nil
             error = nil
         } else {
             error = subagents.error ?? "Couldn't load the timeline."
         }
         loading = false
+    }
+
+    /// Prepends the page before `startCursor`. The reader is at the top when this runs, so
+    /// scrolling the previously-first row back to the top leaves the viewport exactly where it
+    /// was: no jump, and the freshly prepended rows sit above it.
+    @MainActor
+    private func loadOlder(_ proxy: ScrollViewProxy) async {
+        guard hasOlder, !loadingOlder, !loading, let cursor = startCursor else { return }
+        loadingOlder = true
+        olderError = nil
+        defer { loadingOlder = false }
+        let anchor = rows.first?.seq
+        guard let page = await subagents.timelinePage(
+            for: subagent.id, before: cursor, limit: Self.pageSize)
+        else {
+            olderError = subagents.error ?? "Couldn't load the timeline."
+            return
+        }
+        let known = Set(rows.map(\.seq))
+        rows = page.rows.filter { !known.contains($0.seq) } + rows
+        startCursor = page.startCursor
+        hasOlder = page.hasOlder ?? false
+        if let anchor {
+            // Let the prepended rows lay out before pinning the old first row.
+            await Task.yield()
+            proxy.scrollTo(anchor, anchor: .top)
+        }
     }
 
     @ViewBuilder

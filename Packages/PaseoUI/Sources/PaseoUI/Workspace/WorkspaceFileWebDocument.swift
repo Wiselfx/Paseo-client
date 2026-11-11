@@ -33,17 +33,23 @@ enum WorkspaceFileWebDocument {
 
     /// A workspace HTML file, in a document whose head carries the sandbox rules. A file that
     /// is only a fragment is wrapped; one with its own `<head>` gets the rules inserted there.
-    static func html(_ source: String, dark: Bool) -> String {
-        injecting(head: head(dark: dark), into: source)
+    ///
+    /// `baseHref` is `paseo-file://<workspaceId>/<dir>/` (`PreviewFileScheme.baseHref`): with it
+    /// `./style.css` and `/logo.png` resolve to the workspace instead of nowhere. `<base>` comes
+    /// first in the head, before any URL-bearing element.
+    static func html(_ source: String, dark: Bool, baseHref: String? = nil) -> String {
+        injecting(head: head(dark: dark, baseHref: baseHref), into: source)
     }
 
-    private static func head(dark: Bool) -> String {
+    private static func head(dark: Bool, baseHref: String?) -> String {
         let scheme = dark ? "dark" : "light"
         let text = dark ? "#e6e6e6" : "#1a1a1a"
+        let base = baseHref.map { "<base href=\"\($0)\">" } ?? ""
         return """
+            \(base)
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; connect-src https:; media-src https: data: blob:; frame-src https:; object-src 'none'; base-uri 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https: paseo-file:; style-src 'unsafe-inline' https: paseo-file:; img-src https: data: blob: paseo-file:; font-src https: data: paseo-file:; connect-src https: paseo-file:; media-src https: data: blob: paseo-file:; frame-src https: paseo-file:; object-src 'none'; base-uri paseo-file:">
             <style>:root { color-scheme: \(scheme); }
             html, body { background: transparent; color: \(text); font-family: -apple-system, sans-serif; }
             </style>
