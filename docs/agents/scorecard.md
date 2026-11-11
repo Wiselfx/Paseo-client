@@ -31,5 +31,6 @@ per-frame cost unless the ticket spells them out. Needs a strict reviewer.
 | H4 splash/usage/appearance | B+ | Correct (window trait); splash cause plausible, unproven | 3 (sidebar R-1, forced refresh on drawer open, project file missing → gate fail) | 3 | Solid; launch-colour catch was proactive. |
 | H5 images | A− | Excellent corpus with live curl | 3 (failure-height jump, longest-side downsample blur, Double/CGFloat gate error) | 3 | Best diagnosis; fixed its found items well. |
 | HB bug hunt (Muse Spark 1.3, pi, high) | B | 6 small real fixes, all verified | 0 | 1 | Real but modest; good systemic notes (error channel per store, poll without change check, optimistic UI). |
+| G Phase A (Muse Spark 1.3, pi, high) | B | Good architecture (one pipeline, pure policy + 30 table tests, UIKit pager); thorough reports | 3 gate rounds (~40 compile errors, deleted a used function, isolation) + 11 review bugs (per-byte AsyncBytes hops, relay rule on web images, cap after transfer, disk key mismatch, singleton/unregister race, dismiss pan stole paging, zoom relayout) | 3 + 2 lead fixes | Strong design, weak compile discipline; review catches were real. |
 
 **Harness average:** A−. Pi workers were stronger than OMP on diagnosis and design; still miss Apple-specific traps (TextKit, project files, numeric bridging) that only the gate or the lead catch.
