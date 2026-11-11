@@ -175,7 +175,7 @@ struct SchedulesListPage: View {
             _ = await schedules.inspect(summary.id)
         }
         guard let stored = schedules.selected, stored.id == summary.id else {
-            toast?.show("Still loading this schedule.")
+            toast?.show(schedules.actionError ?? "Still loading this schedule.")
             return
         }
         editorRequest = ClaudeSchedulesView.EditorSeed(stored: stored, isHeartbeat: isHeartbeat)
