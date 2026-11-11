@@ -28,7 +28,9 @@ struct ClaudeMeterRing: View {
         ZStack {
             Circle()
                 .stroke(Palette.tertiaryInk.opacity(0.35), lineWidth: lineWidth)
-            if drawsArc {
+            // Nothing at 0 %: a zero-length trim with a round cap is a dot at twelve o'clock, which
+            // reads as a tick or a stray pixel instead of "empty".
+            if drawsArc, clamped > 0 {
                 Circle()
                     .trim(from: 0, to: CGFloat(clamped / 100))
                     .stroke(

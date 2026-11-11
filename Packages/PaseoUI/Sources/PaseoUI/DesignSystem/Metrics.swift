@@ -90,8 +90,8 @@ enum ComposerMetrics {
     /// `(hitSize − expandSize) / 2 = 8` pt from the card's edges, the same 8 pt the row's circles
     /// keep (E1 §4).
     static let expandSize: CGFloat = 28
-    /// The expand control appears at this many effective draft lines (`DraftMetrics`' threshold,
-    /// 5 on a phone in portrait) …
+    /// The expand control appears at this many effective draft lines (`DraftMetrics.lineCount`'
+    /// estimate; 5 is the threshold M8b used, ≈ 5 wrapped lines at the composer's 17 pt face) …
     static let expandShowLines = 5
     /// … and only leaves below this one. One line of dead band: the line count is estimated from
     /// the character count and moves by one either way around the threshold, and every toggle
