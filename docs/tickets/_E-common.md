@@ -12,6 +12,14 @@ Everything else on this list is a defect the user hit with their own fingers.
 Read `AGENTS.md` (UI rules R-1…R-6), `_R-common.md` and `_D-common.md` first. Everything there
 applies. This file adds to them.
 
+## Hard rule: never touch Claude agents
+
+- Never send to, prompt, create or test against any agent whose provider is `claude`: through
+  `paseo-probe`, the MCP, the CLI or anything else.
+- If a test needs a live agent, use `pi` with `opencode-go/beam-free`.
+- `paseo-probe` subcommands can send messages into a conversation. Read what a command does before
+  pointing it at any agent.
+
 ## Work style
 
 - **Use UIKit where UIKit is the right tool, SwiftUI where SwiftUI is.**
