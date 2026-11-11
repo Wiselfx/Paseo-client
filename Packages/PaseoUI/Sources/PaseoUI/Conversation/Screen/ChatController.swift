@@ -220,14 +220,24 @@ struct TranscriptJump: Equatable {
     var mascotSeqFloor = Int.max
     var mascotLiveTurnId: String?
 
+    /// An inline prose image the reader tapped, for the full-screen viewer (`ChatSheets`).
+    var inlineImage: InlineProseImage?
+
     /// The shell's toast center, injected by `ChatScreen` (`@Environment(\.toast)`).
     var toastCenter: ToastCenter?
 
     private var draftSaveTask: Task<Void, Never>?
     /// Re-arms itself on each agent/host capability change; see `startAvailabilityTracking`.
     private var availabilityTask: Task<Void, Never>?
-    /// Inline images, by `(workspaceId, path)`.
-    private let imageCache = NSCache<NSString, UIImage>()
+    /// Inline images, by `(workspaceId, path)`. Bounded by count and bytes: a long conversation
+    /// full of screenshots must not hold every decoded bitmap for the life of the screen (H5
+    /// round 2). `loadImage` passes a real cost, or `totalCostLimit` could never bite.
+    private let imageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 64
+        cache.totalCostLimit = 48 * 1024 * 1024
+        return cache
+    }()
     /// One prose image loader, so its identity is stable across body evaluations (finding #13).
     private let imageLoaderBox = ImageLoaderBox()
 
@@ -919,8 +929,35 @@ struct TranscriptJump: Equatable {
             Clipboard.copy(code)
             Haptics.light()
             showToast("Code copied")
+        case .image(let image):
+            // `![alt](url)` inside a sentence renders as one link-styled run (a thumbnail
+            // would reflow the line), so tapping it is the only way to see the picture.
+            presentInlineImage(image)
         default:
             break
+        }
+    }
+
+    /// Opens an inline prose image full screen through the same loader the cards use. A workspace
+    /// path is read first (cached, off main); a remote one is the viewer's own job.
+    private func presentInlineImage(_ image: MarkdownImage) {
+        let remote = ["http://", "https://", "data:", "blob:"].contains {
+            image.source.trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased().hasPrefix($0)
+        }
+        if remote {
+            inlineImage = InlineProseImage(markdown: image, uiImage: nil)
+            return
+        }
+        let path = image.source.hasPrefix("file://")
+            ? (URL(string: image.source)?.path ?? image.source) : image.source
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let loaded = await self.loadImage(path: path) else {
+                self.showToast("Couldn't read that image.")
+                return
+            }
+            self.inlineImage = InlineProseImage(markdown: image, uiImage: loaded)
         }
     }
 
@@ -946,7 +983,8 @@ struct TranscriptJump: Equatable {
             ComposerImageProcessor.thumbnail(data: data, maxPixelSize: maxPixel)
         }.value
         guard let image else { return nil }
-        imageCache.setObject(image, forKey: key)
+        let pixels = image.size.width * image.scale * image.size.height * image.scale
+        imageCache.setObject(image, forKey: key, cost: Int(max(pixels, 1) * 4))
         return image
     }
 
@@ -1033,6 +1071,13 @@ struct TranscriptJump: Equatable {
     func fileLinkAction(host: OpenURLAction) -> OpenURLAction {
         OpenURLAction { [weak self] url in
             guard let self else { return .systemAction }
+            // Prose hands non-link interactions back as `claude-markdown://presentation/…`
+            // (SwiftUI `Text` links go through here, the UITextView path decodes them itself).
+            // Without this an inline image tap reached the system and did nothing.
+            if let action = MarkdownAction.decodePresentationURL(url) {
+                self.handleMarkdown(action)
+                return .handled
+            }
             if let path = FilePathLinks.path(from: url) {
                 self.openFileViewer(at: self.fileLinkDisplayPath(path))
                 return .handled

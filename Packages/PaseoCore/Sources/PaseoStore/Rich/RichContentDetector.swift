@@ -464,8 +464,11 @@ private func isScheme(_ candidate: String) -> Bool {
 }
 
 private func hasImageExtension(_ s: String) -> Bool {
-    // REMOTE_IMAGE_RE / LOCAL_IMAGE_EXT_RE: .png .jpe?g .gif .webp .svg, case-insensitive.
-    for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"] where s.hasSuffix(ext) {
+    // REMOTE_IMAGE_RE / LOCAL_IMAGE_EXT_RE plus H5: `.avif`, `.heic` and `.heif` decode fine on
+    // iOS but were never detected, so an agent's HEIC screenshot or AVIF export arrived as a
+    // bare link. Upstream's list stays first for upstream parity.
+    for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".heic", ".heif"]
+    where s.hasSuffix(ext) {
         return true
     }
     return false
@@ -834,12 +837,28 @@ func scanAuthoredLinks(in source: String, outside excluded: [Range<String.Index>
 
 /// `https?://…` in prose, trailing `.,;:!?` stripped, kept iff `isRemoteImageURL`.
 /// Fences, inline code, authored links/images, autolinks and raw SVG never reach here.
+///
+/// Parens are URL characters, and Wikipedia's file names are full of them
+/// (`Rotating_earth_(large).gif`), while `isBareURLChar` stops at `)`. A paren the URL opened
+/// itself extends the run to its partner; a paren the sentence opened (`see https://x/a.png)`)
+/// still ends it. Only this image scanner does that: it is the one place a `)` cannot be
+/// punctuation mid-URL.
 func scanBareImageURLs(in segment: Substring, into blocks: inout [RichContentBlock]) {
     var i = segment.startIndex
     while i < segment.endIndex {
         guard let start = nextHTTPScheme(segment, from: i) else { return }
         var end = start
-        while end < segment.endIndex && isBareURLChar(segment[end]) {
+        var openParens = 0
+        while end < segment.endIndex {
+            let char = segment[end]
+            if char == "(" {
+                openParens += 1
+            } else if char == ")" {
+                guard openParens > 0 else { break }
+                openParens -= 1
+            } else if !isBareURLChar(char) {
+                break
+            }
             end = segment.index(after: end)
         }
         let trimEnd = trailingPunctuationEnd(start..<end, in: segment, stoppingAt: trailingURLPunctuation)

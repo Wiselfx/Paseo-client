@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
+import UIKit
 
 enum ClaudeChatSheet: String, Identifiable {
     case controls
@@ -53,6 +54,9 @@ struct ChatSheets: ViewModifier {
             }
             .sheet(isPresented: openFilePathBinding) {
                 fileSheetContent
+            }
+            .fullScreenCover(item: $controller.inlineImage) { item in
+                InlineProseImageViewer(item: item) { controller.inlineImage = nil }
             }
             .confirmationDialog(
                 controller.messageActionTitle,
@@ -128,6 +132,65 @@ struct ChatSheets: ViewModifier {
                 message: nil,
                 action: (title: "Close", run: { controller.openFilePath = nil }))
                 .presentationDetents([.height(240)])
+        }
+    }
+}
+
+/// An inline prose image the reader tapped (H5 round 2). A workspace path arrives already
+/// decoded; a remote source is left to the viewer, which loads it through `RemoteImageLoader`.
+struct InlineProseImage: Identifiable {
+    let markdown: MarkdownImage
+    let uiImage: UIImage?
+
+    var id: String { markdown.source }
+}
+
+/// The full-screen viewer for an image tapped inside a sentence — the same `RichImageViewer`
+/// the image cards use, so zoom, share and the failure line look identical everywhere.
+struct InlineProseImageViewer: View {
+    let item: InlineProseImage
+    let onClose: () -> Void
+
+    @State private var controlsVisible = true
+    @State private var showShare = false
+
+    private var source: String {
+        item.markdown.source.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isRemote: Bool {
+        let lower = source.lowercased()
+        return ["http://", "https://", "data:", "blob:"].contains { lower.hasPrefix($0) }
+    }
+
+    private var fileName: String {
+        let base = isRemote
+            ? URL(string: source)?.lastPathComponent
+            : (source as NSString).lastPathComponent
+        guard let base, !base.isEmpty else { return "image" }
+        return base
+    }
+
+    private var shareItems: [Any] {
+        if let image = item.uiImage { return [image] }
+        if let url = URL(string: source) { return [url] }
+        return []
+    }
+
+    var body: some View {
+        RichImageViewer(
+            fileName: fileName,
+            alt: item.markdown.alt.isEmpty ? fileName : item.markdown.alt,
+            uiImage: item.uiImage,
+            urlString: isRemote ? source : nil,
+            controlsVisible: $controlsVisible,
+            onShare: { showShare = true },
+            onClose: onClose
+        )
+        .sheet(isPresented: $showShare) {
+            if !shareItems.isEmpty {
+                ActivityView(items: shareItems)
+            }
         }
     }
 }

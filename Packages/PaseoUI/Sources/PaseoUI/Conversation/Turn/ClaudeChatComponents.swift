@@ -282,8 +282,9 @@ struct ClaudeProse: View {
             imageContent: proseImageContent)
     }
 
-    /// `![alt](url)` → `ProseMarkdownImage`; remote hosts ride AsyncImage, workspace paths the
-    /// caller's loader. Always non-nil so prose images render instead of degrading to text.
+    /// `![alt](url)` → `ProseMarkdownImage`; remote hosts ride the shared `RemoteImageLoader`,
+    /// workspace paths the caller's loader. Always non-nil so prose images render instead of
+    /// degrading to text.
     private var proseImageContent: (MarkdownImage) -> AnyView {
         let loader = localImageLoader
         return { image in
