@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import PaseoStore
 import SwiftUI
 import UIKit
 

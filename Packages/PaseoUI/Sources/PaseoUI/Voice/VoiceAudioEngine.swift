@@ -22,8 +22,9 @@ final class VoiceAudioEngine {
 
     /// Voice mode's levels (D2 §4): the composer's bars read it, and the store's 0…1 telemetry
     /// is fed from the same eased value, so the meter and the accessibility percentage agree.
-    let waveform = LiveWaveformBuffer()
-    private var smoothedLevel: Double = 0
+    let waveform: LiveWaveformBuffer
+    /// Maps and eases every captured buffer on the capture queue, straight into `waveform`.
+    let meter: AudioLevelMeter
 
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
@@ -32,11 +33,18 @@ final class VoiceAudioEngine {
     private let cuePlayer = AVAudioPlayerNode()
     private var cueTask: Task<Void, Never>?
     private var isCapturing = false
+    /// Between the tap on the primary and `engine.start()` returning. A second start must not
+    /// install a second tap (AVFoundation raises on that, it does not stack).
+    private var isStarting = false
+    /// The input tap is installed, so removing it is safe (removing a tap that was never
+    /// installed raises).
+    private var tapInstalled = false
+    /// Bumped by every stop; a start that is still awaiting the session compares it after each
+    /// await and tears its own half-built capture down instead of going live.
+    private var captureGeneration = 0
     /// `setVoiceProcessingEnabled` is a one-way, expensive graph change: remember it.
     private var voiceProcessingEnabled = false
     private var playerAttached = false
-    /// Once a second, at debug, the raw and mapped level. Nothing per buffer.
-    private var lastLevelLog = Date.distantPast
     private var hasLoggedPlaybackStart = false
     /// The AEC warm-up window is armed once per voice session (reset in `startCapture`).
     private var hasArmedInputWarmup = false
@@ -67,34 +75,22 @@ final class VoiceAudioEngine {
         var completion: (Bool) -> Void
     }
 
-    /// Capture DSP runs off the main actor: the tap only copies samples, the pipeline
-    /// converts them and reports back on the main actor.
-    private lazy var capturePipeline = VoiceCapturePipeline { [weak self] level, pcm in
+    init() {
+        let buffer = LiveWaveformBuffer()
+        waveform = buffer
+        meter = AudioLevelMeter(band: .voiceChat, buffer: buffer)
+    }
+
+    /// Capture DSP runs off the main actor: the tap only copies samples, the pipeline converts
+    /// them, maps the level into the ring, and reports the chunk on the main actor at most 30
+    /// times a second (H1 §3).
+    private lazy var capturePipeline = VoiceCapturePipeline(meter: meter) {
+        [weak self] level, pcm in
         Task { @MainActor in
             guard let self else { return }
-            self.publishLevel(level)
             if !pcm.isEmpty { self.onCapturePCM(pcm) }
+            self.onVolumeLevel(level)
         }
-    }
-
-    /// One RMS per captured buffer: mapped into this mode's band, eased once, then fanned out to
-    /// the store and to the waveform (D2 §4, E1 §2.2). `.voiceChat` runs AGC, so its signal is
-    /// hotter and flatter than dictation's; `AudioLevel.Band.voiceChat` is its band.
-    private func publishLevel(_ rms: Double) {
-        let mapped = AudioLevel.normalized(rms: Float(rms), band: .voiceChat)
-        smoothedLevel = Double(AudioLevel.smoothed(Float(smoothedLevel), towards: mapped))
-        waveform.push(Float(smoothedLevel))
-        onVolumeLevel(smoothedLevel)
-        logLevel(rms: rms, mapped: mapped)
-    }
-
-    private func logLevel(rms: Double, mapped: Float) {
-        let now = Date()
-        guard now.timeIntervalSince(lastLevelLog) >= 1 else { return }
-        lastLevelLog = now
-        let db = 20 * log10(max(rms, 1e-5))
-        VoiceLog.log.debug(
-            "level rms=\(String(format: "%.4f", rms), privacy: .public) db=\(String(format: "%.1f", db), privacy: .public) mapped=\(String(format: "%.3f", mapped), privacy: .public)")
     }
 
     // MARK: Permissions + session
@@ -148,8 +144,12 @@ final class VoiceAudioEngine {
     }
 
     nonisolated private static func deactivateSessionOffMain() async {
-        try? AVAudioSession.sharedInstance().setActive(
-            false, options: .notifyOthersOnDeactivation)
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        // `.voiceChat` must not outlive the voice session: it is a `.playAndRecord` category, so
+        // every later sound the app makes would go through the voice-processing chain (and the
+        // receiver) instead of the normal route. Same reason as `DictationController`.
+        try? session.setCategory(.ambient, options: [.mixWithOthers])
     }
 
     // MARK: Graph
@@ -177,6 +177,38 @@ final class VoiceAudioEngine {
             throw Self.engineError("Voice playback is unavailable on this device.")
         }
         enableVoiceProcessing()
+    }
+
+    /// `setVoiceProcessingEnabled` reconfigures the IO unit's hardware chain and is the longest
+    /// block in this file (Xcode flags it as a main-actor hang risk). It only ever runs on a
+    /// stopped engine, before the tap exists, so nothing else touches the graph while it runs;
+    /// `stopCapture` during a start only bumps the generation and lets the start unwind itself.
+    /// The playback path (`prepareGraph`) keeps the main-actor variant: by the time audio plays,
+    /// capture has already latched it.
+    private func enableVoiceProcessingOffMain() async {
+        guard !voiceProcessingEnabled else { return }
+        nonisolated(unsafe) let input = engine.inputNode
+        do {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try input.setVoiceProcessingEnabled(true)
+                        cont.resume()
+                    } catch {
+                        cont.resume(throwing: error)
+                    }
+                }
+            }
+            voiceProcessingEnabled = true
+            // Upstream mutes the voice-processing input whenever it is not recording, so a lane
+            // that only plays audio never holds the mic open.
+            setVoiceProcessingInputMuted(true)
+            VoiceLog.log.info("capture: voice processing (AEC) enabled")
+        } catch {
+            let nsError = error as NSError
+            VoiceLog.log.error(
+                "capture: voice processing unavailable, continuing without AEC — \(nsError.domain, privacy: .public) \(nsError.code)")
+        }
     }
 
     /// Echo cancellation (E1 §3.3). Without it the speaker's audio comes back through the mic:
@@ -223,12 +255,33 @@ final class VoiceAudioEngine {
     // MARK: Capture
 
     func startCapture() async throws {
-        guard !isCapturing else { return }
+        guard !isCapturing, !isStarting else { return }
+        isStarting = true
+        captureGeneration += 1
+        let generation = captureGeneration
         VoiceLog.log.info("capture: start")
         do {
             try await activateSession()
+            guard generation == captureGeneration else {
+                // Stopped while the session was coming up: give it straight back.
+                pendingDeactivation = Task { await Self.deactivateSessionOffMain() }
+                isStarting = false
+                return
+            }
             VoiceLog.log.info("capture: session active (.playAndRecord/.voiceChat)")
-            try prepareGraph()
+            guard connectPlaybackGraph() else {
+                throw Self.engineError("Voice playback is unavailable on this device.")
+            }
+            // The blocking half of `prepareGraph`, off the main actor: it changes the input
+            // format, so it must finish before the tap's format is read.
+            await enableVoiceProcessingOffMain()
+            guard generation == captureGeneration else {
+                // Stopped while the graph was being prepared: the session is already active,
+                // so hand it back instead of leaving the mic open on a dead engine.
+                isStarting = false
+                pendingDeactivation = Task { await Self.deactivateSessionOffMain() }
+                return
+            }
             // A new session gets its own warm-up window: VPIO's canceller re-converges every
             // time capture starts, and a deadline left over from the last session must not drop
             // this one's first audio. Queued before the tap can deliver anything (E1b).
@@ -236,30 +289,51 @@ final class VoiceAudioEngine {
             capturePipeline.resetWarmupWindow()
             installInputTap()
             try engine.start()
+            guard generation == captureGeneration else {
+                // The user stopped during `engine.start()`. This engine is ours to release.
+                removeInputTap()
+                engine.stop()
+                isStarting = false
+                pendingDeactivation = Task { await Self.deactivateSessionOffMain() }
+                return
+            }
             setVoiceProcessingInputMuted(false)
             VoiceLog.log.info("capture: engine started")
         } catch {
             let nsError = error as NSError
             VoiceLog.log.error(
                 "capture: start failed — \(nsError.domain, privacy: .public) \(nsError.code): \(nsError.localizedDescription, privacy: .public)")
-            // The tap must not survive a failed start: the next start would throw on
-            // a reused tap (and record during a dead engine).
-            engine.inputNode.removeTap(onBus: 0)
+            // The tap must not survive a failed start: the next start would throw on a reused
+            // tap (and record during a dead engine). `tapInstalled` keeps this from removing a
+            // tap that was never installed, which raises inside AVFoundation.
+            removeInputTap()
+            engine.stop()
+            isStarting = false
+            // A start that failed after activation used to leave `.playAndRecord` active with
+            // nothing recording: the mic indicator stayed lit and later audio stayed ducked.
+            pendingDeactivation = Task { await Self.deactivateSessionOffMain() }
             throw error
         }
+        isStarting = false
         isCapturing = true
         MicrophoneSessionOwner.voiceCaptureActive = true
         observeAudioEvents()
     }
 
     func stopCapture() {
-        guard isCapturing else { return }
+        guard isCapturing || isStarting || tapInstalled else { return }
+        captureGeneration += 1
+        isStarting = false
+        guard isCapturing else {
+            // A stop that lands during `.starting`: `startCapture` sees the generation change
+            // and releases what it built. Nothing else to do here.
+            return
+        }
         isCapturing = false
         VoiceLog.log.info("capture: stop")
         setVoiceProcessingInputMuted(true)
-        smoothedLevel = 0
-        waveform.reset()
-        engine.inputNode.removeTap(onBus: 0)
+        meter.reset()
+        removeInputTap()
         engine.stop()
         MicrophoneSessionOwner.voiceCaptureActive = false
         // Capture ending takes playback with it: `engine.stop()` fires the in-flight
@@ -270,6 +344,14 @@ final class VoiceAudioEngine {
         // Voice has ended: release the session even if playback was active — otherwise
         // the `.playAndRecord` session (and the user's background music) stay hijacked.
         deactivateSession()
+    }
+
+    /// Removes the input tap only when one is installed (removing a tap that was never installed
+    /// raises inside AVFoundation), and only once.
+    private func removeInputTap() {
+        guard tapInstalled else { return }
+        tapInstalled = false
+        engine.inputNode.removeTap(onBus: 0)
     }
 
     /// The tap block only copies: the buffer is reused by the engine as soon as the block
@@ -283,6 +365,7 @@ final class VoiceAudioEngine {
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { @Sendable buffer, _ in
             pipeline.capture(buffer)
         }
+        tapInstalled = true
     }
 
     /// Route change: the input device or its format may have changed, so the old tap would
@@ -290,7 +373,7 @@ final class VoiceAudioEngine {
     private func reinstallTapForRouteChange() {
         guard isCapturing else { return }
         VoiceLog.log.info("capture: route changed, reinstalling the tap")
-        engine.inputNode.removeTap(onBus: 0)
+        removeInputTap()
         engine.stop()
         do {
             try prepareGraph()
@@ -675,8 +758,6 @@ enum VoiceLog {
 /// one cached converter per input format.
 final class VoiceCapturePipeline: @unchecked Sendable {
     static let uploadSampleRate = 16_000.0
-    /// The most the main actor hears from the mic per second (E1 §2.4).
-    static let maxDeliveriesPerSecond = 30.0
     /// Upstream's `discardFirstInputMillis` (`expo-two-way-audio/ios/AudioEngine.swift:30`):
     /// the mic's first two seconds after the first playback chunk are dropped, level included,
     /// because AEC has not adapted yet and the mic would otherwise hear the reply.
@@ -685,6 +766,8 @@ final class VoiceCapturePipeline: @unchecked Sendable {
     private let queue = DispatchQueue(label: "paseo.voice.capture", qos: .userInitiated)
     private let onChunk: @Sendable (Double, Data) -> Void
     private let converter = VoiceFormatConverter()
+    private let meter: AudioLevelMeter
+    private let coalescer = VoiceUploadCoalescer()
     private let uploadFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16, sampleRate: VoiceCapturePipeline.uploadSampleRate,
         channels: 1, interleaved: true)
@@ -692,17 +775,16 @@ final class VoiceCapturePipeline: @unchecked Sendable {
     // Queue-confined delivery state. The engine's tap size is a hint, so a device may hand us
     // 1024-frame buffers (≈ 47 per second): coalesce them to one delivery per 33 ms instead of
     // hopping to the main actor per buffer.
-    private var pendingPCM = Data()
-    private var pendingLevel: Double = 0
-    private var lastDelivery: TimeInterval = 0
     private var frameCount = 0
+    private var lastLevelLog: TimeInterval = 0
     /// AEC warm-up: samples arriving before this instant are dropped, and the window is armed
     /// at most once per capture session (`resetWarmupWindow` clears both on each start).
     private var discardUntil: TimeInterval = 0
     private var discardArmed = false
 
-    /// `onChunk` receives the level and the PCM from the capture queue, in capture order.
-    init(onChunk: @escaping @Sendable (Double, Data) -> Void) {
+    /// `onChunk` receives the eased level and the PCM from the capture queue, in capture order.
+    init(meter: AudioLevelMeter, onChunk: @escaping @Sendable (Double, Data) -> Void) {
+        self.meter = meter
         self.onChunk = onChunk
     }
 
@@ -713,6 +795,9 @@ final class VoiceCapturePipeline: @unchecked Sendable {
             guard let self else { return }
             self.discardArmed = false
             self.discardUntil = 0
+            self.coalescer.reset()
+            self.frameCount = 0
+            self.lastLevelLog = 0
         }
     }
 
@@ -725,8 +810,7 @@ final class VoiceCapturePipeline: @unchecked Sendable {
             self.discardArmed = true
             self.discardUntil = deadline
             // Anything already accumulated is inside the window too.
-            self.pendingPCM = Data()
-            self.pendingLevel = 0
+            self.coalescer.reset()
         }
     }
 
@@ -740,37 +824,39 @@ final class VoiceCapturePipeline: @unchecked Sendable {
         }
     }
 
-    /// Holds the newest level and the PCM since the last delivery; emits at most 30 times a
-    /// second. Outside the AEC warm-up window PCM is never dropped, only the level superseded.
+    /// Maps the level into the ring every buffer, and hands the PCM to the main actor at most 30
+    /// times a second. Outside the AEC warm-up window nothing is dropped.
     private func accumulate(_ result: (level: Double, pcm: Data)) {
         let now = Date().timeIntervalSince1970
         // The AEC warm-up window (E1b): upstream skips the whole tap body, so neither the level
-        // nor the PCM leaves the device. One timestamp compare per delivery, no timer.
+        // nor the PCM leaves the device. One timestamp compare per buffer, no timer.
         if discardUntil > 0 {
             guard now >= discardUntil else { return }
             discardUntil = 0
             VoiceLog.log.info("capture: AEC warm-up window ended")
         }
-        pendingLevel = result.level
-        if !result.pcm.isEmpty {
-            pendingPCM.append(result.pcm)
-            // A stalled consumer must not grow this without bound: keep the last ~1.5 s.
-            let cap = Int(Self.uploadSampleRate * 2 * 1.5)
-            if pendingPCM.count > cap {
-                pendingPCM.removeFirst(pendingPCM.count - cap)
-            }
-        }
-        guard now - lastDelivery >= 1.0 / Self.maxDeliveriesPerSecond else { return }
-        lastDelivery = now
-        let pcm = pendingPCM
-        pendingPCM = Data()
+        // The bars read this ring from their own display link: the level never hops to the main
+        // actor per buffer, and no SwiftUI view is invalidated by one (H1 §3).
+        let eased = Double(meter.push(rms: Float(result.level), at: now))
+        logLevel(rms: result.level, eased: eased, at: now)
+        guard let pcm = coalescer.append(result.pcm, at: now) else { return }
         frameCount += 1
         if frameCount == 1 {
             VoiceLog.log.info("capture: first frame sent (\(pcm.count) bytes)")
         } else if frameCount % 50 == 0 {
             VoiceLog.log.debug("capture: \(self.frameCount) frames sent")
         }
-        onChunk(pendingLevel, pcm)
+        onChunk(eased, pcm)
+    }
+
+    /// Once a second, at debug: the raw RMS in dB and the eased 0…1 level. This is the line the
+    /// next device run is read from when the bars still look wrong.
+    private func logLevel(rms: Double, eased: Double, at now: TimeInterval) {
+        guard now - lastLevelLog >= 1 else { return }
+        lastLevelLog = now
+        let db = 20 * log10(max(rms, 1e-5))
+        VoiceLog.log.debug(
+            "level db=\(String(format: "%.1f", db), privacy: .public) eased=\(String(format: "%.3f", eased), privacy: .public)")
     }
 
     private func process(_ frame: Frame) -> (level: Double, pcm: Data)? {
@@ -791,7 +877,10 @@ final class VoiceCapturePipeline: @unchecked Sendable {
         }
         let level = Self.level(frame.channels.first ?? [])
         guard let converted = converter.convert(source, to: upload, reset: false),
-            let pcm = converted.int16ChannelData
+            // `int16ChannelData` is an array of channel pointers; the samples live behind the
+            // first one. Copying from the pointer itself sent the array's own bytes (heap
+            // addresses) to the daemon as "speech" (H1 root cause).
+            let pcm = converted.int16ChannelData?[0]
         else { return (level, Data()) }
         return (level, Data(bytes: pcm, count: Int(converted.frameLength) * 2))
     }

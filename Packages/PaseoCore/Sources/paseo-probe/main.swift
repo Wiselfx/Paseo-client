@@ -83,6 +83,14 @@ let usage = """
                                supportsRewind* flags and the rewindable user messages. Passing
                                <messageId scope> performs the rewind through the store
                                (conversation | files | both)
+      voice <agentId> <file.pcm|file.wav> [seconds]
+                               H1 live proof: start realtime voice for an agent through
+                               VoiceModeSession, stream 16 kHz mono PCM16 in real time, then print
+                               the transcript rows, the TTS chunks (format/bytes), the playback
+                               acks and the phase moves.
+                               WARNING: this PROMPTS the target agent — the daemon turns the audio
+                               into a user message and runs a real turn. It refuses any agent whose
+                               provider is `claude`, and refuses when it cannot look the agent up.
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -457,6 +465,15 @@ do {
         let query = rest.first(where: { !$0.hasPrefix("--") }) ?? "ready"
         try await runAttachmentsSearch(
             connection, agentId: agentId, query: query, send: rest.contains("--send"))
+    case "voice":
+        guard arguments.commandArguments.count >= 2 else {
+            throw ProbeError("voice needs <agentId> <pcm|wav file> [seconds]")
+        }
+        let seconds = arguments.commandArguments.count > 2
+            ? Int(arguments.commandArguments[2]) ?? 30 : 30
+        try await runVoice(
+            connection, agentId: arguments.commandArguments[0],
+            path: arguments.commandArguments[1], seconds: seconds)
     case "rewind":
         guard let agentId = arguments.commandArguments.first else {
             throw ProbeError("rewind needs an <agentId>")
@@ -1843,4 +1860,161 @@ func runProviderSubagents(_ connection: DaemonConnection, agentId: String, raw: 
         print("list DECODE FAILED: \(error)")
     }
     connection.disconnect()
+}
+
+// MARK: - H1: realtime voice mode, live
+
+/// The live voice-mode proof: the same `VoiceModeSession` the app drives, against the real
+/// daemon. Streams a 16 kHz mono PCM16 file in real time and prints every hop — the start
+/// response, the mic chunks, the transcript rows the daemon writes into the timeline, each TTS
+/// chunk with its format, the playback acks and the phase moves.
+///
+/// It never creates or prompts an agent: pass one you own and can archive afterwards, and never a
+/// `claude`-provider agent (the daemon starts a real turn from the speech).
+@MainActor
+func runVoice(
+    _ connection: DaemonConnection, agentId: String, path: String, seconds: Int
+) async throws {
+    let pcm = try readPCM(path)
+    try await connection.connect()
+    // Nothing below this line is read-only: the daemon turns the speech into a user message and
+    // runs the agent. Check the target first, on the wire that is already open.
+    let provider = try await lookupProvider(connection, agentId: agentId)
+    guard !provider.hasPrefix("claude") else {
+        throw ProbeError(
+            "refusing to send spoken audio to \(agentId): it is a claude-provider agent and this probe prompts whatever agent it targets"
+        )
+    }
+    print("target: \(agentId) provider=\(provider) (this probe will prompt it)")
+    let session = HostSession(client: connection)
+    await session.start()
+
+    let infoDeadline = Date().addingTimeInterval(10)
+    while session.serverInfo == nil, Date() < infoDeadline {
+        try await Task.sleep(for: .milliseconds(50))
+    }
+    guard let info = session.serverInfo else { throw ProbeError("server_info did not arrive") }
+    let voice = session.voiceSession
+    print("server: \(info.version ?? "-")")
+    print(
+        "capabilities.voice: available=\(voice.isVoiceAvailable) reason=\(voice.unavailableReason.isEmpty ? "-" : voice.unavailableReason)"
+    )
+    guard voice.isVoiceAvailable else {
+        throw ProbeError(
+            "this daemon reports realtime voice unusable: \(voice.unavailableReason.isEmpty ? "no readiness reported" : voice.unavailableReason)"
+        )
+    }
+    print(
+        "input: \(pcm.count) bytes = \(String(format: "%.2f", Double(pcm.count) / 32_000)) s @ 16 kHz mono PCM16"
+    )
+
+    let started = await voice.start(agentId: agentId)
+    print(
+        "set_voice_mode: accepted=\(started) phase=\(String(describing: voice.phase)) error=\(voice.error ?? "-") missingModels=\(voice.missingModelIds)"
+    )
+    guard started else {
+        _ = await voice.stop()
+        return
+    }
+
+    let store = session.conversation(for: agentId)
+    let loadDeadline = Date().addingTimeInterval(10)
+    while store.phase == .loading, Date() < loadDeadline {
+        try await Task.sleep(for: .milliseconds(50))
+    }
+    var printedRows = store.timeline.rows.count
+
+    let frameBytes = 640  // 20 ms of 16 kHz mono PCM16
+    var offset = 0
+    var micChunks = 0
+    var audioChunks = 0
+    var audioBytes = 0
+    var audioFormats: Set<String> = []
+    var lastPhase = voice.phase
+    var lastSpeaking = voice.isSpeaking
+    let deadline = Date().addingTimeInterval(Double(seconds))
+    while Date() < deadline {
+        if offset < pcm.count {
+            let end = min(offset + frameBytes, pcm.count)
+            voice.handleCapturePCM(pcm.subdata(in: offset..<end))
+            offset = end
+            micChunks += 1
+            if micChunks == 1 {
+                print("mic: first chunk sent (\(end) bytes)")
+            } else if micChunks % 50 == 0 {
+                print("mic: \(micChunks) chunks sent")
+            }
+        }
+        if let chunk = voice.nextAudioChunk {
+            audioChunks += 1
+            audioBytes += chunk.data.count
+            audioFormats.insert(chunk.format)
+            print(
+                "playback: chunk \(audioChunks) format=\(chunk.format) bytes=\(chunk.data.count) group=\(chunk.groupId)"
+            )
+            // The app acks after `dataPlayedBack`; the probe plays nothing, so it acks at once.
+            // Without the ack the daemon never sends the next TTS segment.
+            voice.didPlayChunk(id: chunk.id)
+        }
+        if voice.phase != lastPhase {
+            lastPhase = voice.phase
+            print(
+                "phase: \(String(describing: voice.phase)) listeningTurn=\(voice.isVoiceMode) speaking=\(voice.isSpeaking)"
+            )
+        }
+        if voice.isSpeaking != lastSpeaking {
+            lastSpeaking = voice.isSpeaking
+            print("vad: isSpeaking=\(lastSpeaking)")
+        }
+        let rows = store.timeline.rows
+        if rows.count > printedRows {
+            for row in rows[printedRows...] {
+                print("timeline: \(itemType(row.item)) · \(shortText(row.item))")
+            }
+            printedRows = rows.count
+        }
+        try await Task.sleep(for: .milliseconds(20))
+    }
+
+    print(
+        "result: micChunks=\(micChunks) audioChunks=\(audioChunks) audioBytes=\(audioBytes) formats=\(audioFormats.sorted())"
+    )
+    print(
+        "result: phase=\(String(describing: voice.phase)) playing=\(voice.isAssistantAudioPlaying) playbackError=\(voice.lastPlaybackError ?? "-") turns=\(store.turns.count) running=\(store.isRunning)"
+    )
+    let stopped = await voice.stop()
+    print("set_voice_mode off: \(stopped) phase=\(String(describing: voice.phase))")
+    session.closeConversation(agentId)
+}
+
+/// The provider of one agent, from the directory. Pages until it finds the id; `audio` cannot be
+/// aimed at an agent we could not identify, and a wrong provider is the one mistake this probe
+/// must never make.
+func lookupProvider(_ connection: DaemonConnection, agentId: String) async throws -> String {
+    var cursor: String?
+    for _ in 0..<25 {
+        let response = try await connection.send(
+            FetchAgentsRequest(
+                page: FetchAgentsRequest.Page(limit: FetchAgentsRequest.maxPageLimit, cursor: cursor),
+                sort: [.updatedAtDescending]))
+        if let entry = response.entries.first(where: { $0.agent.id == agentId }) {
+            return entry.agent.provider
+        }
+        guard let next = response.pageInfo?.cursorForNextPage else { break }
+        cursor = next
+    }
+    throw ProbeError(
+        "refusing to start voice: no agent \(agentId) in the directory, so its provider cannot be checked"
+    )
+}
+
+/// Raw PCM16 from a `.pcm` file, or the data chunk of a RIFF `.wav` (the header is skipped).
+func readPCM(_ path: String) throws -> Data {
+    guard let data = FileManager.default.contents(atPath: path) else {
+        throw ProbeError("cannot read \(path)")
+    }
+    guard data.count > 44, String(data: data.prefix(4), encoding: .ascii) == "RIFF" else {
+        return data
+    }
+    return data.subdata(in: 44..<data.count)
 }
