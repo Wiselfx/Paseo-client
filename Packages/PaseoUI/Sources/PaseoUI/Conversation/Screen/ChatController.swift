@@ -325,44 +325,10 @@ struct TranscriptJump: Equatable {
                 let token = await MediaPipeline.shared.registerDaemonFetch(
                     for: workspaceID,
                     { [weak self] ref, maxBytes in
-                        // The store and session are main-actor isolated and the closure
-                        // runs off actor, so everything hops once. The fetch itself is
-                        // async (it suspends on the socket, never blocks). A resolver is
-                        // registered *for* its workspace — the checkout is per
-                        // workspace, not per agent — so the only check is that the
-                        // workspace descriptor still exists.
-                        await MainActor.run { [weak self] () -> DaemonMediaResult in
-                            guard let self,
-                                let descriptor = self.session.workspaceDirectory.workspace(
-                                    id: ref.workspaceID)
-                            else { return .unavailable }
-                            let checkout = self.session.checkout(for: descriptor)
-                            do {
-                                let file = try await checkout.files.fetch(
-                                    ref.path, maxBytes: maxBytes)
-                                guard file.encoding == .base64, let content = file.content,
-                                    let data = Data(
-                                        base64Encoded: content,
-                                        options: [.ignoreUnknownCharacters])
-                                else { return .unavailable }
-                                return .bytes(
-                                    DaemonFileBytes(data: data, revision: file.revision))
-                            } catch let error as PaseoStoreError {
-                                // The daemon stats before it transfers: over `maxBytes` it
-                                // answers "File is too large to display" with no file. That
-                                // text is the frozen reference's, so the match is
-                                // upstream-string-dependent — the one place that may know it.
-                                if case .missingFile(_, let message) = error,
-                                    message?.localizedCaseInsensitiveContains("too large")
-                                        == true
-                                {
-                                    return .tooLarge
-                                }
-                                return .unavailable
-                            } catch {
-                                return .unavailable
-                            }
-                        }
+                        // The resolver runs off the main actor; the store, the session and
+                        // the checkout are main-actor isolated, so it hops once into
+                        // `fetchDaemonMedia`, which suspends on the socket (never blocks).
+                        await self?.fetchDaemonMedia(ref: ref, maxBytes: maxBytes) ?? .unavailable
                     })
                 self?.daemonFetchRegistration.retain(token: token)
                 self?.startMediaLinkUpdates()
@@ -373,6 +339,42 @@ struct TranscriptJump: Equatable {
         refreshAvailability()
         startAvailabilityTracking()
         startConnectionRefresh()
+    }
+
+    /// One daemon read for the media pipeline (G2). A resolver is registered *for* its
+    /// workspace and the checkout is per workspace, not per agent, so the only check is
+    /// that the workspace descriptor still exists.
+    private func fetchDaemonMedia(ref: DaemonFileRef, maxBytes: Int) async -> DaemonMediaResult {
+        guard
+            let descriptor = self.session.workspaceDirectory.workspace(
+                id: ref.workspaceID)
+        else { return .unavailable }
+        let checkout = self.session.checkout(for: descriptor)
+        do {
+            let file = try await checkout.files.fetch(
+                ref.path, maxBytes: maxBytes)
+            guard file.encoding == .base64, let content = file.content,
+                let data = Data(
+                    base64Encoded: content,
+                    options: [.ignoreUnknownCharacters])
+            else { return .unavailable }
+            return .bytes(
+                DaemonFileBytes(data: data, revision: file.revision))
+        } catch let error as PaseoStoreError {
+            // The daemon stats before it transfers: over `maxBytes` it
+            // answers "File is too large to display" with no file. That
+            // text is the frozen reference's, so the match is
+            // upstream-string-dependent — the one place that may know it.
+            if case .missingFile(_, let message) = error,
+                message?.localizedCaseInsensitiveContains("too large")
+                    == true
+            {
+                return .tooLarge
+            }
+            return .unavailable
+        } catch {
+            return .unavailable
+        }
     }
 
     /// The workspace id plus the registration token, for `deinit`. A small box so

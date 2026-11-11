@@ -34,7 +34,7 @@ public final class NetworkPathMonitor {
     public private(set) var offline = false
 
     /// Called on every path change (main actor), after the published values update.
-    public var onChange: (@Sendable (Interface, Bool, Bool, Bool) -> Void)?
+    public var onChange: (@MainActor (Interface, Bool, Bool, Bool) -> Void)?
 
     /// `NWPathMonitor` is Sendable, so plain `nonisolated` covers both the main-actor
     /// use and the `deinit` cancel.
