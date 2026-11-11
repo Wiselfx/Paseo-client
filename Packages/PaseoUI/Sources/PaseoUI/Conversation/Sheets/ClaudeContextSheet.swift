@@ -17,8 +17,13 @@ struct ClaudeContextSheet: View {
                         detailsSection(usage: usage)
                         costByModelSection(usage: usage)
                     } else {
+                        // Upstream's empty line (`contextWindow.noData`, en.ts), with what it
+                        // means for this agent as the message: the sheet used to open from a
+                        // ring that did not exist, so its empty state was never reachable while
+                        // a window was still unreported (H3 §1).
                         EmptyState(
-                            title: "This agent's host does not report context usage yet."
+                            title: "No context data",
+                            message: "This agent's host does not report context usage yet."
                         )
                         .padding(.horizontal, Space.lg)
                         .padding(.top, Space.xl)

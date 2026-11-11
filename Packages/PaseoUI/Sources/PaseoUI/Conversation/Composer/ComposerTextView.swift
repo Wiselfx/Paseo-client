@@ -19,6 +19,9 @@ struct ComposerTextView: UIViewRepresentable {
     let placeholder: String
     /// The field grows to this many lines, then scrolls inside itself.
     let lineLimit: Int
+    /// True while the card's corner expand control is drawn over the field: the text column then
+    /// stops short of it, so nothing typed there runs under the button (H3 §2).
+    let reservesCornerControl: Bool
     /// Images pasted into the field, in pasteboard order.
     let onPasteImages: ([Data]) -> Void
 
@@ -29,6 +32,7 @@ struct ComposerTextView: UIViewRepresentable {
         view.accessibilityIdentifier = "composer.draft"
         view.applyStyle(placeholder: placeholder)
         view.lineLimit = lineLimit
+        view.reservesCornerControl = reservesCornerControl
         view.onPasteImages = onPasteImages
         return view
     }
@@ -38,6 +42,7 @@ struct ComposerTextView: UIViewRepresentable {
         context.coordinator.parent = self
         uiView.onPasteImages = onPasteImages
         uiView.lineLimit = lineLimit
+        uiView.reservesCornerControl = reservesCornerControl
         uiView.applyStyle(placeholder: placeholder)
         // An external write (a mention, a dictation, a restored draft after a failed create)
         // leaves the caret at the end, where the user was typing. Never while the IME is
@@ -165,6 +170,15 @@ final class ComposerUITextView: UITextView {
     /// Images pasted, in pasteboard order.
     var onPasteImages: (([Data]) -> Void)?
     var lineLimit = 9
+    /// While true, the card's corner expand control is drawn over the field, so the text column
+    /// stops short of it (H3 §2).
+    var reservesCornerControl = false {
+        didSet {
+            guard reservesCornerControl != oldValue else { return }
+            applyTrailingInset()
+            setNeedsLayout()
+        }
+    }
 
     private let placeholderLabel = UILabel()
     private var appliedSize: CGFloat = 0
@@ -223,6 +237,26 @@ final class ComposerUITextView: UITextView {
         let scrolls = content.height > cap + 0.5
         if isScrollEnabled != scrolls { isScrollEnabled = scrolls }
         return CGSize(width: width, height: ceil(height))
+    }
+
+    /// While the card's corner expand control is drawn, the field's trailing inset grows to the
+    /// control's own 44 pt width, so no glyph — and no placeholder — ever runs under the button or
+    /// under its touch target (H3 §2).
+    ///
+    /// The whole field, deliberately: a field this tall is scrolling inside its cap
+    /// (`fittedSize`), so any line can be the one at the top of the visible area. A text-container
+    /// exclusion region would narrow only the document's first line and leave every line the user
+    /// scrolls to underneath the button.
+    ///
+    /// It is written only when the control appears or disappears. `ComposerView` makes that
+    /// decision sticky between two line counts (`ComposerMetrics.expandShowLines` /
+    /// `expandHideLines`), so a word wrapping at the threshold cannot re-wrap the draft on
+    /// consecutive keystrokes.
+    private func applyTrailingInset() {
+        let right = reservesCornerControl
+            ? ComposerMetrics.hitSize : ComposerMetrics.textInsetLeading
+        guard textContainerInset.right != right else { return }
+        textContainerInset.right = right
     }
 
     override func layoutSubviews() {

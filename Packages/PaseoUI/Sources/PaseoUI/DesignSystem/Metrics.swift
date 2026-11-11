@@ -74,5 +74,28 @@ enum ComposerMetrics {
     static let waveformHeight: CGFloat = 28
     static let waveformBarWidth: CGFloat = 3
     static let waveformBarGap: CGFloat = 2
+
+    // MARK: The context meter (H3 §1)
+
+    /// The ring inside the meter's 36 pt slot. 24 pt leaves room for the number inside it at the
+    /// default type size, and 1.5 pt keeps it a ring rather than a spinner (D2 §1).
+    static let meterRingSize: CGFloat = 24
+    static let meterRingLineWidth: CGFloat = 1.5
+
+    // MARK: The corner expand control (H3 §2)
+
+    /// The visual circle in the card's top-trailing corner. 28 pt, not the row's 36: it is a
+    /// convenience, not an action, and every point it takes comes out of the text column while it
+    /// is shown. A 44 pt hit frame with a 28 pt circle keeps the circle
+    /// `(hitSize − expandSize) / 2 = 8` pt from the card's edges, the same 8 pt the row's circles
+    /// keep (E1 §4).
+    static let expandSize: CGFloat = 28
+    /// The expand control appears at this many effective draft lines (`DraftMetrics`' threshold,
+    /// 5 on a phone in portrait) …
+    static let expandShowLines = 5
+    /// … and only leaves below this one. One line of dead band: the line count is estimated from
+    /// the character count and moves by one either way around the threshold, and every toggle
+    /// changes the field's first-line reserve (H3 §2).
+    static let expandHideLines = expandShowLines - 1
 }
 #endif
