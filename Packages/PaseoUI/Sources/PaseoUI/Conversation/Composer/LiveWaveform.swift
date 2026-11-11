@@ -199,6 +199,10 @@ final class WaveformMeterView: UIView {
         }
         let target = WaveformTickTarget(view: self)
         let link = CADisplayLink(target: target, selector: #selector(WaveformTickTarget.tick(_:)))
+        // A display link otherwise wakes at the display's full rate: on a 120 Hz iPhone that is
+        // 120 callbacks a second to draw 30 frames, and it keeps ProMotion from idling. The
+        // range caps it at 30; the time guard in `tick` stays as the backstop.
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
         link.add(to: .main, forMode: .common)
         self.tickTarget = target
         self.link = link

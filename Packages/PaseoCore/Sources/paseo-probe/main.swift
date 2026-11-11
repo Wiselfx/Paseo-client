@@ -87,9 +87,10 @@ let usage = """
                                H1 live proof: start realtime voice for an agent through
                                VoiceModeSession, stream 16 kHz mono PCM16 in real time, then print
                                the transcript rows, the TTS chunks (format/bytes), the playback
-                               acks and the phase moves. Read-only on the agent apart from the
-                               conversation the daemon starts from the speech. Never point it at
-                               a claude-provider agent.
+                               acks and the phase moves.
+                               WARNING: this PROMPTS the target agent — the daemon turns the audio
+                               into a user message and runs a real turn. It refuses any agent whose
+                               provider is `claude`, and refuses when it cannot look the agent up.
 
     Default credential: --local-credential /home/paseo/.paseo/local-credential
     """
@@ -1876,6 +1877,15 @@ func runVoice(
 ) async throws {
     let pcm = try readPCM(path)
     try await connection.connect()
+    // Nothing below this line is read-only: the daemon turns the speech into a user message and
+    // runs the agent. Check the target first, on the wire that is already open.
+    let provider = try await lookupProvider(connection, agentId: agentId)
+    guard !provider.hasPrefix("claude") else {
+        throw ProbeError(
+            "refusing to send spoken audio to \(agentId): it is a claude-provider agent and this probe prompts whatever agent it targets"
+        )
+    }
+    print("target: \(agentId) provider=\(provider) (this probe will prompt it)")
     let session = HostSession(client: connection)
     await session.start()
 
@@ -1975,6 +1985,27 @@ func runVoice(
     let stopped = await voice.stop()
     print("set_voice_mode off: \(stopped) phase=\(String(describing: voice.phase))")
     session.closeConversation(agentId)
+}
+
+/// The provider of one agent, from the directory. Pages until it finds the id; `audio` cannot be
+/// aimed at an agent we could not identify, and a wrong provider is the one mistake this probe
+/// must never make.
+func lookupProvider(_ connection: DaemonConnection, agentId: String) async throws -> String {
+    var cursor: String?
+    for _ in 0..<25 {
+        let response = try await connection.send(
+            FetchAgentsRequest(
+                page: FetchAgentsRequest.Page(limit: FetchAgentsRequest.maxPageLimit, cursor: cursor),
+                sort: [.updatedAtDescending]))
+        if let entry = response.entries.first(where: { $0.agent.id == agentId }) {
+            return entry.agent.provider
+        }
+        guard let next = response.pageInfo?.cursorForNextPage else { break }
+        cursor = next
+    }
+    throw ProbeError(
+        "refusing to start voice: no agent \(agentId) in the directory, so its provider cannot be checked"
+    )
 }
 
 /// Raw PCM16 from a `.pcm` file, or the data chunk of a RIFF `.wav` (the header is skipped).
