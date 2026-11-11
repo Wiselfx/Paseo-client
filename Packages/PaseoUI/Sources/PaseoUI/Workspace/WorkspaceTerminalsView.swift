@@ -123,16 +123,17 @@ struct WorkspaceTerminalsView: View {
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item]) { result in
             guard case .success(let url) = result else { return }
             Task {
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                guard let data = try? Data(contentsOf: url) else {
+                // Off the main actor (`PickedFileLoader`): this task inherits the main actor, so
+                // `Data(contentsOf:)` here froze the panel for the length of the read.
+                switch await PickedFileLoader.load(url, maxBytes: ConversationUpload.maxBytes) {
+                case .success(let file):
+                    await attach(
+                        data: file.data, fileName: url.lastPathComponent, mimeType: file.mimeType)
+                case .failure(.tooLarge):
+                    showToast("That file is over 50 MB — too large to attach.")
+                case .failure(.unopenable), .failure(.unreadable):
                     showToast("Couldn't read that file.")
-                    return
                 }
-                let ext = url.pathExtension.lowercased()
-                let mimeType = UTType(filenameExtension: ext)?.preferredMIMEType
-                    ?? "application/octet-stream"
-                await attach(data: data, fileName: url.lastPathComponent, mimeType: mimeType)
             }
         }
         .alert("Rename terminal", isPresented: Binding(

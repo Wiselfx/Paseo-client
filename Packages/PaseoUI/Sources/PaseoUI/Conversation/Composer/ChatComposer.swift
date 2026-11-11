@@ -14,12 +14,15 @@ enum ComposerMode {
 }
 
 /// The one composer (R6 §5): the conversation's two-row card, and the draft's card once it is
-/// expanded. Every derived value (`canSend`, `isTall`, `slashQuery`, `mentionQuery`) is computed
-/// here, so the rest of the screen never reads the draft.
+/// expanded. Every derived value (`canSend`, `slashQuery`, `mentionQuery`) is computed here, so
+/// the rest of the screen never reads the draft. The one exception is the expand control's
+/// visibility, which the field itself decides from its own layout (`ComposerUITextView`) because
+/// only the text layout knows the draft's real line count (H3 §2).
 ///
 /// **Reads:** the text binding, `store.isRunning`, `store.actionError`, `store.agent` (model,
-/// provider, features), `store.contextUsage`, and the controller's slash / mention / queue /
-/// attachment / dictation / voice state.
+/// provider, features), and the controller's slash / mention / queue / attachment / dictation /
+/// voice state. The context meter reads `store.contextUsage` itself, one control wide
+/// (`ComposerContextMeter`, H3 §1).
 struct ComposerView: View {
     let mode: ComposerMode
     /// The conversation; nil in draft mode.
@@ -56,6 +59,12 @@ struct ComposerView: View {
     @State private var showForgePicker = false
     @State private var attachmentViewerImage: UIImage?
     @State private var surfaceHeight: CGFloat = 0
+    /// Whether the tall draft's expand control is in the card's corner, and with it whether the
+    /// field reserves the corner's trailing column. **Written by the field** from its own laid-out
+    /// line count, only when the answer flips: sticky between `ComposerMetrics.expandShowLines`
+    /// and `expandHideLines` (H3 §2), so a word wrapping at the threshold cannot flicker the
+    /// control and re-flow the text on consecutive keystrokes.
+    @State private var expandVisible = false
 
     @Environment(\.composerFocusRequested) private var composerFocusRequested
     @Environment(\.openURL) private var openURL
@@ -141,15 +150,17 @@ struct ComposerView: View {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Grow-to-cap: an O(1)-ish check, never `components(separatedBy:)`.
-    private var isTall: Bool {
-        DraftMetrics.isTall(text)
-    }
-
+    /// One O(lines) pass per text change, and only while the draft is being typed into: what the
+    /// expand control's visibility is decided from (H3 §2).
     private var isDraft: Bool {
         if case .draft = mode { return true }
         return false
     }
+
+    /// Whether the corner expand control is on screen: the field's laid-out line count said the
+    /// draft is tall (`ComposerTextView.expandVisible`, H3 §2) and the card is open — the at-rest
+    /// pill is one line tall and its own mic owns that corner.
+    private var expandControlShown: Bool { expandVisible && composerExpanded }
 
     private var draftSession: DraftSession? {
         if case .draft(let draft) = mode { return draft }
@@ -335,8 +346,6 @@ struct ComposerView: View {
         .onChange(of: controller?.dismissKeyboardRequest) { _, _ in
             focused = false
         }
-        // M8b: expand control for tall drafts, left of the crab's spot.
-        .overlay(alignment: .topTrailing) { expandComposerButton }
         // The crab stands on the card's top edge, flush with its trailing edge.
         .overlay(alignment: .topTrailing) { mascotCrab }
         .sheet(isPresented: $showDraftControls) {
@@ -390,18 +399,33 @@ struct ComposerView: View {
 
     /// The draft overlays its add button on the field's leading edge at rest, so the field keeps
     /// one structural position and the keyboard holds when the pill grows (§4.1).
-    @ViewBuilder private var fieldRow: some View {
-        if isDraft {
-            HStack(spacing: ComposerMetrics.controlSpacing) {
+    ///
+    /// The expand control hangs off this row's trailing corner: measuring from the field is what
+    /// keeps it exactly over the text it takes room from, whatever sits above (H3 §2).
+    private var fieldRow: some View {
+        Group {
+            if isDraft {
+                HStack(spacing: ComposerMetrics.controlSpacing) {
+                    composerTextField
+                        .padding(.leading, composerExpanded ? 0 : ComposerMetrics.hitSize)
+                        .overlay(alignment: .leading) {
+                            if !composerExpanded { composerAddMenu }
+                        }
+                    if !composerExpanded { dictateButton }
+                }
+            } else {
                 composerTextField
-                    .padding(.leading, composerExpanded ? 0 : ComposerMetrics.hitSize)
-                    .overlay(alignment: .leading) {
-                        if !composerExpanded { composerAddMenu }
-                    }
-                if !composerExpanded { dictateButton }
             }
-        } else {
-            composerTextField
+        }
+        .overlay(alignment: .topTrailing) {
+            expandComposerButton
+                // Up into the card's padding, the same 8 pt the card's own padding is, so the
+                // control sits in the card's corner — not 8 pt below it (E1 §4).
+                .padding(.top, -ComposerMetrics.verticalInset)
+                // Opacity only: the card keeps its height and the field keeps its width, so the
+                // control fades in over the reserve the field already carries.
+                .animation(
+                    Motion.fade.resolved(reduceMotion: reduceMotion), value: expandControlShown)
         }
     }
 
@@ -413,7 +437,13 @@ struct ComposerView: View {
             text: $text,
             isFocused: $focused,
             placeholder: placeholder,
-            lineLimit: composerFieldLineLimit
+            lineLimit: composerFieldLineLimit,
+            // The field decides this from its own layout and writes it only when it flips, so no
+            // keystroke scans the draft to guess a line count (H3 §2).
+            expandVisible: $expandVisible,
+            // The field gives the control its column back while the control is on screen: written
+            // only when the control appears or disappears, never per keystroke.
+            reservesCornerControl: expandControlShown
         ) { images in
             attachPastedImages(images)
         }
@@ -471,9 +501,8 @@ struct ComposerView: View {
         // the card's edge, concentric with its corner (E1 §4).
         .padding(.horizontal, -ComposerMetrics.controlOverhang)
         .padding(.bottom, -ComposerMetrics.controlOverhang)
-        // The ring appears at 70 %: the row moves into place instead of snapping.
-        .animation(
-            Motion.feedback.resolved(reduceMotion: reduceMotion), value: contextPercent == nil)
+        // No animation on the meter: it never appears or disappears, and the reading changes
+        // inside `ComposerContextMeter`, not here (H3 §1).
     }
 
     private var composerAddMenu: some View {
@@ -570,40 +599,23 @@ struct ComposerView: View {
         }
     }
 
-    /// The ring is noise at low usage (it reads as a spinner on device), so it only exists where
-    /// it says something: from 70 % up, with the number inside (D2 §1). Below 90 % it is ink at
-    /// 60 %, above it is full ink.
+    /// The meter's slot in the control row (H3 §1). In a conversation it is **always** occupied:
+    /// the ring is there before the provider reports a window and stays at any percentage, so the
+    /// row cannot reflow when usage arrives or when 70 % is crossed. The ring, its number and the
+    /// empty track live in `ComposerContextMeter`, which is also the only view that reads the
+    /// usage (R-1): this body never reads it, and the ring redraws only when the integer percent
+    /// changes.
+    ///
+    /// The draft has no agent and will never have a window, so it has no slot: an empty 44 pt
+    /// column would only take width from the model chip for the whole of the draft's life. Nothing
+    /// moves at the hand-off either — the shell swaps the draft screen for the conversation, so the
+    /// two rows are never on screen together.
     @ViewBuilder private var contextMeter: some View {
-        if let percent = contextPercent {
-            Button {
+        if let store, !isDraft {
+            ComposerContextMeter(store: store) {
                 controller?.showContextSheet = true
-            } label: {
-                ClaudeMeterRing(percent: percent, size: 24, lineWidth: 1.5)
-                    .overlay {
-                        Text(PaseoFormat.integer(Int(percent.rounded())))
-                            .font(.paseo(.caption2, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(Palette.ink)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-                    .opacity(percent >= 90 ? 1 : 0.6)
-                    .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
-                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
-                    .contentShape(.rect)
             }
-            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
-            .accessibilityLabel("Context window, \(Int(percent.rounded())) percent used")
-            .accessibilityIdentifier("composer.contextMeter")
         }
-    }
-
-    /// The ring's reason to exist is the reading, and below 70 % there isn't one (D2 §1).
-    private var contextPercent: Double? {
-        guard let usage = store?.contextUsage, let percent = usage.percentUsed,
-            usage.usedTokens != nil, usage.maxTokens != nil, percent >= 70
-        else { return nil }
-        return percent
     }
 
     /// Nothing while voice mode owns the mic (E1 §3): a second owner would set the session's
@@ -775,29 +787,40 @@ struct ComposerView: View {
             controller.attachFileURLs(urls)
             return
         }
-        for url in urls {
-            let name = url.lastPathComponent
-            guard url.startAccessingSecurityScopedResource() else {
-                localAttachmentError = "Couldn't open \(name)."
-                continue
+        // The picker's files are read off the main actor (`PickedFileLoader`): a 40 MB file, or an
+        // iCloud file that still has to download, used to freeze this screen inside
+        // `Data(contentsOf:)`. Each tile is in the tray from the tap — `.decoding` also holds Send
+        // while the bytes load, so a tap cannot overtake the file.
+        Task {
+            for url in urls {
+                let name = url.lastPathComponent
+                var item = ComposerAttachmentItem(
+                    fileName: name, mimeType: "application/octet-stream", byteCount: 0,
+                    data: Data(), thumbnail: nil, phase: .decoding)
+                localTray.append(item)
+                switch await PickedFileLoader.load(url, maxBytes: ConversationUpload.maxBytes) {
+                case .success(let file):
+                    item.mimeType = file.mimeType
+                    item.data = file.data
+                    item.byteCount = file.data.count
+                    item.phase = .pending
+                    // A tile the user removed while it loaded stays removed.
+                    if let index = localTray.firstIndex(where: { $0.id == item.id }) {
+                        localTray[index] = item
+                    }
+                case .failure(.unopenable):
+                    localTray.removeAll { $0.id == item.id }
+                    localAttachmentError = "Couldn't open \(name)."
+                case .failure(.unreadable):
+                    localTray.removeAll { $0.id == item.id }
+                    localAttachmentError = "Couldn't read \(name)."
+                case .failure(.tooLarge):
+                    localTray.removeAll { $0.id == item.id }
+                    localAttachmentError = "\(name) is too large (50 MB max)."
+                }
             }
-            defer { url.stopAccessingSecurityScopedResource() }
-            guard let data = try? Data(contentsOf: url) else {
-                localAttachmentError = "Couldn't read \(name)."
-                continue
-            }
-            guard data.count <= ConversationUpload.maxBytes else {
-                localAttachmentError = "\(name) is too large (50 MB max)."
-                continue
-            }
-            let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
-                ?? "application/octet-stream"
-            localTray.append(
-                ComposerAttachmentItem(
-                    fileName: name, mimeType: mimeType, byteCount: data.count, data: data,
-                    thumbnail: nil))
+            pumpLocalUploads()
         }
-        pumpLocalUploads()
     }
 
     private func handlePickedPhotos(_ selection: [PhotosPickerItem]) {
@@ -1056,8 +1079,24 @@ struct ComposerView: View {
 
     // MARK: Expand and mascot
 
+    /// The tall draft's expand control, in the card's top-trailing corner (H3 §2).
+    ///
+    /// It used to sit `.padding(.trailing, 104)` to the left — "the crab's spot" — although the
+    /// crab's 72 pt frame stands *above* the card, so the control floated a crab's width from the
+    /// corner it belongs to, over the first line of text, at whatever that literal happened to
+    /// make on the current model. The `1` on its top edge was the same kind of guess.
+    ///
+    /// Now nothing is hard-coded except tokens: the 44 pt hit frame is flush with the card's
+    /// corner (it hangs `verticalInset` up into the card's padding, see `fieldRow`) and its 28 pt
+    /// circle lands `(hitSize − expandSize) / 2 = 8` pt inside, the same 8 pt the row's 36 pt
+    /// circles keep (E1 §4). The field gives back exactly that column while the control is shown
+    /// (`ComposerUITextView.applyTrailingInset`), so no glyph ever runs under it.
+    ///
+    /// It can never meet the crab: the crab's feet are on the card's top edge and its 104 × 72 pt
+    /// frame is above it, while this control is inside the card — no width, type size, mode or
+    /// mascot state brings them together, so the crab does not have to move.
     @ViewBuilder private var expandComposerButton: some View {
-        if isTall {
+        if expandControlShown {
             Button {
                 if controller != nil {
                     controller?.showFullScreenComposer = true
@@ -1068,14 +1107,12 @@ struct ComposerView: View {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .font(.glyph(.small, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 28, height: 28)
+                    .frame(width: ComposerMetrics.expandSize, height: ComposerMetrics.expandSize)
                     .background(Palette.chip, in: .circle)
-                    .frame(width: 44, height: 44)
+                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                     .contentShape(.rect)
             }
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
-            .padding(.trailing, 104)
-            .padding(.top, 1)
             .accessibilityLabel("Expand composer")
             .transition(.opacity)
         }

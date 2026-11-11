@@ -2,29 +2,7 @@
 import SwiftUI
 import PaseoStore
 
-/// M8b: draft metrics and the full-height editor sheet for long drafts.
-enum DraftMetrics {
-    /// Rough per-line budget for the composer at 18 pt on a phone in portrait.
-    static let charsPerLine = 34
-    /// Shows the expand control when the draft occupies at least this many effective lines.
-    static let tallLineThreshold = 5
-
-    /// Effective line count (explicit newlines, plus wrapping at ~`charsPerLine` per line).
-    static func lineCount(_ text: String) -> Int {
-        var lines = 0
-        let rawLines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        for rawLine in rawLines {
-            lines += max(1, Int((Double(rawLine.count) / Double(charsPerLine)).rounded(.up)))
-        }
-        return lines
-    }
-
-    static func isTall(_ text: String) -> Bool {
-        lineCount(text) >= tallLineThreshold
-    }
-}
-
-/// The full-height draft editor for long drafts. Shares the composer's draft binding; same
+/// M8b: the full-height draft editor for long drafts. Shares the composer's draft binding; same
 /// Sans as the composer at 17 pt. Done keeps the draft; Send sends it.
 struct FullScreenComposer: View {
     @Binding var draft: String

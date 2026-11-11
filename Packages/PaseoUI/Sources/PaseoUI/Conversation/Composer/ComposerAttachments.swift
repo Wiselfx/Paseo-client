@@ -88,8 +88,13 @@ final class ComposerAttachmentStore {
         add(item, to: id, store: store)
     }
 
-    /// Retry for a failed item.
+    /// Retry for a failed item. Only an item that still has bytes can be re-sent: the retry button
+    /// on a pill whose *read* failed (`addImage`/`addFile` decode or file error, no data) has
+    /// nothing to upload, and re-phasing it would push a 0-byte file at the agent.
     func retry(_ itemId: UUID, in id: String, store: ConversationStore) {
+        guard let item = items[id]?.first(where: { $0.id == itemId }), !item.data.isEmpty else {
+            return
+        }
         setPhase(.pending, for: itemId, in: id)
         pump(id, store: store)
     }
@@ -188,6 +193,46 @@ extension ComposerAttachmentStore {
         list[index].data = data
         list[index].thumbnail = thumbnail
         list[index].byteCount = data.count
+        items[id] = list
+        return true
+    }
+
+    /// Attach a file picked in Files. Same shape as `addImage`: the pill exists immediately in the
+    /// `.decoding` phase — which also holds Send while the bytes are read — and the read runs **off
+    /// main** (`PickedFileLoader`; an iCloud file that still has to download is seconds of I/O). A
+    /// failure lands on the pill as `.failed`, with the copy the toast used to show.
+    func addFile(url: URL, to id: String, store: ConversationStore) {
+        let item = ComposerAttachmentItem(
+            fileName: url.lastPathComponent, mimeType: "application/octet-stream", byteCount: 0,
+            data: Data(), thumbnail: nil, phase: .decoding)
+        add(item, to: id, store: store)
+        Task { @MainActor [weak self] in
+            switch await PickedFileLoader.load(url, maxBytes: ConversationUpload.maxBytes) {
+            case .success(let file):
+                guard let self, self.replaceFile(file, for: item.id, in: id) else { return }
+                self.setPhase(.pending, for: item.id, in: id)
+                self.resumePump(id, store: store)
+            case .failure(.unopenable):
+                self?.setPhase(.failed("Couldn't open \(item.fileName)."), for: item.id, in: id)
+            case .failure(.unreadable):
+                self?.setPhase(.failed("Couldn't read \(item.fileName)."), for: item.id, in: id)
+            case .failure(.tooLarge):
+                self?.setPhase(
+                    .failed("\(item.fileName) is too large (50 MB max)."), for: item.id, in: id)
+            }
+        }
+    }
+
+    /// Fills in a `.decoding` file's bytes and its type. False when the pill was removed.
+    private func replaceFile(
+        _ file: PickedFileLoader.Loaded, for itemId: UUID, in id: String
+    ) -> Bool {
+        guard var list = items[id], let index = list.firstIndex(where: { $0.id == itemId }) else {
+            return false
+        }
+        list[index].mimeType = file.mimeType
+        list[index].data = file.data
+        list[index].byteCount = file.data.count
         items[id] = list
         return true
     }
@@ -311,6 +356,9 @@ struct ComposerAttachmentPill: View {
                                     style: StrokeStyle(lineWidth: 2, lineCap: .round))
                             .frame(width: 32, height: 32)
                             .rotationEffect(.degrees(-90))
+                    } else if case .decoding = item.phase {
+                        // A picked file's bytes are read off main; the tile holds its place.
+                        InlineProgress()
                     }
                 }
                 .frame(width: 36, height: 36)
@@ -327,14 +375,15 @@ struct ComposerAttachmentPill: View {
                             .foregroundStyle(Palette.failureInk)
                             .lineLimit(1)
                             .frame(maxWidth: 110, alignment: .leading)
-                    } else {
+                    } else if item.byteCount > 0 {
                         Text(ComposerImageProcessor.byteCountText(item.byteCount))
                             .font(.paseo(.caption2))
                             .foregroundStyle(Palette.tertiaryInk)
                             .lineLimit(1)
                     }
                 }
-                if case .failed = item.phase {
+                // Nothing to retry while the bytes are missing: the pick itself failed.
+                if case .failed = item.phase, !item.data.isEmpty {
                     Button {
                         onRetry()
                     } label: {
@@ -349,7 +398,8 @@ struct ComposerAttachmentPill: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .frame(height: 56)
+            // `minHeight`: a fixed one clips the name at accessibility text sizes.
+            .frame(minHeight: 56)
             .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
             .overlay {
                 RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
@@ -411,7 +461,7 @@ struct ComposerAttachmentPill: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .frame(height: 56)
+        .frame(minHeight: 56)
         .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)

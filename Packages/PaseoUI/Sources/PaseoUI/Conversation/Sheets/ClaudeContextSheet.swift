@@ -12,13 +12,22 @@ struct ClaudeContextSheet: View {
         SheetScaffold("Context", detents: .mediumLarge) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.lg) {
-                    if let usage = store.contextUsage, let percent = usage.percentUsed {
-                        meterRow(usage: usage, percent: percent)
+                    if let usage = store.contextUsage {
+                        // A session with a window gets the meter; a session the provider reports
+                        // without one keeps its figures and gets upstream's `contextWindow.noData`
+                        // line where the percentage would be. Only a host that reports nothing at
+                        // all falls through to the empty state (H3 §1).
+                        if let percent = usage.percentUsed {
+                            meterRow(usage: usage, percent: percent)
+                        } else {
+                            noWindowRow
+                        }
                         detailsSection(usage: usage)
                         costByModelSection(usage: usage)
                     } else {
                         EmptyState(
-                            title: "This agent's host does not report context usage yet."
+                            title: "No context data",
+                            message: "This agent's host does not report context usage yet."
                         )
                         .padding(.horizontal, Space.lg)
                         .padding(.top, Space.xl)
@@ -31,6 +40,23 @@ struct ClaudeContextSheet: View {
     }
 
     // MARK: Header row
+
+    /// The same header slot as `meterRow`, with no window to draw: the composer's empty track, and
+    /// upstream's wording (`contextWindow.noData`) where the percentage goes — its details sheet
+    /// draws that line and keeps the session figures below it
+    /// (`context-window-details.tsx:52-55`).
+    private var noWindowRow: some View {
+        HStack(spacing: 18) {
+            ClaudeMeterRing(
+                percent: 0, size: 64, lineWidth: 6, tint: Palette.secondaryInk, drawsArc: false)
+            Text("No context data")
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.secondaryInk)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Space.lg)
+        .padding(.top, Space.xl)
+    }
 
     private func meterRow(usage: ContextUsage, percent: Double) -> some View {
         HStack(spacing: 18) {
@@ -163,7 +189,9 @@ struct ClaudeContextSheet: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 16)
-        .frame(height: 44)
+        // `minHeight`, not `height`: a value row is a text container, and at the largest Dynamic
+        // Type sizes a fixed 44 clips the value instead of growing the row.
+        .frame(minHeight: 44)
     }
 
     static func tokenCount(_ value: Int) -> String {
