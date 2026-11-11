@@ -7,7 +7,7 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 **G-round IN FLIGHT (launched 2026-11-11, after the H-round).** Contract: `docs/tickets/G-rich-ui.md`
 
-**2026-11-11 Phase A review:** report in (c4c0377, fff269b, decc50a). Gate FAILED (~25 compile errors). Review found: per-byte AsyncBytes work (actor hop per byte), relay rule applied to remote web images, daemon cap applied after transfer, disk-cache key mismatch/staleness, singleton daemon-fetch hook, dismiss pan steals paging, zoom relayout, preferredColorScheme in cover, NSCache cost, cap vs shared flight. Fixed over 3 rounds (+1 lead isolation fix). **Phase A MERGED** into foundation; gate green; PaseoCore green; IPA built. Worker told: continue to Phase B (G4 Mermaid + G5 artifact page), stop and report.
+**2026-11-11 Phase A review:** report in (c4c0377, fff269b, decc50a). Gate FAILED (~25 compile errors). Review found: per-byte AsyncBytes work (actor hop per byte), relay rule applied to remote web images, daemon cap applied after transfer, disk-cache key mismatch/staleness, singleton daemon-fetch hook, dismiss pan steals paging, zoom relayout, preferredColorScheme in cover, NSCache cost, cap vs shared flight. Fixed over 3 rounds (+1 lead isolation fix). **Phase A MERGED** into foundation; gate green; PaseoCore green; IPA `Paseo-20261111-1531-b49ebb2.ipa`. Worker told: continue to Phase B (G4 Mermaid + G5 artifact page), stop and report.
 
 (the rich UI plan made coherent; decisions D1–D8 taken by the lead on the user's delegation:
 Mermaid bundled, Live Activity / Share ext / Expo deferred, extensions built but not embedded,
