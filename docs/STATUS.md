@@ -50,7 +50,7 @@ The user tested IPA 3b65c9d next to the official Claude app and chose native ove
     - collapsed group rows ≈50 pt;
     - the Files header.
   - **E3b** (fb9b2c5e): the isolation warnings and `UIScreen.main`; a `paseo-file://` scheme handler for relative HTML refs; `unsafe-eval` for file previews only; subagent timeline paging; the viewer strip → panel.
-- **No IPA for the user until E1b–E3b are merged.** `Paseo-20261111-0901-da8b549.ipa` exists only as a gate artifact.
+- **E1b, E2b and E3b merged.** Every diff was read in full, E3b took 3 review rounds, and the lead fixed 2 things at the E2b merge (back-to-end clears the subagent pill; the terminal background is keyed by scheme). Mac gate green; PaseoCore 1114 green. **IPA for the user: `/Users/Shared/Paseo-ipas/Paseo-20261111-0955-5584843.ipa`** (the da8b549 IPA is obsolete).
 - **UX plan:** `docs/research/14-rich-ui-plan.md` (trimmed) and `-full.md` (plus the lead's §8–15). The user's decisions are pending (§5 of the plan): signing, Mermaid bundle, notification actions, Share extension, Expo push.
 
 ## In flight (Paseo agents, each in its own worktree; branch = ticket)
