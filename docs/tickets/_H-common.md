@@ -59,13 +59,21 @@ behaviour to be right, not the sentence to be literally satisfied.
 - No new dependencies. No force unwraps, no `fatalError`.
 - Never commit secrets, real hostnames, tokens or the user's agent titles (the repo is public).
 
-## Report what you see (proactive, but disciplined)
+## Report what you see — and fix it (updated by the user, 2026-11-11)
 
-While you read code, you will notice other problems. **Fix them only if they are in your owned
-files and directly affect your fixes** (list under "Also fixed"). Everything else goes under
-"Found, not fixed", each with: `file:line`, what's wrong, the concrete failure a user would hit,
-and the fix you'd propose. Don't pad this list; every item must be something you verified by
-reading the code. "No findings" is a fine answer.
+While you read code you will notice other problems. **Fix them too**, to the same standard as your
+ticket items (root cause, no hacks, mission-critical rules), and list each under "Also fixed" with
+its root cause. Only real, verified problems; don't pad.
+
+- Any file is fair game for these fixes, **except** where another H worker is editing the same
+  region right now (H1 voice/dictation regions of `ChatComposer.swift`; H2 `ChatTranscript`,
+  `ChatScreen`, `ChatHeader`, the scroll/chrome parts of `ChatController`; H3 the composer control
+  row/expand/`ComposerTextView`; H4 launch/`RootView`/sidebar usage/appearance; H5 the remote image
+  path). Small edits in a different region of a shared file are fine; keep them minimal so the
+  lead can merge cleanly.
+- Leave something under "Found, not fixed" only when fixing it would: change an existing test
+  (forbidden), need a decision from the user (copy, product behaviour), touch another worker's
+  region, or make a layout less stable. Say which reason, and give the exact fix.
 
 ## Proof (every ticket)
 
