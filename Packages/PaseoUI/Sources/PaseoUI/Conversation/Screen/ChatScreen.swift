@@ -56,6 +56,7 @@ public struct ChatScreen: View {
             // ordinary links fall through to the host's handler unchanged.
             .environment(\.openURL, controller.fileLinkAction(host: openURL))
             .environment(\.chatActions, controller.actions)
+            .environment(\.richActions, controller.richActions)
             .modifier(
                 ChatInputWiring(store: store, controller: controller, focused: $composerFocused))
             .modifier(

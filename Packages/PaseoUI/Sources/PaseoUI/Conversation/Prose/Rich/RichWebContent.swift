@@ -217,7 +217,7 @@ struct RichSVGCard: View {
     private var heightCap: CGFloat { viewportHeight * 0.6 }
 
     var body: some View {
-        RichCard {
+        PaseoCard(content:
             VStack(alignment: .leading, spacing: 10) {
                 header
                 if showSource {
@@ -225,8 +225,7 @@ struct RichSVGCard: View {
                 } else {
                     drawing
                 }
-            }
-        }
+            })
         .background { widthReader }
         .task(id: renderKey) { await render() }
         .fullScreenCover(isPresented: $showViewer) {

@@ -6,28 +6,11 @@ import SwiftUI
 import UIKit
 import WebKit
 
-/// ClaudeUI card chrome for rich-content blocks: 14 pt radius, 0.5 pt hairline border,
-/// the panel surface in both themes. `ClaudeCard` draws 10 pt, which predates the rich
-/// card metrics; this mirrors it at the ticket's 12–16 pt range.
-struct RichCard<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
-            }
-    }
-}
-
 /// Routes one detector block to its renderer, in document order (the caller iterates).
+/// Actions and the workspace image loader arrive from `RichActions` in the environment (G1
+/// §1.2, R-2): this router and every card below it take values only.
 struct ClaudeRichBlockView: View {
     let block: RichContentBlock
-    let localImageLoader: ((String) async -> UIImage?)?
 
     var body: some View {
         switch block {
@@ -40,7 +23,7 @@ struct ClaudeRichBlockView: View {
         case .bareImageURL(let url, _):
             RichRemoteImage(urlString: url, alt: "")
         case .localImage(let path, let alt, _):
-            RichLocalImage(path: path, alt: alt, loader: localImageLoader)
+            RichLocalImage(path: path, alt: alt)
         case .localFileLink(let path, _):
             RichPathChip(path: path, glyph: "doc.text")
         case .rawSVG(let source, _):
@@ -78,6 +61,7 @@ struct RichMapCard: View {
     let reference: MapReference
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var snapshot: UIImage?
 
     private var targetURL: URL? {
@@ -87,46 +71,43 @@ struct RichMapCard: View {
         return URL(string: reference.url)
     }
 
-    var body: some View {
-        RichCard {
-            Button {
-                if let targetURL { openURL(targetURL) }
-            } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    ZStack {
-                        if let snapshot {
-                            Image(uiImage: snapshot)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } else {
-                            Rectangle().fill(Palette.codeSurface)
-                                .overlay {
-                                    Image(systemName: "map")
-                                        .font(.glyph(.xlarge, weight: .light))
-                                        .foregroundStyle(Palette.secondaryInk)
-                                }
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 150)
-                    .clipped()
-                    .clipShape(.rect(cornerRadius: Radius.md))
-                    HStack(spacing: 6) {
-                        Image(systemName: "mappin")
-                            .font(.glyph(.small, weight: .medium))
+    /// The 150 pt snapshot slot, edge to edge in the media card; the container clips it.
+    private var snapshotBox: some View {
+        ZStack {
+            if let snapshot {
+                Image(uiImage: snapshot)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Rectangle().fill(Palette.codeSurface)
+                    .overlay {
+                        Image(systemName: "map")
+                            .font(.glyph(.xlarge, weight: .light))
                             .foregroundStyle(Palette.secondaryInk)
-                        Text(caption)
-                            .font(.paseo(.caption))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .lineLimit(1)
                     }
-                    .padding(.horizontal, 4)
-                }
-                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open in Maps")
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 150)
+        .contentShape(.rect)
+    }
+
+    var body: some View {
+        Button {
+            if let targetURL { openURL(targetURL) }
+        } label: {
+            PaseoMediaCard(
+                media: snapshotBox,
+                header: PaseoCardHeader(glyph: "mappin", title: caption))
+        }
+        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+        .paseoCardMenu(
+            openTitle: "Open in Maps",
+            onOpen: { if let targetURL { openURL(targetURL) } },
+            copyTitle: "Copy location",
+            copyText: caption)
+        .paseoCardAccessibility(kind: "Map", title: caption, isButton: true)
+        .accessibilityHint("Opens Apple Maps")
         .task(id: "\(reference.latitude ?? 0),\(reference.longitude ?? 0)") {
             guard snapshot == nil, let lat = reference.latitude, let lng = reference.longitude else { return }
             if let cached = RichMapSnapshotCache.image(for: reference) {
@@ -185,12 +166,13 @@ struct RichLinkCard: View {
 
     @State private var metadata: LPLinkMetadata?
     @State private var showSafari = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        RichCard {
-            Button {
-                showSafari = true
-            } label: {
+        Button {
+            showSafari = true
+        } label: {
+            PaseoCard(content:
                 HStack(alignment: .center, spacing: 10) {
                     if let metadata {
                         LinkPreviewView(metadata: metadata)
@@ -199,11 +181,21 @@ struct RichLinkCard: View {
                         placeholder
                     }
                 }
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open \(RichContentDetector.domain(for: url))")
+                .contentShape(.rect))
         }
+        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+        .paseoCardMenu(
+            openTitle: "Open",
+            onOpen: { showSafari = true },
+            copyTitle: "Copy link",
+            copyText: url,
+            externalTitle: "Open in Safari",
+            externalURL: URL(string: url))
+        .paseoCardAccessibility(
+            kind: "Link",
+            title: RichContentDetector.domain(for: url),
+            meta: RichContentDetector.displayURL(url),
+            isButton: true)
         .task(id: url) {
             guard let parsed = URL(string: url) else { return }
             if let cached = RichLinkMetadataCache.metadata(for: parsed) {
@@ -691,11 +683,13 @@ struct RichRemoteImage: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityHint("Opens the image full screen")
                 // A context menu is the only way to the link without a second gesture language.
-                .contextMenu {
-                    if webURL != nil { copyLinkButton }
-                    shareButton
-                    if webURL != nil { openLinkButton }
-                }
+                // Save to Photos arrives with the G3 viewer (it needs the usage description).
+                .paseoCardMenu(
+                    onShare: { showShare = true },
+                    copyTitle: "Copy link",
+                    copyText: webURL != nil ? urlString : nil,
+                    externalTitle: "Open link",
+                    externalURL: webURL)
         } else if let failure {
             if keepsFailureBox {
                 boxedFailure(failure)
@@ -738,15 +732,9 @@ struct RichRemoteImage: View {
     }
 
     private func compactFailure(_ failure: RemoteImageFailure) -> some View {
-        failureContent(failure)
-            .padding(.horizontal, Space.md)
-            .padding(.vertical, Space.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
-            }
+        PaseoCard(content:
+            failureContent(failure)
+                .frame(maxWidth: .infinity, alignment: .leading))
     }
 
     private func failureContent(_ failure: RemoteImageFailure) -> some View {
@@ -803,31 +791,6 @@ struct RichRemoteImage: View {
         } else if let webURL {
             // Not loaded yet: the link is all we honestly have.
             ActivityView(items: [webURL])
-        }
-    }
-
-    private var copyLinkButton: some View {
-        Button {
-            UIPasteboard.general.string = urlString
-            Haptics.light()
-        } label: {
-            Label("Copy link", systemImage: "link")
-        }
-    }
-
-    private var openLinkButton: some View {
-        Button {
-            if let webURL { openURL(webURL) }
-        } label: {
-            Label("Open link", systemImage: "safari")
-        }
-    }
-
-    private var shareButton: some View {
-        Button {
-            showShare = true
-        } label: {
-            Label("Share", systemImage: "square.and.arrow.up")
         }
     }
 
@@ -910,14 +873,13 @@ struct RichRemoteImage: View {
     }
 }
 
-/// A bare local path to an image, read through the daemon (the files store the caller
-/// threads in). Without a reachable store — or on any read failure — this falls back to
-/// `RichPathChip`.
+/// A bare local path to an image, read through the daemon via `RichActions` (G1 §1.2).
+/// Without a reachable store — or on any read failure — this falls back to `RichPathChip`.
 struct RichLocalImage: View {
     let path: String
     let alt: String
-    let loader: ((String) async -> UIImage?)?
 
+    @Environment(\.richActions) private var richActions
     @State private var image: UIImage?
     @State private var loaded = false
     @State private var showViewer = false
@@ -961,11 +923,7 @@ struct RichLocalImage: View {
         }
         .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: image)
         .task {
-            guard let loader else {
-                loaded = true
-                return
-            }
-            image = await loader(path)
+            image = await richActions?.loadLocalImage(path)
             loaded = true
         }
         .fullScreenCover(isPresented: $showViewer) {
@@ -1073,41 +1031,48 @@ struct RichImageViewer: View {
 }
 
 /// A mono path chip: for local image paths that can't be read, and for bare non-image
-/// `file://` paths (§1.5). Tap copies the path.
+/// `file://` paths (§1.5). Tap copies the path; the menu also offers Show in Files.
 struct RichPathChip: View {
     let path: String
     var glyph: String = "doc.text"
 
+    @Environment(\.richActions) private var richActions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Button {
+            copyPath()
+        } label: {
+            PaseoCard(content:
+                HStack(spacing: 8) {
+                    Image(systemName: glyph)
+                        .font(.glyph(.small))
+                        .foregroundStyle(Palette.secondaryInk)
+                    Text(path)
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.ink)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Image(systemName: "doc.on.doc")
+                        .font(.glyph(.small))
+                        .foregroundStyle(Palette.secondaryInk)
+                }
+                .contentShape(.rect))
+        }
+        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+        .paseoCardMenu(copyTitle: "Copy path", copyText: path, filePath: path)
+        .paseoCardAccessibility(kind: "File", title: path, isButton: true)
+        .accessibilityHint("Copies the path")
+    }
+
+    private func copyPath() {
+        if let richActions {
+            richActions.copyText(path)
+        } else {
             UIPasteboard.general.string = path
             Haptics.light()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: glyph)
-                    .font(.glyph(.small))
-                    .foregroundStyle(Palette.secondaryInk)
-                Text(path)
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 8)
-                Image(systemName: "doc.on.doc")
-                    .font(.glyph(.small))
-                    .foregroundStyle(Palette.secondaryInk)
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 12)
-            .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
-            }
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Path \(path). Copies the path.")
     }
 }
 
@@ -1151,7 +1116,7 @@ struct RichWebCard: View {
     private var showsLive: Bool { isVisible && holdsSlot }
 
     var body: some View {
-        RichCard {
+        PaseoCard(content:
             VStack(alignment: .leading, spacing: 10) {
                 header
                 if showSource {
@@ -1162,8 +1127,7 @@ struct RichWebCard: View {
                         openFullScreenButton
                     }
                 }
-            }
-        }
+            })
         .background { widthReader }
         .onAppear { setVisible(true) }
         .onDisappear { setVisible(false) }

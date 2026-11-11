@@ -17,10 +17,9 @@ struct ClaudeRevealProse: View {
     let onAction: (MarkdownAction) -> Void
     /// True while the producing turn is running — i.e. prose is actively arriving.
     let isStreaming: Bool
-    var localImageLoader: ((String) async -> UIImage?)? = nil
     /// Renders `![alt](url)` paragraphs: remote images through `RemoteImageLoader` (the shared
-    /// cache, downsample and SVG path); workspace paths through the local loader. `nil` renders
-    /// images as text.
+    /// cache, downsample and SVG path); workspace paths through `RichActions` in the environment.
+    /// `nil` renders images as text.
     var imageContent: ((MarkdownImage) -> AnyView)? = nil
 
     static let minOpacity: Double = 0.2
@@ -39,7 +38,7 @@ struct ClaudeRevealProse: View {
     @State private var tailStart = -1
     @State private var tailLength = 0
 
-    private struct PieceRef: Identifiable {
+    private struct PieceRef {
         let id: Int
         let piece: RichPiece
         /// UTF-16 offset of the piece's first unit within the rendered piece stream.
@@ -48,6 +47,16 @@ struct ClaudeRevealProse: View {
         let length: Int
         /// The last non-empty Markdown piece — the one whose suffix fades in.
         var isTailMarkdown: Bool
+
+        /// Stable identity (G1 §1.4): a block is its kind plus its start offset, so a newly
+        /// detected block mid-stream never re-runs an older card's entrance; Markdown chunks
+        /// keep their positional id.
+        var stableIdentity: String {
+            switch piece {
+            case .markdown: "md:\(id)"
+            case .block(let block, _): "block:\(block.cardKindKey):\(start)"
+            }
+        }
     }
 
     private func pieceRefs(_ source: String) -> [PieceRef] {
@@ -80,7 +89,7 @@ struct ClaudeRevealProse: View {
     var body: some View {
         let refs = pieceRefs(markdown)
         VStack(alignment: .leading, spacing: theme.blockSpacing) {
-            ForEach(refs) { ref in
+            ForEach(refs, id: \.stableIdentity) { ref in
                 switch ref.piece {
                 case .markdown(let chunk):
                     let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -93,7 +102,7 @@ struct ClaudeRevealProse: View {
                             .mask(sweepMask(active: ref.isTailMarkdown))
                     }
                 case .block(let block, _):
-                    ClaudeRichBlockView(block: block, localImageLoader: localImageLoader)
+                    ClaudeRichBlockView(block: block)
                         .phaseAnimator([Self.minOpacity, 1.0], trigger: revealTick) { content, phase in
                             content.opacity(
                                 reduceMotion || !isStreaming || ref.id != refs.count - 1 ? 1 : phase)

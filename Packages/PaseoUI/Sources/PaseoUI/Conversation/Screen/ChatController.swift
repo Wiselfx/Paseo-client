@@ -160,6 +160,9 @@ struct TranscriptJump: Equatable {
 
     /// The transcript's verbs, put in the environment by `ChatScreen`.
     let actions: ChatActions
+    /// The cards' verbs (G1 §1.2): the same instance for the screen's life, so it is never
+    /// part of any row's `==`. Wired once in `configureActions`; cards read values from it.
+    let richActions = RichActions()
 
     // Sheet routing.
     var sheet: ClaudeChatSheet?
@@ -299,8 +302,11 @@ struct TranscriptJump: Equatable {
         actions.retract = { [weak self] row in
             self?.retractMessage(userRow: row)
         }
-        actions.loadImage = { [weak self] path in
+        richActions.loadLocalImage = imageLoaderBox.loader { [weak self] path in
             await self?.loadImage(path: path)
+        }
+        richActions.openFile = { [weak self] path in
+            self?.openFileViewer(at: path)
         }
         refreshAvailability()
         startAvailabilityTracking()
@@ -996,13 +1002,6 @@ struct TranscriptJump: Equatable {
         return width
     }
 
-    /// The prose image loader. One closure for the controller's life, so `ClaudeProse` keeps its
-    /// input identity (finding #13).
-    var localImageLoader: ((String) async -> UIImage?)? {
-        imageLoaderBox.loader { [weak self] path in
-            await self?.loadImage(path: path)
-        }
-    }
 
 
     // MARK: Outline and end-of-transcript requests
