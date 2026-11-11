@@ -45,10 +45,16 @@ struct SchedulesListPage: View {
             ScheduleEditorPage(session: session, seed: seed)
         }
         .task {
+            // No push events for schedules: the captions tick every 5 s from the local
+            // `now`, and the list itself reloads every 30 s (minute-granularity data) plus on
+            // appear, pull-to-refresh and every mutation. The store publishes only on real
+            // change, so a quiet poll never re-evaluates the rows.
+            var tick = 0
             while !Task.isCancelled {
                 if scenePhase == .active {
                     now = Date()
-                    await schedules.load()
+                    if tick % 6 == 0 { await schedules.load() }
+                    tick += 1
                 }
                 try? await Task.sleep(for: .seconds(5))
             }
