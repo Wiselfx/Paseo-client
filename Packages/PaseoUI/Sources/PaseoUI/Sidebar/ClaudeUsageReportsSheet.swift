@@ -9,21 +9,26 @@ import SwiftUI
 struct ClaudeUsageReportsSheet: View {
     let session: HostSession
 
-    private var overview: UsageOverview {
-        UsageOverviewBuilder.compute(agents: session.agents)
-    }
+    /// The figures, computed once when the sheet appears and never in `body` (H4, R-1): rolling
+    /// the agent list up parses a date and walks a model map per agent, and the sheet stays on
+    /// screen while agents stream. The sheet owns this view's identity, so one value per open is
+    /// right: it is a this-launch rollup, and pull to refresh re-asks the host, not the rollup.
+    @State private var overview: UsageOverview?
 
     var body: some View {
         SheetScaffold("Usage", detents: .large) {
             Group {
-                if session.hostUsage.reports.isEmpty && overview.sessions == 0 {
+                if session.hostUsage.reports.isEmpty && (overview?.sessions ?? 0) == 0 {
                     emptyState
                 } else {
                     List {
-                        overviewCard
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        if let overview {
+                            overviewCard(overview)
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .listRowInsets(
+                                    EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        }
                         ForEach(session.hostUsage.reports) { report in
                             usageCard(report)
                                 .listRowSeparator(.hidden)
@@ -38,6 +43,11 @@ struct ClaudeUsageReportsSheet: View {
             .scrollIndicators(.hidden)
         }
         .task {
+            // Before the load's round trip finishes, so the first frame that draws the list
+            // already has the overview card: no second layout of the sheet.
+            if overview == nil {
+                overview = UsageOverviewBuilder.compute(agents: session.agents)
+            }
             if case .idle = session.hostUsage.phase {
                 _ = await session.hostUsage.load(forceRefresh: false)
             }
@@ -68,8 +78,8 @@ struct ClaudeUsageReportsSheet: View {
 
     /// The six stat cells, the 14-day token chart and the per-model split, from the agent
     /// list's `lastUsage` (DSH's session-list fallback). A figure no source can answer is a
-    /// dash, not a zero.
-    private var overviewCard: some View {
+    /// dash, not a zero. Takes the rollup as a value: only `body` decides when it is computed.
+    private func overviewCard(_ overview: UsageOverview) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Overview")
                 .font(.paseo(.callout, weight: .semibold))

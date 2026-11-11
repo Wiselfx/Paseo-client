@@ -68,6 +68,12 @@ struct DraftChatView: View {
             Text(workspaceTitle)
                 .font(.paseo(.title))
                 .lineLimit(1)
+                // The header is a 48 pt bar (`HomeHeroMetrics.headerHeight`) and the launch frame
+                // reserves exactly that, so the title must not make the row taller: this is bar
+                // chrome, and bar labels keep their height like UIKit's do. Without the cap the
+                // title's line box passes 48 pt at the largest text sizes and the hero shifts a
+                // few points on the launch → draft hand-off (H4 §1).
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .accessibilityIdentifier("draft.workspace")
 
