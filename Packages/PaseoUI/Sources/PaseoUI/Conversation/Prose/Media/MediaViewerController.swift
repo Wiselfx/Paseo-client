@@ -36,7 +36,12 @@ struct MediaViewerPager: UIViewControllerRepresentable {
         }
         pager.onToggleChrome = { [weak coordinator = context.coordinator] in
             guard let coordinator else { return }
-            coordinator.parent.chromeVisible.toggle()
+            // Fade, don't pop: the chrome is one element appearing and leaving.
+            withAnimation(
+                Motion.fade.resolved(reduceMotion: coordinator.parent.reduceMotion)
+            ) {
+                coordinator.parent.chromeVisible.toggle()
+            }
         }
         pager.onCurrentImage = { [weak coordinator = context.coordinator] image in
             coordinator?.parent.currentImage = image
@@ -52,6 +57,9 @@ struct MediaViewerPager: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ pager: MediaViewerPagerController, context: Context) {
+        // The struct copy the coordinator closes over goes stale (bindings do not); refresh
+        // it so callbacks read the current closures.
+        context.coordinator.parent = self
         pager.isChromeVisible = chromeVisible
         pager.setLiveTextMode(liveTextMode)
     }
@@ -92,6 +100,14 @@ final class MediaViewerPagerController: UIPageViewController {
     override var prefersStatusBarHidden: Bool { !isChromeVisible }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
 
+    /// The black behind the pages, faded by the dismiss drag (the SwiftUI cover behind
+    /// is clear, so the transcript shows through as the image leaves).
+    private let dimView: UIView = {
+        let view = UIView()
+        view.backgroundColor = .black
+        return view
+    }()
+
     init(items: [MediaViewerItem], startIndex: Int, reduceMotion: Bool) {
         self.items = items
         self.currentIndex = startIndex
@@ -104,7 +120,12 @@ final class MediaViewerPagerController: UIPageViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
+        // The window style stays dark even in a light transcript.
+        overrideUserInterfaceStyle = .dark
+        view.backgroundColor = .clear
+        dimView.frame = view.bounds
+        dimView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.insertSubview(dimView, at: 0)
         dataSource = self
         delegate = self
         if let first = page(for: currentIndex) {
@@ -133,6 +154,7 @@ final class MediaViewerPagerController: UIPageViewController {
             },
             onClose: { [weak self] in self?.onClose?() })
         pages[index] = page
+        page.backdrop = dimView
         // The displayed page loads in `viewDidAppear` at the exact screen scale; only
         // neighbours preload with the fallback scale.
         if index != currentIndex {
@@ -222,6 +244,9 @@ final class MediaViewerPageController: UIViewController {
 
     private let scrollView = UIScrollView()
     private let imageView = UIImageView()
+    /// The pager's black, dimmed by the dismiss drag. Owned by the pager; a plain
+    /// reference here cannot cycle (the backdrop points at nothing).
+    weak var backdrop: UIView?
     /// VisionKit Live Text, attached once the full image lands (G3 §4.6).
     private var textInteraction: ImageAnalysisInteraction?
     private var analyzerTask: Task<Void, Never>?
@@ -234,6 +259,10 @@ final class MediaViewerPageController: UIViewController {
 
     private var fullTask: Task<Void, Never>?
     private var dismissPan: UIPanGestureRecognizer?
+    /// The last bounds the image was fitted to, and which bitmap: a layout pass mid-zoom
+    /// (a chrome toggle repaints the status bar) must not re-fit and snap the zoom.
+    private var lastFittedBounds: CGSize = .zero
+    private var lastFittedImage: UIImage?
 
     init(
         item: MediaViewerItem, reduceMotion: Bool,
@@ -313,8 +342,10 @@ final class MediaViewerPageController: UIViewController {
         singleTap.require(toFail: doubleTap)
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
         pan.delegate = self
-        imageView.addGestureRecognizer(doubleTap)
-        imageView.addGestureRecognizer(singleTap)
+        // On the scroll view, not the image: tapping the black letterbox toggles chrome
+        // too, and a tap outside the image still finds the page.
+        scrollView.addGestureRecognizer(doubleTap)
+        scrollView.addGestureRecognizer(singleTap)
         scrollView.addGestureRecognizer(pan)
         dismissPan = pan
     }
@@ -330,7 +361,10 @@ final class MediaViewerPageController: UIViewController {
         if scrollView.zoomScale > 1.5 {
             scrollView.setZoomScale(1, animated: !reduceMotion)
         } else {
-            let point = recognizer.location(in: imageView)
+            var point = recognizer.location(in: imageView)
+            if !imageView.bounds.contains(point) {
+                point = CGPoint(x: imageView.bounds.midX, y: imageView.bounds.midY)
+            }
             let zoom: CGFloat = 2.5
             let size = CGSize(
                 width: scrollView.bounds.width / zoom, height: scrollView.bounds.height / zoom)
@@ -381,12 +415,14 @@ final class MediaViewerPageController: UIViewController {
 
     private func setImage(_ image: UIImage, animated: Bool) {
         displayedImage = image
-        layoutImage()
-        updateMaxZoom(for: image)
+        if scrollView.zoomScale <= 1.01 {
+            layoutImage()
+            updateMaxZoom(for: image)
+        }
         if animated {
             imageView.alpha = 0
             imageView.image = image
-            UIView.animate(withDuration: 0.2) { self.imageView.alpha = 1 }
+            UIView.animate(withDuration: Motion.uiFadeDuration) { self.imageView.alpha = 1 }
         } else {
             imageView.image = image
         }
@@ -411,10 +447,13 @@ final class MediaViewerPageController: UIViewController {
     private func startTextAnalysis(image: UIImage) {
         analyzerTask?.cancel()
         analyzerTask = Task.detached(priority: .utility) { [weak self] in
+            guard ImageAnalyzer.isSupported else { return }
             let analyzer = ImageAnalyzer()
             let analysis: ImageAnalysis?
             do {
-                analysis = try await analyzer.analyze(image, orientation: .up)
+                analysis = try await analyzer.analyze(
+                    image, orientation: .up,
+                    configuration: ImageAnalyzer.Configuration([.text]))
             } catch {
                 analysis = nil
             }
@@ -440,9 +479,21 @@ final class MediaViewerPageController: UIViewController {
     }
 
     private func updateMaxZoom(for image: UIImage) {
-        let fitWidth = max(imageView.frame.width, 1)
         let pixels = max(image.size.width * image.scale, 1)
-        scrollView.maximumZoomScale = max(4, pixels / fitWidth)
+        scrollView.maximumZoomScale = max(4, pixels / fittedWidth(for: image))
+    }
+
+    /// The fitted width from the bounds and the aspect alone — never from the image
+    /// view's frame, which is scaled while zoomed.
+    private func fittedWidth(for image: UIImage) -> CGFloat {
+        let bounds = scrollView.bounds.size
+        guard bounds.width > 1, bounds.height > 1 else { return max(image.size.width, 1) }
+        let aspect = image.size.width / max(image.size.height, 1)
+        var width = bounds.width
+        if width / aspect > bounds.height {
+            width = bounds.height * aspect
+        }
+        return max(width, 1)
     }
 
     // MARK: Dismiss (R-3)
@@ -457,11 +508,11 @@ final class MediaViewerPageController: UIViewController {
         case .changed:
             let dy = translation.y > 0 ? translation.y : translation.y / 3
             scrollView.transform = CGAffineTransform(translationX: 0, y: dy)
-            scrollView.alpha = 1 - min(max(translation.y, 0) / (view.bounds.height * 0.5), 0.6)
+            backdrop?.alpha = 1 - min(max(translation.y, 0) / (view.bounds.height * 0.5), 0.6)
         case .ended, .cancelled:
             let distance = translation.y
             if recognizer.state == .ended
-                && (distance > 120 || velocity.y > 800)
+                && (distance > Metrics.dismissDistance || velocity.y > Metrics.dismissVelocity)
             {
                 dismissWithVelocity(velocity)
             } else {
@@ -472,30 +523,36 @@ final class MediaViewerPageController: UIViewController {
         }
     }
 
-    /// Release into a velocity-matched critically damped spring, then close. The content is
-    /// already gone when the cover dismisses, so no transition ever jumps.
+    /// Release into a velocity-matched critically damped spring, then close. The spring's
+    /// initial velocity is relative to the remaining distance (not points/second), so a
+    /// slow drag and a flick both settle without overshoot. The content is already gone
+    /// when the cover dismisses, so no transition ever jumps.
     private func dismissWithVelocity(_ velocity: CGPoint) {
+        let remaining = max(view.bounds.height - scrollView.transform.ty, 1)
         let timing = UISpringTimingParameters(
             dampingRatio: 1,
-            initialVelocity: CGVector(dx: velocity.x / 1000, dy: velocity.y / 1000))
-        let animator = UIViewPropertyAnimator(duration: 0.25, timingParameters: timing)
+            initialVelocity: CGVector(dx: 0, dy: velocity.y / remaining))
+        let animator = UIViewPropertyAnimator(
+            duration: Metrics.dismissDuration, timingParameters: timing)
         animator.addAnimations {
             self.scrollView.transform = CGAffineTransform(
                 translationX: 0, y: self.view.bounds.height)
-            self.scrollView.alpha = 0
+            self.backdrop?.alpha = 0
         }
         animator.addCompletion { _ in self.onClose() }
         animator.startAnimation()
     }
 
     private func springHome(velocity: CGPoint) {
+        let remaining = max(abs(scrollView.transform.ty), 1)
         let timing = UISpringTimingParameters(
             dampingRatio: 1,
-            initialVelocity: CGVector(dx: velocity.x / 1000, dy: velocity.y / 1000))
-        let animator = UIViewPropertyAnimator(duration: 0.32, timingParameters: timing)
+            initialVelocity: CGVector(dx: 0, dy: -velocity.y / remaining))
+        let animator = UIViewPropertyAnimator(
+            duration: Metrics.springHomeDuration, timingParameters: timing)
         animator.addAnimations {
             self.scrollView.transform = .identity
-            self.scrollView.alpha = 1
+            self.backdrop?.alpha = 1
         }
         animator.startAnimation()
     }
@@ -534,7 +591,10 @@ extension MediaViewerPageController: UIGestureRecognizerDelegate {
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         // The dismiss pan owns 1× pages; zoomed content pans inside the scroll view.
         guard let pan = dismissPan, gestureRecognizer === pan else { return true }
-        return scrollView.zoomScale <= 1.01
+        guard scrollView.zoomScale <= 1.01 else { return false }
+        // Downward-dominant to begin: a horizontal swipe stays with the pager.
+        let velocity = pan.velocity(in: view)
+        return velocity.y > 0 && abs(velocity.y) > abs(velocity.x)
     }
 }
 
@@ -545,25 +605,25 @@ extension MediaViewerPageController {
     }
 
     /// The fitted frame: aspect-fit in the scroll view, never upscaled past it.
+    /// Re-fits only at 1× with new bounds or a new bitmap: any layout pass mid-zoom
+    /// (a chrome toggle repainting the status bar) must not snap the zoom.
     private func layoutImage() {
         guard let image = displayedImage ?? item.thumbnail else { return }
         let bounds = scrollView.bounds.size
         guard bounds.width > 1, bounds.height > 1 else { return }
-        let aspect = image.size.width / max(image.size.height, 1)
-        var width = bounds.width
-        var height = width / aspect
-        if height > bounds.height {
-            height = bounds.height
-            width = height * aspect
-        }
+        guard scrollView.zoomScale <= 1.01,
+            bounds != lastFittedBounds || lastFittedImage !== image
+        else { return }
+        lastFittedBounds = bounds
+        lastFittedImage = image
+        let width = fittedWidth(for: image)
+        let height = width / (image.size.width / max(image.size.height, 1))
         imageView.frame = CGRect(
             x: max((bounds.width - width) / 2, 0),
             y: max((bounds.height - height) / 2, 0),
-            width: max(width, 1), height: max(height, 1))
+            width: width, height: max(height, 1))
         scrollView.contentSize = imageView.frame.size
-        if let displayed = displayedImage {
-            updateMaxZoom(for: displayed)
-        }
+        updateMaxZoom(for: image)
     }
 }
 #endif

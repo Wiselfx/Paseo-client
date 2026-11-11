@@ -132,10 +132,12 @@ struct MediaViewerView: View {
                 .ignoresSafeArea()
             chrome
         }
-        .background(.black)
-        .preferredColorScheme(.dark)
+        .background(.clear)
+        .environment(\.colorScheme, .dark)
+        // Clear so the drag can fade the UIKit backdrop onto the transcript behind.
+        .presentationBackground(.clear)
         .navigationTransition(
-            reduceMotion ? .opacity : .zoom(sourceID: sourceID, in: namespace))
+            reduceMotion ? .automatic : .zoom(sourceID: sourceID, in: namespace))
         .accessibilityAction(.escape) { onClose() }
         .onChange(of: selection) { _, _ in
             // One announcement per page; the label carries kind + position + alt (G3 §1.5).
@@ -220,7 +222,7 @@ struct MediaViewerView: View {
                 copyCurrentImage()
             }
             .disabled(currentImage == nil && currentItem?.fullSource == nil)
-            viewerButton(systemName: "photo", label: "Save to Photos") {
+            viewerButton(systemImage: "photo", label: "Save to Photos") {
                 if let currentImage {
                     if let richActions {
                         richActions.saveImage(currentImage)
@@ -240,8 +242,8 @@ struct MediaViewerView: View {
             if liveTextAvailable {
                 viewerButton(
                     systemImage: "text.viewfinder",
-                    label: liveTextMode ? "Hide text" : "Show text")
-                {
+                    label: liveTextMode ? "Hide text" : "Show text"
+                ) {
                     liveTextMode.toggle()
                 }
             }
@@ -261,7 +263,7 @@ struct MediaViewerView: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.paseo(.body))
-                .frame(width: 48, height: Metrics.hitSize)
+                .frame(width: Metrics.viewerChromeButtonWidth, height: Metrics.hitSize)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -299,7 +301,7 @@ struct MediaViewerView: View {
             }.value
             guard let data else { return }
             if let richActions {
-                richActions.addToChat(fileName, data)
+                richActions.addImageToChat(fileName, data)
             }
         }
     }
