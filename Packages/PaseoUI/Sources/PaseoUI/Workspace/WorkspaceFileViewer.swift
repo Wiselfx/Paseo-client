@@ -49,6 +49,10 @@ struct WorkspaceFileViewer: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+    /// The viewer's laid-out size, read once per resize (not per scroll frame). Image decoding
+    /// and syntax bounds derive from it; no `UIScreen` lookup.
+    @State private var stageSize: CGSize = .zero
 
     private var files: WorkspaceFiles { checkout.files }
     private var fileName: String { WorkspaceFileFormat.lastComponent(relPath) }
@@ -104,11 +108,22 @@ struct WorkspaceFileViewer: View {
     }
 
     private var renderKey: FileRenderKey? {
-        guard let file else { return nil }
+        // No budget before the first layout: wait one frame for the real size instead of
+        // decoding twice (placeholder first, image at the layout size).
+        guard let file, stageSize.width > 1 || stageSize.height > 1 else { return nil }
         return FileRenderKey(
             path: file.path,
             revision: file.revision ?? file.modifiedAt,
-            dark: colorScheme == .dark)
+            dark: colorScheme == .dark,
+            pixelBudget: pixelBudget)
+    }
+
+    /// The largest edge this viewer can draw, in pixels; 512 until the first layout pass. Part of
+    /// `renderKey`, so a rotation re-decodes once at the new size.
+    private var pixelBudget: Int {
+        let dimension = max(stageSize.width, stageSize.height)
+        guard dimension > 1 else { return 512 }
+        return max(Int(dimension * displayScale), 512)
     }
 
     var body: some View {
@@ -137,6 +152,13 @@ struct WorkspaceFileViewer: View {
         // `topRow` is the header (back, title, actions); the system bar would duplicate it.
         .toolbar(.hidden, for: .navigationBar)
         .interactiveDismissDisabled(isDirty)
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { size in
+            stageSize = size
+        }
+        // A markdown preview can hold images and HTML: cap them against this viewer, not a screen.
+        .environment(\.richViewportHeight, stageSize.height > 1 ? stageSize.height : 800)
         .confirmationDialog(
             "Discard changes?",
             isPresented: Binding(
@@ -217,13 +239,14 @@ struct WorkspaceFileViewer: View {
             render = nil
             return
         }
-        let key = renderKey
+        // Before the first layout there is no pixel budget: `.task(id:)` fires again once
+        // `renderKey` gains one, so this returns instead of decoding twice.
+        guard let key = renderKey else { return }
         let language = language(for: file.path)
         let theme: ClaudeCodeSyntaxTheme = colorScheme == .dark ? .dark : .light
-        let bounds = UIScreen.main.bounds.size
-        let maxPixel = Int(max(bounds.width, bounds.height) * UIScreen.main.scale)
+        let maxPixel = max(key.pixelBudget, 512)
         let model = await FileRenderModel.make(
-            file: file, language: language, theme: theme, maxPixel: max(maxPixel, 512))
+            file: file, language: language, theme: theme, maxPixel: maxPixel)
         guard !Task.isCancelled, renderKey == key else { return }
         render = model
     }
@@ -535,7 +558,8 @@ struct WorkspaceFileViewer: View {
         }
         .padding(.horizontal, Space.sm)
         .padding(.vertical, 6)
-        .background(Palette.background)
+        // E3b: the panel has one canvas now; the strip sits on it, not on the page colour.
+        .background(Palette.panel)
     }
 
     private func previewSegment(_ source: Bool, label: String) -> some View {
@@ -601,7 +625,10 @@ struct WorkspaceFileViewer: View {
                     detail: "\(WorkspaceFileFormat.bytes(file?.size ?? 0)) · Switch to Source.")
             } else {
                 sandboxedPreview(
-                    WorkspaceFileWebDocument.html(text, dark: colorScheme == .dark),
+                    WorkspaceFileWebDocument.html(
+                        text, dark: colorScheme == .dark,
+                        baseHref: PreviewFileScheme.baseHref(
+                            workspaceId: checkout.workspaceId, filePath: relativePath)),
                     allowsScripts: true)
             }
         } else {
@@ -643,7 +670,9 @@ struct WorkspaceFileViewer: View {
         SandboxedHTMLView(
             html: html, heightFloor: 0, heightCeiling: 0, onHeightChange: { _ in },
             fillsFrame: true, allowsScripts: allowsScripts,
-            onExternalNavigation: allowsScripts ? { url in previewLink = url } : nil
+            onExternalNavigation: allowsScripts ? { url in previewLink = url } : nil,
+            previewFiles: allowsScripts
+                ? PreviewFileSource(files: files, workspaceId: checkout.workspaceId) : nil
         )
     }
 
@@ -803,6 +832,8 @@ private struct FileRenderKey: Hashable {
     let path: String
     let revision: String
     let dark: Bool
+    /// The viewer's pixel budget: a rotation re-decodes the image at the new size exactly once.
+    let pixelBudget: Int
 }
 
 private enum ExitAction: Identifiable {

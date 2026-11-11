@@ -200,6 +200,7 @@ struct RichSVGCard: View {
     @State private var showShare = false
     @State private var width: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
 
     private var dark: Bool { colorScheme == .dark }
 
@@ -209,8 +210,11 @@ struct RichSVGCard: View {
     /// From `viewBox`, else `width`/`height`; nil when the drawing carries neither.
     private var intrinsicAspectRatio: CGFloat? { RichSVGIntrinsic.aspectRatio(of: code) }
 
-    /// 60 % of the screen height: a tall drawing shrinks to fit instead of pushing the turn away.
-    private var heightCap: CGFloat { RichMediaMetrics.heightCap }
+    /// The container's height, for the 60 % cap, known before the first frame (`RichViewport`).
+    @Environment(\.richViewportHeight) private var viewportHeight
+
+    /// A tall drawing shrinks to fit instead of pushing the turn away.
+    private var heightCap: CGFloat { viewportHeight * 0.6 }
 
     var body: some View {
         RichCard {
@@ -318,7 +322,7 @@ struct RichSVGCard: View {
             return
         }
         let rendered = await RichSnapshotQueue.shared.snapshot(
-            html: document, width: width, scale: UIScreen.main.scale)
+            html: document, width: width, scale: displayScale)
         guard let rendered else { return }
         RichSnapshotCache.store(rendered, for: key)
         image = rendered

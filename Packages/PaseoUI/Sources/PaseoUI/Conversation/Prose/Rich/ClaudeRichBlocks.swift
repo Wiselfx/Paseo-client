@@ -53,21 +53,6 @@ struct ClaudeRichBlockView: View {
     }
 }
 
-/// Shared rich-media caps (E3 §3): an image takes at most 60 % of the screen height, an HTML
-/// card at most 70 %. The screen comes from the attached scene, not `UIScreen.main` (deprecated).
-enum RichMediaMetrics {
-    static var screenHeight: CGFloat {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
-        return scene?.screen.bounds.height ?? 844
-    }
-
-    /// Images and SVG drawings.
-    static var heightCap: CGFloat { screenHeight * 0.6 }
-    /// HTML cards in chat.
-    static var htmlHeightCap: CGFloat { screenHeight * 0.7 }
-}
-
 // MARK: - Map card (M17)
 
 /// Snapshot cache, keyed by coordinate. Snapshots are single-pass renders; re-snapshot
@@ -519,7 +504,11 @@ struct RichRemoteImage: View {
     @State private var controlsVisible = true
     @State private var showShare = false
     @State private var loaded = false
+    /// The container's height, for the 60 % cap, known before the first frame (`RichViewport`).
+    @Environment(\.richViewportHeight) private var viewportHeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var heightCap: CGFloat { viewportHeight * 0.6 }
 
     private var fileName: String {
         URL(string: urlString)?.lastPathComponent.nilIfEmpty ?? "image"
@@ -534,7 +523,7 @@ struct RichRemoteImage: View {
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: RichMediaMetrics.heightCap)
+                    .frame(maxWidth: .infinity, maxHeight: heightCap)
                     .background(Palette.codeSurface)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .contentShape(.rect)
@@ -572,7 +561,7 @@ struct RichRemoteImage: View {
         Rectangle()
             .fill(Palette.codeSurface)
             .aspectRatio(4.0 / 3.0, contentMode: .fit)
-            .frame(maxWidth: .infinity, maxHeight: RichMediaMetrics.heightCap)
+            .frame(maxWidth: .infinity, maxHeight: heightCap)
             .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
                 ProgressView().controlSize(.small).tint(Palette.secondaryInk)
@@ -613,7 +602,10 @@ struct RichLocalImage: View {
     @State private var showViewer = false
     @State private var controlsVisible = true
     @State private var showShare = false
+    @Environment(\.richViewportHeight) private var viewportHeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var heightCap: CGFloat { viewportHeight * 0.6 }
 
     private var fileName: String {
         (path as NSString).lastPathComponent.nilIfEmpty ?? "image"
@@ -625,7 +617,7 @@ struct RichLocalImage: View {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: RichMediaMetrics.heightCap)
+                    .frame(maxWidth: .infinity, maxHeight: heightCap)
                     .background(Palette.codeSurface)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .contentShape(.rect)
@@ -639,7 +631,7 @@ struct RichLocalImage: View {
                 Rectangle()
                     .fill(Palette.codeSurface)
                     .aspectRatio(4.0 / 3.0, contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: RichMediaMetrics.heightCap)
+                    .frame(maxWidth: .infinity, maxHeight: heightCap)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .overlay {
                         ProgressView().controlSize(.small).tint(Palette.secondaryInk)
@@ -767,7 +759,7 @@ struct RichPathChip: View {
 /// A ` ```visualize ` block: a sandboxed WKWebView sized to its content, with a "View source"
 /// toggle that swaps in the raw source with a copy button.
 ///
-/// E3 §3.2: the height follows the reported content up to 70 % of the screen height, animated
+/// E3 §3.2: the height follows the reported content up to 70 % of the window height, animated
 /// once per settled layout (the reporter debounces 100 ms and ignores sub-2-pt moves); past the
 /// cap an "Open" button shows the page full screen.
 ///
@@ -785,11 +777,14 @@ struct RichWebCard: View {
     @State private var holdsSlot = false
     @State private var snapshot: UIImage?
     @State private var width: CGFloat = 0
+    /// The container's height, for the 70 % cap, known before the first frame.
+    @Environment(\.richViewportHeight) private var viewportHeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
 
     /// A page that wants more than this gets the "Open" affordance instead.
-    private var heightCap: CGFloat { RichMediaMetrics.htmlHeightCap }
+    private var heightCap: CGFloat { viewportHeight * 0.7 }
 
     /// Built once per (content, scheme) instead of on every `body` pass.
     private var document: String {
@@ -947,7 +942,7 @@ struct RichWebCard: View {
                 let key = RichSnapshotCache.key(html: html, width: renderWidth, dark: dark)
                 if RichSnapshotCache.image(for: key) != nil { return }
                 let rendered = await RichSnapshotQueue.shared.snapshot(
-                    html: html, width: renderWidth, scale: UIScreen.main.scale)
+                    html: html, width: renderWidth, scale: displayScale)
                 guard let rendered else { return }
                 RichSnapshotCache.store(rendered, for: key)
                 snapshot = rendered
@@ -964,7 +959,7 @@ struct RichWebCard: View {
             return
         }
         let rendered = await RichSnapshotQueue.shared.snapshot(
-            html: document, width: width, scale: UIScreen.main.scale)
+            html: document, width: width, scale: displayScale)
         guard let rendered else { return }
         RichSnapshotCache.store(rendered, for: key)
         snapshot = rendered

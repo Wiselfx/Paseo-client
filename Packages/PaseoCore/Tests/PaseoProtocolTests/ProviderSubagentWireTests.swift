@@ -132,6 +132,18 @@ import Testing
         #expect(page.window.maxSeq == 0)
     }
 
+    /// E3b: the sheet asks for the page before a cursor when the reader reaches the top.
+    @Test func olderPageRequestEncodesDirectionAndCursor() throws {
+        let request = ProviderSubagentTimelineRequest(
+            parentAgentId: "agent_parent", subagentId: "toolu_1", direction: .before,
+            cursor: TimelineCursor(epoch: "epoch_1", seq: 7), limit: 50)
+        let json = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(request))
+        #expect(json["direction"] == .string("before"))
+        #expect(json["cursor"]?["epoch"] == .string("epoch_1"))
+        #expect(json["cursor"]?["seq"] == .number(7))
+        #expect(json["limit"] == .number(50))
+    }
+
     @Test func errorPageDecodes() throws {
         let json = """
             {"parentAgentId":"agent_parent_fixture","subagentId":"toolu_fixture_1",

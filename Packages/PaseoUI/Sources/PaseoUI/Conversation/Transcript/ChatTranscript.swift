@@ -63,6 +63,11 @@ struct TranscriptView: View {
     @State private var scrollHeld = false
     /// The send runway (D1 §2). One `@State`, written on layout, never per scroll frame.
     @State private var runway = SendRunway()
+    /// The transcript's height with the keyboard down (E3b). Rich media and the process cap read
+    /// it, so the keyboard's arrival never resizes every capped block while the user types. It
+    /// only grows for one width and resets when the width changes (rotation, split view).
+    @State private var stableViewportHeight: CGFloat = 0
+    @State private var stableViewportWidth: CGFloat = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.shellDrawer) private var shellDrawer
@@ -126,6 +131,9 @@ struct TranscriptView: View {
 
     private var transcript: some View {
         GeometryReader { geometry in
+            // The keyboard shrinks `geometry`: the first pass has no stable value yet, so it uses
+            // this pass's real height; after that only a width change or real growth moves it.
+            let viewport = stableViewportHeight > 0 ? stableViewportHeight : geometry.size.height
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Self.turnSpacing) {
@@ -219,8 +227,28 @@ struct TranscriptView: View {
                 } action: { _, metrics in
                     handleScroll(metrics, proxy: proxy)
                 }
-                .environment(\.claudeProcessCap, min(400, geometry.size.height * 0.5))
+                .environment(\.claudeProcessCap, min(400, viewport * 0.5))
+                // Rich cards cap media at 60 %/70 % of the transcript's own height (E3b).
+                .environment(\.richViewportHeight, viewport)
             }
+            .onGeometryChange(for: CGSize.self) { proxy in
+                proxy.size
+            } action: { size in
+                updateStableViewport(size)
+            }
+        }
+    }
+
+    /// Keyboard-independent viewport height. The keyboard and a growing composer both only
+    /// shrink the transcript; ignoring a shrink keeps every cap (and the process cap) fixed
+    /// through focus changes. A width change is a real resize and resets both axes.
+    private func updateStableViewport(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        if abs(size.width - stableViewportWidth) >= 1 {
+            stableViewportWidth = size.width
+            stableViewportHeight = size.height
+        } else if size.height - stableViewportHeight >= 1 {
+            stableViewportHeight = size.height
         }
     }
 

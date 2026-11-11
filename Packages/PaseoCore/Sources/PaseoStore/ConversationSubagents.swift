@@ -69,6 +69,22 @@ public final class ConversationSubagents {
     public func timelinePage(
         for subagentId: String, limit: Int = 50
     ) async -> ProviderSubagentTimelineRequest.Response? {
+        await timeline(subagentId: subagentId, direction: .tail, cursor: nil, limit: limit)
+    }
+
+    /// The page before `cursor` (`E3b`): the sheet prepends it when the reader reaches the top.
+    /// The same read-only path as the tail page; the response carries the new `startCursor` and
+    /// `hasOlder`.
+    public func timelinePage(
+        for subagentId: String, before cursor: TimelineCursor, limit: Int = 50
+    ) async -> ProviderSubagentTimelineRequest.Response? {
+        await timeline(subagentId: subagentId, direction: .before, cursor: cursor, limit: limit)
+    }
+
+    private func timeline(
+        subagentId: String, direction: ProviderSubagentTimelineRequest.Direction,
+        cursor: TimelineCursor?, limit: Int
+    ) async -> ProviderSubagentTimelineRequest.Response? {
         guard isSupported else {
             error = "This provider does not support subagents."
             return nil
@@ -80,7 +96,8 @@ public final class ConversationSubagents {
         do {
             let response = try await client.send(
                 ProviderSubagentTimelineRequest(
-                    parentAgentId: agentId, subagentId: subagentId, direction: .tail, limit: limit))
+                    parentAgentId: agentId, subagentId: subagentId, direction: direction,
+                    cursor: cursor, limit: limit))
             if let message = response.error {
                 error = message
                 return nil

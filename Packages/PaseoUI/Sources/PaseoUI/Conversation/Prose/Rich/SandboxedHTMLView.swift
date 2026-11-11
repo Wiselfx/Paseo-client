@@ -1,8 +1,15 @@
 #if canImport(UIKit)
+import PaseoStore
 import SafariServices
 import SwiftUI
 import UIKit
 import WebKit
+
+/// The checkout a file preview reads its relative references from.
+struct PreviewFileSource {
+    let files: WorkspaceFiles
+    let workspaceId: String
+}
 
 /// Wraps `SFSafariViewController` for the "open in Safari view" behavior of rich cards.
 struct SafariView: UIViewControllerRepresentable {
@@ -49,6 +56,10 @@ struct SandboxedHTMLView: UIViewRepresentable {
     /// Called for a top-level navigation that isn't the document itself (a link tap, a form
     /// post, a redirect). File previews open the URL in an in-app Safari sheet instead.
     var onExternalNavigation: ((URL) -> Void)? = nil
+    /// The workspace a file preview may read through `paseo-file://`; nil for chat cards, which
+    /// have no access to workspace files. The scheme handler is built with the web view, so no
+    /// object is allocated per `body` pass.
+    var previewFiles: PreviewFileSource? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onHeightChange: onHeightChange, floor: heightFloor, ceiling: heightCeiling)
@@ -62,6 +73,12 @@ struct SandboxedHTMLView: UIViewRepresentable {
             // A preview of the user's own file: nothing to persist, nothing shared with the app.
             configuration.websiteDataStore = .nonPersistent()
             configuration.allowsInlineMediaPlayback = true
+        }
+        if let previewFiles {
+            configuration.setURLSchemeHandler(
+                WorkspacePreviewFileHandler(
+                    files: previewFiles.files, workspaceId: previewFiles.workspaceId),
+                forURLScheme: PreviewFileScheme.name)
         }
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -169,8 +186,11 @@ struct SandboxedHTMLView: UIViewRepresentable {
                 loadedDocument = true
                 return .allow
             }
-            if allowsExternalNavigation, let url = navigationAction.request.url {
-                onExternalNavigation?(url)
+            if let url = navigationAction.request.url {
+                // A link inside the preview that points at the workspace: never hand a synthetic
+                // scheme to Safari. Subresources arrive through the scheme handler, not here.
+                if url.scheme?.lowercased() == PreviewFileScheme.name { return .cancel }
+                if allowsExternalNavigation { onExternalNavigation?(url) }
             }
             return .cancel
         }
