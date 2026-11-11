@@ -43,7 +43,7 @@ struct PaseoSidebar: View {
     @AppStorage("paseo.sidebar.activeFirst") var activeFirst = true
     /// The sidebar label filter: the raw label name, or "" for All (one at a time, by design).
     @AppStorage("paseo.sidebar.labelFilter") var labelFilter = ""
-    /// Shared with the Settings → General toggle, which owns this row. Hidden by default.
+    /// Shared with the Settings → Sidebar toggle, which owns this row. Hidden by default.
     @AppStorage("paseo.usage.showInSidebar") var showUsageInSidebar = false
     /// Shared with Settings → Sidebar; default shown.
     @AppStorage("paseo.sidebar.showHistory") var showHistory = true
@@ -53,7 +53,9 @@ struct PaseoSidebar: View {
     @Environment(\.toast) var toast
     /// R5's drawer, for the ⌘K hook: the sidebar owns the Search sheet.
     @Environment(\.shellDrawer) private var shellDrawer
-
+    /// False while the drawer shows the sidebar itself (H4 §2). The usage footer refreshes on
+    /// that edge — a commit, not a drag frame.
+    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
 
     var body: some View {
         // Derived once per evaluation and shared by the directory and every row (P5 #3).
@@ -98,11 +100,15 @@ struct PaseoSidebar: View {
                 shellDrawer?.open(.sidebar)
                 sheet = .search
             }
-            if showUsageInSidebar && session.hostUsage.isSupported {
-                Task { _ = await session.hostUsage.load(forceRefresh: false) }
-            }
             consumeAddProjectRequest()
             loadDirectoryIfNeeded()
+        }
+        // Usage is state-driven, never appear-driven (H4 §2): the toggle, the host's capability
+        // and the host itself decide when a load is worth asking for.
+        .task(id: usageLoadKey) { await loadUsage() }
+        .onChange(of: isSurfaceObscured) { _, obscured in
+            guard !obscured else { return }
+            Task { await loadUsage() }
         }
         .onChange(of: addProjectRequest) { _, _ in
             consumeAddProjectRequest()
@@ -309,65 +315,32 @@ struct PaseoSidebar: View {
 
     // MARK: Usage
 
-    /// One compact line per available provider report, with its pinned (or first) window:
-    /// "62% · resets 3h". Hidden entirely unless enabled in Settings → General.
-    @ViewBuilder private var usageSection: some View {
-        if showsUsageFooter {
-            VStack(spacing: 4) {
-                ForEach(session.hostUsage.reports) { report in
-                    if case .available(let available) = report.report {
-                        ForEach(summaryWindows(available)) { window in
-                            if let used = window.usedPct {
-                                usageFooterLine(source: report.sourceLabel, window: window, used: used)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 8)
-        }
+    /// The footer's usage block. Its own view, which reads the usage store — the narrow
+    /// `@Observable` child — and nothing else, so a load never re-evaluates this page (H4 §2,
+    /// R-1). This page only decides when a load is worth asking for.
+    private var usageSection: some View {
+        SidebarUsageFooter(
+            hostUsage: session.hostUsage,
+            showInSidebar: showUsageInSidebar,
+            onOpenUsage: { sheet = .usage })
     }
 
-    /// One switch (Settings → General owns it) plus the host's support; a host with usage off
-    /// reports the failure itself, so its own policy is not a second gate.
-    private var showsUsageFooter: Bool {
-        showUsageInSidebar && session.hostUsage.isSupported
+    /// The three facts a usage load depends on: the toggle, the host's capability, and the host
+    /// itself. `.task(id:)` re-runs on a change of one of them — never per frame.
+    private var usageLoadKey: String {
+        "\(showUsageInSidebar)|\(session.hostUsage.isSupported)|\(session.serverInfo?.serverId ?? "")"
     }
 
-    private func summaryWindows(_ available: AvailableUsageReport) -> [ProviderUsageWindow] {
-        let flagged = available.windows.filter { $0.summary == true }
-        if flagged.isEmpty { return Array(available.windows.prefix(1)) }
-        return Array(flagged.prefix(2))
-    }
-
-    private func usageFooterLine(
-        source: String, window: ProviderUsageWindow, used: Double
-    ) -> some View {
-        let resets = ClaudeUsageResets.short(afterISO: window.resetsAt)
-        let percent = Int(min(max(used, 0), 100).rounded())
-        return Button {
-            sheet = .usage
-        } label: {
-            HStack(spacing: 8) {
-                Text("\(source) · \(window.label)")
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                ClaudeUsageBar(percent: used, width: 44)
-                Text(resets.map { "\(percent)% · \($0)" } ?? "\(percent)%")
-                    .monospacedDigit()
-                    .font(.paseo(.caption2))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .fixedSize()
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-            "\(source), \(window.label), \(percent) percent used"
-                + (resets.map { ", \($0)" } ?? ""))
-        .accessibilityIdentifier("sidebar.usage.\(source).\(window.id)")
+    /// The state-driven load: turning the toggle on, or a `server_info` that finally reports
+    /// support, loads the footer without reopening the drawer. The throttle also covers a second
+    /// trigger while one load is in flight.
+    ///
+    /// Never `forceRefresh`: an automatic question asks the daemon, and the daemon decides whether
+    /// its provider cache is stale. Only the user's own Retry and the sheet's pull-to-refresh force
+    /// the providers' quota APIs (H4 §2).
+    private func loadUsage() async {
+        guard showUsageInSidebar, session.hostUsage.needsAutomaticLoad() else { return }
+        _ = await session.hostUsage.load(forceRefresh: false)
     }
 
     // MARK: Footer

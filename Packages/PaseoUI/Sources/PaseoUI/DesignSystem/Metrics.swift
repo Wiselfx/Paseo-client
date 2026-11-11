@@ -42,6 +42,14 @@ enum Metrics {
     static let hitSize: CGFloat = 44
 }
 
+/// The sidebar's rows.
+enum SidebarMetrics {
+    /// The usage footer's line height, for the meter rows **and** the status line they replace.
+    /// Both are single `.caption` rows with the same `minHeight`, so the footer cannot change
+    /// height when the first load lands and the page above it cannot jump (H4 §2).
+    static let usageLineHeight: CGFloat = 20
+}
+
 /// The composer's shape, measured from Claude's composer (screenshots at 3×, E1 §4).
 ///
 /// Every number the card and its rows draw comes from here, so the draft and the conversation

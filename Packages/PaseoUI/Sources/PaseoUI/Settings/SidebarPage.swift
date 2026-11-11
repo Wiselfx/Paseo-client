@@ -39,8 +39,8 @@ struct SidebarPage: View {
             Section {
                 ListRow(
                     title: "Usage",
-                    subtitle:
-                        "One line per account the host reports usage for, with its pinned-window meters",
+                    // Upstream `providerUsage.showInSidebarHint` (en.ts:2237).
+                    subtitle: "Pinned windows show in the sidebar footer",
                     systemImage: "chart.bar",
                     accessory: ListRow.Accessory.toggle($showUsage)
                 )
@@ -49,7 +49,9 @@ struct SidebarPage: View {
             } header: {
                 Text("Footer")
             } footer: {
-                Text("Hidden by default. Toggling this applies immediately.")
+                Text(
+                    "Hidden by default. Toggling this applies immediately; when a host can't report usage, the footer says why."
+                )
             }
         }
         .inlinePageTitle("Sidebar")

@@ -35,7 +35,12 @@ targets:
         CFBundleDisplayName: Paseo
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
-        UILaunchScreen: {}
+        # The static launch screen paints the launch background: the same colour as
+        # `Palette.background`, so the very first frame does not flash the system's white / black
+        # before `LaunchSkeleton` draws (H4 §1). The asset cannot read the app's Pure black trait,
+        # so Pure black starts from the dark canvas (#151515) and steps to #000 with the shell.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSLocalNetworkUsageDescription: Paseo connects to the agent daemon on your network.
         NSSpeechRecognitionUsageDescription: Paseo uses on-device speech recognition to dictate into the composer.
