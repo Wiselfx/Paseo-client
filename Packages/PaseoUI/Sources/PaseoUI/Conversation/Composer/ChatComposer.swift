@@ -14,8 +14,10 @@ enum ComposerMode {
 }
 
 /// The one composer (R6 §5): the conversation's two-row card, and the draft's card once it is
-/// expanded. Every derived value (`canSend`, the expand control's visibility, `slashQuery`,
-/// `mentionQuery`) is computed here, so the rest of the screen never reads the draft.
+/// expanded. Every derived value (`canSend`, `slashQuery`, `mentionQuery`) is computed here, so
+/// the rest of the screen never reads the draft. The one exception is the expand control's
+/// visibility, which the field itself decides from its own layout (`ComposerUITextView`) because
+/// only the text layout knows the draft's real line count (H3 §2).
 ///
 /// **Reads:** the text binding, `store.isRunning`, `store.actionError`, `store.agent` (model,
 /// provider, features), and the controller's slash / mention / queue / attachment / dictation /
@@ -58,9 +60,10 @@ struct ComposerView: View {
     @State private var attachmentViewerImage: UIImage?
     @State private var surfaceHeight: CGFloat = 0
     /// Whether the tall draft's expand control is in the card's corner, and with it whether the
-    /// field reserves the first line's trailing end. Sticky between
-    /// `ComposerMetrics.expandShowLines` and `expandHideLines` (H3 §2), so a word wrapping at the
-    /// threshold cannot flicker the control and re-flow the text on consecutive keystrokes.
+    /// field reserves the corner's trailing column. **Written by the field** from its own laid-out
+    /// line count, only when the answer flips: sticky between `ComposerMetrics.expandShowLines`
+    /// and `expandHideLines` (H3 §2), so a word wrapping at the threshold cannot flicker the
+    /// control and re-flow the text on consecutive keystrokes.
     @State private var expandVisible = false
 
     @Environment(\.composerFocusRequested) private var composerFocusRequested
@@ -149,22 +152,14 @@ struct ComposerView: View {
 
     /// One O(lines) pass per text change, and only while the draft is being typed into: what the
     /// expand control's visibility is decided from (H3 §2).
-    private func syncExpandControl(_ text: String) {
-        let lines = DraftMetrics.lineCount(text)
-        if lines >= ComposerMetrics.expandShowLines {
-            if !expandVisible { expandVisible = true }
-        } else if lines <= ComposerMetrics.expandHideLines {
-            if expandVisible { expandVisible = false }
-        }
-    }
-
     private var isDraft: Bool {
         if case .draft = mode { return true }
         return false
     }
 
-    /// Whether the corner expand control is on screen: sticky on the line count (H3 §2) and only
-    /// on the open card — the at-rest pill is one line tall and its own mic owns that corner.
+    /// Whether the corner expand control is on screen: the field's laid-out line count said the
+    /// draft is tall (`ComposerTextView.expandVisible`, H3 §2) and the card is open — the at-rest
+    /// pill is one line tall and its own mic owns that corner.
     private var expandControlShown: Bool { expandVisible && composerExpanded }
 
     private var draftSession: DraftSession? {
@@ -350,10 +345,6 @@ struct ComposerView: View {
         .onChange(of: controller?.dismissKeyboardRequest) { _, _ in
             focused = false
         }
-        // The corner expand control's state, decided from the text itself (H3 §2): a remembered
-        // draft (the restored sheet, a create that failed) may already be tall.
-        .onAppear { syncExpandControl(text) }
-        .onChange(of: text) { _, newText in syncExpandControl(newText) }
         // The crab stands on the card's top edge, flush with its trailing edge.
         .overlay(alignment: .topTrailing) { mascotCrab }
         .sheet(isPresented: $showDraftControls) {
@@ -446,9 +437,11 @@ struct ComposerView: View {
             isFocused: $focused,
             placeholder: placeholder,
             lineLimit: composerFieldLineLimit,
-            // The field gives the control its column back while the control is on screen: it is
-            // written only when the control appears or disappears, never per keystroke, and
-            // `syncExpandControl` makes that decision sticky (H3 §2).
+            // The field decides this from its own layout and writes it only when it flips, so no
+            // keystroke scans the draft to guess a line count (H3 §2).
+            expandVisible: $expandVisible,
+            // The field gives the control its column back while the control is on screen: written
+            // only when the control appears or disappears, never per keystroke.
             reservesCornerControl: expandControlShown
         ) { images in
             attachPastedImages(images)

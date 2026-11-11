@@ -90,12 +90,14 @@ enum ComposerMetrics {
     /// `(hitSize − expandSize) / 2 = 8` pt from the card's edges, the same 8 pt the row's circles
     /// keep (E1 §4).
     static let expandSize: CGFloat = 28
-    /// The expand control appears at this many effective draft lines (`DraftMetrics.lineCount`'
-    /// estimate; 5 is the threshold M8b used, ≈ 5 wrapped lines at the composer's 17 pt face) …
+    /// The expand control appears at this many **laid-out** draft lines
+    /// (`ComposerUITextView.visualLineCount`: the field's own text layout, so Dynamic Type, a wider
+    /// window and proportional glyphs all count correctly; 5 is the threshold M8b used) …
     static let expandShowLines = 5
-    /// … and only leaves below this one. One line of dead band: the line count is estimated from
-    /// the character count and moves by one either way around the threshold, and every toggle
-    /// changes the field's first-line reserve (H3 §2).
+    /// … and only leaves below this one. One line of dead band: the control's own reserve narrows
+    /// the text column, and a re-wrap at the threshold must not make it flicker. A narrower column
+    /// can only add lines (so appearing cannot fall to this threshold) and a wider one can only
+    /// remove them (so disappearing cannot climb back above `expandShowLines`) (H3 §2).
     static let expandHideLines = expandShowLines - 1
 }
 #endif

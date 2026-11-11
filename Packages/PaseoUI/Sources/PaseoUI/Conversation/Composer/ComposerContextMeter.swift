@@ -100,11 +100,11 @@ struct ComposerContextMeterFace: View, Equatable {
         return Palette.ink
     }
 
-    /// "Context window, 42 percent used" / "Context window, no usage yet" — the same shape as
-    /// upstream's `contextWindow.accessibility` / `contextWindow.accessibilityNoData` (en.ts).
+    /// Upstream `en.ts`, verbatim: `contextWindow.accessibility` (“Context window {{percentage}}%
+    /// used”, :2197) and `contextWindow.accessibilityNoData` (:2192).
     private var accessibilityLabel: String {
-        guard let percent = reading.percent else { return "Context window, no usage yet" }
-        return "Context window, \(percent) percent used"
+        guard let percent = reading.percent else { return "Context window: No context data" }
+        return "Context window \(percent)% used"
     }
 }
 #endif
