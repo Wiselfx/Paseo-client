@@ -230,6 +230,11 @@ struct TranscriptJump: Equatable {
 
     /// An inline prose image the reader tapped, for the full-screen viewer (`ChatSheets`).
     var inlineImage: InlineProseImage?
+    /// The artifact on the full-screen page (`ChatSheets`). Setting it raises
+    /// `artifactPageOpen`, which yields the transcript's pooled web views to the page.
+    var artifactDocument: ArtifactDocument? {
+        didSet { richActions.artifactPageOpen = artifactDocument != nil }
+    }
 
     /// The shell's toast center, injected by `ChatScreen` (`@Environment(\.toast)`).
     var toastCenter: ToastCenter?
@@ -307,6 +312,9 @@ struct TranscriptJump: Equatable {
         richActions.daemonWorkspaceID = store.agent?.workspaceId
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
+        }
+        richActions.openArtifact = { [weak self] document in
+            self?.artifactDocument = document
         }
         richActions.addImageToChat = { [weak self] fileName, data in
             guard let self else { return }

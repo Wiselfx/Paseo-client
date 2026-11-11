@@ -45,6 +45,7 @@ extension RichContentBlock {
         case .localFileLink: "file"
         case .rawSVG: "svg"
         case .visualize: "visualize"
+        case .mermaid: "mermaid"
         case .mapCard: "map"
         }
     }

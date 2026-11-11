@@ -169,6 +169,7 @@ import Testing
             case .localFileLink: kind = "localFileLink"
             case .rawSVG: kind = "rawSVG"
             case .visualize: kind = "visualize"
+            case .mermaid: kind = "mermaid"
             case .mapCard: kind = "mapCard"
             }
             return "\(kind):\(source[block.range])"

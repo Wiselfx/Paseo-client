@@ -701,9 +701,9 @@ import Testing
         guard case .visualize = blocks[0] else { Issue.record(); return }
     }
 
-    /// §2/§1.8 — mermaid and other fences we don't host produce nothing.
+    /// §2/§1.8 — fences we don't host produce nothing. (Mermaid moved out: G4 detects
+    /// closed ```mermaid fences; see MermaidDetectorTests.)
     @Test func otherFencesYieldNothing() {
-        #expect(detected("```mermaid\ngraph TD; A-->B\n```").isEmpty)
         #expect(detected("```yaml\nx: https://example.com/a.png\n```").isEmpty)
     }
 

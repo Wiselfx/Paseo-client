@@ -40,6 +40,11 @@ final class RichActions {
         UIPasteboard.general.image = image
         Haptics.light()
     }
+    /// Opens an artifact full screen (G4/G5). No-op until the host sets it.
+    var openArtifact: (ArtifactDocument) -> Void = { _ in }
+    /// True while the artifact page covers the transcript (G4/G5): web cards yield
+    /// their pooled slots and fall back to snapshots.
+    var artifactPageOpen = false
     /// Adds an image to the composer tray (G3): the file name plus JPEG bytes, through the
     /// existing attachment path. No-op until the host sets it.
     var addImageToChat: (String, Data) -> Void = { _, _ in }

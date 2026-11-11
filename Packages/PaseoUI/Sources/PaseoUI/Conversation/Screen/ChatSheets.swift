@@ -43,6 +43,7 @@ struct ChatSheets: ViewModifier {
     @Bindable var store: ConversationStore
     let session: HostSession
     @Bindable var controller: ChatController
+    @Namespace private var artifactZoom
 
     func body(content: Content) -> some View {
         content
@@ -57,6 +58,14 @@ struct ChatSheets: ViewModifier {
             }
             .fullScreenCover(item: $controller.inlineImage) { item in
                 InlineProseImageViewer(item: item) { controller.inlineImage = nil }
+            }
+            .environment(\.artifactZoomNamespace, artifactZoom)
+            .fullScreenCover(item: $controller.artifactDocument) { document in
+                ArtifactPage(
+                    document: document,
+                    sourceID: document.id,
+                    namespace: artifactZoom,
+                    onClose: { controller.artifactDocument = nil })
             }
             .confirmationDialog(
                 controller.messageActionTitle,

@@ -1,0 +1,14 @@
+Mermaid runtime, bundled offline (G4, decision D2).
+
+Version: 11.16.0 (pinned; matches the upstream reference's ^11.16.0)
+Source:  https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js
+SHA-256: 74d7c46dabca328c2294733910a8aa1ed0c37451776e8d5295da38a2b758fb9b
+Size:    ~3.5 MB
+Licence: MIT (LICENSE-MIT.txt in this directory), copyright Knut Sveidqvist.
+
+Used by Conversation/Prose/Media/MermaidRenderer.swift: the script is inlined into
+a single offline render document (CSP: no network) and run in the shared offscreen
+web view. The transcript shows only the snapshot; the live view per diagram comes
+from the artifact page. To upgrade: replace mermaid.min.js, update the version and
+hash here, and re-verify the render contract (MermaidDetectorTests + a device pass
+over flowchart, sequence, class and gantt samples in light and dark).

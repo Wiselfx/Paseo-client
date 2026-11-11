@@ -28,6 +28,8 @@ struct ClaudeRichBlockView: View {
             RichPathChip(path: path, glyph: "doc.text")
         case .rawSVG(let source, _):
             RichSVGCard(code: source)
+        case .mermaid(let source, _):
+            MermaidCard(code: source)
         case .visualize(let code, _):
             RichWebCard(code: code)
         case .mapCard(let reference, _):
@@ -1406,6 +1408,215 @@ struct RichPathChip: View {
     }
 }
 
+/// A closed ` ```mermaid ` fence (C9): the diagram rendered once, offscreen, into a cached
+/// image; the transcript shows only the image, never a live web view per diagram (§1.6.1).
+/// A streaming fence never reaches this card — the detector keeps it a code block.
+///
+/// Box: the cached true ratio, else 4:3 until the render lands (one animated settle, then
+/// never again for that source). Failures keep the box and show the source as code plus
+/// the renderer's error. Tap opens the live vector diagram on the artifact page.
+struct MermaidCard: View {
+    let code: String
+
+    @State private var image: UIImage?
+    @State private var aspectRatio: CGFloat?
+    @State private var svg: String?
+    @State private var errorMessage: String?
+    @State private var showSource = false
+    @State private var width: CGFloat = 0
+    @Environment(\.artifactZoomNamespace) private var artifactZoom
+    @Environment(\.richActions) private var richActions
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.richViewportHeight) private var viewportHeight
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var dark: Bool { colorScheme == .dark }
+
+    /// Content identity: source plus scheme. The snapshot key adds the layout width;
+    /// the shape (one settle per source, forever) does not.
+    private var shapeKey: String { "mermaid:\(code.hashValue)" }
+
+    private var renderKey: String? {
+        guard width > 1 else { return nil }
+        return "\(shapeKey)|\(Int(width.rounded()))|\(dark ? "d" : "l")"
+    }
+
+    /// The ratio the box reserves: the diagram's own when known, else the 4:3 guess.
+    private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
+
+    private var heightCap: CGFloat { viewportHeight * 0.6 }
+
+    private var viewerSourceID: String { shapeKey }
+
+    private var viewerDocument: ArtifactDocument {
+        ArtifactDocument(
+            kind: .mermaid(source: code, svg: svg, snapshot: image),
+            shareImage: image)
+    }
+
+    var body: some View {
+        PaseoCard(content:
+            VStack(alignment: .leading, spacing: 10) {
+                header
+                if showSource {
+                    source
+                } else if let errorMessage {
+                    errorStage(message: errorMessage)
+                } else {
+                    diagram
+                }
+            })
+        .background { widthReader }
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: aspectRatio)
+        .task(id: renderKey) { await render() }
+    }
+
+    private var header: some View {
+        HStack {
+            Text("Diagram")
+                .font(.paseo(.caption, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            Button {
+                showSource.toggle()
+            } label: {
+                Text(showSource ? "View diagram" : "View source")
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showSource ? "View diagram" : "View source")
+        }
+    }
+
+    @ViewBuilder private var diagram: some View {
+        if let image {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .contentShape(.rect)
+                .modifier(ArtifactZoomSource(id: viewerSourceID, namespace: artifactZoom))
+                .onTapGesture { openViewer() }
+                .accessibilityLabel("Diagram, tap to open")
+                .accessibilityAddTraits(.isButton)
+                .paseoCardMenu(
+                    copyTitle: "Copy source",
+                    copyText: code,
+                    viewSourceTitle: "View source",
+                    onViewSource: { showSource.toggle() })
+        } else {
+            Rectangle()
+                .fill(Palette.codeSurface)
+                .frame(maxWidth: .infinity)
+                .frame(height: placeholderHeight)
+                .overlay { ProgressView().controlSize(.small).tint(Palette.secondaryInk) }
+                .accessibilityLabel("Loading diagram")
+        }
+    }
+
+    /// The size the drawing will take, from its own ratio, so the card does not jump when
+    /// the snapshot arrives. Before layout, assume a phone-width card.
+    private var placeholderHeight: CGFloat {
+        let assumedWidth = width > 1 ? width : 350
+        return min(assumedWidth / reservedAspect, heightCap)
+    }
+
+    /// The card's inner width, for rendering at the real size instead of a guess.
+    private var widthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { width = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
+        }
+    }
+
+    /// Syntax errors show the source as code, plus the renderer's message.
+    private func errorStage(message: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Couldn't render diagram")
+                .font(.paseo(.caption, weight: .medium))
+                .foregroundStyle(Palette.failureInk)
+            source
+            Text(message)
+                .font(.paseo(.codeCaption))
+                .foregroundStyle(Palette.secondaryInk)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Diagram could not be rendered. \(message)")
+    }
+
+    private var source: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView {
+                Text(code)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.ink)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 260)
+            HStack {
+                Spacer(minLength: 0)
+                Button {
+                    if let richActions {
+                        richActions.copyText(code)
+                    } else {
+                        UIPasteboard.general.string = code
+                        Haptics.light()
+                    }
+                } label: {
+                    Label("Copy source", systemImage: "doc.on.doc")
+                        .font(.paseo(.caption, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func openViewer() {
+        if let richActions {
+            richActions.openArtifact(viewerDocument)
+        }
+    }
+
+    /// One render per (content, width, scheme); hits draw from cache with no fade.
+    @MainActor
+    private func render() async {
+        guard let key = renderKey else { return }
+        if let cached = RichSnapshotCache.image(for: key) {
+            image = cached
+            return
+        }
+        if aspectRatio == nil,
+            let aspect = MediaMetadataCache.aspectRatio(for: shapeKey)
+        {
+            aspectRatio = aspect
+        }
+        let outcome = await MermaidRenderQueue.shared.render(
+            source: code, dark: dark, slotWidth: width)
+        guard !Task.isCancelled else { return }
+        switch outcome {
+        case .diagram(let rendered, let aspect, let renderedSVG):
+            RichSnapshotCache.store(rendered, for: key)
+            MediaMetadataCache.remember(aspect, for: shapeKey)
+            image = rendered
+            aspectRatio = aspect
+            svg = renderedSVG
+        case .error(let message):
+            errorMessage = message
+        case .unavailable:
+            errorMessage = "The diagram renderer is unavailable."
+        }
+    }
+}
+
 // MARK: - The visualize fence (§1.6, §2)
 
 /// A ` ```visualize ` block: a sandboxed WKWebView sized to its content, with a "View source"
@@ -1434,6 +1645,7 @@ struct RichWebCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.richActions) private var richActions
 
     /// A page that wants more than this gets the "Open" affordance instead.
     private var heightCap: CGFloat { viewportHeight * 0.7 }
@@ -1443,7 +1655,10 @@ struct RichWebCard: View {
         RichHTMLDocument.visualize(code: code, dark: colorScheme == .dark)
     }
 
-    private var showsLive: Bool { isVisible && holdsSlot }
+    /// The artifact page outranks transcript slots (G4/G5): while it is open the card
+    /// shows its snapshot, never a live view.
+    private var pageOpen: Bool { richActions?.artifactPageOpen ?? false }
+    private var showsLive: Bool { isVisible && holdsSlot && !pageOpen }
 
     var body: some View {
         PaseoCard(content:
@@ -1462,6 +1677,14 @@ struct RichWebCard: View {
         .onAppear { setVisible(true) }
         .onDisappear { setVisible(false) }
         .onScrollVisibilityChange(threshold: 0.1) { visible in setVisible(visible) }
+        .onChange(of: pageOpen) { _, open in
+            // The page outranks this slot: yield it with a snapshot, reclaim on close.
+            if open {
+                if holdsSlot { releaseSlot() }
+            } else if isVisible {
+                claimSlot()
+            }
+        }
         .task(id: snapshotKey) { await captureSnapshotIfNeeded() }
         .sheet(isPresented: $showFullScreen) {
             SheetScaffold("Visualization", detents: .large) {
@@ -1581,24 +1804,34 @@ struct RichWebCard: View {
         guard isVisible != visible else { return }
         isVisible = visible
         if visible {
-            if !holdsSlot { holdsSlot = LiveWebViewBudget.shared.claim() }
+            claimSlot()
         } else if holdsSlot {
-            let html = document
-            let renderWidth = max(width, 1)
-            let dark = colorScheme == .dark
-            let height = contentHeight
-            holdsSlot = false
-            LiveWebViewBudget.shared.release()
-            Task { @MainActor in
-                let key = RichSnapshotCache.key(html: html, width: renderWidth, dark: dark)
-                if RichSnapshotCache.image(for: key) != nil { return }
-                let rendered = await RichSnapshotQueue.shared.snapshot(
-                    html: html, width: renderWidth, scale: displayScale)
-                guard let rendered else { return }
-                RichSnapshotCache.store(rendered, for: key)
-                snapshot = rendered
-                contentHeight = max(height, min(rendered.size.height, heightCap))
-            }
+            releaseSlot()
+        }
+    }
+
+    @MainActor
+    private func claimSlot() {
+        if !holdsSlot, !pageOpen { holdsSlot = WebViewSlotPool.shared.claim() }
+    }
+
+    @MainActor
+    private func releaseSlot() {
+        let html = document
+        let renderWidth = max(width, 1)
+        let dark = colorScheme == .dark
+        let height = contentHeight
+        holdsSlot = false
+        WebViewSlotPool.shared.release()
+        Task { @MainActor in
+            let key = RichSnapshotCache.key(html: html, width: renderWidth, dark: dark)
+            if RichSnapshotCache.image(for: key) != nil { return }
+            let rendered = await RichSnapshotQueue.shared.snapshot(
+                html: html, width: renderWidth, scale: displayScale)
+            guard let rendered else { return }
+            RichSnapshotCache.store(rendered, for: key)
+            snapshot = rendered
+            contentHeight = max(height, min(rendered.size.height, heightCap))
         }
     }
 

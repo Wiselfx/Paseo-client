@@ -234,6 +234,31 @@ enum RichHTMLDocument {
         """
     }
 
+    /// A rendered artifact SVG (mermaid output, G4/G5): the same static guarantees as the
+    /// raw block, but sized for a full-screen page instead of a card — the drawing fills
+    /// the viewport width at its intrinsic ratio and the page scrolls what exceeds it.
+    /// No height reporter: the page is not sized to its content.
+    static func artifactSVG(source: String, dark: Bool) -> String {
+        let scheme = dark ? "dark" : "light"
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+        <style>:root { color-scheme: \(scheme); }
+        html, body { margin: 0; padding: 0; background: transparent; }
+        svg { width: 100%; height: auto; display: block; }
+        </style>
+        </head>
+        <body>
+        \(source)
+        </body>
+        </html>
+        """
+    }
+
     /// A raw `<svg>…</svg>` block, inlined. Scripts never run: the CSP has no `script-src`,
     /// so inline SVG event handlers and `<script>` children are all blocked.
     static func rawSVG(source: String, dark: Bool) -> String {
