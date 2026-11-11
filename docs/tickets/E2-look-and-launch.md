@@ -92,8 +92,7 @@ Dark, light and pure black all stay. Only the accent changes.
    - Under the appearance picker, add an "Accent" row with a two-option segmented control:
      "Claude", "Paseo".
    - These three strings are approved new copy: "Accent", "Claude", "Paseo".
-   - The switch animates the send button colour live (it's on screen behind Settings? No: Settings
-     is a page. A live switch is enough).
+   - A switch applies live (the trait redraws). No restart, no rebuild of the shell.
 
 ## 3. Launch: one screen, not two, and no stray sidebar button
 
