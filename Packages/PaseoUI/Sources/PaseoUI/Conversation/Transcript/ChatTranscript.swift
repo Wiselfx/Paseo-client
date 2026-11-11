@@ -8,8 +8,14 @@ import UIKit
 /// **Reads:** `store.turns`, `store.pendingPermissions`, `store.phase`, `store.backgroundWork`,
 /// `store.isLoadingOlder`, `store.promptOutline` (rail + reading position), `controller.find`
 /// (open/seq/flash), `controller.isFollowing` / `anchoringToAnswer`, `controller.outlineItems`
-/// (rail), `controller.landingTurnId`. It reads `store.timeline` only for the pending-row
+/// (rail), `controller.landingTurnId`, `controller.endScrollRequest` / `jumpToEndRequest` (the
+/// composer's wish and the button's order). It reads `store.timeline` only for the pending-row
 /// signature (one dictionary-free pass over the ids while a send is pending).
+///
+/// **Writes:** `controller.isFollowing`, `controller.anchoringToAnswer`, `controller.showsBackToEnd`
+/// and `controller.headerHidden`, each only when its boundary flips — never per scroll frame. The
+/// signed scroll travel and the top visible turn stay in `TranscriptScrollTrack`, which nothing
+/// observes.
 struct TranscriptView: View {
     @Bindable var store: ConversationStore
     let controller: ChatController
@@ -31,7 +37,6 @@ struct TranscriptView: View {
     /// The reading-position report's throttle while scrolling.
     static let readingReportInterval: TimeInterval = 0.1
 
-    @State private var scrollProxy: ScrollViewProxy?
     /// U3: scroll position, used to undo the jump a prepended history page would cause, and to
     /// lead a long jump.
     @State private var scrollPosition = ScrollPosition()
@@ -73,6 +78,11 @@ struct TranscriptView: View {
         content
             // A turn arrived. If you just sent it, the runway opens and it glides to the top.
             .onChange(of: store.turns.last?.id) { _, id in beginRunway(for: id) }
+            // The anchor's job is done. At the anchor this trims nothing; if the reader scrolled
+            // away while the answer ran, the idle rule already removed the room below the screen.
+            .onChange(of: controller.anchoringToAnswer) { _, anchoring in
+                if !anchoring { trimRunwayIfNeeded() }
+            }
             .onAppear { shellDrawer?.trailingEdgeReserved = turnNavVisible }
             .onChange(of: turnNavVisible) { _, shown in
                 shellDrawer?.trailingEdgeReserved = shown
@@ -165,7 +175,7 @@ struct TranscriptView: View {
                 }
                 .overlay(alignment: .trailing) { outlineRail }
                 .onChange(of: controller.find.isOpen) { _, isOpen in
-                    if isOpen { restoreFindAnchor(proxy: proxy) } else { restoreScroll(proxy: proxy) }
+                    if isOpen { restoreFindAnchor() } else { restoreScroll(proxy: proxy) }
                 }
                 .onChange(of: controller.find.jump) { _, jump in
                     guard let jump else { return }
@@ -178,14 +188,14 @@ struct TranscriptView: View {
                     jumpToTurn(jump.id, proxy: proxy)
                 }
                 .onChange(of: controller.endScrollRequest) { _, _ in
+                    endScrollRequested()
+                }
+                .onChange(of: controller.jumpToEndRequest) { _, _ in
                     withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
                         scrollPosition.scrollTo(edge: .bottom)
                     }
                 }
-                .onAppear {
-                    scrollProxy = proxy
-                    reportReadingPosition()
-                }
+                .onAppear { reportReadingPosition() }
                 .onScrollPhaseChange { _, phase in
                     scrollTrack.phase = phase
                     // Only the boundary invalidates the body: the size-change anchor may move.
@@ -199,10 +209,9 @@ struct TranscriptView: View {
                     case .interacting, .tracking, .decelerating, .animating:
                         revealTurnRail()
                     case .idle:
-                        reportReadingPosition()
                         // A flick that reached the end settles with no further geometry change;
-                        // the last scroll frame may still have been outside the slack.
-                        followIfAtEnd()
+                        // every chrome decision belongs to this edge, never to a frame.
+                        scrollSettled()
                     @unknown default:
                         reportReadingPosition()
                     }
@@ -219,8 +228,8 @@ struct TranscriptView: View {
                         viewportHeight: geometry.bounds.height,
                         visibleHeight: geometry.bounds.height - geometry.contentInsets.top
                             - geometry.contentInsets.bottom)
-                } action: { _, metrics in
-                    handleScroll(metrics, proxy: proxy)
+                } action: { previous, metrics in
+                    handleScroll(metrics, from: previous, proxy: proxy)
                 }
                 .environment(\.claudeProcessCap, min(400, viewport * 0.5))
                 // Rich cards cap media at 60 %/70 % of the transcript's own height (E3b).
@@ -294,11 +303,13 @@ struct TranscriptView: View {
             } action: { minY in
                 scrollTrack.turnOffsetChanged(turn.id, offset: minY)
             }
-            // The send runway is measured off the tail turn alone (D1 §2).
+            // The send runway is measured off the tail turn alone (D1 §2). Every turn's height is
+            // recorded in the track: the tail can report before the runway is opened for it and
+            // the ordering must not decide the runway's first frame (H2 §1).
             .onGeometryChange(for: CGFloat.self) { geometry in
                 geometry.size.height
             } action: { height in
-                guard turn.id == lastId else { return }
+                scrollTrack.turnHeightChanged(turn.id, height: height)
                 updateRunway(turnId: turn.id, height: height)
             }
         }
@@ -348,17 +359,20 @@ struct TranscriptView: View {
 
     // MARK: Scroll
 
-    private func handleScroll(_ metrics: ScrollFollowMetrics, proxy: ScrollViewProxy) {
+    private func handleScroll(
+        _ metrics: ScrollFollowMetrics, from previous: ScrollFollowMetrics, proxy: ScrollViewProxy
+    ) {
         if transcriptHeight != metrics.viewportHeight {
             transcriptHeight = metrics.viewportHeight
         }
         scrollTrack.contentOffset = metrics.offsetY
         scrollTrack.distanceFromBottom = metrics.distanceFromBottom
+        scrollTrack.contentHeight = metrics.contentHeight
         if scrollTrack.visibleHeight != metrics.visibleHeight {
             scrollTrack.visibleHeight = metrics.visibleHeight
-            resizeRunway()
+            runwayViewportChanged()
         }
-        openRunwayIfPossible()
+        openRunwayIfPossible(proxy: proxy)
         // The second half of a glide-lead: the instant jump has landed, so the last stretch
         // glides (DSH `turn-nav.ts:412-474`).
         if let glide = pendingGlide {
@@ -390,36 +404,44 @@ struct TranscriptView: View {
             revealTurnRail()
         }
         loadOlderIfNeeded(metrics)
-        updateFollow(metrics)
-        updateBackToEnd(metrics)
+        updateHeaderReveal(metrics, from: previous)
+        releaseFollowWhileDragging(metrics)
+        // "Back to the end" flips only when the content itself moved. An inset-only frame is what
+        // the keyboard animates, and it must never flash the button (H2 §2).
+        if backToEndMayFlip,
+            metrics.offsetY != previous.offsetY || metrics.contentHeight != previous.contentHeight
+        {
+            decideBackToEnd()
+        }
     }
 
-    /// The follow state machine (D1 §3). The finger owns the transcript: follow may only turn
-    /// off while you drag away from the end, and may only turn on from a settled, idle scroll
-    /// that sits within `followSlack` of the end. Nothing here changes at a phase boundary, so a
-    /// flick decelerates into the end with no snap.
-    private func updateFollow(_ metrics: ScrollFollowMetrics) {
-        switch scrollTrack.phase {
-        case .interacting:
-            // Dragged away from the end: release the tail, and a just-sent anchor with it.
-            guard metrics.distanceFromBottom > Self.followSlack else { return }
-            if controller.isFollowing { controller.isFollowing = false }
-            if controller.anchoringToAnswer { controller.anchoringToAnswer = false }
-        case .idle:
-            if controller.anchoringToAnswer {
-                // A runway that is gone means the answer fills the screen: the tail takes over.
-                guard runway.measured, runway.height <= 0,
-                    metrics.distanceFromBottom <= Self.followSlack
-                else { return }
-                controller.anchoringToAnswer = false
-                controller.isFollowing = true
-            } else {
-                followIfAtEnd()
-            }
-        default:
-            // Tracking, decelerating, animating: never move the follow state mid-motion.
-            break
-        }
+    /// The scroll came to rest: the one edge where chrome state is allowed to change. The follow,
+    /// button and anchor decisions run on the distance the gesture left behind, before the trim
+    /// below changes the range.
+    private func scrollSettled() {
+        reportReadingPosition()
+        handOverAnchorIfFilled()
+        followIfAtEnd()
+        decideBackToEnd()
+        closeRunwayAtRest()
+    }
+
+    /// The follow state machine (D1 §3). While the finger is down it may only turn follow off,
+    /// when the reader drags away from the end; turning it back on belongs to the settle.
+    private func releaseFollowWhileDragging(_ metrics: ScrollFollowMetrics) {
+        guard case .interacting = scrollTrack.phase else { return }
+        guard metrics.distanceFromBottom > Self.followSlack else { return }
+        if controller.isFollowing { controller.isFollowing = false }
+        if controller.anchoringToAnswer { controller.anchoringToAnswer = false }
+    }
+
+    /// A runway that is gone means the answer fills the screen: the tail takes over.
+    private func handOverAnchorIfFilled() {
+        guard controller.anchoringToAnswer, runway.measured, runway.height <= 0,
+            scrollTrack.distanceFromBottom <= Self.followSlack
+        else { return }
+        controller.anchoringToAnswer = false
+        controller.isFollowing = true
     }
 
     /// Tail-follow turns on only from a settled scroll at the end.
@@ -430,68 +452,167 @@ struct TranscriptView: View {
         controller.isFollowing = true
     }
 
-    /// "Back to the end" is offered only once the reader is more than a screen from the end.
-    private func updateBackToEnd(_ metrics: ScrollFollowMetrics) {
-        let shows = !controller.isFollowing && metrics.distanceFromBottom > metrics.visibleHeight
+    /// "Back to the end" is offered only once the reader is more than a screen from the end. The
+    /// screen is the keyboard-independent viewport: the sliver above the keyboard is not one, so
+    /// focusing the composer can never flash the button (H2 §2).
+    private func decideBackToEnd() {
+        let screen = stableViewportHeight > 0 ? stableViewportHeight : scrollTrack.visibleHeight
+        let shows = !controller.isFollowing && scrollTrack.distanceFromBottom > max(screen, 1)
         if controller.showsBackToEnd != shows { controller.showsBackToEnd = shows }
+    }
+
+    /// The button's visibility is decided on user motion and at rest, never while the scroll view
+    /// animates (a programmatic glide) and never on an inset-only frame (the keyboard).
+    private var backToEndMayFlip: Bool {
+        switch scrollTrack.phase {
+        case .interacting, .tracking, .idle: return true
+        case .decelerating, .animating: return false
+        @unknown default: return false
+        }
+    }
+
+    /// Focusing the composer is a wish to be at the end, not an order (H2 §2, iMessage): within a
+    /// real screen the transcript glides there and the last line keeps resting on the composer;
+    /// further up the reader's place wins and the button offers the way back.
+    private func endScrollRequested() {
+        guard scrollTrack.distanceFromBottom > Self.followSlack else { return }
+        let screen = stableViewportHeight > 0 ? stableViewportHeight : scrollTrack.visibleHeight
+        guard scrollTrack.distanceFromBottom <= screen else {
+            if controller.isFollowing { controller.isFollowing = false }
+            decideBackToEnd()
+            return
+        }
+        withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
+            scrollPosition.scrollTo(edge: .bottom)
+        }
+    }
+
+    // MARK: Header
+
+    /// The header's auto-hide rule (H2 §3). Per frame this is arithmetic on the track's plain
+    /// state machine: SwiftUI hears one `Bool` write when the bar flips. Only user phases
+    /// accumulate, so a send glide, a back-to-end or a jump never moves the header.
+    private func updateHeaderReveal(
+        _ metrics: ScrollFollowMetrics, from previous: ScrollFollowMetrics
+    ) {
+        let canScroll = metrics.contentHeight > metrics.visibleHeight + 1
+        switch scrollTrack.phase {
+        case .interacting, .tracking, .decelerating:
+            let viewport = stableViewportHeight > 0 ? stableViewportHeight : metrics.visibleHeight
+            let changed = scrollTrack.headerReveal.scroll(
+                by: metrics.offsetY - previous.offsetY,
+                revealDistance: TranscriptHeader.revealDistance(viewport: viewport),
+                hideDistance: TranscriptHeader.hideDistance,
+                roomAbove: metrics.distanceFromTop,
+                roomBelow: metrics.distanceFromBottom,
+                canScroll: canScroll)
+            if changed { publishHeaderVisibility() }
+        case .idle:
+            // A conversation that fits the screen keeps its chrome, whatever it last did.
+            if !canScroll { revealHeader() }
+        default:
+            break
+        }
+    }
+
+    private func publishHeaderVisibility() {
+        let hidden = scrollTrack.headerReveal.isHidden
+        if controller.headerHidden != hidden { controller.headerHidden = hidden }
+    }
+
+    /// Shows the header now: a send, a jump to an older turn, or a conversation that stopped
+    /// scrolling. One `Bool` write, only when it actually changes.
+    private func revealHeader() {
+        guard scrollTrack.headerReveal.reveal() else { return }
+        publishHeaderVisibility()
     }
 
     // MARK: Runway
 
-    /// A turn arrived. If it is the message you just sent, the runway opens and the glide to the
-    /// top is owed from here; the runway is what makes `.top` reachable (D1 §2).
+    /// A turn arrived. If it is the message you just sent, the runway opens; the runway is what
+    /// makes `.top` reachable (D1 §2). The tail turn's height may already have been reported
+    /// before this ran (H2 §1), so it comes from the track.
     private func beginRunway(for turnId: String?) {
         guard let turnId, controller.anchoringToAnswer,
             let turn = store.turns.last, turn.userMessage != nil
         else { return }
-        runway = SendRunway(
-            turnId: turnId, height: scrollTrack.visibleHeight, pendingGlide: true)
-        openRunwayIfPossible()
+        runway.open(
+            turnId: turnId, viewport: scrollTrack.visibleHeight,
+            turnHeight: scrollTrack.turnHeight(of: turnId), slack: Self.runwaySlack)
+        // The landing position is *under the header*: a send is an explicit return to live
+        // content, so the bar is there for it, like a freshly opened conversation (H2 §3).
+        revealHeader()
     }
 
-    /// The glide is owed until there is a viewport to measure against; the first message of a new
-    /// conversation arrives before its scroll view has reported one. Generous to start with, so
-    /// `.top` is reachable whatever the bubble's height turns out to be.
-    private func openRunwayIfPossible() {
-        guard runway.pendingGlide, let turnId = runway.turnId,
+    /// The glide the open owes, granted on the first geometry pass that has both a viewport and a
+    /// proxy (the first message of a conversation arrives before its scroll view reports one).
+    /// The runway's height is written in this same update, ahead of the proxy's scroll request, so
+    /// the scroll resolves against the grown content and needs no main-actor hop.
+    private func openRunwayIfPossible(proxy: ScrollViewProxy) {
+        guard runway.owesGlide, let turnId = runway.turnId,
             scrollTrack.visibleHeight > 0, controller.anchoringToAnswer
         else { return }
-        runway.height = scrollTrack.visibleHeight
-        runway.pendingGlide = false
-        // One main-actor hop, so the runway is part of the layout the scroll resolves against.
-        Task { @MainActor in
-            guard controller.anchoringToAnswer, let proxy = scrollProxy else { return }
-            withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
-                proxy.scrollTo(turnId, anchor: .top)
-            }
+        var next = runway
+        next.grant(viewport: scrollTrack.visibleHeight, slack: Self.runwaySlack)
+        runway = next
+        withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
+            proxy.scrollTo(turnId, anchor: .top)
         }
     }
 
-    /// The tail turn's height moved: the runway follows it, and once the answer fills the screen
-    /// the anchor hands over to the follow rules.
+    /// The tail turn's height moved: the runway follows it downhill, and once the answer fills the
+    /// screen the anchor hands over to the follow rules.
     private func updateRunway(turnId: String, height: CGFloat) {
         guard runway.turnId == turnId else { return }
-        let capacity = scrollTrack.visibleHeight - Self.runwaySlack
-        let filled = runway.measured && runway.turnHeight < capacity && height >= capacity
-        runway.turnHeight = height
-        runway.measured = true
-        runway.height = runwayHeight(for: height)
-        if filled, controller.anchoringToAnswer {
-            controller.anchoringToAnswer = false
-            controller.isFollowing = true
+        var next = runway
+        let filled = next.measure(
+            turnHeight: height, viewport: scrollTrack.visibleHeight, slack: Self.runwaySlack)
+        if next != runway { runway = next }
+        guard filled, controller.anchoringToAnswer else { return }
+        controller.anchoringToAnswer = false
+        controller.isFollowing = true
+    }
+
+    /// The viewport changed (the keyboard, mostly, or rotation): the tail turn keeps its bottom on
+    /// the visible line, and the runway may only shrink (H2 §1).
+    private func runwayViewportChanged() {
+        guard runway.measured, runway.height > 0 else { return }
+        var next = runway
+        guard next.viewportChanged(viewport: scrollTrack.visibleHeight, slack: Self.runwaySlack)
+        else { return }
+        runway = next
+    }
+
+    /// The runway's close at rest, in two steps (H2 §1). First the part below the visible bottom:
+    /// changing off-screen room moves nothing, so this trim can never jump. Then, if what is left
+    /// is a conversation that fits the screen, the rest goes too — a short answer's room is visible
+    /// but no scroll can reach it, and holding it would keep a blank screen under the last line.
+    /// The content settles onto the composer, which is where a short conversation lives.
+    private func closeRunwayAtRest() {
+        guard runway.height > 0 else { return }
+        let contentWithoutRunway = scrollTrack.contentHeight - runway.height
+        trimRunwayIfNeeded()
+        guard runway.height > 0, !controller.anchoringToAnswer,
+            contentWithoutRunway <= scrollTrack.visibleHeight + 1
+        else { return }
+        var next = runway
+        guard next.collapse() else { return }
+        withAnimation(Motion.settle.resolved(reduceMotion: reduceMotion)) {
+            runway = next
+            // Same update as the size change: the tail growth anchor sees the bottom and the
+            // short conversation comes to rest on the composer.
+            if !controller.isFollowing { controller.isFollowing = true }
         }
     }
 
-    /// The viewport changed (the keyboard, mostly): the runway keeps the tail turn's bottom on
-    /// the visible line.
-    private func resizeRunway() {
-        guard runway.measured else { return }
-        runway.height = runwayHeight(for: runway.turnHeight)
-    }
-
-    /// The empty room under the tail turn, from its top under the header to the composer.
-    private func runwayHeight(for turnHeight: CGFloat) -> CGFloat {
-        max(0, scrollTrack.visibleHeight - turnHeight - Self.runwaySlack)
+    /// Removes the part of the runway that sits below the visible bottom. Changing off-screen
+    /// room moves nothing the reader is looking at, so this is the one trim that can never jump:
+    /// it is how the send runway loses the room the reader has scrolled past (H2 §1).
+    private func trimRunwayIfNeeded() {
+        guard runway.height > 0 else { return }
+        var next = runway
+        guard next.trim(toDistanceFromBottom: max(0, scrollTrack.distanceFromBottom)) else { return }
+        runway = next
     }
 
     /// Where the viewport sat when an older page was requested, so the prepend can be undone.
@@ -574,7 +695,7 @@ struct TranscriptView: View {
 
     /// Find opened mid-conversation: keep the reader where they were (anchoring to the topmost
     /// mounted turn), so the bar appearing does not move the conversation.
-    private func restoreFindAnchor(proxy: ScrollViewProxy) {
+    private func restoreFindAnchor() {
         controller.find.anchor = scrollTrack.lastTrackedTurn
     }
 
@@ -599,6 +720,11 @@ struct TranscriptView: View {
     private func jumpToTurn(_ id: String, proxy: ScrollViewProxy) {
         // Jumping backwards releases the tail-follow, like M7b.
         controller.isFollowing = false
+        // A jump back into the conversation is a deliberate move toward reading: the header
+        // comes back. Forward jumps never change it (H2 §3).
+        if let targetY = scrollTrack.offset(of: id), targetY < scrollTrack.contentOffset {
+            revealHeader()
+        }
         showLandingLine(for: id)
         guard !reduceMotion else {
             proxy.scrollTo(id, anchor: .top)
@@ -642,7 +768,7 @@ struct TranscriptView: View {
     /// only reports when it actually moved (finding #18).
     private func reportReadingPosition() {
         var seq = scrollTrack.topVisibleSeq
-        if seq == nil, controller.isFollowing { seq = controller.outlineItems.last?.seq }
+        if seq == nil, controller.isFollowing { seq = controller.lastPromptSeq }
         guard seq != scrollTrack.reportedReadingAnchor else { return }
         scrollTrack.reportedReadingAnchor = seq
         store.promptOutline.reportReadingPosition(anchorSeq: seq)
@@ -708,6 +834,8 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     var phase: ScrollPhase = .idle
     /// How far the content's end is below the visible bottom, from the last scroll frame.
     var distanceFromBottom: CGFloat = 0
+    /// The content's own height, from the last scroll frame; the runway's close at rest reads it.
+    var contentHeight: CGFloat = 0
     /// The space the bars leave for content, from the last scroll frame.
     var visibleHeight: CGFloat = 0
     /// The topmost mounted turn's prompt seq: the reading-position anchor, read O(1) per frame.
@@ -718,9 +846,13 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     var turnNavIdleDeadline: Date?
     /// The rail's one idle task; a scroll frame extends the deadline instead of restarting it.
     var turnNavIdleTask: Task<Void, Never>?
+    /// The header's reveal rule. The signed travel accumulates here, in plain memory, so a scroll
+    /// frame never invalidates a body; the controller hears only the flips (H2 §3).
+    var headerReveal = HeaderRevealState()
 
     private var turnSeqs: [String: Int] = [:]
     private var turnOffsets: [String: CGFloat] = [:]
+    private var turnHeights: [String: CGFloat] = [:]
     private var topVisibleTurnId: String?
 
     func turnAppeared(_ id: String, seq: Int?) {
@@ -733,10 +865,20 @@ final class TranscriptScrollTrack: @unchecked Sendable {
         }
     }
 
+    /// The turn's laid-out height. Recorded for every mounted turn: the tail can report before the
+    /// runway is opened for it, and the ordering must not decide the runway's first frame (H2 §1).
+    func turnHeightChanged(_ id: String, height: CGFloat) {
+        turnHeights[id] = height
+    }
+
+    /// The last height the turn reported; nil when it has not been laid out yet.
+    func turnHeight(of id: String) -> CGFloat? { turnHeights[id] }
+
     func turnDisappeared(_ id: String) {
         visibleTurnIds.remove(id)
         turnSeqs.removeValue(forKey: id)
         turnOffsets.removeValue(forKey: id)
+        turnHeights.removeValue(forKey: id)
         guard topVisibleTurnId == id else { return }
         topVisibleTurnId = nil
         topVisibleSeq = nil
@@ -766,21 +908,6 @@ final class TranscriptScrollTrack: @unchecked Sendable {
 
     /// The content offset of a mounted turn, for the jump lead. Nil when it was never laid out.
     func offset(of id: String) -> CGFloat? { turnOffsets[id] }
-}
-
-/// The send runway (D1 §2): the space under the turn you just sent that lets `.top` land under
-/// the header, and that the incoming answer eats as it grows.
-struct SendRunway: Equatable {
-    /// The turn the runway was opened for; nil before the first send of this conversation.
-    var turnId: String?
-    /// The space drawn under that turn.
-    var height: CGFloat = 0
-    /// That turn's last measured height.
-    var turnHeight: CGFloat = 0
-    /// True once that turn has been measured, so its first height is not read as growth.
-    var measured = false
-    /// The glide to `.top` is owed: it waits for a measured viewport.
-    var pendingGlide = false
 }
 
 /// "Back to the end": offered once you are more than a screen from the end (D1 §3). It fades and

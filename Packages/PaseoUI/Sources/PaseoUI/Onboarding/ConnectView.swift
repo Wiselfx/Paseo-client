@@ -26,6 +26,7 @@ public struct ConnectView: View {
 
     @State private var showAddForm: Bool
     @State private var showAdvanced = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var renameTarget: HostSwitchEntry?
     @State private var renameText = ""
     @State private var forgetTarget: HostSwitchEntry?
@@ -287,7 +288,12 @@ public struct ConnectView: View {
                 RowDivider()
                 Button {
                     Haptics.selection()
-                    withAnimation(Motion.disclosure.animation) { showAdvanced.toggle() }
+                    // Reduce Motion drops the disclosure animation, not the disclosure.
+                    if reduceMotion {
+                        showAdvanced.toggle()
+                    } else {
+                        withAnimation(Motion.disclosure.animation) { showAdvanced.toggle() }
+                    }
                 } label: {
                     HStack(spacing: 12) {
                         fieldSymbol("chevron.down.chevron.up")

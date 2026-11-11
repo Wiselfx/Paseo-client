@@ -174,8 +174,12 @@ struct TranscriptJump: Equatable {
     var isFollowing = true
     var anchoringToAnswer = false
     /// "Back to the end" is on screen. Set by the transcript from its distance from the end: it
-    /// flips only when that distance crosses a viewport, never per scroll frame (D1 §3).
+    /// flips only when that distance crosses a real screen, never per scroll frame (D1 §3, H2 §2).
     var showsBackToEnd = false
+    /// The header is out of the way while you read forward. The transcript owns the rule (its
+    /// scroll distance accumulates in a non-observed box) and writes this one `Bool` only when
+    /// the bar flips; only the top chrome reads it (H2 §3).
+    var headerHidden = false
     /// A jump the transcript still owes (`jumpToPrompt` records it here).
     var pendingJump: TranscriptJump?
 
@@ -1039,8 +1043,26 @@ struct TranscriptJump: Equatable {
         outlineItems.count >= ChatOutlineRail.minimumPrompts
     }
 
-    /// Bumped when something asks the transcript to glide to the end (composer focus).
+    /// The newest prompt's sequence, without building the outline. The reading-position report
+    /// runs during a scroll, so it must not map every turn into a list (R-1); this stops at the
+    /// first (newest) turn that carries a user message.
+    var lastPromptSeq: Int? {
+        if store.promptOutline.isSupported, let last = store.promptOutline.prompts.last {
+            return last.seq
+        }
+        for turn in store.turns.reversed() {
+            guard let row = turn.userMessage, case .userMessage = row.item else { continue }
+            return row.seqStart
+        }
+        return nil
+    }
+
+    /// Bumped when the composer focuses: a *wish* to be at the end. The transcript glides only
+    /// when the reader is within a screen of it; further up, the reading position wins and
+    /// "Back to the end" offers the way back (H2 §2).
     var endScrollRequest = 0
+    /// Bumped by "Back to the end": always goes, whatever the distance (H2 §2).
+    var jumpToEndRequest = 0
     /// Bumped when the transcript is tapped: the composer drops focus (it owns the field).
     var dismissKeyboardRequest = 0
 
@@ -1054,7 +1076,7 @@ struct TranscriptJump: Equatable {
         anchoringToAnswer = false
         isFollowing = true
         showsBackToEnd = false
-        requestEndScroll()
+        jumpToEndRequest += 1
     }
 
     func dismissKeyboard() {

@@ -50,6 +50,29 @@ enum SidebarMetrics {
     static let usageLineHeight: CGFloat = 20
 }
 
+/// The conversation header's auto-hide (H2 §3) and the wash that keeps a bubble from reading
+/// through the title. The reveal travel is a third of a real screen: the user's "scroll up a lot".
+enum TranscriptHeader {
+    /// Travel toward newer content that hides the bar: a short flick, so it gets out of the way
+    /// (upstream's own "scrolled away intentionally" distance is 24 px, `bottom-anchor-controller.ts`).
+    static let hideDistance: CGFloat = 24
+    /// Fraction of the keyboard-independent viewport you must pull toward older content to bring
+    /// the bar back. A third of a screen, per the user's "a lot"; never a per-frame threshold.
+    static let revealViewportFraction: CGFloat = 1.0 / 3.0
+    /// The wash behind the visible bar: opaque enough that prose cannot read through the
+    /// subtitle, in light and dark.
+    static let backdropOpacity: Double = 0.94
+    /// Where the wash starts fading out, as a fraction of the bar's height. The fade keeps a row
+    /// edge from meeting a hard line while the header is up.
+    static let backdropFadeLocation: CGFloat = 0.72
+
+    /// The travel that reveals the bar at this viewport. Floored so a zero or tiny viewport (a
+    /// preview, a pre-layout pass) still needs a deliberate pull.
+    static func revealDistance(viewport: CGFloat) -> CGFloat {
+        max(viewport * revealViewportFraction, Space.xl)
+    }
+}
+
 /// The composer's shape, measured from Claude's composer (screenshots at 3×, E1 §4).
 ///
 /// Every number the card and its rows draw comes from here, so the draft and the conversation
