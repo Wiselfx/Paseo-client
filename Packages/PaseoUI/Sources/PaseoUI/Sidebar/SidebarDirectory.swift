@@ -13,9 +13,8 @@ struct SidebarDerivations {
 extension PaseoSidebar {
     func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.paseo(.caption, weight: .semibold))
-            .foregroundStyle(Palette.tertiaryInk)
-            .textCase(.uppercase)
+            .font(.paseo(.footnote, weight: .medium))
+            .foregroundStyle(Palette.secondaryInk)
             .lineLimit(1)
             .truncationMode(.tail)
             .padding(.top, 18)

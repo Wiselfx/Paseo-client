@@ -86,13 +86,20 @@ public struct ChatScreen: View {
     }
 
     /// The bottom bar: the subagent pill and the composer, both clear behind their own cards, so
-    /// the transcript runs under them (D1 §1).
+    /// the transcript runs under them (D1 §1). "Back to the end" rides the composer card's top
+    /// edge, so it moves with the keyboard and the card's growth and needs no inset math (E2b §9).
     private var bottomChrome: some View {
         VStack(spacing: 0) {
             SubagentPill(store: store, controller: controller)
             ComposerView(
                 mode: .conversation, store: store, controller: controller,
                 focused: $composerFocused)
+                .overlay(alignment: .top) {
+                    // A guide of `bottom + Space.sm` on the overlay's top edge puts the button's
+                    // bottom Space.sm above the composer's top, centred horizontally.
+                    TranscriptBackToEndButton(controller: controller)
+                        .alignmentGuide(.top) { $0[.bottom] + Space.sm }
+                }
         }
     }
 }

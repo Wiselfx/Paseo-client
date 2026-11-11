@@ -640,9 +640,8 @@ struct CommandCenterSheet: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.paseo(.caption, weight: .semibold))
-            .foregroundStyle(Palette.tertiaryInk)
-            .textCase(.uppercase)
+            .font(.paseo(.footnote, weight: .medium))
+            .foregroundStyle(Palette.secondaryInk)
             .padding(.top, Space.lg)
             .padding(.bottom, Space.xs)
             .padding(.horizontal, Space.xl)

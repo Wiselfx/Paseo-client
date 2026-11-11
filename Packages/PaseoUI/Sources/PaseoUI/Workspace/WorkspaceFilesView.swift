@@ -221,19 +221,20 @@ private struct WorkspaceFilesDirectoryList: View {
                 } label: {
                     HStack(spacing: Space.xs) {
                         Image(systemName: "chevron.left").font(.glyph(.small, weight: .semibold))
-                        Text(backTitle).font(.paseo(.footnote)).lineLimit(1)
+                        Text(backTitle)
+                            .font(.paseo(.footnote))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(minHeight: 44)
                     .contentShape(.rect)
                 }
                 .accessibilityLabel("Back to \(backTitle)")
-            } else {
-                Text("Files")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, Space.xs)
             }
+            // At the root the segmented control already says "Files": no second static label
+            // here, and the actions stay trailing-aligned (E2b §12). A subfolder shows its back
+            // folder, one line, truncated in the middle.
             Spacer(minLength: Space.sm)
             Menu {
                 ForEach(FileSort.allCases, id: \.self) { choice in

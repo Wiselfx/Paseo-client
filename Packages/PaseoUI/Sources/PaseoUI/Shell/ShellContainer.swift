@@ -115,10 +115,8 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
         panelCard.contentView.addSubview(panelHost.view)
         panelHost.didMove(toParent: self)
 
-        // The conversation card casts toward its leading edge; the panel, sliding in from the
-        // trailing edge, mirrors it (E2 §1).
-        panelCard.layer.shadowOffset = EdgeDrawer.trailingShadowOffset
-
+        // Both cards cast toward their leading edge, which is the edge the sidebar and the panel
+        // reveal when they slide out over the other surface (E2b §7).
         view.addSubview(conversationCard)
         view.addSubview(panelCard)
 
@@ -188,8 +186,12 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
         // No scrim: the dim view stays as the tap-to-close target with zero alpha, and the
         // front card's shadow supplies the depth (E2 §1).
         dimView.alpha = CGFloat(EdgeDrawer.scrimOpacity(max(s, p), dark: isDark))
-        conversationCard.shadowOpacity = EdgeDrawer.shadowOpacity(s, dark: isDark)
-        panelCard.shadowOpacity = EdgeDrawer.shadowOpacity(p, dark: isDark)
+        // A surface that is on screen casts the full token shadow. Never write 0 here: this body
+        // also runs inside the settle animation, where a zero would vanish at release while the
+        // card is still sliding (E2b §8). The zero is written when a settle finishes closed.
+        let shadow = EdgeDrawer.shadowOpacity(dark: isDark)
+        if s > 0 { conversationCard.shadowOpacity = shadow }
+        if p > 0 { panelCard.shadowOpacity = shadow }
         conversationCard.hairlineOpacity = Float(s)
         panelCard.hairlineOpacity = Float(p)
     }
@@ -198,6 +200,13 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         UIView.performWithoutAnimation { applyModel(sidebar: s, panel: p) }
+        // The unanimated path: a surface at exactly 0 with no settle in flight is fully closed,
+        // so its shadow can go. A settle in flight goes through the animator's completion
+        // instead, so a layout pass mid-spring cannot make the shadow vanish (E2b §8).
+        if animator == nil {
+            if s == 0 { conversationCard.shadowOpacity = 0 }
+            if p == 0 { panelCard.shadowOpacity = 0 }
+        }
         CATransaction.commit()
     }
 
@@ -320,9 +329,15 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
             self.applyModel(sidebar: s, panel: p)
         }
         animator.addCompletion { [weak self] position in
-            guard let self else { return }
-            if position == .end { self.commit(target) }
-            if self.animator === animator { self.animator = nil }
+            guard let self, self.animator === animator else { return }
+            self.animator = nil
+            guard position == .end else { return }
+            self.commit(target)
+            // A settle that came to rest closed: the card is offscreen, and zeroing stops its
+            // blur from bleeding at the display edge. An interrupted or still-open settle keeps
+            // the token shadow (E2b §8).
+            if self.sidebarProgress == 0 { self.conversationCard.shadowOpacity = 0 }
+            if self.panelProgress == 0 { self.panelCard.shadowOpacity = 0 }
         }
         self.animator = animator
         beginMotion(target: target)

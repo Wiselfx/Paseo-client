@@ -19,17 +19,15 @@ enum EdgeDrawer {
     }
 
     /// The front card's shadow: black at 10 % in light, 45 % in dark, a 24 pt blur along the
-    /// leading edge (the panel mirrors it). Opacity follows the drawer progress, so it grows
-    /// with the finger and the settle instead of popping in at the end.
+    /// leading edge (the panel casts the same way). The opacity is the token whenever the surface
+    /// is on screen; it is zeroed only after a settle finishes closed (E2b §8).
     static let shadowRadius: CGFloat = 24
     static let shadowOpacityLight: Double = 0.10
     static let shadowOpacityDark: Double = 0.45
     static let leadingShadowOffset = CGSize(width: -2, height: 0)
-    static let trailingShadowOffset = CGSize(width: 2, height: 0)
 
-    static func shadowOpacity(_ progress: CGFloat, dark: Bool) -> Float {
-        let amount = Double(min(max(progress, 0), 1))
-        return Float(amount * (dark ? shadowOpacityDark : shadowOpacityLight))
+    static func shadowOpacity(dark: Bool) -> Float {
+        Float(dark ? shadowOpacityDark : shadowOpacityLight)
     }
 }
 #endif
