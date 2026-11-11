@@ -38,6 +38,8 @@ final class VoiceAudioEngine {
     /// Once a second, at debug, the raw and mapped level. Nothing per buffer.
     private var lastLevelLog = Date.distantPast
     private var hasLoggedPlaybackStart = false
+    /// The AEC warm-up window is armed once per voice session (reset in `startCapture`).
+    private var hasArmedInputWarmup = false
     private var interruptionObservers: [NSObjectProtocol] = []
     private var playbackQueue: [QueuedChunk] = []
     private var isPlayingNow = false
@@ -227,6 +229,11 @@ final class VoiceAudioEngine {
             try await activateSession()
             VoiceLog.log.info("capture: session active (.playAndRecord/.voiceChat)")
             try prepareGraph()
+            // A new session gets its own warm-up window: VPIO's canceller re-converges every
+            // time capture starts, and a deadline left over from the last session must not drop
+            // this one's first audio. Queued before the tap can deliver anything (E1b).
+            hasArmedInputWarmup = false
+            capturePipeline.resetWarmupWindow()
             installInputTap()
             try engine.start()
             setVoiceProcessingInputMuted(false)
@@ -414,6 +421,7 @@ final class VoiceAudioEngine {
             VoiceLog.log.info(
                 "playback: start \(next.format, privacy: .public), \(next.data.count) bytes")
         }
+        armInputWarmupIfNeeded(.reply)
         isPlayingNow = true
         nextNodeID += 1
         let nodeID = nextNodeID
@@ -432,6 +440,31 @@ final class VoiceAudioEngine {
             }
         }
         player.play()
+    }
+
+    /// What started the window. Both are PCM on the speaker, so both are audio the mic can
+    /// hear; the log line says which one armed it.
+    private enum WarmupSource: String {
+        case reply
+        case cue
+    }
+
+    /// Upstream arms the AEC warm-up in `playPCMData`
+    /// (`expo-two-way-audio/ios/AudioEngine.swift:248-253`), the one native path both the reply
+    /// and the thinking cue take: the engine's first PCM playback drops the next two seconds of
+    /// mic (`discardFirstInputMillis`, `:30`) so AEC can adapt.
+    /// Dropped audio is not processed at all — no level, nothing sent (`:175-179`).
+    ///
+    /// Two differences from upstream, both on purpose (E1b): the window is per **voice session**
+    /// (armed at each capture start, not once per engine or launch), and only armable while the
+    /// mic is live — a chunk scheduled while capture is stopped must not consume it.
+    private func armInputWarmupIfNeeded(_ source: WarmupSource) {
+        guard isCapturing, !hasArmedInputWarmup else { return }
+        hasArmedInputWarmup = true
+        VoiceLog.log.info(
+            "capture: AEC warm-up window armed by \(source.rawValue, privacy: .public) — dropping mic for \(VoiceCapturePipeline.warmupDiscardSeconds) s")
+        capturePipeline.discardInput(
+            until: Date().timeIntervalSince1970 + VoiceCapturePipeline.warmupDiscardSeconds)
     }
 
     /// Settings → Diagnostics "Test audio". Upstream plays the thinking-tone blob here
@@ -529,6 +562,9 @@ final class VoiceAudioEngine {
     private func playThinkingToneOnce() async {
         guard let tone = thinkingTone else { return }
         guard (try? ensureEngineRunning()) != nil else { return }
+        // The cue is PCM too, and upstream arms the window in the one `playPCMData` both the
+        // cue and the reply go through (see `armInputWarmupIfNeeded`).
+        armInputWarmupIfNeeded(.cue)
         let finished = PlaybackCompletion()
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             finished.attach(cont)
@@ -641,6 +677,10 @@ final class VoiceCapturePipeline: @unchecked Sendable {
     static let uploadSampleRate = 16_000.0
     /// The most the main actor hears from the mic per second (E1 §2.4).
     static let maxDeliveriesPerSecond = 30.0
+    /// Upstream's `discardFirstInputMillis` (`expo-two-way-audio/ios/AudioEngine.swift:30`):
+    /// the mic's first two seconds after the first playback chunk are dropped, level included,
+    /// because AEC has not adapted yet and the mic would otherwise hear the reply.
+    static let warmupDiscardSeconds = 2.0
 
     private let queue = DispatchQueue(label: "paseo.voice.capture", qos: .userInitiated)
     private let onChunk: @Sendable (Double, Data) -> Void
@@ -656,10 +696,38 @@ final class VoiceCapturePipeline: @unchecked Sendable {
     private var pendingLevel: Double = 0
     private var lastDelivery: TimeInterval = 0
     private var frameCount = 0
+    /// AEC warm-up: samples arriving before this instant are dropped, and the window is armed
+    /// at most once per capture session (`resetWarmupWindow` clears both on each start).
+    private var discardUntil: TimeInterval = 0
+    private var discardArmed = false
 
     /// `onChunk` receives the level and the PCM from the capture queue, in capture order.
     init(onChunk: @escaping @Sendable (Double, Data) -> Void) {
         self.onChunk = onChunk
+    }
+
+    /// A new capture session starts a fresh warm-up window (E1b): clears the previous one, so a
+    /// deadline armed before capture stopped cannot drop the new session's first audio.
+    func resetWarmupWindow() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.discardArmed = false
+            self.discardUntil = 0
+        }
+    }
+
+    /// Arms the AEC warm-up window: mic input is dropped until `deadline` (E1b). Called from
+    /// the main actor, applied on the capture queue before the next delivery. Only the first
+    /// call per session counts.
+    func discardInput(until deadline: TimeInterval) {
+        queue.async { [weak self] in
+            guard let self, !self.discardArmed else { return }
+            self.discardArmed = true
+            self.discardUntil = deadline
+            // Anything already accumulated is inside the window too.
+            self.pendingPCM = Data()
+            self.pendingLevel = 0
+        }
     }
 
     /// Called on the audio thread. The engine reuses `buffer` as soon as this returns, so
@@ -673,8 +741,16 @@ final class VoiceCapturePipeline: @unchecked Sendable {
     }
 
     /// Holds the newest level and the PCM since the last delivery; emits at most 30 times a
-    /// second. PCM is never dropped — only the level is superseded.
+    /// second. Outside the AEC warm-up window PCM is never dropped, only the level superseded.
     private func accumulate(_ result: (level: Double, pcm: Data)) {
+        let now = Date().timeIntervalSince1970
+        // The AEC warm-up window (E1b): upstream skips the whole tap body, so neither the level
+        // nor the PCM leaves the device. One timestamp compare per delivery, no timer.
+        if discardUntil > 0 {
+            guard now >= discardUntil else { return }
+            discardUntil = 0
+            VoiceLog.log.info("capture: AEC warm-up window ended")
+        }
         pendingLevel = result.level
         if !result.pcm.isEmpty {
             pendingPCM.append(result.pcm)
@@ -684,7 +760,6 @@ final class VoiceCapturePipeline: @unchecked Sendable {
                 pendingPCM.removeFirst(pendingPCM.count - cap)
             }
         }
-        let now = Date().timeIntervalSince1970
         guard now - lastDelivery >= 1.0 / Self.maxDeliveriesPerSecond else { return }
         lastDelivery = now
         let pcm = pendingPCM
