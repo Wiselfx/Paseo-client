@@ -1,7 +1,59 @@
 # Status and handoff
 
-Last updated 2026-11-09. Read `ARCHITECTURE.md` and `AGENTS.md` first. All work is local on
-branch `foundation`; nothing has been pushed, and `main` is untouched.
+Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happens on branch
+`foundation` (pushed to origin); `main` is untouched.
+
+## Next session starts here (2026-11-11)
+
+The previous lead session ended after many compactions; this section is its handoff. Read it,
+then the E-round section below, then memory (`MEMORY.md` index loads automatically).
+
+**Where we are**
+- E-round (E1/E2/E3 + E1b/E2b/E3b) is merged on `foundation`. Mac gate green, PaseoCore 1114 tests
+  green. Code head `5584843`; every later commit is docs only.
+- **The user is device-testing `/Users/Shared/Paseo-ipas/Paseo-20261111-0955-5584843.ipa`.** Wait
+  for their report. Don't build a new IPA unless app code changed.
+- If the IPA checks out, the next round is the rich UI plan: `docs/research/14-rich-ui-plan.md` §5
+  (tickets G1–G23, order at the end of §5). `-full.md` has the uncapped version plus the rescued
+  draft (Appendix A).
+
+**Blocked on the user before writing G tickets** (doc 14 §5, "One decision message"):
+1. IPA signing: free or paid team (gates G14–G21: widgets, extensions, Live Activity).
+2. Bundle the Mermaid runtime, ≈3.5 MB (recommend yes; needs an existing test changed, so the
+   user must approve that too).
+3. Live Activity only if the G17 spike proves it stays truthful (recommend yes).
+4. Allow/Deny actions on notifications (recommend yes, off by default).
+5. Share extension (recommend later, after widgets).
+6. Pay for push via Expo?
+7. Approve the new copy listed there.
+
+**Next round's workers use Pi**, not OMP: `pi` provider, model `opencode-go/deepseek-v4.1-flash`,
+so the user can compare harnesses. Add a row per ticket to `docs/agents/scorecard.md` after each
+review (judge items on their merits, not only on whether they were assigned).
+
+**Idle E-round workers (OMP, context intact, reusable via `send_agent_prompt`):**
+E1 `ffb609f4-27f6-4058-ba23-8622f70f4bd3`, E2 `a217e056-e061-4c11-b4ac-c48ce8ad5459`,
+E3 `fb9b2c5e-6b6c-44eb-a03c-527616372ea7`.
+
+**Known gaps (not yet fixed or not verifiable here)**
+- Voice mode: needs the user's device run; logs are under `os.Logger` category `voice` /
+  `voice.level`.
+- Back-to-end button: it is an overlay on the bottom bar that extends above the bar's frame;
+  hit-testing outside that frame is unverified on device.
+- Rewind doesn't show for OpenCode because the live daemon reports no rewind capability
+  (correct gating, not a bug). "Fork in a new workspace" is hidden without `workspaceMultiplicity`.
+- File preview scheme (`paseo-file://`) ignores `Range` requests; multi-directory workspaces 404 on
+  sibling paths.
+- Composer card height ≈95 pt vs Claude's ≈98.7.
+
+**Rules that bite (also in memory)**
+- Never send to, prompt, create or probe any `claude`-provider agent. Live tests: `pi` +
+  `opencode-go/beam-free`.
+- Read every worker diff in full against `_E-common.md`'s mission-critical rules before the gate
+  and before merging. A summary plus a green build is not a review.
+- Mac gate: push the branch first, then
+  `ssh -i ~/.ssh/paseo_build_ed25519 -o BatchMode=yes claude@host.orb.internal build|ipa <ref>`.
+- Screenshots in `/home/paseo/dev/e-round-shots/` are private: never commit them.
 
 ## Vision (agreed with the user)
 
