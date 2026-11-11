@@ -28,6 +28,31 @@ wording and assets; don't invent quips. Never reuse `~/workspace/claude-ios-ui` 
   extras, T12 attachments/search/subagents, T13 rich detection + mascot state machine).
   386 tests green. Gap: T12 file byte upload needs binary send in PaseoKit.
 
+## E-round (device feedback 2, 2026-11-11): read this first
+
+The user tested IPA 3b65c9d next to the official Claude app and chose native over the React Native experiment (the lab is closed). Tickets: `docs/tickets/_E-common.md`, `E1`–`E3`. The workers are DeepSeek v4.1 flash on OMP (`omp/opencode-go/deepseek-v4.1-flash`, mode full, thinking high). The hard rule: no worker ever touches a `claude`-provider agent; live tests use `pi` with `opencode-go/beam-free`.
+
+- **Merged on `foundation` (da8b549), Mac gate green, PaseoCore 1104 tests green:**
+  - **E1:** the composer keeps the keyboard (a dead `@FocusState` → a plain Bool + an edge-triggered bridge); the waveform redraws per tick, fills the row, uses dB bands per mode; voice mode gets AEC (`setVoiceProcessingEnabled`), 16 kHz, a primed converter and `VoiceLog`; composer metrics match Claude.
+  - **E2:** no scrim, a card shadow; the Claude/Paseo accent trait plus a setting; one launch screen (`HomeHeroLayout`); the connect card; the panel canvas; the prompt rail off (`ChatOutlineRail.promptRailEnabled`).
+  - **E3:** harness subagents (the client now advertises `projected_subagent_timeline`); per-provider turn actions (`TurnActionAvailability`); SVG snapshots; viz card height; file HTML with JS; inline YouTube; viewer zoom; the probe's `--send` gate.
+- **In flight, on new branches from foundation (the same agents):**
+  - **E1b** (ffb609f4): the upstream AEC warm-up mic discard.
+  - **E2b** (a217e056):
+    - the greeting and rise once per launch;
+    - DraftChatView adopts `HomeHeroLayout`;
+    - the terminal tab and SwiftTerm background → panel;
+    - the subagent running state → accent;
+    - the panel shadow → leading offset;
+    - shadow opacity constant while displaced (it was not animatable in the animator);
+    - back-to-end attached to the composer (keyboard double-count);
+    - sentence-case sidebar headers;
+    - collapsed group rows ≈50 pt;
+    - the Files header.
+  - **E3b** (fb9b2c5e): the isolation warnings and `UIScreen.main`; a `paseo-file://` scheme handler for relative HTML refs; `unsafe-eval` for file previews only; subagent timeline paging; the viewer strip → panel.
+- **No IPA for the user until E1b–E3b are merged.** `Paseo-20261111-0901-da8b549.ipa` exists only as a gate artifact.
+- **UX plan:** `docs/research/14-rich-ui-plan.md` (trimmed) and `-full.md` (plus the lead's §8–15). The user's decisions are pending (§5 of the plan): signing, Mermaid bundle, notification actions, Share extension, Expo push.
+
 ## In flight (Paseo agents, each in its own worktree; branch = ticket)
 
 U-round: the first on-device fix round (2026-11-09). Spec: `docs/UX-SPEC.md`. Audits: `/tmp/reviews/ux-audit-{A,B}.md` (Crouton). Fixed directly by the lead: the send wipe (dictation.stop emitted an empty draft) and the dictation off-main crash.
