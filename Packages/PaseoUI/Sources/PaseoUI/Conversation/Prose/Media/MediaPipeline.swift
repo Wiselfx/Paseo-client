@@ -299,7 +299,7 @@ actor MediaPipeline {
     /// Daemon reads, one per workspace. Every controller registers its workspace on
     /// configure and unregisters on dealloc; last registration per workspace wins. A
     /// missing resolver is "not reachable yet", never a memoized failure.
-    private var resolvers: [String: DaemonMediaFetch] = [:]
+    private var resolvers: [String: (token: UUID, fetch: DaemonMediaFetch)] = [:]
     /// Live keys fetched this launch. The disk entry for a path is served only when
     /// validated here or requested as the offline fallback: a first view in a new session
     /// always refetches, so an agent-edited file never serves last launch's bytes.
@@ -319,18 +319,23 @@ actor MediaPipeline {
         }
     }
 
-    /// Registers the workspace's daemon read. Called by each conversation controller with
-    /// a stable closure; unregistered when it goes away.
-    func registerDaemonFetch(for workspaceID: String, _ fetch: DaemonMediaFetch) {
-        resolvers[workspaceID] = fetch
+    /// Registers the workspace's daemon read and returns its token. Called by each
+    /// conversation controller with a stable closure; last registration per workspace
+    /// wins, and unregistration only removes the entry holding its own token — so a
+    /// deallocated controller never unregisters its successor in the same workspace.
+    func registerDaemonFetch(for workspaceID: String, _ fetch: @escaping DaemonMediaFetch) -> UUID {
+        let token = UUID()
+        resolvers[workspaceID] = (token, fetch)
+        return token
     }
 
-    func unregisterDaemonFetch(for workspaceID: String) {
+    func unregisterDaemonFetch(for workspaceID: String, token: UUID) {
+        guard resolvers[workspaceID]?.token == token else { return }
         resolvers.removeValue(forKey: workspaceID)
     }
 
     private func resolver(for workspaceID: String) -> DaemonMediaFetch? {
-        resolvers[workspaceID]
+        resolvers[workspaceID]?.fetch
     }
 
     /// The app's identity on the wire. Wikimedia answers **403** to a request with no
@@ -574,7 +579,7 @@ actor MediaPipeline {
         case .data(let bytes, _):
             await finishImageData(
                 data: bytes, pixelWidth: pixelWidth, key: key,
-                identity: identityKey(source: source), capBytes: capBytes,
+                identity: identityKey(source: source),
                 maxSide: maxSide, cacheResult: cacheResult)
         }
     }
@@ -661,7 +666,7 @@ actor MediaPipeline {
             }
         } catch {
             await shared.reportFinal(
-                key: key, identity: identity, outcome: mapStreamError(error))
+                key: key, identity: identity, outcome: .failure(mapStreamError(error)))
             return
         }
         if data.count > maxBytes {
@@ -730,12 +735,13 @@ actor MediaPipeline {
         // disk — but only when validated this session, or as the offline fallback. A first
         // view in a new session always refetches: the daemon has no cheap per-file stat,
         // and a parent listing per image would cost more than the fetch it saves.
+        // The read key is the request identity — the same function the write uses.
         if await shared.validatedContains(identity) || allowStaleDisk,
             let cached = diskRead(key: diskKey(ref: ref, revision: ref.revision))
         {
             await finishImageData(
                 data: cached, pixelWidth: pixelWidth, key: key, identity: identity,
-                capBytes: nil, maxSide: maxSide, cacheResult: cacheResult)
+                maxSide: maxSide, cacheResult: cacheResult)
             return
         }
         // The cap is the request's ceiling, so an oversize file is never transferred.
@@ -750,20 +756,30 @@ actor MediaPipeline {
             case .bytes(let fetched):
                 fetchResult = fetched
                 await shared.noteValidated(identity)
-                diskWrite(data: fetched.data, key: diskKey(ref: ref, revision: fetched.revision))
+                // The write key is the request identity — the same function the read
+                // uses, so they always agree. The response revision rides in a sidecar
+                // for a later stat-based validation; it is never part of a key the
+                // reader cannot reconstruct.
+                diskWrite(data: fetched.data, key: diskKey(ref: ref, revision: ref.revision))
+                if let revision = fetched.revision {
+                    diskWriteText(
+                        revision,
+                        key: diskKey(ref: ref, revision: ref.revision) + ".rev")
+                }
             case .tooLarge:
                 await shared.reportFinal(
                     key: key, identity: identity, outcome: .failure(.tooLarge(bytes: nil)))
                 return
             case .unavailable:
-                await shared.reportFinal(
-                    key: key, identity: identity, outcome: .failure(.other))
+                // Not reachable yet (reconnecting, descriptor missing): fan out with no
+                // memo, so the card retries on its next appear.
+                await shared.reportUnresolved(key: key)
                 return
             }
         }
         await finishImageData(
             data: fetchResult.data, pixelWidth: pixelWidth, key: key, identity: identity,
-            capBytes: nil, maxSide: maxSide, cacheResult: cacheResult)
+            maxSide: maxSide, cacheResult: cacheResult)
     }
 
     private func validatedContains(_ liveKey: String) -> Bool {
@@ -772,6 +788,33 @@ actor MediaPipeline {
 
     private func noteValidated(_ liveKey: String) {
         validatedThisSession.insert(liveKey)
+    }
+
+    /// The shared tail for arrived bytes: SVG routing plus the width-exact off-main
+    /// decode. Bytes that already arrived are never capped — the ceiling applies to the
+    /// transfer (the request), not to bytes in hand.
+    private static func finishImageData(
+        data: Data, pixelWidth: Int, key: String, identity: String,
+        maxSide: Double, cacheResult: Bool
+    ) async {
+        if looksLikeSVG(data), let source = text(data) {
+            let aspect = RichSVGIntrinsic.aspectRatio(of: source)
+            let outcome = MediaOutcome.svg(source: source, aspectRatio: aspect)
+            if let aspect { await shared.reportSize(key: key, aspect: aspect, identity: identity) }
+            await shared.reportFinal(key: key, identity: identity, outcome: outcome)
+            return
+        }
+        guard
+            let payload = MediaPayload.decode(data: data, pixelWidth: pixelWidth, maxSide: maxSide)
+        else {
+            await shared.reportFinal(
+                key: key, identity: identity, outcome: .failure(.decoding))
+            return
+        }
+        await shared.reportSize(key: key, aspect: payload.aspectRatio, identity: identity)
+        await shared.reportFinal(
+            key: key, identity: identity, outcome: .image(payload),
+            cache: cacheResult)
     }
 
     private static func mapStreamError(_ error: Error) -> MediaFailure {
@@ -848,6 +891,17 @@ actor MediaPipeline {
 
     /// Writes one entry, then evicts the oldest until the directory fits the budget.
     /// Both passes are O(files) and run off main, only when bytes actually arrived.
+    /// Writes one text sidecar (the daemon's revision, for a later stat-based
+    /// validation). Best-effort like every disk write here.
+    private static func diskWriteText(_ text: String, key: String) {
+        guard let directory = diskDirectory(),
+            let url = Optional(directory.appending(path: key, directoryHint: .notDirectory)),
+            let data = text.data(using: .utf8)
+        else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
+    }
+
     private static func diskWrite(data: Data, key: String) {
         guard let directory = diskDirectory(),
             let url = Optional(directory.appending(path: key, directoryHint: .notDirectory))

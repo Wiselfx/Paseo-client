@@ -78,6 +78,22 @@ enum AnimatedImageDecoder {
     }
 }
 
+/// The cover transition: zoom from the exact thumbnail, or the system default under
+/// Reduce Motion. A modifier (not a ternary): the two transition types do not mix.
+private struct MediaViewerTransition: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+        } else {
+            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        }
+    }
+}
+
 // MARK: - MediaViewerView (G3 §4.6)
 
 /// The one full-screen viewer for every visual in the app (G3): chat images, galleries,
@@ -136,8 +152,9 @@ struct MediaViewerView: View {
         .environment(\.colorScheme, .dark)
         // Clear so the drag can fade the UIKit backdrop onto the transcript behind.
         .presentationBackground(.clear)
-        .navigationTransition(
-            reduceMotion ? .automatic : .zoom(sourceID: sourceID, in: namespace))
+        // Reduce Motion gets the system default cover transition (a cross-dissolve),
+        // never the zoom: the two transition types cannot mix in one ternary.
+        .modifier(MediaViewerTransition(sourceID: sourceID, namespace: namespace, reduceMotion: reduceMotion))
         .accessibilityAction(.escape) { onClose() }
         .onChange(of: selection) { _, _ in
             // One announcement per page; the label carries kind + position + alt (G3 §1.5).
