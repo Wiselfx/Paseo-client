@@ -16,6 +16,9 @@ one worktree each under `/home/paseo/.paseo/worktrees/0264elgj/<branch>`:
 H1 and H3 both edit `ChatComposer.swift` (disjoint regions): merge H3 first, then H1. Upstream
 reference = `/home/paseo/dev/paseo-upstream-ref` (read-only, v0.16.0-beta.1); the lab is off-limits.
 Review every diff in full before gate/merge; add scorecard rows (Pi section).
+Bug hunter (read-only, whole codebase, not the H tickets): LongCat 2.5 via pi, agent
+`3f4811a9-fc54-4d51-8bab-9ed320853c20`, worktree `h-bughunt`, report → `/tmp/reviews/bug-hunt-longcat.md`.
+Verify its findings before ticketing them.
 
 The previous lead session ended after many compactions; this section is its handoff. Read it,
 then the E-round section below, then memory (`MEMORY.md` index loads automatically).
