@@ -280,9 +280,9 @@ struct ClaudeProse: View {
             imageContent: proseImageContent)
     }
 
-    /// `![alt](url)` → `ProseMarkdownImage`; remote hosts ride the shared `RemoteImageLoader`,
-    /// workspace paths read through `RichActions` in the environment. Always non-nil so prose
-    /// images render instead of degrading to text.
+    /// `![alt](url)` → `ProseMarkdownImage`; remote hosts and workspace paths both ride the
+    /// shared `MediaPipeline`. Always non-nil so prose images render instead of degrading
+    /// to text.
     private var proseImageContent: (MarkdownImage) -> AnyView {
         { image in
             AnyView(ProseMarkdownImage(image: image))

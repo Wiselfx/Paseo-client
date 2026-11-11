@@ -245,8 +245,9 @@ struct TranscriptJump: Equatable {
         cache.totalCostLimit = 48 * 1024 * 1024
         return cache
     }()
-    /// One prose image loader, so its identity is stable across body evaluations (finding #13).
-    private let imageLoaderBox = ImageLoaderBox()
+    /// The §12 network signal (G2). Owned here so its life matches the conversation's; cards
+    /// read only the derived condition on `RichActions` (R-1).
+    private var pathMonitor: NetworkPathMonitor?
 
     enum SlashCommandState {
         case idle, loading, ready
@@ -302,14 +303,63 @@ struct TranscriptJump: Equatable {
         actions.retract = { [weak self] row in
             self?.retractMessage(userRow: row)
         }
-        richActions.loadLocalImage = imageLoaderBox.loader { [weak self] path in
-            await self?.loadImage(path: path)
-        }
+        richActions.daemonWorkspaceID = store.agent?.workspaceId
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
         }
+        // The pipeline's only daemon entry: socket bytes (64 MB cap) in, decoded pixels out.
+        // The hook reads the live agent at call time and runs off main inside the driver.
+        richActions.linkCondition = MediaLinkCondition(
+            isRelay: session.isRelayConnection, offline: false)
+        Task { @MainActor [weak self] in
+            await MediaPipeline.shared.setDaemonFetch({ [weak self] ref in
+                guard let self, let agent = self.store.agent,
+                    agent.workspaceID == ref.workspaceID,
+                    let descriptor = self.session.workspaceDirectory.workspace(id: ref.workspaceID)
+                else { return nil }
+                let checkout = self.session.checkout(for: descriptor)
+                guard
+                    let file = try? await checkout.files.fetch(
+                        ref.path, maxBytes: Int(MediaPipeline.maxDaemonBytes)),
+                    file.encoding == .base64, let content = file.content,
+                    let data = Data(base64Encoded: content, options: [.ignoreUnknownCharacters])
+                else { return nil }
+                return DaemonFileBytes(data: data, revision: file.revision)
+            })
+            self?.startMediaLinkUpdates()
+        }
         refreshAvailability()
         startAvailabilityTracking()
+    }
+
+    // MARK: Media link condition (G2 §12)
+
+    private func startMediaLinkUpdates() {
+        let monitor = NetworkPathMonitor()
+        monitor.onChange = { [weak self] interface, constrained, _, offline in
+            guard let self else { return }
+            self.refreshLinkCondition(
+                interface: interface, constrained: constrained, offline: offline)
+        }
+        pathMonitor = monitor
+        refreshLinkCondition(
+            interface: monitor.interface, constrained: monitor.constrained,
+            offline: monitor.offline)
+    }
+
+    private func refreshLinkCondition(
+        interface: NetworkPathMonitor.Interface, constrained: Bool, offline: Bool
+    ) {
+        let linkInterface: MediaLinkCondition.Interface
+        switch interface {
+        case .wifi: linkInterface = .wifi
+        case .cellular: linkInterface = .cellular
+        case .wired: linkInterface = .wired
+        case .other: linkInterface = .other
+        }
+        richActions.linkCondition = MediaLinkCondition(
+            interface: linkInterface, constrained: constrained,
+            isRelay: session.isRelayConnection, offline: offline)
     }
 
     // MARK: Turn actions
@@ -1105,15 +1155,4 @@ struct TranscriptJump: Equatable {
     }
 }
 
-/// Holds one image loader closure for the prose view. Main-actor only; the box carries the same
-/// escape hatch as the other view-side caches.
-final class ImageLoaderBox: @unchecked Sendable {
-    private var loader: ((String) async -> UIImage?)?
-
-    func loader(_ build: @escaping (String) async -> UIImage?) -> (String) async -> UIImage? {
-        if let loader { return loader }
-        self.loader = build
-        return build
-    }
-}
 #endif

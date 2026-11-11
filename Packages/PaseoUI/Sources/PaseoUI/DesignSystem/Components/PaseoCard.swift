@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import Observation
+import PaseoStore
 import SwiftUI
 import UIKit
 
@@ -19,9 +20,12 @@ import UIKit
 final class RichActions {
     /// Opens a `paseo-file://` path in the workspace file viewer. No-op until the host sets it.
     var openFile: (String) -> Void = { _ in }
-    /// Reads a workspace image through the daemon (the 8 MiB cap lives in the controller).
-    /// Nil result renders the path chip, as before.
-    var loadLocalImage: (String) async -> UIImage? = { _ in nil }
+    /// The §12 connection (path monitor + the host session's relay flag), mirrored by the
+    /// conversation controller. Cards read only the derived policy (R-1).
+    var linkCondition: MediaLinkCondition = .assumed
+    /// The workspace daemon files resolve against (workspaceId). Nil outside a conversation:
+    /// without it, local images render as path chips.
+    var daemonWorkspaceID: String?
     /// Puts a value (a URL string, a code block) into the composer as an attachment or quote.
     /// No-op until a later ticket wires it (G3 "Add to chat").
     var addToChat: (String) -> Void = { _ in }

@@ -17,8 +17,9 @@ struct ClaudeRevealProse: View {
     let onAction: (MarkdownAction) -> Void
     /// True while the producing turn is running — i.e. prose is actively arriving.
     let isStreaming: Bool
-    /// Renders `![alt](url)` paragraphs: remote images through `RemoteImageLoader` (the shared
-    /// cache, downsample and SVG path); workspace paths through `RichActions` in the environment.
+    /// Renders `![alt](url)` paragraphs: remote images through `MediaPipeline` (the shared
+    /// cache, size probe, downsample and SVG path); workspace daemon paths through the same
+    /// pipeline via `RichActions` in the environment.
     /// `nil` renders images as text.
     var imageContent: ((MarkdownImage) -> AnyView)? = nil
 

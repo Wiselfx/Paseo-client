@@ -6,10 +6,10 @@ import UIKit
 ///
 /// Remote (`http`, `https`, and also `data:`/`blob:` — a markdown image is always an *image*
 /// request, whatever the extension says) goes through `RichRemoteImage` and the shared
-/// `RemoteImageLoader`: sized `URLCache`, a `Paseo/…` User-Agent, downsampled decode off main,
-/// SVG through the snapshot renderer, and an honest failure card. Anything else is a workspace
-/// path → `RichLocalImage`, which reads through `RichActions` in the environment (8 MiB daemon
-/// read cap, G1 §1.2); a failed/missing read falls back to the path chip.
+/// `MediaPipeline`: sized `URLCache`, a `Paseo/…` User-Agent, the incremental size probe,
+/// downsampled decode off main, SVG through the snapshot renderer, and an honest failure card.
+/// Anything else is a workspace path → `RichLocalImage`, which reads through the same pipeline
+/// (daemon fetch, disk cache) with the same viewer; a failed/missing read falls back to the chip.
 struct ProseMarkdownImage: View {
     let image: MarkdownImage
 

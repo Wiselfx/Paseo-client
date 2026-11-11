@@ -311,7 +311,7 @@ struct YouTubeRichCard: View {
 
     /// The 16:9 card's still. Decoded once through the shared loader and cached by URL, so
     /// scrolling past and back does not re-download or re-flash it (H5 round 2: this used to be
-    /// a bare `AsyncImage`, the same defect the image cards had).
+    /// an uncached system image view, the same defect the image cards had).
     @State private var still: UIImage?
     @State private var stillFailed = false
     /// The card's real width, measured once per layout so the still is decoded at the size it
@@ -325,7 +325,7 @@ struct YouTubeRichCard: View {
     /// and until the width is known.
     private var stillKey: String? {
         guard !isPlaying, width > 1 else { return nil }
-        let pixels = RemoteImageSizing.pixelWidth(points: width, scale: displayScale)
+        let pixels = MediaSizing.pixelWidth(points: width, scale: displayScale)
         return "\(RichContentDetector.youTubeThumbnailURL(id: reference.id))|\(pixels)"
     }
 
@@ -436,9 +436,9 @@ struct YouTubeRichCard: View {
     private func loadStill() async {
         guard width > 1, still == nil else { return }
         let url = RichContentDetector.youTubeThumbnailURL(id: reference.id)
-        let outcome = await RemoteImageLoader.shared.load(
+        let outcome = await MediaPipeline.shared.load(
             urlString: url,
-            pixelWidth: RemoteImageSizing.pixelWidth(points: width, scale: displayScale))
+            pixelWidth: MediaSizing.pixelWidth(points: width, scale: displayScale))
         guard !Task.isCancelled else { return }
         switch outcome {
         case .image(let payload): still = payload.image
@@ -546,7 +546,7 @@ struct RichRemoteImage: View {
     @State private var image: UIImage?
     /// Known before the pixels: from the cache, or from the image once it lands.
     @State private var aspectRatio: CGFloat?
-    @State private var failure: RemoteImageFailure?
+    @State private var failure: MediaFailure?
     /// True while this card is the one that showed the placeholder: its failure then keeps the
     /// reserved box instead of collapsing to a 56 pt row and pulling the rest of the turn up.
     @State private var keepsFailureBox = true
@@ -555,6 +555,15 @@ struct RichRemoteImage: View {
     /// The URL the state above belongs to. SwiftUI can hand this view a different block; when it
     /// does, the old picture must not be drawn for the new link.
     @State private var stateURL: String?
+    /// Set once the reader explicitly taps (or retries): the policy gate and the in-flight
+    /// ceiling stop applying — an explicit fetch is always honored.
+    @State private var tappedLoad = false
+    /// The last streaming progress, for the determinate ring in place. Nil before the first
+    /// progress event (or when the total is unknown): the indeterminate spinner instead.
+    @State private var downloadProgress: Double?
+    /// The bytes the last `.tooLarge` learned, for the tap-to-download size line.
+    @State private var tooLargeBytes: Int64?
+    @Environment(\.richActions) private var richActions
     @State private var showViewer = false
     @State private var controlsVisible = true
     @State private var showShare = false
@@ -581,20 +590,20 @@ struct RichRemoteImage: View {
     private struct Seed {
         let image: UIImage?
         let aspectRatio: CGFloat?
-        let failure: RemoteImageFailure?
+        let failure: MediaFailure?
         /// A card that has not drawn the placeholder (a cache hit) may show the compact failure
         /// row; one that has must keep its box so nothing under it moves.
         let keepsBox: Bool
     }
 
     private static func seed(for urlString: String) -> Seed {
-        let identity = RemoteImageLoader.cacheIdentity(for: urlString)
-        let cached = RemoteImageLoader.cached(for: identity)
-        let memo = RemoteImageLoader.cachedFailure(for: identity)
+        let identity = MediaPipeline.cacheIdentity(for: urlString)
+        let cached = MediaPipeline.cached(for: identity)
+        let memo = MediaPipeline.cachedFailure(for: identity)
         let image = cached?.image
         return Seed(
             image: image,
-            aspectRatio: cached?.aspectRatio ?? RemoteImageLoader.cachedAspect(for: identity),
+            aspectRatio: cached?.aspectRatio ?? MediaMetadataCache.aspectRatio(for: identity),
             failure: image == nil ? memo : nil,
             keepsBox: image == nil && memo == nil)
     }
@@ -604,24 +613,54 @@ struct RichRemoteImage: View {
     /// The ratio the box reserves: the image's own when we know it, else the old 4:3 guess.
     private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
 
+    /// The §12 verdict for this card, O(1) in the environment's condition (R-1). Unknown size
+    /// proceeds optimistically on cheap links; the streaming cap enforces the ceiling and the
+    /// card flips to tap-to-download with the learned size.
+    private var policy: MediaFetchPolicy {
+        mediaFetchPolicy(
+            kind: .image, knownBytes: nil,
+            condition: richActions?.linkCondition ?? .assumed)
+    }
+
+    /// The in-flight ceiling, from the same table. Nil once the reader taps: their fetch.
+    private var capBytes: Int64? {
+        guard !tappedLoad else { return nil }
+        return mediaDownloadCap(
+            kind: .image, condition: richActions?.linkCondition ?? .assumed)
+    }
+
+    /// The reserved box with a download action instead of bytes (§12): the policy said wait
+    /// and the reader has not tapped yet, or a stream hit the ceiling before any attempt.
+    /// After an explicit tap the failure box (with Retry) owns the error — the box must
+    /// never loop tap → fail → tap on a file the ceiling will always refuse. `.cacheOnly`
+    /// (offline) is not tappable — it shows the offline failure instead.
+    private var showsTapBox: Bool {
+        guard image == nil, !tappedLoad else { return false }
+        if let failure {
+            if case .tooLarge = failure { return true }
+            return false
+        }
+        return policy == .tapToDownload
+    }
+
     private var fileName: String {
-        RemoteImageLoader.target(for: urlString)?.lastPathComponent.nilIfEmpty ?? "image"
+        MediaPipeline.target(for: urlString)?.lastPathComponent.nilIfEmpty ?? "image"
     }
 
     private var host: String? {
-        RemoteImageLoader.target(for: urlString)?.host
+        MediaPipeline.target(for: urlString)?.host
     }
 
     /// Only an http(s) link is worth sending to Safari; a `data:` or `blob:` one is not.
     private var webURL: URL? {
-        guard let url = RemoteImageLoader.target(for: urlString) else { return nil }
+        guard let url = MediaPipeline.target(for: urlString) else { return nil }
         let scheme = url.scheme?.lowercased()
         return scheme == "http" || scheme == "https" ? url : nil
     }
 
     /// One load per (URL, pixel bucket, retry). Nothing here runs per scroll frame.
     private var loadKey: String {
-        "\(urlString)|\(RemoteImageSizing.pixelWidth(points: width, scale: displayScale))|\(retryToken)"
+        "\(urlString)|\(MediaSizing.pixelWidth(points: width, scale: displayScale))|\(retryToken)"
     }
 
     /// What the card's box is doing, as one value: a placeholder at a reserved ratio, the image
@@ -636,6 +675,8 @@ struct RichRemoteImage: View {
         var stage = 0
         if image != nil {
             stage = 2
+        } else if showsTapBox {
+            stage = 4
         } else if failure != nil {
             stage = keepsFailureBox ? 3 : 1
         }
@@ -690,6 +731,8 @@ struct RichRemoteImage: View {
                     copyText: webURL != nil ? urlString : nil,
                     externalTitle: "Open link",
                     externalURL: webURL)
+        } else if showsTapBox {
+            tapBox
         } else if let failure {
             if keepsFailureBox {
                 boxedFailure(failure)
@@ -701,6 +744,69 @@ struct RichRemoteImage: View {
         }
     }
 
+    /// The §12 tap state: the reserved box, a centered download glyph, the size when known,
+    /// the file name. One tap fetches it, with the progress ring in the same frame. The box
+    /// never changes size through any of this — only its inside crossfades (`Motion.fade`).
+    private var tapBox: some View {
+        Button {
+            startTappedLoad()
+        } label: {
+            Rectangle()
+                .fill(Palette.codeSurface)
+                .aspectRatio(reservedAspect, contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .clipShape(.rect(cornerRadius: Radius.md))
+                .overlay {
+                    VStack(spacing: Space.sm) {
+                        if let progress = downloadProgress {
+                            ProgressView(value: progress)
+                                .controlSize(.small)
+                                .tint(Palette.secondaryInk)
+                        } else {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.glyph(.large, weight: .light))
+                                .foregroundStyle(Palette.secondaryInk)
+                        }
+                        Text(tapLabel)
+                            .font(.paseo(.caption, weight: .medium))
+                            .foregroundStyle(Palette.ink)
+                        Text(fileName)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .padding(.horizontal, Space.md)
+                }
+        }
+        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+        .paseoCardAccessibility(
+            kind: "Image", title: alt.isEmpty ? fileName : alt, isButton: true)
+        .accessibilityHint("Downloads the image")
+    }
+
+    private static let byteFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter
+    }()
+
+    /// "Tap to download", plus the size when the ceiling learned it (§15, new copy).
+    private var tapLabel: String {
+        guard let bytes = tooLargeBytes else { return "Tap to download" }
+        return "Tap to download · \(Self.byteFormatter.string(fromByteCount: bytes))"
+    }
+
+    private func startTappedLoad() {
+        Haptics.light()
+        tappedLoad = true
+        failure = nil
+        tooLargeBytes = nil
+        downloadProgress = nil
+        keepsFailureBox = true
+        retryToken += 1
+    }
+
     private var placeholder: some View {
         Rectangle()
             .fill(Palette.codeSurface)
@@ -708,7 +814,14 @@ struct RichRemoteImage: View {
             .frame(maxWidth: .infinity, maxHeight: heightCap)
             .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
-                ProgressView().controlSize(.small).tint(Palette.secondaryInk)
+                // Streaming with a known total: the determinate ring in the same frame.
+                if let progress = downloadProgress {
+                    ProgressView(value: progress)
+                        .controlSize(.small)
+                        .tint(Palette.secondaryInk)
+                } else {
+                    ProgressView().controlSize(.small).tint(Palette.secondaryInk)
+                }
             }
             .accessibilityLabel(alt.isEmpty ? "Loading image" : "Loading image: \(alt)")
     }
@@ -718,7 +831,7 @@ struct RichRemoteImage: View {
     /// Two forms, one behaviour: a card that showed the placeholder keeps the placeholder's
     /// height (H5 round 2 review — a 270 pt box must not collapse to 56 pt under the reader),
     /// a card that was created already failed takes the compact row.
-    private func boxedFailure(_ failure: RemoteImageFailure) -> some View {
+    private func boxedFailure(_ failure: MediaFailure) -> some View {
         Rectangle()
             .fill(Palette.codeSurface)
             .aspectRatio(reservedAspect, contentMode: .fit)
@@ -731,13 +844,13 @@ struct RichRemoteImage: View {
             }
     }
 
-    private func compactFailure(_ failure: RemoteImageFailure) -> some View {
+    private func compactFailure(_ failure: MediaFailure) -> some View {
         PaseoCard(content:
             failureContent(failure)
                 .frame(maxWidth: .infinity, alignment: .leading))
     }
 
-    private func failureContent(_ failure: RemoteImageFailure) -> some View {
+    private func failureContent(_ failure: MediaFailure) -> some View {
         HStack(alignment: .center, spacing: Space.sm) {
             Image(systemName: "photo")
                 .font(.glyph(.large, weight: .light))
@@ -779,7 +892,7 @@ struct RichRemoteImage: View {
     }
 
     /// "host · what happened", the one line the card has room for.
-    private func detail(for failure: RemoteImageFailure) -> String {
+    private func detail(for failure: MediaFailure) -> String {
         guard let host else { return failure.message }
         return "\(host) · \(failure.message)"
     }
@@ -806,7 +919,11 @@ struct RichRemoteImage: View {
 
     private func retry() {
         Haptics.light()
+        // An explicit retry is the reader's fetch: the gate and the ceiling stop applying.
+        tappedLoad = true
         failure = nil
+        tooLargeBytes = nil
+        downloadProgress = nil
         // A retry shows the placeholder again, so a second failure must keep its box.
         keepsFailureBox = true
         retryToken += 1
@@ -817,22 +934,51 @@ struct RichRemoteImage: View {
         if stateURL != urlString { adoptState(for: urlString) }
         // No width yet: a fetch at a guessed size would only be thrown away.
         guard width > 1 else { return }
-        let pixelWidth = RemoteImageSizing.pixelWidth(points: width, scale: displayScale)
+        // The §12 gate: a metered link waits for the tap box, offline fails closed. A tap,
+        // a retry, or a cached image skips the gate — none of them spends the reader's data.
+        if !tappedLoad {
+            switch policy {
+            case .tapToDownload: return
+            case .cacheOnly:
+                if image == nil, failure == nil { failure = .offline }
+                return
+            case .automatic: break
+            }
+        }
+        guard let url = MediaPipeline.target(for: urlString) else {
+            failure = .badURL
+            return
+        }
+        let pixelWidth = MediaSizing.pixelWidth(points: width, scale: displayScale)
         let ignoresFailureCache = retryToken > 0
-        let outcome = await RemoteImageLoader.shared.load(
-            urlString: urlString, pixelWidth: pixelWidth,
+        for await event in await MediaPipeline.shared.events(
+            source: .remote(url), pixelWidth: pixelWidth, capBytes: capBytes,
             ignoreFailureCache: ignoresFailureCache)
-        // The row may have gone; the loader already cached the result for its return.
-        guard !Task.isCancelled else { return }
-        switch outcome {
-        case .image(let payload):
-            image = payload.image
-            aspectRatio = payload.aspectRatio
-            failure = nil
-        case .svg(let source, let knownAspect):
-            await renderSVG(source, knownAspect: knownAspect)
-        case .failure(let reason):
-            failure = reason
+        {
+            // The row may have gone; the pipeline already cached the result for its return.
+            guard !Task.isCancelled else { return }
+            switch event {
+            case .size(let size):
+                // The probe's true ratio wins only while nothing is known: one settle, once.
+                if aspectRatio == nil, size.height > 0 {
+                    aspectRatio = size.width / size.height
+                }
+            case .progress(let fraction):
+                downloadProgress = fraction
+            case .final(let outcome):
+                downloadProgress = nil
+                switch outcome {
+                case .image(let payload):
+                    image = payload.image
+                    aspectRatio = payload.aspectRatio
+                    failure = nil
+                case .svg(let source, let knownAspect):
+                    await renderSVG(source, knownAspect: knownAspect)
+                case .failure(let reason):
+                    if case .tooLarge(let bytes) = reason { tooLargeBytes = bytes }
+                    failure = reason
+                }
+            }
         }
     }
 
@@ -844,16 +990,19 @@ struct RichRemoteImage: View {
         aspectRatio = seed.aspectRatio
         failure = seed.failure
         keepsFailureBox = seed.keepsBox
+        tappedLoad = false
+        downloadProgress = nil
+        tooLargeBytes = nil
     }
 
     /// SVG has no `UIImage` decoder; the shared offscreen `WKWebView` draws it instead, at the
     /// card's width, and its `viewBox` reserves the box while that happens.
     @MainActor
     private func renderSVG(_ source: String, knownAspect: CGFloat?) async {
-        let identity = RemoteImageLoader.cacheIdentity(for: urlString)
+        let identity = MediaPipeline.cacheIdentity(for: urlString)
         if let knownAspect {
             aspectRatio = knownAspect
-            RemoteImageLoader.rememberAspect(knownAspect, for: identity)
+            MediaMetadataCache.remember(knownAspect, for: identity)
         }
         let dark = colorScheme == .dark
         let html = RichHTMLDocument.rawSVG(source: source, dark: dark)
@@ -869,7 +1018,7 @@ struct RichRemoteImage: View {
         let size = rendered.size
         let ratio = size.height > 0 ? size.width / size.height : 1
         aspectRatio = ratio
-        RemoteImageLoader.rememberAspect(ratio, for: identity)
+        MediaMetadataCache.remember(ratio, for: identity)
     }
 }
 
@@ -881,17 +1030,64 @@ struct RichLocalImage: View {
 
     @Environment(\.richActions) private var richActions
     @State private var image: UIImage?
+    @State private var aspectRatio: CGFloat?
+    @State private var failed = false
     @State private var loaded = false
+    @State private var tappedLoad = false
+    @State private var downloadProgress: Double?
+    @State private var width: CGFloat = 0
     @State private var showViewer = false
     @State private var controlsVisible = true
     @State private var showShare = false
     @Environment(\.richViewportHeight) private var viewportHeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var colorScheme
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
 
     private var fileName: String {
         (path as NSString).lastPathComponent.nilIfEmpty ?? "image"
+    }
+
+    /// The daemon file, when the conversation names its workspace. Nil outside one
+    /// (previews): the path chip is all there honestly is.
+    private var ref: DaemonFileRef? {
+        guard let workspaceID = richActions?.daemonWorkspaceID else { return nil }
+        return DaemonFileRef(workspaceID: workspaceID, path: path, revision: nil)
+    }
+
+    /// The ratio the box reserves: the image's own when known, else the 4:3 guess.
+    private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
+
+    private var policy: MediaFetchPolicy {
+        mediaFetchPolicy(
+            kind: .image, knownBytes: nil,
+            condition: richActions?.linkCondition ?? .assumed)
+    }
+
+    /// What the card's box is doing, as one value, so motion runs only when this changes.
+    private struct Layout: Equatable {
+        let aspectRatio: CGFloat
+        let stage: Int
+    }
+
+    private var layout: Layout {
+        var stage = 0
+        if image != nil {
+            stage = 2
+        } else if failed {
+            stage = 3
+        } else if showsTapBox {
+            stage = 4
+        }
+        return Layout(aspectRatio: reservedAspect, stage: stage)
+    }
+
+    private var showsTapBox: Bool {
+        guard image == nil, !failed, !loaded else { return false }
+        if tappedLoad { return false }
+        return policy == .tapToDownload
     }
 
     var body: some View {
@@ -908,24 +1104,36 @@ struct RichLocalImage: View {
                         controlsVisible = true
                         showViewer = true
                     }
-            } else if loaded {
+                    .accessibilityLabel(alt.isEmpty ? fileName : alt)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Opens the image full screen")
+            } else if failed || loaded {
                 RichPathChip(path: path, glyph: "photo")
+            } else if showsTapBox {
+                tapBox
             } else {
                 Rectangle()
                     .fill(Palette.codeSurface)
-                    .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                    .aspectRatio(reservedAspect, contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: heightCap)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .overlay {
-                        ProgressView().controlSize(.small).tint(Palette.secondaryInk)
+                        if let progress = downloadProgress {
+                            ProgressView(value: progress)
+                                .controlSize(.small)
+                                .tint(Palette.secondaryInk)
+                        } else {
+                            ProgressView().controlSize(.small).tint(Palette.secondaryInk)
+                        }
                     }
+                    .accessibilityLabel(alt.isEmpty ? "Loading image" : "Loading image: \(alt)")
             }
         }
-        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: image)
-        .task {
-            image = await richActions?.loadLocalImage(path)
-            loaded = true
-        }
+        .background { widthReader }
+        .animation(
+            Motion.disclosure.resolved(reduceMotion: reduceMotion),
+            value: layout)
+        .task(id: loadKey) { await load() }
         .fullScreenCover(isPresented: $showViewer) {
             RichImageViewer(
                 fileName: fileName,
@@ -941,6 +1149,135 @@ struct RichLocalImage: View {
                 ActivityView(items: [image])
             }
         }
+    }
+
+    /// One load per (path, pixel bucket, tap). Nothing here runs per scroll frame.
+    private var loadKey: String {
+        let bucket = MediaSizing.pixelWidth(points: width, scale: displayScale)
+        return "\(path)|\(bucket)|\(tappedLoad)"
+    }
+
+    /// The card's inner width, for decoding at the size it will be drawn at. Published only
+    /// when it actually changes — never per scroll frame.
+    private var widthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { width = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
+        }
+    }
+
+    /// The §12 tap state: the reserved box, the file name, one tap to fetch.
+    private var tapBox: some View {
+        Button {
+            startTappedLoad()
+        } label: {
+            Rectangle()
+                .fill(Palette.codeSurface)
+                .aspectRatio(reservedAspect, contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .clipShape(.rect(cornerRadius: Radius.md))
+                .overlay {
+                    VStack(spacing: Space.sm) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.glyph(.large, weight: .light))
+                            .foregroundStyle(Palette.secondaryInk)
+                        Text("Tap to download")
+                            .font(.paseo(.caption, weight: .medium))
+                            .foregroundStyle(Palette.ink)
+                        Text(fileName)
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .padding(.horizontal, Space.md)
+                }
+        }
+        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+        .paseoCardAccessibility(kind: "Image", title: fileName, isButton: true)
+        .accessibilityHint("Downloads the image")
+    }
+
+    private func startTappedLoad() {
+        Haptics.light()
+        tappedLoad = true
+        failed = false
+        downloadProgress = nil
+    }
+
+    @MainActor
+    private func load() async {
+        guard let ref else {
+            // No workspace (a preview): the chip is the honest rendering.
+            loaded = true
+            return
+        }
+        guard width > 1 else { return }
+        if !tappedLoad {
+            switch policy {
+            case .tapToDownload: return
+            case .cacheOnly:
+                if image == nil { failed = true }
+                loaded = true
+                return
+            case .automatic: break
+            }
+        }
+        let pixelWidth = MediaSizing.pixelWidth(points: width, scale: displayScale)
+        let cap = tappedLoad
+            ? nil
+            : mediaDownloadCap(
+                kind: .image, condition: richActions?.linkCondition ?? .assumed)
+        for await event in await MediaPipeline.shared.events(
+            source: .daemon(ref), pixelWidth: pixelWidth, capBytes: cap)
+        {
+            guard !Task.isCancelled else { return }
+            switch event {
+            case .size(let size):
+                if aspectRatio == nil, size.height > 0 {
+                    aspectRatio = size.width / size.height
+                }
+            case .progress(let fraction):
+                downloadProgress = fraction
+            case .final(let outcome):
+                downloadProgress = nil
+                switch outcome {
+                case .image(let payload):
+                    image = payload.image
+                    aspectRatio = payload.aspectRatio
+                    loaded = true
+                case .svg(let source, let knownAspect):
+                    await renderDaemonSVG(source, knownAspect: knownAspect, ref: ref)
+                case .failure:
+                    failed = true
+                    loaded = true
+                }
+            }
+        }
+    }
+
+    /// Daemon SVGs draw through the shared offscreen renderer, like remote ones.
+    @MainActor
+    private func renderDaemonSVG(_ source: String, knownAspect: CGFloat?, ref: DaemonFileRef) async {
+        if let knownAspect {
+            aspectRatio = knownAspect
+            MediaMetadataCache.remember(knownAspect, for: MediaPipeline.liveKey(ref: ref))
+        }
+        let html = RichHTMLDocument.rawSVG(source: source, dark: colorScheme == .dark)
+        guard
+            let rendered = await RichSnapshotQueue.shared.snapshot(
+                html: html, width: width, scale: displayScale)
+        else {
+            failed = true
+            loaded = true
+            return
+        }
+        guard !Task.isCancelled else { return }
+        image = rendered
+        let size = rendered.size
+        if size.height > 0 { aspectRatio = size.width / size.height }
+        loaded = true
     }
 }
 
@@ -1004,7 +1341,7 @@ struct RichImageViewer: View {
                 Text("Couldn't load image")
                     .font(.paseo(.headline))
                     .foregroundStyle(.white)
-                Text(urlString.flatMap { RemoteImageLoader.target(for: $0)?.host } ?? urlString ?? "")
+                Text(urlString.flatMap { MediaPipeline.target(for: $0)?.host } ?? urlString ?? "")
                     .font(.paseo(.codeCaption))
                     .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(1)
@@ -1018,7 +1355,7 @@ struct RichImageViewer: View {
     @MainActor
     private func loadRemote() async {
         guard shownImage == nil, urlString != nil, remoteImage == nil else { return }
-        let outcome = await RemoteImageLoader.shared.load(urlString: urlString ?? "", pixelWidth: 2048)
+        let outcome = await MediaPipeline.shared.load(urlString: urlString ?? "", pixelWidth: 2048)
         guard !Task.isCancelled else { return }
         switch outcome {
         case .image(let payload): remoteImage = payload.image
