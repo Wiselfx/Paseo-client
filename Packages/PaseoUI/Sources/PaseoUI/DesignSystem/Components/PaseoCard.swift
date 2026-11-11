@@ -38,6 +38,15 @@ final class RichActions {
         UIPasteboard.general.string = text
         Haptics.light()
     }
+    /// Copies an image to the pasteboard. Defaults to the general pasteboard; the host
+    /// overrides only if it needs more.
+    var copyImage: (UIImage) -> Void = { image in
+        UIPasteboard.general.image = image
+        Haptics.light()
+    }
+    /// Adds an image to the composer tray (G3): the file name plus JPEG bytes, through the
+    /// existing attachment path. No-op until the host sets it.
+    var addToChat: (String, Data) -> Void = { _, _ in }
     /// Saves an image to Photos. Needs `NSPhotoLibraryAddUsageDescription` (G3 adds it);
     /// until then the system prompt speaks for itself on first use.
     var saveImage: (UIImage) -> Void = { image in

@@ -555,6 +555,7 @@ struct RichRemoteImage: View {
     /// The URL the state above belongs to. SwiftUI can hand this view a different block; when it
     /// does, the old picture must not be drawn for the new link.
     @State private var stateURL: String?
+    @Namespace private var zoom
     /// Set once the reader explicitly taps (or retries): the policy gate and the in-flight
     /// ceiling stop applying — an explicit fetch is always honored.
     @State private var tappedLoad = false
@@ -565,8 +566,6 @@ struct RichRemoteImage: View {
     @State private var tooLargeBytes: Int64?
     @Environment(\.richActions) private var richActions
     @State private var showViewer = false
-    @State private var controlsVisible = true
-    @State private var showShare = false
     /// The container's height, for the 60 % cap, known before the first frame (`RichViewport`).
     @Environment(\.richViewportHeight) private var viewportHeight
     @Environment(\.displayScale) private var displayScale
@@ -692,18 +691,12 @@ struct RichRemoteImage: View {
                 value: layout)
             .task(id: loadKey) { await load() }
             .fullScreenCover(isPresented: $showViewer) {
-                RichImageViewer(
-                    fileName: fileName,
-                    alt: alt.isEmpty ? fileName : alt,
-                    uiImage: image,
-                    aspectRatio: aspectRatio,
-                    urlString: urlString,
-                    controlsVisible: $controlsVisible,
-                    onShare: { showShare = true },
-                    onClose: { showViewer = false })
-            }
-            .sheet(isPresented: $showShare) {
-                shareSheet
+                MediaViewerView(
+                    items: [viewerItem],
+                    sourceID: viewerSourceID,
+                    namespace: zoom,
+                    onClose: { showViewer = false },
+                    selection: .constant(0))
             }
     }
 
@@ -715,18 +708,29 @@ struct RichRemoteImage: View {
                 .frame(maxWidth: .infinity, maxHeight: heightCap)
                 .background(Palette.codeSurface)
                 .clipShape(.rect(cornerRadius: Radius.md))
+                .overlay(alignment: .bottomTrailing) {
+                    if showsAnimationBadge {
+                        Text(MediaPipeline.target(for: urlString)?.pathExtension.uppercased() ?? "GIF")
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.black.opacity(0.6), in: .capsule)
+                            .padding(Space.sm)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .contentShape(.rect)
+                .matchedTransitionSource(id: viewerSourceID, in: zoom)
                 .onTapGesture {
-                    controlsVisible = true
                     showViewer = true
                 }
                 .accessibilityLabel(alt.isEmpty ? "Image" : alt)
                 .accessibilityAddTraits(.isButton)
                 .accessibilityHint("Opens the image full screen")
                 // A context menu is the only way to the link without a second gesture language.
-                // Save to Photos arrives with the G3 viewer (it needs the usage description).
+                // Share and Save to Photos live in the viewer (G3 §4.6).
                 .paseoCardMenu(
-                    onShare: { showShare = true },
                     copyTitle: "Copy link",
                     copyText: webURL != nil ? urlString : nil,
                     externalTitle: "Open link",
@@ -891,20 +895,30 @@ struct RichRemoteImage: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// The zoom-transition source, stable per card: the thumbnail the viewer returns to.
+    private var viewerSourceID: String { "image:\(urlString)" }
+
+    /// One viewer page: the pixels on screen now, the full fetch behind them (G3 §4.6).
+    private var viewerItem: MediaViewerItem {
+        MediaViewerItem(
+            id: urlString,
+            thumbnail: image,
+            fullSource: MediaPipeline.target(for: urlString).map(MediaSource.remote),
+            fileName: fileName,
+            alt: alt.isEmpty ? fileName : alt,
+            filePath: nil)
+    }
+
+    /// The transcript shows the first frame; only the viewer animates (G3 §4.6).
+    private var showsAnimationBadge: Bool {
+        let ext = MediaPipeline.target(for: urlString)?.pathExtension.lowercased()
+        return ext == "gif" || ext == "apng"
+    }
+
     /// "host · what happened", the one line the card has room for.
     private func detail(for failure: MediaFailure) -> String {
         guard let host else { return failure.message }
         return "\(host) · \(failure.message)"
-    }
-
-    @ViewBuilder private var shareSheet: some View {
-        if let image {
-            // The image itself, so the share sheet offers Save Image and Copy.
-            ActivityView(items: [image])
-        } else if let webURL {
-            // Not loaded yet: the link is all we honestly have.
-            ActivityView(items: [webURL])
-        }
     }
 
     /// The card's inner width, for decoding at the size it will be drawn at. Published only
@@ -1037,8 +1051,7 @@ struct RichLocalImage: View {
     @State private var downloadProgress: Double?
     @State private var width: CGFloat = 0
     @State private var showViewer = false
-    @State private var controlsVisible = true
-    @State private var showShare = false
+    @Namespace private var zoom
     @Environment(\.richViewportHeight) private var viewportHeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
@@ -1048,6 +1061,21 @@ struct RichLocalImage: View {
 
     private var fileName: String {
         (path as NSString).lastPathComponent.nilIfEmpty ?? "image"
+    }
+
+    /// The zoom-transition source, stable per card.
+    private var viewerSourceID: String { "local-image:\(path)" }
+
+    /// One viewer page: the pixels on screen now, the full fetch behind them, with Show in
+    /// Files for the daemon path (G3 §4.6).
+    private var viewerItem: MediaViewerItem {
+        MediaViewerItem(
+            id: "local-image:\(path)",
+            thumbnail: image,
+            fullSource: ref.map(MediaSource.daemon),
+            fileName: fileName,
+            alt: alt.isEmpty ? fileName : alt,
+            filePath: ref == nil ? nil : path)
     }
 
     /// The daemon file, when the conversation names its workspace. Nil outside one
@@ -1100,8 +1128,8 @@ struct RichLocalImage: View {
                     .background(Palette.codeSurface)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .contentShape(.rect)
+                    .matchedTransitionSource(id: viewerSourceID, in: zoom)
                     .onTapGesture {
-                        controlsVisible = true
                         showViewer = true
                     }
                     .accessibilityLabel(alt.isEmpty ? fileName : alt)
@@ -1135,19 +1163,12 @@ struct RichLocalImage: View {
             value: layout)
         .task(id: loadKey) { await load() }
         .fullScreenCover(isPresented: $showViewer) {
-            RichImageViewer(
-                fileName: fileName,
-                alt: alt.isEmpty ? fileName : alt,
-                uiImage: image,
-                urlString: nil,
-                controlsVisible: $controlsVisible,
-                onShare: { showShare = true },
-                onClose: { showViewer = false })
-        }
-        .sheet(isPresented: $showShare) {
-            if let image {
-                ActivityView(items: [image])
-            }
+            MediaViewerView(
+                items: [viewerItem],
+                sourceID: viewerSourceID,
+                namespace: zoom,
+                onClose: { showViewer = false },
+                selection: .constant(0))
         }
     }
 
@@ -1278,92 +1299,6 @@ struct RichLocalImage: View {
         let size = rendered.size
         if size.height > 0 { aspectRatio = size.width / size.height }
         loaded = true
-    }
-}
-
-/// Full-screen viewer, reusing ClaudeMediaViewer: black canvas, close button, the image
-/// centered, share into UIActivityViewController.
-struct RichImageViewer: View {
-    let fileName: String
-    let alt: String
-    let uiImage: UIImage?
-    var aspectRatio: CGFloat? = nil
-    let urlString: String?
-    @Binding var controlsVisible: Bool
-    let onShare: () -> Void
-    let onClose: () -> Void
-
-    /// Only used when the card could not hand the pixels over (the image was evicted between
-    /// the tap and the cover appearing). Same loader, so a hit is instant.
-    @State private var remoteImage: UIImage?
-    @State private var remoteFailed = false
-
-    private var shownImage: UIImage? { uiImage ?? remoteImage }
-
-    /// The canvas frame: the real shape as soon as anything knows it, instead of a square.
-    private var shownAspectRatio: Double {
-        if let shownImage, shownImage.size.height > 0 {
-            return Double(shownImage.size.width / shownImage.size.height)
-        }
-        if let aspectRatio, aspectRatio.isFinite, aspectRatio > 0 { return Double(aspectRatio) }
-        return 1
-    }
-
-    var body: some View {
-        let media = ClaudeMedia(
-            id: "rich-\(fileName)", fileName: fileName, accessibilityDescription: alt,
-            aspectRatio: shownAspectRatio)
-        ClaudeMediaViewer(
-            item: media,
-            controlsVisible: controlsVisible,
-            // Prose images have no editor; the pencil would be dead.
-            showsEditAction: false,
-            mediaContent: { _, _ in
-                AnyView(viewerContent)
-            },
-            onAction: { action in
-                switch action {
-                case .close: onClose()
-                case .toggleControls: controlsVisible.toggle()
-                case .share: onShare()
-                default: break
-                }
-            })
-        .task { await loadRemote() }
-    }
-
-    @ViewBuilder
-    private var viewerContent: some View {
-        if let shownImage {
-            Image(uiImage: shownImage).resizable().aspectRatio(contentMode: .fit)
-        } else if remoteFailed {
-            VStack(spacing: Space.sm) {
-                Text("Couldn't load image")
-                    .font(.paseo(.headline))
-                    .foregroundStyle(.white)
-                Text(urlString.flatMap { MediaPipeline.target(for: $0)?.host } ?? urlString ?? "")
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .lineLimit(1)
-            }
-        } else {
-            ProgressView().tint(.white)
-        }
-    }
-
-    /// The card usually hands the pixels over; this is the fallback for when it could not.
-    @MainActor
-    private func loadRemote() async {
-        guard shownImage == nil, urlString != nil, remoteImage == nil else { return }
-        let outcome = await MediaPipeline.shared.load(urlString: urlString ?? "", pixelWidth: 2048)
-        guard !Task.isCancelled else { return }
-        switch outcome {
-        case .image(let payload): remoteImage = payload.image
-        case .svg:
-            // The viewer zooms pixels; an SVG here has already been drawn by the card.
-            remoteFailed = true
-        case .failure: remoteFailed = true
-        }
     }
 }
 

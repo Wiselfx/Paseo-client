@@ -16,10 +16,18 @@ final class MediaPayload: @unchecked Sendable {
     /// Width / height as decoded, so a card can reserve its box before the pixels land and
     /// never shift what is above or below it.
     let aspectRatio: CGFloat
+    /// More than one frame (GIF/APNG/WebP): the transcript shows `image` (the first frame)
+    /// with a badge; only the viewer animates.
+    let isAnimated: Bool
+    /// The full bytes, carried only for small animated images (≤ 8 MB) so the viewer can
+    /// decode frames without a second fetch. Nil for stills — they never need it.
+    let fullData: Data?
 
-    init(image: UIImage, aspectRatio: CGFloat) {
+    init(image: UIImage, aspectRatio: CGFloat, isAnimated: Bool = false, fullData: Data? = nil) {
         self.image = image
         self.aspectRatio = aspectRatio.isFinite && aspectRatio > 0 ? aspectRatio : 1
+        self.isAnimated = isAnimated
+        self.fullData = fullData
     }
 }
 
@@ -105,6 +113,9 @@ struct DaemonFileRef: Hashable, Sendable {
 enum MediaSource: Hashable, Sendable {
     case remote(URL)
     case daemon(DaemonFileRef)
+    /// Raw bytes with a caller-provided flight identity (the Files panel's decoded file:
+    /// the bytes are already here, so the pipeline only decodes — never fetches).
+    case data(Data, String)
 }
 
 /// Raw daemon bytes plus the revision the daemon reported, if any. The controller builds
@@ -266,10 +277,10 @@ actor MediaPipeline {
     /// - `ignoreFailureCache`: a Retry/extraordinary reload bypasses the failure memo.
     func events(
         source: MediaSource, pixelWidth: Int, capBytes: Int64? = nil,
-        ignoreFailureCache: Bool = false
+        ignoreFailureCache: Bool = false, maxSide: Double = 2048, cacheResult: Bool = true
     ) async -> AsyncStream<MediaEvent> {
         let key = streamKey(source: source, pixelWidth: pixelWidth)
-        let identity = identityKey(source: source)
+        let identity = Self.identityKey(source: source)
 
         // The same picture at another bucket (a rotation, a sheet): right for the first
         // paint, and the exact size follows if it is asked for again.
@@ -311,9 +322,10 @@ actor MediaPipeline {
         flight.watchers[id] = continuation
         flights[key] = flight
         if isNew {
-            Task.detached { [source, pixelWidth, key, capBytes] in
+            Task.detached { [source, pixelWidth, key, capBytes, maxSide, cacheResult] in
                 await MediaPipeline.drive(
-                    source: source, pixelWidth: pixelWidth, key: key, capBytes: capBytes)
+                    source: source, pixelWidth: pixelWidth, key: key, capBytes: capBytes,
+                    maxSide: maxSide, cacheResult: cacheResult)
             }
         }
         if let aspect = MediaMetadataCache.aspectRatio(for: identity) {
@@ -325,10 +337,12 @@ actor MediaPipeline {
     /// The classic one-shot: the final outcome, for callers with no streaming UI (YouTube
     /// stills, the viewer's fallback fetch).
     func load(
-        source: MediaSource, pixelWidth: Int, ignoreFailureCache: Bool = false
+        source: MediaSource, pixelWidth: Int, ignoreFailureCache: Bool = false,
+        maxSide: Double = 2048, cacheResult: Bool = true
     ) async -> MediaOutcome {
         for await event in await events(
-            source: source, pixelWidth: pixelWidth, ignoreFailureCache: ignoreFailureCache
+            source: source, pixelWidth: pixelWidth, ignoreFailureCache: ignoreFailureCache,
+            maxSide: maxSide, cacheResult: cacheResult
         ) {
             if case .final(let outcome) = event { return outcome }
         }
@@ -381,13 +395,15 @@ actor MediaPipeline {
         }
     }
 
-    private func reportFinal(key: String, identity: String, outcome: MediaOutcome) {
+    private func reportFinal(key: String, identity: String, outcome: MediaOutcome, cache: Bool = true) {
         let flight = flights.removeValue(forKey: key)
         switch outcome {
         case .image(let payload):
-            Self.decoded.setObject(
-                payload, forKey: key as NSString, cost: Self.cost(of: payload))
-            Self.decoded.setObject(payload, forKey: identity as NSString, cost: 0)
+            if cache {
+                Self.decoded.setObject(
+                    payload, forKey: key as NSString, cost: Self.cost(of: payload))
+                Self.decoded.setObject(payload, forKey: identity as NSString, cost: 0)
+            }
             MediaMetadataCache.remember(payload.aspectRatio, for: identity)
             Self.forgetFailure(key)
             Self.forgetFailure(identity)
@@ -413,7 +429,7 @@ actor MediaPipeline {
     private static func cost(of payload: MediaPayload) -> Int {
         let width = payload.image.size.width * payload.image.scale
         let height = payload.image.size.height * payload.image.scale
-        return Int(max(width, 1) * max(height, 1) * 4)
+        return Int(max(width, 1) * max(height, 1) * 4) + (payload.fullData?.count ?? 0)
     }
 
     // MARK: Drivers (detached: never actor-isolated, never main)
@@ -421,18 +437,29 @@ actor MediaPipeline {
     /// One download: stream the bytes, probe the size early, enforce the ceiling, decode at
     /// display size off main. Reports back through the actor; the actor fans out to watchers.
     private static func drive(
-        source: MediaSource, pixelWidth: Int, key: String, capBytes: Int64?
+        source: MediaSource, pixelWidth: Int, key: String, capBytes: Int64?,
+        maxSide: Double, cacheResult: Bool
     ) async {
         switch source {
         case .remote(let url):
-            await driveRemote(url: url, pixelWidth: pixelWidth, key: key, capBytes: capBytes)
+            await driveRemote(
+                url: url, pixelWidth: pixelWidth, key: key, capBytes: capBytes,
+                maxSide: maxSide, cacheResult: cacheResult)
         case .daemon(let ref):
-            await driveDaemon(ref: ref, pixelWidth: pixelWidth, key: key, capBytes: capBytes)
+            await driveDaemon(
+                ref: ref, pixelWidth: pixelWidth, key: key, capBytes: capBytes,
+                maxSide: maxSide, cacheResult: cacheResult)
+        case .data(let bytes, _):
+            await finishImageData(
+                data: bytes, pixelWidth: pixelWidth, key: key,
+                identity: identityKey(source: source), capBytes: capBytes,
+                maxSide: maxSide, cacheResult: cacheResult)
         }
     }
 
     private static func driveRemote(
-        url: URL, pixelWidth: Int, key: String, capBytes: Int64?
+        url: URL, pixelWidth: Int, key: String, capBytes: Int64?,
+        maxSide: Double, cacheResult: Bool
     ) async {
         let identity = url.absoluteString
         var request = URLRequest(
@@ -529,7 +556,9 @@ actor MediaPipeline {
             await shared.reportFinal(key: key, identity: identity, outcome: .final(outcome))
             return
         }
-        guard let payload = MediaPayload.decode(data: data, pixelWidth: pixelWidth) else {
+        guard
+            let payload = MediaPayload.decode(data: data, pixelWidth: pixelWidth, maxSide: maxSide)
+        else {
             let isImageType = contentType?.hasPrefix("image/") == true
             await shared.reportFinal(
                 key: key, identity: identity,
@@ -537,7 +566,9 @@ actor MediaPipeline {
             return
         }
         await shared.reportSize(key: key, aspect: payload.aspectRatio, identity: identity)
-        await shared.reportFinal(key: key, identity: identity, outcome: .final(.image(payload)))
+        await shared.reportFinal(
+            key: key, identity: identity, outcome: .final(.image(payload)),
+            cache: cacheResult)
     }
 
     /// Reads the incremental source's size, if the header bytes have arrived. One header
@@ -552,7 +583,8 @@ actor MediaPipeline {
     }
 
     private static func driveDaemon(
-        ref: DaemonFileRef, pixelWidth: Int, key: String, capBytes: Int64?
+        ref: DaemonFileRef, pixelWidth: Int, key: String, capBytes: Int64?,
+        maxSide: Double, cacheResult: Bool
     ) async {
         let identity = liveKey(ref: ref)
         guard let fetch = await shared.daemonFetch else {
@@ -584,7 +616,16 @@ actor MediaPipeline {
             }
             diskWrite(data: fetchResult.data, key: diskKey(ref: ref, revision: fetchResult.revision))
         }
-        let data = fetchResult.data
+        await finishImageData(
+            data: fetchResult.data, pixelWidth: pixelWidth, key: key, identity: identity,
+            capBytes: capBytes, maxSide: maxSide, cacheResult: cacheResult)
+    }
+
+    /// The shared tail for fetched bytes: ceiling, SVG routing, width-exact off-main decode.
+    private static func finishImageData(
+        data: Data, pixelWidth: Int, key: String, identity: String, capBytes: Int64?,
+        maxSide: Double, cacheResult: Bool
+    ) async {
         if let capBytes, Int64(data.count) > capBytes {
             await shared.reportFinal(
                 key: key, identity: identity,
@@ -598,13 +639,17 @@ actor MediaPipeline {
             await shared.reportFinal(key: key, identity: identity, outcome: .final(outcome))
             return
         }
-        guard let payload = MediaPayload.decode(data: data, pixelWidth: pixelWidth) else {
+        guard
+            let payload = MediaPayload.decode(data: data, pixelWidth: pixelWidth, maxSide: maxSide)
+        else {
             await shared.reportFinal(
                 key: key, identity: identity, outcome: .final(.failure(.decoding)))
             return
         }
         await shared.reportSize(key: key, aspect: payload.aspectRatio, identity: identity)
-        await shared.reportFinal(key: key, identity: identity, outcome: .final(.image(payload)))
+        await shared.reportFinal(
+            key: key, identity: identity, outcome: .final(.image(payload)),
+            cache: cacheResult)
     }
 
     private static func mapURLError(_ error: URLError) -> MediaFailure {
@@ -623,15 +668,17 @@ actor MediaPipeline {
 
     /// The flight key: one stream per (content, decode bucket).
     private func streamKey(source: MediaSource, pixelWidth: Int) -> String {
-        "\(identityKey(source: source))|\(pixelWidth)"
+        "\(Self.identityKey(source: source))|\(pixelWidth)"
     }
 
-    /// The content identity: the normalized URL, or the daemon live key. Sizes and failures
-    /// are remembered here, so they survive pixel eviction and bucket changes.
-    private func identityKey(source: MediaSource) -> String {
+    /// The content identity: the normalized URL, the daemon live key, or the caller's data
+    /// identity. Sizes and failures are remembered here, so they survive pixel eviction
+    /// and bucket changes.
+    private static func identityKey(source: MediaSource) -> String {
         switch source {
         case .remote(let url): url.absoluteString
         case .daemon(let ref): Self.liveKey(ref: ref)
+        case .data(_, let id): "data|\(id)"
         }
     }
 
@@ -750,7 +797,7 @@ actor MediaPipeline {
         guard data.count <= maxBytes else {
             return .final(.failure(.tooLarge(bytes: Int64(data.count))))
         }
-        guard let payload = await decode(data, pixelWidth: pixelWidth) else {
+        guard let payload = await decode(data, pixelWidth: pixelWidth, maxSide: 2048) else {
             return .final(.failure(.decoding))
         }
         return .final(.image(payload))
@@ -780,24 +827,37 @@ actor MediaPipeline {
 
     /// One ImageIO pass at the card's width (`ImageDownsampler`), never a full-size bitmap. A
     /// 4000 px photo costs a 1200 px buffer, not 48 MB. An animated GIF yields its first frame.
-    private static func decode(_ data: Data, pixelWidth: Int) async -> MediaPayload? {
+    private static func decode(_ data: Data, pixelWidth: Int, maxSide: Double) async -> MediaPayload? {
         await Task.detached(priority: .userInitiated) {
-            MediaPayload.decode(data: data, pixelWidth: pixelWidth)
+            MediaPayload.decode(data: data, pixelWidth: pixelWidth, maxSide: maxSide)
         }.value
     }
 }
 
 extension MediaPayload {
+    /// Animated bytes are worth carrying only when they fit a viewer page comfortably.
+    static let maxCarriedAnimationBytes = 8 * 1024 * 1024
+
     /// The downsample itself, off the pipeline's actor and off main. Width-exact: a tall portrait
     /// is decoded so its **width** matches the card, not its longest side (H5 round 2 review).
-    static func decode(data: Data, pixelWidth: Int) -> MediaPayload? {
+    static func decode(data: Data, pixelWidth: Int, maxSide: Double = 2048) -> MediaPayload? {
         guard
             let image = ImageDownsampler.image(
-                data: data, pixelWidth: Double(pixelWidth), maxSide: 2048)
+                data: data, pixelWidth: Double(pixelWidth), maxSide: maxSide)
         else { return nil }
         let size = image.size
         guard size.width > 0, size.height > 0 else { return nil }
-        return MediaPayload(image: image, aspectRatio: size.width / size.height)
+        let animated = (frameCount(of: data) ?? 1) > 1
+        let fullData = animated && data.count <= maxCarriedAnimationBytes ? data : nil
+        return MediaPayload(
+            image: image, aspectRatio: size.width / size.height,
+            isAnimated: animated, fullData: fullData)
+    }
+
+    /// The frame count from the header alone — no bitmap, no decode.
+    private static func frameCount(of data: Data) -> Int? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return CGImageSourceGetCount(source)
     }
 }
 #endif

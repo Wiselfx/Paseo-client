@@ -45,6 +45,8 @@ targets:
         NSLocalNetworkUsageDescription: Paseo connects to the agent daemon on your network.
         NSSpeechRecognitionUsageDescription: Paseo uses on-device speech recognition to dictate into the composer.
         NSMicrophoneUsageDescription: Paseo uses the microphone to dictate into the composer.
+        # G3: the viewer saves only the image you explicitly choose.
+        NSPhotoLibraryAddUsageDescription: Paseo saves images you choose to your photo library.
         # Upstream wording (en.ts pairing.scan.cameraPermissionBody).
         NSCameraUsageDescription: Allow camera access to scan the pairing QR code from your daemon.
         # M20: `paseo://` deep links (agent / workspace / open-project routes). Pairing links

@@ -307,6 +307,11 @@ struct TranscriptJump: Equatable {
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
         }
+        richActions.addToChat = { [weak self] fileName, data in
+            guard let self else { return }
+            self.attachmentStore.addImage(
+                data: data, fileName: fileName, to: self.store.agentId, store: self.store)
+        }
         // The pipeline's only daemon entry: socket bytes (64 MB cap) in, decoded pixels out.
         // The hook reads the live agent at call time and runs off main inside the driver.
         richActions.linkCondition = MediaLinkCondition(

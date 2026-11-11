@@ -145,14 +145,13 @@ struct InlineProseImage: Identifiable {
     var id: String { markdown.source }
 }
 
-/// The full-screen viewer for an image tapped inside a sentence — the same `RichImageViewer`
-/// the image cards use, so zoom, share and the failure line look identical everywhere.
+/// The full-screen viewer for an image tapped inside a sentence — the same `MediaViewerView`
+/// the image cards use, so zoom, share and the chrome look identical everywhere.
 struct InlineProseImageViewer: View {
     let item: InlineProseImage
     let onClose: () -> Void
 
-    @State private var controlsVisible = true
-    @State private var showShare = false
+    @Namespace private var zoom
 
     private var source: String {
         item.markdown.source.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -171,27 +170,22 @@ struct InlineProseImageViewer: View {
         return base
     }
 
-    private var shareItems: [Any] {
-        if let image = item.uiImage { return [image] }
-        if let url = URL(string: source) { return [url] }
-        return []
-    }
-
     var body: some View {
-        RichImageViewer(
-            fileName: fileName,
-            alt: item.markdown.alt.isEmpty ? fileName : item.markdown.alt,
-            uiImage: item.uiImage,
-            urlString: isRemote ? source : nil,
-            controlsVisible: $controlsVisible,
-            onShare: { showShare = true },
-            onClose: onClose
-        )
-        .sheet(isPresented: $showShare) {
-            if !shareItems.isEmpty {
-                ActivityView(items: shareItems)
-            }
-        }
+        MediaViewerView(
+            items: [
+                MediaViewerItem(
+                    id: "inline:\(source)",
+                    thumbnail: item.uiImage,
+                    fullSource: isRemote
+                        ? MediaPipeline.target(for: source).map(MediaSource.remote) : nil,
+                    fileName: fileName,
+                    alt: item.markdown.alt.isEmpty ? fileName : item.markdown.alt,
+                    filePath: isRemote ? nil : source)
+            ],
+            sourceID: "inline:\(source)",
+            namespace: zoom,
+            onClose: onClose,
+            selection: .constant(0))
     }
 }
 

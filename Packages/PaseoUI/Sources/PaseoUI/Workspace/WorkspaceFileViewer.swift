@@ -53,6 +53,9 @@ struct WorkspaceFileViewer: View {
     /// The viewer's laid-out size, read once per resize (not per scroll frame). Image decoding
     /// and syntax bounds derive from it; no `UIScreen` lookup.
     @State private var stageSize: CGSize = .zero
+    /// The shared full-screen viewer for the image on screen (G3 §4.6).
+    @State private var showImageViewer = false
+    @Namespace private var imageZoom
 
     private var files: WorkspaceFiles { checkout.files }
     private var fileName: String { WorkspaceFileFormat.lastComponent(relPath) }
@@ -686,10 +689,35 @@ struct WorkspaceFileViewer: View {
         )
     }
 
-    /// Images render zoomable: pinch, drag while zoomed, double-tap to toggle 1x/2x.
+    /// The image at its fitted size; tap opens the shared full-screen viewer (G3 §4.6).
+    /// Pinch and drag-down dismiss live there, not inline.
     @ViewBuilder private var zoomableImage: some View {
-        if let render, case .image(_, let image) = render.payload {
-            ZoomableImageView(image: image)
+        if let render, case .image(let data, let image) = render.payload {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(.rect)
+                .matchedTransitionSource(id: "file-image:\(relPath)", in: imageZoom)
+                .onTapGesture { showImageViewer = true }
+                .accessibilityLabel("Image \(fileName), tap to open")
+                .accessibilityAddTraits(.isButton)
+                .fullScreenCover(isPresented: $showImageViewer) {
+                    MediaViewerView(
+                        items: [
+                            MediaViewerItem(
+                                id: "file-image:\(relPath)",
+                                thumbnail: image,
+                                fullSource: .data(data, "file-image:\(relPath)"),
+                                fileName: fileName,
+                                alt: fileName,
+                                filePath: nil)
+                        ],
+                        sourceID: "file-image:\(relPath)",
+                        namespace: imageZoom,
+                        onClose: { showImageViewer = false },
+                        selection: .constant(0))
+                }
         } else if render == nil {
             LoadingState()
         } else {
@@ -1072,69 +1100,4 @@ struct WorkspaceCodeView: View {
     }
 }
 
-/// A zoomable image: pinch to zoom, drag to pan while zoomed, double-tap to toggle 1x/2x.
-private struct ZoomableImageView: View {
-    let image: UIImage
-
-    @State private var scale: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        GeometryReader { proxy in
-            let fitted = fittedSize(in: proxy.size)
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: fitted.width, height: fitted.height)
-                .scaleEffect(scale)
-                .offset(offset)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(.rect)
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged { value in
-                            scale = min(5, max(1, value))
-                        }
-                        .onEnded { _ in
-                            if scale <= 1.05 { scale = 1; offset = .zero; lastOffset = .zero }
-                        })
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            guard scale > 1 else { return }
-                            offset = CGSize(
-                                width: lastOffset.width + value.translation.width,
-                                height: lastOffset.height + value.translation.height)
-                        }
-                        .onEnded { _ in lastOffset = offset })
-                .onTapGesture(count: 2) {
-                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                        if scale > 1 {
-                            scale = 1
-                            offset = .zero
-                            lastOffset = .zero
-                        } else {
-                            scale = 2
-                        }
-                    }
-                }
-                .accessibilityLabel("Zoomable image")
-        }
-        .background(Palette.codeSurface)
-    }
-
-    private func fittedSize(in size: CGSize) -> CGSize {
-        let aspect = image.size.width / max(image.size.height, 1)
-        let bounds = CGSize(width: size.width, height: size.height)
-        var width = bounds.width
-        var height = width / aspect
-        if height > bounds.height {
-            height = bounds.height
-            width = height * aspect
-        }
-        return CGSize(width: width, height: height)
-    }
-}
 #endif
