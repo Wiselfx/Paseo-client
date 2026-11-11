@@ -18,6 +18,9 @@ enum Motion: CaseIterable {
     case bubbleEnter
     /// The status line's wording swap (OCU §12.22).
     case swap
+    /// The transcript header leaving and returning (H2 §3): interruptible, so a reversal
+    /// retargets from wherever the bar is.
+    case header
 
     var animation: Animation {
         switch self {
@@ -30,6 +33,7 @@ enum Motion: CaseIterable {
         case .glide: .smooth(duration: 0.3)
         case .bubbleEnter: Motion.ocuOut(0.2)
         case .swap: Motion.ocuOut(0.24)
+        case .header: .smooth(duration: 0.26)
         }
     }
 
@@ -45,7 +49,7 @@ enum Motion: CaseIterable {
         switch self {
         case .fade: return animation
         case .settle: return .easeOut(duration: 0.2)
-        case .feedback, .disclosure, .glide, .bubbleEnter, .swap: return nil
+        case .feedback, .disclosure, .glide, .bubbleEnter, .swap, .header: return nil
         }
     }
 }

@@ -76,13 +76,10 @@ public struct ChatScreen: View {
 
     /// The top bar: two glass buttons and the centred title. No band, and the find bar joins it
     /// when find is open; content dissolves under them through the scroll edge effect (D1 §1).
+    /// The bar reads its own chrome state (find, hidden, sheets), so a flip never rebuilds the
+    /// transcript (R-1, H2 §3).
     private var topChrome: some View {
-        VStack(spacing: 0) {
-            ChatHeaderBar(store: store, controller: controller)
-            if controller.find.isOpen {
-                ChatFindBarView(store: store, controller: controller)
-            }
-        }
+        ChatTopChrome(store: store, controller: controller)
     }
 
     /// The bottom bar: the subagent pill and the composer, both clear behind their own cards, so
