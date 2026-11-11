@@ -1706,3 +1706,266 @@ list.
 | Setting (§3) | "Show agent names on the Lock Screen" |
 | Notification action (G19, if approved) | "Allow", "Deny" (upstream wording if present) |
 | Share extension (G20, if approved) | "Send to Paseo", "Choose agent" |
+
+---
+
+# Appendix A: the research agent's own draft, rescued (verbatim)
+
+The research agent wrote these sections, but a safety filter stopped them before they reached this
+file. The user recovered them from the agent's shell commands on 2026-11-11, and they appear below
+word for word. Both captures end mid-text; the cut-offs are marked. Where they overlap with the
+lead's §8–§10 above, both versions are kept. §0 (the research synthesis) appears only here.
+
+## 0. Research synthesis: what others do, and what it means here
+
+This section was cut from the capped version. It records what the web research found and the
+conclusion each finding drives. Sources are in §7.
+
+### 0.1 Apple platform guidance
+
+- **Live Activities (HIG, change log Oct 2026).**
+  - Scope:
+    - Live Activities are for tasks "that have a defined beginning and end" and "don't exceed
+      eight hours".
+    - They remain on the Lock Screen up to four hours after ending, and a custom dismissal of
+      15–30 minutes is "adequate" in most cases.
+    - "Prefer a single Live Activity that uses a dynamic layout and rotates through events."
+    - Don't send push notifications "alongside Live Activities for the same updates".
+  - Interaction:
+    - Interactivity should be limited "to a single element".
+    - CarPlay deactivates interactive elements.
+  - Privacy: avoid sensitive information, or redact it.
+  - Layout specs, from the 393 pt-wide iPhone:
+    - compact 52.33×36.67, minimal 36.67–45×36.67;
+    - expanded and Lock Screen 371×84–160;
+    - limited width is a 28 pt circle;
+    - Lock Screen margin is 14 pt.
+  - Presentations:
+    - The Mac menu bar (macOS Tahoe), the Watch Smart Stack and StandBy reuse the same
+      presentations.
+    - The logo mark sits "without a container".
+  - Animations are at most 2 s.
+  - **Consequence:** one rotating "agents" activity, no buttons, redacted titles, a factual
+    status line, and an end with 15 min dismissal.
+- **Widgets (HIG).**
+  - Standard margin 16 pt (11 pt for groupings), and `ContainerRelativeShape` for inner
+    corners.
+  - Text ≥ 11 pt; don't rasterize text.
+  - "Convey meaning without relying on specific colors" (acc
+
+*[Capture ends here, mid-sentence.]*
+
+## 8. What competent apps do (the agent's version)
+
+These are the patterns that well-built chat, assistant and developer apps converge on for rich
+answers and system surfaces. Each pattern comes with the reason it exists. Apple's HIG is cited
+where it states the same rule.
+
+### 8.1 Rich answers in a transcript
+
+- **Prose first, cards second.**
+  - The answer stays readable text. Rich blocks appear only where they carry information that
+    text can't: an image, a diagram, a structured status.
+  - Why: a transcript that turns into a dashboard is hard to scan, and every card costs vertical
+    space on a phone.
+- **One card language.**
+  - Every embedded object shares the same chrome (radius, border, padding, header anatomy) and
+    differs only in content.
+  - Why: users learn "this is tappable and opens something" once. Mixed card styles read as
+    bugs.
+- **Explicit triggers, never guesses.**
+  - Cards come from unambiguous signals: a dedicated fence, a bare URL on its own line, a known
+    file extension. Prose is never parsed for "probably a place" or "probably a chart".
+  - Why: a false positive (a sentence turned into a card) is worse than a missed card.
+- **Space is reserved before content arrives.**
+  - Media slots get their final size from metadata or a fixed ratio before any pixel loads.
+  - Why: text that jumps while you read is the most visible sign of an unpolished app.
+- **Progressive disclosure for big things.**
+  - Inline previews are capped (about one screen). The full object opens on its own page with
+    share, source and export.
+  - Why: the transcript scrolls; artifacts need room. Mixing the two makes both worse.
+- **Source stays one tap away.**
+  - Anything rendered from code (diagrams, HTML, SVG) offers "view source" and "copy source".
+  - Why: technical users need to verify what was rendered, and copy it elsewhere.
+- **Citations are compact and inline.**
+  - Small chips or a collapsed list of sources, expanded on demand.
+  - Why: provenance matters, but should never push the answer below the fold.
+- **Structured follow-ups replace typing where it's cheap.**
+  - Choices, confirmations and approvals appear as native controls, while free text stays
+    available.
+  - Why: tapping is faster on a phone. In this app that pattern already exists as the
+    permission and question cards; it isn't extended to generic "forms in answers" (§6).
+
+### 8.2 Media
+
+- **Downsample to display size; decode off the main thread.**
+  - Why: full-resolution screenshots exhaust memory and cause scroll hitches.
+- **Never crop what matters.**
+  - The inline view letterboxes tall images. Only gallery tiles crop, and the viewer always
+    shows the full frame.
+  - Why: a cropped screenshot hides exactly the part that matters.
+- **One full-screen viewer for everything visual**, with the zoom transition from the source,
+  swipe to page, pinch and double-tap zoom, drag down to dismiss, and share/save/copy.
+  - Why: users carry the system Photos gestures into every app. Deviating feels broken.
+- **Players are lazy and exclusive.**
+  - The poster shows first, and the player is created on tap. Only one source plays at a time,
+    and scrolling far away pauses it.
+  - Why: performance, battery, and not surprising the user with sound.
+- **Text in images is selectable** (on-device text recognition in the viewer).
+  - Why: error screenshots are the most common image in developer conversations.
+- **Expensive downloads are explicit.**
+  - Large files show their size and wait for a tap. Low Data Mode is respected.
+  - Why: the user pays for data, and the HIG asks apps to honour Low Data Mode.
+
+### 8.3 Developer-specific
+
+- **Changes are summarised, not dumped.**
+  - "N files changed, +A −B", with per-file diffs one tap away.
+  - Why: on a phone, a reviewer wants the scope first and the details second.
+- **Terminal output keeps its colors but is truncated to the tail.**
+  - Why: the end of the output holds the verdict (exit code, test summary). The colors carry
+    meaning (red failures).
+- **CI and review state is live, not a snapshot.**
+  - A PR card updates as checks finish.
+  - Why: stale CI status leads to wrong decisions.
+- **Approvals show the full command before acting.**
+  - Truncated commands, and buttons placed where a mis-tap approves, are the most common
+    complaints about mobile agent control.
+  - Why: approval is a security decision.
+
+### 8.4 System surfaces
+
+- **Widgets show the one thing the user checks most, with an honest freshness label.**
+  - HIG: "Prefer dynamic information"; "consider displaying text that describes when the data was
+    last updated".
+  - Why: a widget that looks current but isn't destroys trust.
+- **Widgets deep-link to the exact item**, never to the app's home screen (HIG).
+- **Live Activities track one bounded task.**
+  - They use a single activity, and update only on meaningful change. The single alert goes out
+    when the user must act. They end promptly, with a short summary (HIG).
+  - Why: Live Activities are prominent and budgeted; noise gets them turned off system-wide.
+- **Lock Screen content is redacted by default** when it may contain private text (HIG).
+- **Controls and Action-button shortcuts start the most common action** (a new conversation).
+  - Why: they're the fastest entry point the system offers.
+- **Background chats show progress in a Live Activity only when the app can actually keep the
+  work alive.**
+  - Why: a timer that counts after the work stopped is a lie.
+- **Destructive or privileged actions from outside the app require device authentication.**
+  - Why: a locked phone in someone else's hand must not be able to approve anything.
+
+---
+
+## 9. Lower-priority card refinements (the agent's version)
+
+These are not in the phased roadmap. Ticket them after Phase 1 if device use shows the need.
+
+### 9.1 Wide Markdown tables
+
+- **Today.**
+  - `MarkdownTableMetrics` sizes columns: short tables fill the column, wide ones scroll
+    horizontally (`Conversation/Prose/MarkdownTableMetrics.swift`, `ClaudeMarkdownView.swift:271-280`).
+- **Refinement.**
+  - When a table overflows, show a right-edge fade as the scroll hint, and pin the first column
+    while scrolling.
+  - Add an "Open" accessory in the table's top-right that opens a full-screen table page:
+    - landscape allowed on that page only;
+    - both axes scroll;
+    - sticky header row;
+    - Copy as Markdown and Copy as CSV.
+  - Long-press a cell to copy its text.
+- **Data.** Have (prose).
+- **Size.** M.
+- **Note.** The app is portrait-only (`UISupportedInterfaceOrientations`). Allowing landscape on
+  one page needs a small UIKit orientation override. List it as a platform risk.
+
+### 9.2 Todo / plan card
+
+- **Today.** `ClaudeTodoCard` (`Conversation/Turn/ClaudeToolDetail.swift:220`) lists items. Plans
+  render as text (`ToolCallDetail.plan`).
+- **Refinement.**
+  - A thin determinate progress bar in the card header ("3 of 7"), with the in-progress item
+    highlighted.
+  - Completed items collapse behind "N done" once there are more than five.
+  - The same `done/total` value feeds the Live Activity row 3 (§3.2) and the
+    `BGContinuedProcessingTask` progress (G17).
+  - Plan text uses the card family's row header ("Plan"), with the Markdown body below.
+- **Data.** Have (`TimelineItem.todo`, `ToolCallDetail.plan`).
+- **Size.** S.
+
+### 9.3 Previews in the permission card
+
+- **Today.** `ClaudePermissionCard` renders actions, question forms, and a generic tool fallback.
+- **Refinement.** Reuse the new cards inside the request, read-only:
+  - Shell request: the full command in the terminal surface (C12 styling) with the working
+    directory. Never truncated; long commands wrap, and "Show all" opens a sheet.
+  - Edit or write request: the diff (`ClaudeDiffView`), capped at 12 lines with "Show all", plus
+    a `DiffStat`.
+  - Fetch request: the C6 link card for the URL (metadata only, no web view).
+  - The action buttons sit at least 12 pt below the preview, and the destructive or allow
+    buttons are never at the card's top edge, to avoid mis-taps while scrolling.
+- **Data.** Have (`AgentPermissionRequest.detail: ToolCallDetail`, `input`, `actions`).
+- **Size.** M.
+
+### 9.4 Subagent cards
+
+- **Today.** E3 fixes harness subagent loading and states. `ToolCallDetail.subAgent` carries the
+  type and description.
+- **Refinement.**
+  - A row card in the work group for each subagent tool call:
+    - the subagent type glyph;
+    - its description (2 lines);
+    - status (running, completed or failed, from the tool call status);
+    - elapsed time;
+    - a chevron.
+  - Tap opens the existing subagent sheet (`Conversation/Sheets/ChatSubagents.swift`).
+  - While running, the trailing accessory shows the subagent's latest step, the same
+    `ActivityLine` logic used for the Live Activity.
+- **Data.**
+  - Have: `ToolCallDetail.subAgent(subAgentType, description, childSessionId)` and
+    `ToolCall.status`.
+  - Partial: the live step needs the subagent timeline, which comes from
+    `agent.provider_subagents.timeline.get`. Fetch it only when the card is visible.
+- **Size.** M (after E3).
+
+### 9.5 Images in user bubbles
+
+- **Today.** Attached images show as ClaudeUI thumbnails in the bubble.
+- **Refinement.**
+  - Thumbnails come from the same `MediaPipeline`, at their true ratio:
+    - one image: up to 220 pt wide;
+    - two or more: a 2-column mini grid of 1:1 tiles;
+    - all sit above the bubble text.
+  - Tap opens the shared viewer (G3) with all of that message's images.
+  - Images that were sent but can't be loaded back show a placeholder tile with the file name.
+- **Data.**
+  - Partial: images attached in this session are local. History images depend on what the
+    projected timeline returns for user messages. Today `UserMessage` carries text only
+    (`PaseoProtocol/Timeline.swift:24-36`).
+  - Showing images from history needs protocol support. Upstream's `images` and `attachments`
+    fields on send requests (`messages.ts:1287-1302`) aren't echoed in timeline items.
+- **Size.** S.
+
+---
+
+## 10. Data needs (the agent's version)
+
+Status key:
+- **Have**: present and decoded today.
+- **Partial**: present in some cases, or only for live turns.
+- **Change**: needs a protocol or daemon change upstream.
+
+| Item | Data needed | Status | Field / message |
+|---|---|---|---|
+| C1 Image (remote) | URL | Have | Assistant prose → `RichContentBlock.bareImageURL` |
+| C1 Image (local) | file bytes | Have | `FileExplorerRequest` (`mode: file`, `acceptBinary`, `maxBytes`) → `FileExplorerFile.content` base64 |
+| C1 cache freshness | file revision | Partial | `FileExplorerFile.revision` (optional) |
+| C2 Gallery | adjacent image blocks | Have | Detector output |
+| C3 Video (remote) | URL | Have | Prose |
+| C3 Video (local ≤ 64 MB) | bytes | Have | `FileExplorerRequest` binary read |
+| C3 Video (local, streaming or > 64 MB) | ranged reads | Change | `/api/files/download` lacks `Range`; no chunked socket read |
+| C4 Audio | bytes | Have | As C3 |
+| C5 YouTube title | title, channel | Have (client) | Third-party oEmbed; nothing from the daemon |
+| C6 Link metadata | title, icon, image | Have (client) | `LPMetadataProvider` |
+| C7 GitHub (same repo) | title, state, labels | Have | Forge search (`ForgeSearch.swift`: `title`, `state`, `labels`, `number`) |
+
+*[Capture ends here, inside the C7 rows. The rest of the agent's table is in the lead's §10 above.]*
