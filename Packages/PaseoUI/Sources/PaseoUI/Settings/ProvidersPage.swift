@@ -21,6 +21,14 @@ struct ProvidersPage: View {
                         .panelRow(Palette.background)
                 }
             }
+            if let saveError = hostSettings.error {
+                Section {
+                    InlineBanner(
+                        .failure, title: saveError,
+                        action: ("Try again", { Task { await hostSettings.load() } }))
+                        .panelRow(Palette.background)
+                }
+            }
             if catalog.providers.isEmpty {
                 Section {
                     stateRow
