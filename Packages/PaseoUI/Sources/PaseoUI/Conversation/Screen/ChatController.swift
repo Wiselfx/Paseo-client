@@ -232,6 +232,10 @@ struct TranscriptJump: Equatable {
     var inlineImage: InlineProseImage?
     /// A tool call's own diff, opened from the turn changes card (G6 C11).
     var diffDocument: ClaudeDiffDocument?
+    /// A provider subagent pushed from its tool call's row card (C4 §9.4):
+    /// the read-only timeline page, presented as a sheet (the transcript has no
+    /// NavigationStack to push onto).
+    var pushedSubagent: ProviderSubagent?
     /// The artifact on the full-screen page (`ChatSheets`). Setting it raises
     /// `artifactPageOpen`, which yields the transcript's pooled web views to the page.
     var artifactDocument: ArtifactDocument? {
@@ -321,6 +325,10 @@ struct TranscriptJump: Equatable {
         richActions.openMediaItem = { [weak self] item in
             self?.openMediaItem(item)
         }
+        richActions.openSubagent = { [weak self] subagent in
+            self?.pushedSubagent = subagent
+        }
+        startSubagentsMirror()
         richActions.openArtifact = { [weak self] document in
             self?.artifactDocument = document
         }
@@ -437,6 +445,27 @@ struct TranscriptJump: Equatable {
             let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
         else { return nil }
         return session.checkout(for: descriptor)
+    }
+
+    /// Mirrors the provider subagents into the cards by tool call id (C4 §9.4): one
+    /// write per list change, never per scroll frame. Cards read only the value (R-1).
+    private func startSubagentsMirror() {
+        richActions.subagentsByCallId = Dictionary(
+            uniqueKeysWithValues: store.subagents.items.compactMap { item in
+                item.toolCallId.map { ($0, item) }
+            })
+        withObservationTracking { [weak self] in
+            _ = self?.store.subagents.items
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.richActions.subagentsByCallId = Dictionary(
+                    uniqueKeysWithValues: self.store.subagents.items.compactMap { item in
+                        item.toolCallId.map { ($0, item) }
+                    })
+                self.startSubagentsMirror()
+            }
+        }
     }
 
     /// Mirrors the live PR status into the cards (C13): one write per change, never per
@@ -959,12 +988,23 @@ struct TranscriptJump: Equatable {
         Haptics.send()
         // Capture the text before the hop: the store clears the draft as it sends.
         let text = trimmedDraft
+        // This device's images ride into the user bubble under the send's id: seed
+        // memory now (the pending bubble renders before the network answers) and
+        // persist thumbnails off main only if the daemon accepts the send. Another
+        // device's bubbles — and evicted entries — have nothing and show nothing.
+        let trayImages = attachmentStore.items(for: store.agentId).filter(\.isImage)
+        let sendId = UUID().uuidString
+        UserImageCache.shared.seed(trayImages.compactMap(\.thumbnail), for: sendId)
         Task { [weak self] in
             guard let self else { return }
-            await self.store.sendWithAttachments(
-                text, attachments: attachments, behavior: behavior)
-            if self.store.actionError == nil {
+            let accepted = await self.store.sendWithAttachments(
+                text, attachments: attachments, behavior: behavior, clientId: sendId)
+            if accepted != nil {
+                UserImageCache.shared.persist(trayImages.map(\.data), for: sendId)
                 self.attachmentStore.consumeDoneAttachments(for: self.store.agentId)
+            } else {
+                // Refused or failed: the pending bubble rolls back, so forget the send.
+                UserImageCache.shared.discard(sendId)
             }
         }
     }

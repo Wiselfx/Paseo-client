@@ -15,7 +15,12 @@ struct ClaudePermissionCard: View {
     let onAnswered: (AnsweredPermission) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var answering = false
+    /// The chosen button's title while the daemon confirms: the card shows its
+    /// pending state there, never a resolution line (D8 — the line appears only
+    /// after the request leaves `pendingPermissions`).
+    @State private var pendingTitle: String?
+
+    private var answering: Bool { pendingTitle != nil }
     /// The optimistic quiet line is reported at most once per request: a retry after the
     /// answer timeout must not append a second line with the same id (the parent renders
     /// them in a `ForEach`, where duplicate ids are undefined behaviour).
@@ -60,9 +65,11 @@ struct ClaudePermissionCard: View {
             // `agent_permission_resolved` event ever arrives. Without this timeout the card
             // would sit on its spinner with dead buttons forever. When the card is still
             // mounted after the timeout the answer never landed, so the user can answer again.
+            // (HB: the timeout only re-arms the buttons; the recorded answer stays put
+            // and still renders if the daemon confirms it late.)
             try? await Task.sleep(for: Self.answerTimeout)
             guard !Task.isCancelled else { return }
-            answering = false
+            pendingTitle = nil
         }
     }
 
@@ -86,13 +93,55 @@ struct ClaudePermissionCard: View {
                 .foregroundStyle(Palette.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        if let input = request.input {
-            ClaudeCodeBlock(output: ClaudeToolCallDetail.describe(input), maxHeight: 180)
-        }
+        requestPreview
         HStack(spacing: 8) {
             ForEach(actionButtons, id: \.title) { spec in
                 answerButton(title: spec.title, variant: spec.variant, response: spec.response)
             }
+        }
+    }
+
+    /// What is being requested, from the daemon's normalized tool call when it
+    /// could build one: the diff for an edit, the command for a shell, the path
+    /// for a read/write or fetch. Falls back to the generic description plus the
+    /// raw input dump. Existing views only — no new renderers.
+    @ViewBuilder private var requestPreview: some View {
+        if let detail = request.detail {
+            switch detail {
+            case .edit(let path, _, _, let diff):
+                if let diff, !diff.isEmpty {
+                    ClaudeDiffView(path: path, unifiedDiff: diff, old: nil, new: nil)
+                } else {
+                    previewPathRow(path)
+                }
+            case .shell(let command, _, _, _):
+                ClaudeCodeBlock(command: command, output: nil, maxHeight: 180)
+            case .read(let path, _), .write(let path, _):
+                previewPathRow(path)
+            case .fetch(let url, _, _):
+                previewPathRow(url)
+            default:
+                genericPreview
+            }
+        } else {
+            genericPreview
+        }
+    }
+
+    private func previewPathRow(_ path: String) -> some View {
+        Text(path)
+            .font(.paseo(.codeSmall))
+            .foregroundStyle(Palette.ink)
+            .lineLimit(2)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The description already renders above; this is only the raw input dump.
+    @ViewBuilder private var genericPreview: some View {
+        if let input = request.input {
+            ClaudeCodeBlock(output: ClaudeToolCallDetail.describe(input), maxHeight: 180)
         }
     }
 
@@ -272,9 +321,13 @@ struct ClaudePermissionCard: View {
     ) -> some View {
         let filled = variant == .primary
         let danger = variant == .danger
+        // The chosen button carries the pending state; the rest dim and disable.
+        // Nothing reports a resolution here (D8): the parent renders the line only
+        // after the daemon confirms (the request leaves `pendingPermissions`).
+        let isPending = pendingTitle == title
         return Button {
             guard !answering else { return }
-            answering = true
+            pendingTitle = title
             Haptics.selection()
             let requestId = request.id
             let line = ResolutionLine.text(for: response, request: request)
@@ -284,24 +337,31 @@ struct ClaudePermissionCard: View {
                 onAnswered(AnsweredPermission(id: requestId, line: line))
             }
         } label: {
-            Text(title)
-                .font(.paseo(.callout, weight: .medium))
-                .lineLimit(1)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 36)
-                .foregroundStyle(
-                    filled
-                        ? Palette.background
-                        : danger ? Palette.failureInk : Palette.ink)
-                .background(
-                    filled ? Palette.ink : Palette.adaptive(light: 0.94, dark: 0.24),
-                    in: .capsule)
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.paseo(.callout, weight: .medium))
+                    .lineLimit(1)
+                if isPending {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .accessibilityLabel("Waiting for confirmation")
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
+            .foregroundStyle(
+                filled
+                    ? Palette.background
+                    : danger ? Palette.failureInk : Palette.ink)
+            .background(
+                filled ? Palette.ink : Palette.adaptive(light: 0.94, dark: 0.24),
+                in: .capsule)
         }
         .buttonStyle(.plain)
         .disabled(answering)
-        .opacity(answering ? 0.6 : 1)
+        .opacity(answering && !isPending ? 0.6 : 1)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: answering)
-        .accessibilityLabel(title)
+        .accessibilityLabel(isPending ? "\(title), waiting for confirmation" : title)
     }
 }
 

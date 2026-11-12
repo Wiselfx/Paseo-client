@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+    import PaseoStore
     import SwiftUI
 
     /// Theme values follow `docs/research/08-dsh-live-observation.md` §6: serif body, 12 pt between
@@ -53,6 +54,10 @@
         public var theme: ClaudeMarkdownTheme
         @State private var tableViewport: CGFloat = 0
         @State private var expandedCode: ExpandedCode?
+        /// Per-table content widths, by block index: the overflow signal. Written
+        /// only when the width changes — never per scroll frame.
+        @State private var tableContentWidths: [Int: CGFloat] = [:]
+        @State private var expandedTable: ExpandedTable?
         private let codeContent: ((String?, String) -> AttributedString)?
         private let onAction: (MarkdownAction) -> Void
         /// True while the producing turn runs: code blocks wait for their fence to close before
@@ -132,7 +137,7 @@
             AnyView(
                 VStack(alignment: .leading, spacing: theme.blockSpacing) {
                     ForEach(identifiedBlocks(blocks)) { identified in
-                        render(identified.value)
+                        render(identified.value, blockIndex: identified.index)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading))
         }
@@ -203,7 +208,7 @@
         /// Renders one block. `@ViewBuilder` (not `AnyView`, P5-B): type erasure hides the
         /// block type from SwiftUI's diff engine, so every prose re-render rebuilt the whole
         /// block subtree. The concrete type per branch lets unchanged blocks be skipped.
-        @ViewBuilder private func render(_ block: MarkdownBlock) -> some View {
+        @ViewBuilder private func render(_ block: MarkdownBlock, blockIndex: Int = 0) -> some View {
             switch block {
             case .paragraph(let content):
                 if content.count == 1, case .image(let image) = content[0], let imageContent {
@@ -292,34 +297,9 @@
                     RoundedRectangle(cornerRadius: Radius.group).stroke(theme.rule, lineWidth: 0.6)
                 }
             case .table(let header, let rows, let alignments):
-                let columns = max(header.count, rows.map(\.count).max() ?? 0)
-                ScrollView(.horizontal) {
-                    ClaudeMarkdownTableLayout(
-                        columns: columns, availableWidth: tableViewport,
-                        maximumColumnWidth: max(50, theme.tableColumnWidth) + 24
-                    ) {
-                        ForEach(identifiedRows([header] + rows)) { identified in
-                            let row = identified.value
-                            let isHeader = identified.index == 0
-                            ForEach(0..<columns, id: \.self) { column in
-                                let cell = column < row.count ? row[column] : []
-                                let alignment = column < alignments.count ? alignments[column] : .left
-                                inline(
-                                    cell, font: isHeader ? theme.bodyFont.bold() : theme.bodyFont,
-                                    alignment: alignment
-                                )
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .frame(maxHeight: .infinity, alignment: .top)
-                                .background(isHeader ? theme.tableHeaderBackground : .clear)
-                                .overlay(alignment: .bottom) {
-                                    if identified.index < rows.count { Rectangle().fill(theme.rule).frame(height: 0.5) }
-                                }
-                            }
-                        }
-                    }.clipShape(.rect(cornerRadius: Radius.sm)).overlay {
-                        RoundedRectangle(cornerRadius: Radius.sm).stroke(theme.rule, lineWidth: 0.6)
-                    }
-                }.accessibilityIdentifier("markdown.table")
+                tableBlock(
+                    header: header, rows: rows, alignments: alignments,
+                    blockIndex: blockIndex)
             case .unsupported(let kind, let source):
                 if let unsupportedContent {
                     unsupportedContent(kind, source)
@@ -330,6 +310,258 @@
                 }
             }
         }
+        // MARK: Wide tables (Phase C §9.1)
+
+        /// One table opened full screen: the block plus an identity for the sheet.
+        private struct ExpandedTable: Identifiable {
+            let index: Int
+            let header: [[MarkdownInline]]
+            let rows: [[[MarkdownInline]]]
+            let alignments: [MarkdownColumnAlignment]
+            let columns: Int
+            var id: Int { index }
+        }
+
+        /// The plan key: header text (stable while rows stream in), the block index
+        /// (same-header tables stay apart) and the viewport bucket (rotation re-plans).
+        private func tablePlanKey(header: [[MarkdownInline]], blockIndex: Int) -> String {
+            MarkdownTablePlan.cacheKey(
+                headerText: header.flatMap { $0.map(\.plainText) }.joined(separator: "|"),
+                tableIndex: blockIndex,
+                viewportBucket: MarkdownTablePlan.viewportBucket(for: Double(max(tableViewport, 0))))
+        }
+
+        /// Horizontal scroll inside the block, pinned label column when the table
+        /// earns it, header tap to full screen. Rows append downward with stable
+        /// ids; widths come from the plan cache and only ever grow.
+        @ViewBuilder
+        private func tableBlock(
+            header: [[MarkdownInline]], rows: [[[MarkdownInline]]],
+            alignments: [MarkdownColumnAlignment], blockIndex: Int
+        ) -> some View {
+            let columns = max(header.count, rows.map(\.count).max() ?? 0)
+            let key = tablePlanKey(header: header, blockIndex: blockIndex)
+            let plan = MarkdownTablePlanCache.lookup(key: key)
+            let firstCells = rows.map { $0.first?.map(\.plainText).joined() ?? "" }
+            let contentWidth = tableContentWidths[blockIndex] ?? 0
+            let totalWidth: CGFloat =
+                plan.map { $0.widths.reduce(0, +) } ?? contentWidth
+            let overflow = MarkdownTablePlan.overflows(
+                totalWidth: Double(totalWidth), viewportWidth: Double(tableViewport))
+            let planFits = plan.map {
+                $0.widths.count == columns && $0.heights.count == rows.count + 1
+            } ?? false
+            // Pin only a label column on an overflowing table: short, non-numeric
+            // first cells. Numbers scroll with their column; short tables need no pin.
+            let pinned = MarkdownTablePlan.isLabelColumn(firstCells) && overflow && planFits
+            let contentVersion = document.tableVersions[blockIndex] ?? 0
+            Group {
+                if pinned, let plan {
+                    pinnedTable(
+                        header: header, rows: rows, alignments: alignments,
+                        columns: columns, plan: plan, blockIndex: blockIndex)
+                } else {
+                    scrollingTable(
+                        header: header, rows: rows, alignments: alignments,
+                        columns: columns, cacheKey: key, contentVersion: contentVersion,
+                        blockIndex: blockIndex)
+                }
+            }
+            .accessibilityIdentifier("markdown.table")
+            .sheet(item: $expandedTable) { table in
+                SheetScaffold("Table", detents: .large) {
+                    ScrollView([.vertical, .horizontal]) {
+                        ClaudeMarkdownTableLayout(
+                            columns: table.columns, availableWidth: .greatestFiniteMagnitude,
+                            maximumColumnWidth: max(50, theme.tableColumnWidth) + 24,
+                            cacheKey: key + "|full",
+                            contentVersion: document.tableVersions[table.index] ?? 0
+                        ) {
+                            tableCells(
+                                header: table.header, rows: table.rows,
+                                alignments: table.alignments, columns: table.columns,
+                                rowsCount: table.rows.count, headerTappable: false)
+                        }
+                        .padding(Space.md)
+                    }
+                }
+            }
+        }
+
+        /// The scrolled table: the measuring layout, a content-width reader for the
+        /// overflow signal, and a trailing fade (only when overflowing) that opens
+        /// the full screen as well.
+        @ViewBuilder
+        private func scrollingTable(
+            header: [[MarkdownInline]], rows: [[[MarkdownInline]]],
+            alignments: [MarkdownColumnAlignment], columns: Int, cacheKey: String,
+            contentVersion: Int, blockIndex: Int
+        ) -> some View {
+            let overflow = MarkdownTablePlan.overflows(
+                totalWidth: Double(tableContentWidths[blockIndex] ?? 0),
+                viewportWidth: Double(tableViewport))
+            ScrollView(.horizontal) {
+                ClaudeMarkdownTableLayout(
+                    columns: columns, availableWidth: tableViewport,
+                    maximumColumnWidth: max(50, theme.tableColumnWidth) + 24,
+                    cacheKey: cacheKey, contentVersion: contentVersion
+                ) {
+                    tableCells(
+                        header: header, rows: rows, alignments: alignments,
+                        columns: columns, rowsCount: rows.count, headerTappable: true,
+                        blockIndex: blockIndex)
+                }
+                .clipShape(.rect(cornerRadius: Radius.sm))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Radius.sm).stroke(theme.rule, lineWidth: 0.6)
+                }
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { tableContentWidths[blockIndex] = proxy.size.width }
+                            .onChange(of: proxy.size.width) { _, newWidth in
+                                tableContentWidths[blockIndex] = newWidth
+                            }
+                    }
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if overflow {
+                    Button {
+                        expandTable(
+                            header: header, rows: rows, alignments: alignments,
+                            columns: columns, blockIndex: blockIndex)
+                    } label: {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0),
+                                .init(color: Palette.background, location: 1),
+                            ],
+                            startPoint: .leading, endPoint: .trailing)
+                            .frame(width: Metrics.tableFadeWidth)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open table full screen")
+                }
+            }
+        }
+
+        /// The pinned table: the label column fixed, the rest scrolling, row heights
+        /// shared from the plan so the two stacks can never drift apart.
+        @ViewBuilder
+        private func pinnedTable(
+            header: [[MarkdownInline]], rows: [[[MarkdownInline]]],
+            alignments: [MarkdownColumnAlignment], columns: Int, plan: TablePlanBox,
+            blockIndex: Int
+        ) -> some View {
+            let allRows = [header] + rows
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    ForEach(Array(allRows.enumerated()), id: \.offset) { index, row in
+                        let isHeader = index == 0
+                        tableCell(
+                            row.first ?? [], isHeader: isHeader,
+                            alignment: alignments.first ?? .left, rowIndex: index,
+                            rowsCount: rows.count, headerTappable: isHeader,
+                            blockIndex: blockIndex, header: header, rows: rows,
+                            alignments: alignments, columns: columns)
+                            .frame(
+                                width: plan.widths[0], height: plan.heights[index],
+                                alignment: .topLeading)
+                    }
+                }
+                .frame(width: plan.widths[0], alignment: .top)
+                ScrollView(.horizontal) {
+                    FixedTableLayout(
+                        columns: columns - 1, widths: Array(plan.widths.dropFirst()),
+                        heights: plan.heights
+                    ) {
+                        ForEach(Array(allRows.enumerated()), id: \.offset) { index, row in
+                            let isHeader = index == 0
+                            ForEach(1..<columns, id: \.self) { column in
+                                let cell = column < row.count ? row[column] : []
+                                let alignment =
+                                    column < alignments.count ? alignments[column] : .left
+                                tableCell(
+                                    cell, isHeader: isHeader, alignment: alignment,
+                                    rowIndex: index, rowsCount: rows.count,
+                                    headerTappable: isHeader, blockIndex: blockIndex,
+                                    header: header, rows: rows, alignments: alignments,
+                                    columns: columns)
+                            }
+                        }
+                    }
+                    .clipShape(.rect(cornerRadius: Radius.sm))
+                }
+                .clipShape(.rect(cornerRadius: Radius.sm))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.sm).stroke(theme.rule, lineWidth: 0.6)
+            }
+        }
+
+        /// One cell: the inline content, the header wash, the row divider, and the
+        /// header's full-screen tap target.
+        @ViewBuilder
+        private func tableCell(
+            _ cell: [MarkdownInline], isHeader: Bool, alignment: MarkdownColumnAlignment,
+            rowIndex: Int, rowsCount: Int, headerTappable: Bool, blockIndex: Int,
+            header: [[MarkdownInline]], rows: [[[MarkdownInline]]],
+            alignments: [MarkdownColumnAlignment], columns: Int
+        ) -> some View {
+            inline(
+                cell, font: isHeader ? theme.bodyFont.bold() : theme.bodyFont,
+                alignment: alignment
+            )
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(isHeader ? theme.tableHeaderBackground : .clear)
+            .overlay(alignment: .bottom) {
+                if rowIndex < rowsCount { Rectangle().fill(theme.rule).frame(height: 0.5) }
+            }
+            .contentShape(.rect)
+            .accessibilityHint(isHeader ? "Opens table full screen" : "")
+            .onTapGesture {
+                guard isHeader, headerTappable else { return }
+                expandTable(
+                    header: header, rows: rows, alignments: alignments, columns: columns,
+                    blockIndex: blockIndex)
+            }
+        }
+
+        /// The shared cell ForEach for the measuring layouts, keyed by row content.
+        @ViewBuilder
+        private func tableCells(
+            header: [[MarkdownInline]], rows: [[[MarkdownInline]]],
+            alignments: [MarkdownColumnAlignment], columns: Int, rowsCount: Int,
+            headerTappable: Bool, blockIndex: Int = 0
+        ) -> some View {
+            ForEach(identifiedRows([header] + rows)) { identified in
+                let row = identified.value
+                let isHeader = identified.index == 0
+                ForEach(0..<columns, id: \.self) { column in
+                    let cell = column < row.count ? row[column] : []
+                    let alignment = column < alignments.count ? alignments[column] : .left
+                    tableCell(
+                        cell, isHeader: isHeader, alignment: alignment,
+                        rowIndex: identified.index, rowsCount: rowsCount,
+                        headerTappable: headerTappable && isHeader, blockIndex: blockIndex,
+                        header: header, rows: rows, alignments: alignments,
+                        columns: columns)
+                }
+            }
+        }
+
+        private func expandTable(
+            header: [[MarkdownInline]], rows: [[[MarkdownInline]]],
+            alignments: [MarkdownColumnAlignment], columns: Int, blockIndex: Int
+        ) {
+            Haptics.light()
+            expandedTable = ExpandedTable(
+                index: blockIndex, header: header, rows: rows, alignments: alignments,
+                columns: columns)
+        }
+
         @ViewBuilder private func inline(
             _ content: [MarkdownInline], font: Font? = nil, alignment: MarkdownColumnAlignment = .left
         ) -> some View {

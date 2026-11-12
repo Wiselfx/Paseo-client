@@ -366,7 +366,12 @@ struct ClaudeUserBubble: View {
     /// session's composer (`message-actions.ts:197-207`). Nil hides the item — no host support, no
     /// settled turn, or nothing above the message to fork from.
     var onRetract: (() -> Void)? = nil
+    /// This device's sent images, looked up by the send's `clientMessageId` (§9.5).
+    /// Nil (another device, an evicted entry) draws nothing: no placeholder, no fetch.
+    var clientMessageId: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Disk entries for a send whose memory seed is gone (relaunch, eviction).
+    @State private var diskImages: [UIImage]? = nil
 
     /// Captured at insertion: true only for a message that was pending when it appeared
     /// (i.e. sent this session). History rows are never pending, so they never animate.
@@ -380,7 +385,7 @@ struct ClaudeUserBubble: View {
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
         onRewind: ((RewindScope) -> Void)? = nil, attributed: AttributedString? = nil,
         canRewrite: Bool = false, onEdit: (() -> Void)? = nil, onRerun: (() -> Void)? = nil,
-        onRetract: (() -> Void)? = nil
+        onRetract: (() -> Void)? = nil, clientMessageId: String? = nil
     ) {
         self.text = text
         self.isPending = isPending
@@ -391,6 +396,7 @@ struct ClaudeUserBubble: View {
         self.onEdit = onEdit
         self.onRerun = onRerun
         self.onRetract = onRetract
+        self.clientMessageId = clientMessageId
         self._entered = State(initialValue: !isPending)
     }
 
@@ -408,11 +414,59 @@ struct ClaudeUserBubble: View {
                 : Motion.bubbleEnter.animation,
             value: entered)
         .onAppear { entered = true }
+        // Disk fills what memory lost (relaunch, eviction): one lookup per send,
+        // never per body pass. The manifest loads first so the boxes reserve before
+        // the pixels land. Unknown stays empty — no box, no placeholder, no fetch.
+        .task(id: clientMessageId) {
+            guard let id = clientMessageId else { return }
+            await UserImageCache.shared.ensureManifestLoaded()
+            guard UserImageCache.shared.memoryThumbnails(for: id) == nil else { return }
+            diskImages = await UserImageCache.shared.diskThumbnails(for: id)
+        }
+    }
+
+    /// This device's sent images for the send, memory first: the seed lands at send
+    /// time, disk fills history after a relaunch. Unknown stays empty.
+    private var sentImages: [UIImage] {
+        if let id = clientMessageId,
+            let memory = UserImageCache.shared.memoryThumbnails(for: id)
+        {
+            return memory
+        }
+        return diskImages ?? []
+    }
+
+    /// Reserved boxes from the manifest: the bubble keeps its height while the
+    /// pixels load, so nothing jumps. No manifest entry means no box at all.
+    private var reservedRatios: [CGFloat] {
+        if !sentImages.isEmpty { return [] }
+        guard let id = clientMessageId else { return [] }
+        return UserImageCache.shared.manifestRatios(for: id) ?? []
     }
 
     /// The filled bubble, and the thing the context-menu preview shows.
     private var bubble: some View {
-        bodyText
+        VStack(alignment: .leading, spacing: Space.sm) {
+            ForEach(Array(sentImages.enumerated()), id: \.offset) { index, image in
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: Metrics.userImageMaxHeight)
+                    .clipShape(.rect(cornerRadius: Radius.sm))
+                    .transition(.opacity)
+                    .accessibilityLabel("Sent image \(index + 1)")
+            }
+            ForEach(Array(reservedRatios.enumerated()), id: \.offset) { _, ratio in
+                Rectangle()
+                    .fill(.clear)
+                    .aspectRatio(ratio, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
+            }
+            bodyText
+        }
+        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: sentImages.count)
             // UX-SPEC §4.1 (amended): the user bubble is 17 pt with 4 pt line spacing.
             .font(.paseo(.body))
             .foregroundStyle(Palette.ink)

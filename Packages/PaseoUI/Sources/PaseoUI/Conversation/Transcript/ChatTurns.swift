@@ -152,7 +152,8 @@ struct ClaudeTurnView: View {
                     canRewrite: canRewrite,
                     onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
                     onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
-                    onRetract: retractible ? { onRetract?(row) } : nil
+                    onRetract: retractible ? { onRetract?(row) } : nil,
+                    clientMessageId: message.clientMessageId
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -179,6 +180,11 @@ struct ClaudeTurnView: View {
             .accessibilityLabel(turnSummaryLabel)
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown)
+                if let todoState = turn.todoState {
+                    // One card per turn for its todos and plan (live while running),
+                    // ahead of the file changes.
+                    TurnTodoCard(state: todoState).equatable()
+                }
                 if !isRunning, let summary = turn.changeSummary {
                     TurnChangesCard(summary: summary, turnID: turn.id).equatable()
                 }
@@ -209,7 +215,8 @@ struct ClaudeTurnView: View {
                     canRewrite: canRewrite,
                     onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
                     onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
-                    onRetract: retractible ? { onRetract?(row) } : nil
+                    onRetract: retractible ? { onRetract?(row) } : nil,
+                    clientMessageId: message.clientMessageId
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -231,6 +238,10 @@ struct ClaudeTurnView: View {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: isRunning)
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
+            }
+            if let todoState = turn.todoState {
+                // One card per turn for its todos and plan (live while running).
+                TurnTodoCard(state: todoState).equatable()
             }
             if !isRunning, let summary = turn.changeSummary {
                 // The turn's file changes close the turn, after the final prose.
@@ -371,8 +382,9 @@ struct ClaudeSegmentView: View {
                             .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
                     }
             }
-        case .todo(let row):
-            if case .todo(let list) = row.item { ClaudeTodoCard(list: list) }
+        case .todo:
+            // The per-turn card above owns todos now: a row here would duplicate it.
+            EmptyView()
         case .notice(let row):
             ClaudeNoticeRow(item: row.item)
         }

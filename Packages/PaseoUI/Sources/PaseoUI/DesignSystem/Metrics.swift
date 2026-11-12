@@ -87,6 +87,12 @@ enum Metrics {
     static let overlayVPadding: CGFloat = 3
     /// The audio waveform's bar count (G11 C4): fixed, so the draw is O(1) per paint.
     static let audioBarCount = 48
+    /// The table overflow fade (C1 §9.1): the trailing strip that hints scrollability
+    /// and opens the full screen. Narrow enough to never cover a cell's content.
+    static let tableFadeWidth: CGFloat = 24
+    /// A sent image's height cap in the user bubble (C5 §9.5): full-bleed width,
+    /// aspect-fit, never taller than this.
+    static let userImageMaxHeight: CGFloat = 220
 }
 
 /// The sidebar's rows.
