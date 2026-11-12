@@ -18,6 +18,26 @@ packages:
   PaseoUI:
     path: ../Packages/PaseoUI
 targets:
+  # Phase E G15: the widgets + controls extension. Built but NOT shipped: it is not
+  # embedded in the app (no dependency from PaseoClient, no embed phase), the app
+  # target gains no entitlement and no capability, so the default IPA is unchanged
+  # (D1). See the turn-on list in docs/research/14-rich-ui-plan-full.md §3.
+  PaseoWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PaseoWidgets
+    info:
+      path: PaseoWidgets/Info.plist
+    entitlements:
+      path: PaseoWidgets/PaseoWidgets.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wiselfx.paseoclient.PaseoWidgets
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
   PaseoClient:
     type: application
     platform: iOS
@@ -65,3 +85,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
+schemes:
+  PaseoWidgets:
+    build:
+      targets:
+        PaseoWidgets: all
