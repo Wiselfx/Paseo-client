@@ -1,9 +1,11 @@
 # Status and handoff
 
-Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happens on branch
+Last updated 2026-11-12. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happens on branch
 `foundation` (pushed to origin); `main` is untouched.
 
 ## Next session starts here (2026-11-11)
+
+**J-round MERGED (2026-11-12, device feedback 4 on IPA cacde34).** Tickets `docs/tickets/J1–J3` + `_J-common.md`; three pi DeepSeek v4.1 flash workers (thinking minimal), lead-traced root causes. J1: real Newsreader faces for bold/italic/headings (`ProseFaceTable`), Mermaid runtime lookup falls back to flat bundle name. J2: image-only paragraphs → gallery, file-link lines → media/file cards, bare URLs linked, list YouTube players after the list, `98.5` no longer a file link. J3: paste tile overlay framed (no giant circle), back-to-end button moved to a transcript overlay (hit-testable), decision uses keyboard-free content distance (`BackToEndState` in Core). Gates green; PaseoCore 974+208+145. IPA `Paseo-20261111-2243-2adbc1c.ipa`. Found, not fixed: Anthropic sans is one static face (~205 non-regular weight sites are no-ops; left as is), AnsiText perf test flaky under load, J3 header `roomBelow` still inset-based (no visible effect). Showcase chat: throwaway repo `/home/paseo/dev/paseo-showcase` + agent 61e2b3cf (pi beam-free) — archive/delete when the user is done.
 
 **G-round COMPLETE (2026-11-12) (launched 2026-11-11, after the H-round).** Contract: `docs/tickets/G-rich-ui.md`
 
