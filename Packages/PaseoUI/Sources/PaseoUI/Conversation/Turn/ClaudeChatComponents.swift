@@ -66,7 +66,7 @@ struct ClaudeCodeBlock: View {
     @State private var showAll = false
 
     /// The sheet's line cap (G8 review): full output scrolls nowhere fast.
-    private static let sheetLines = 2000
+    nonisolated private static let sheetLines = 2000
 
     init(
         title: String? = nil, command: String? = nil, output: String?,
@@ -83,7 +83,7 @@ struct ClaudeCodeBlock: View {
     }
 
     /// The last 12 lines: the tail that carries the verdict (G8 C12).
-    private static let tailLines = 12
+    nonisolated private static let tailLines = 12
 
     private var copyText: String {
         if let parsed {
@@ -172,18 +172,22 @@ struct ClaudeCodeBlock: View {
             parsed = cached
             return
         }
-        let result = await Task.detached(priority: .userInitiated) { () -> ParsedTerminal in
+        // The parse runs off main; the AttributedString (fonts and colours are
+        // main-actor tokens) is built once here, from the capped sheet runs.
+        let parts = await Task.detached(priority: .userInitiated) {
+            () -> (tail: [AnsiRun], full: [AnsiRun], sheet: [AnsiRun], summary: TestSummary?, lines: Int) in
             let runs = AnsiText.parse(output)
             let tail = AnsiText.tail(runs, maxLines: Self.tailLines)
             let sheet = AnsiText.tail(runs, maxLines: Self.sheetLines)
             let summary = TestSummaryParser.parse(output)
             let lines = runs.reduce(0) { $0 + $1.text.filter { $0.isNewline }.count }
-            return ParsedTerminal(
-                tail: tail, full: runs, sheet: sheet,
-                sheetAttributed: Self.attributedText(sheet), summary: summary,
-                lineCount: lines)
+            return (tail, runs, sheet, summary, lines)
         }.value
         guard !Task.isCancelled else { return }
+        let result = ParsedTerminal(
+            tail: parts.tail, full: parts.full, sheet: parts.sheet,
+            sheetAttributed: Self.attributedText(parts.sheet), summary: parts.summary,
+            lineCount: parts.lines)
         TerminalParseCache.store(result, for: output)
         parsed = result
     }
@@ -222,7 +226,7 @@ struct ClaudeCodeBlock: View {
                     .frame(minHeight: Metrics.hitSize)
                     .accessibilityHint("Opens the full terminal output")
                     .sheet(isPresented: $showAll) {
-                        SheetScaffold("Output", detents: [.large]) {
+                        SheetScaffold("Output", detents: .large) {
                             VStack(alignment: .leading, spacing: 0) {
                                 HStack {
                                     if display.lineCount > Self.sheetLines {

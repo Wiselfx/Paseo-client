@@ -470,6 +470,7 @@ struct VideoCard: View {
             loadFailed = true
             return
         }
+        guard let fileURL = localFileURL else { return }
         let asset = AVURLAsset(url: fileURL)
         guard let (image, duration) = await posterFrame(for: asset) else { return }
         guard !Task.isCancelled else { return }
