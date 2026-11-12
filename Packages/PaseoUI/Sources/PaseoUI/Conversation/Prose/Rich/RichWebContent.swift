@@ -189,7 +189,7 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         subsystem: "com.wiselfx.paseoclient", category: "mermaid")
 
     /// The flattened name first, then the folder name a differently built bundle would keep.
-    private static func mermaidRuntimeURL() -> URL? {
+    nonisolated private static func mermaidRuntimeURL() -> URL? {
         Bundle.module.url(forResource: "mermaid.min", withExtension: "js", subdirectory: "mermaid")
             ?? Bundle.module.url(forResource: "mermaid.min", withExtension: "js")
     }
