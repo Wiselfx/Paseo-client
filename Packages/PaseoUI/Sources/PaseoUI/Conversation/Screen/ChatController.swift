@@ -232,6 +232,10 @@ struct TranscriptJump: Equatable {
     var inlineImage: InlineProseImage?
     /// A tool call's own diff, opened from the turn changes card (G6 C11).
     var diffDocument: ClaudeDiffDocument?
+    /// A provider subagent pushed from its tool call's row card (C4 §9.4):
+    /// the read-only timeline page, presented as a sheet (the transcript has no
+    /// NavigationStack to push onto).
+    var pushedSubagent: ProviderSubagent?
     /// The artifact on the full-screen page (`ChatSheets`). Setting it raises
     /// `artifactPageOpen`, which yields the transcript's pooled web views to the page.
     var artifactDocument: ArtifactDocument? {
@@ -320,6 +324,12 @@ struct TranscriptJump: Equatable {
         }
         richActions.openMediaItem = { [weak self] item in
             self?.openMediaItem(item)
+        }
+        richActions.subagentForCallId = { [weak self] callId in
+            self?.store.subagents.items.first(where: { $0.toolCallId == callId })
+        }
+        richActions.openSubagent = { [weak self] subagent in
+            self?.pushedSubagent = subagent
         }
         richActions.openArtifact = { [weak self] document in
             self?.artifactDocument = document

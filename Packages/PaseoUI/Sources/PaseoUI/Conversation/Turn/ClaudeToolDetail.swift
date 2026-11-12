@@ -48,10 +48,8 @@ struct ClaudeToolCallDetail: View {
                 }
                 if let result, !result.isEmpty { ClaudeCodeBlock(output: result) }
             }
-        case .subAgent(_, let description, _):
-            if let description {
-                Text(description).font(.paseo(.callout)).foregroundStyle(Palette.secondaryInk)
-            }
+        case .subAgent:
+            ClaudeSubagentRow(call: call)
         case .plainText(_, let text, _):
             if let text {
                 Text(text).font(.paseo(.callout)).foregroundStyle(Palette.secondaryInk)
@@ -301,6 +299,73 @@ struct ClaudeCompactionMarker: View {
             return "Context compacted (\(PaseoFormat.integer(thousands))K tokens)"
         }
         return "Context compacted"
+    }
+}
+
+/// A subagent tool call as a row card (C4 §9.4): matched to the provider subagent
+/// by `toolCallId` — pi's `subagent` tool carries it on the execution event, and
+/// claude's Task tool and opencode's children resolve through the same
+/// `provider_subagents` list. Tapping pushes the subagent's read-only timeline
+/// page (the existing `ChatSubagentTimelineView`: transcript components, no new
+/// renderer). Presented as a sheet: the transcript has no NavigationStack to push
+/// onto. Unmatched stays an informational row with the daemon's own description.
+private struct ClaudeSubagentRow: View {
+    let call: ToolCall
+
+    @Environment(\.richActions) private var richActions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var subagent: ProviderSubagent?
+
+    private var subAgentType: String? {
+        if case .subAgent(let type_, _, _) = call.detail { type_ } else { nil }
+    }
+
+    private var callDescription: String? {
+        if case .subAgent(_, let description, _) = call.detail { description } else { nil }
+    }
+
+    private var title: String {
+        if let name = subagent?.title, !name.isEmpty { return name }
+        return subAgentType ?? "Subagent"
+    }
+
+    var body: some View {
+        Group {
+            if subagent != nil {
+                Button {
+                    Haptics.selection()
+                    if let subagent { richActions?.openSubagent(subagent) }
+                } label: {
+                    card(accessory: chevron)
+                }
+                .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+                .accessibilityLabel("Subagent \(title)")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Opens the subagent's timeline")
+            } else {
+                card(accessory: EmptyView())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Subagent \(title)")
+            }
+        }
+        // One lookup per call id, never per body pass: the match arrives with the
+        // daemon's subagent list, after the tool call rendered.
+        .task(id: call.callId) {
+            subagent = richActions?.subagentForCallId(call.callId)
+        }
+    }
+
+    private func card<Accessory: View>(accessory: Accessory) -> some View {
+        PaseoRowCard(
+            glyph: "person.2", title: title, meta: callDescription,
+            accessory: accessory)
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.glyph(.small, weight: .semibold))
+            .foregroundStyle(Palette.tertiaryInk)
+            .accessibilityHidden(true)
     }
 }
 

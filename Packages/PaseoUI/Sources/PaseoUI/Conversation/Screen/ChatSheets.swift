@@ -67,6 +67,11 @@ struct ChatSheets: ViewModifier {
                         old: document.old, new: document.new)
                 }
             }
+            .sheet(item: $controller.pushedSubagent) { subagent in
+                SheetScaffold(subagent.title ?? "Subagent", detents: .large) {
+                    ChatSubagentTimelineView(subagents: store.subagents, subagent: subagent)
+                }
+            }
             .environment(\.artifactZoomNamespace, artifactZoom)
             .fullScreenCover(item: $controller.artifactDocument) { document in
                 ArtifactPage(
