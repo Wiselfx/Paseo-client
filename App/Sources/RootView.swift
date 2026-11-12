@@ -257,7 +257,7 @@ struct RootView: View {
             stagePairing(offer)
         case .unsupported:
             deepLinkMessage = "This link isn't supported on this device."
-        case .agent, .workspace, .host, .openProject:
+        case .agent, .workspace, .host, .openProject, .newAgent:
             routeDeepLink(link)
         }
     }
