@@ -4,6 +4,18 @@ import PaseoStore
 import PaseoUI
 import UserNotifications
 
+/// A notification Allow/Deny answer waiting for the shell to perform. The shell
+/// reconnects if needed, sends through the store's permission path, and records
+/// the line (which the transcript shows only after the daemon confirms, D8).
+/// On failure the shell posts an "Open" fallback instead.
+struct PendingPermissionAction: Sendable, Hashable {
+    var requestId: String
+    var agentId: String
+    var hostServerID: String
+    var allow: Bool
+    var daemonActionId: String
+}
+
 /// Posts local notifications for `AttentionCenter` intents and turns a notification tap back into
 /// an `AttentionTarget` for the shell.
 ///
@@ -13,10 +25,19 @@ import UserNotifications
 final class NotificationCoordinator {
     /// A tap waiting for the shell to route it. The shell clears it after selecting.
     var pendingTarget: AttentionTarget?
+    /// A notification answer waiting for the shell to perform. Cleared when taken.
+    var pendingPermissionAction: PendingPermissionAction?
+    /// Resolves an agent id to its latest permission request plus the daemon
+    /// server id to answer on (or nil). Set by the composition root, which owns
+    /// the session.
+    var permissionRequestProvider: ((String) -> (AgentPermissionRequest, String)?)?
 
     private let proxy: NotificationDelegateProxy
 
     private static let promptedKey = "paseo.notifications.prompted"
+    static let permissionCategoryID = "paseo.permission"
+    static let allowActionID = "paseo.permission.allow"
+    static let denyActionID = "paseo.permission.deny"
 
     init() {
         let proxy = NotificationDelegateProxy()
@@ -24,7 +45,23 @@ final class NotificationCoordinator {
         proxy.onTap = { [weak self] target in
             Task { @MainActor in self?.pendingTarget = target }
         }
+        proxy.onPermissionAction = { [weak self] action in
+            Task { @MainActor in self?.pendingPermissionAction = action }
+        }
         UNUserNotificationCenter.current().delegate = proxy
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(
+                identifier: Self.permissionCategoryID,
+                actions: [
+                    UNNotificationAction(
+                        identifier: Self.allowActionID, title: "Allow",
+                        options: [.authenticationRequired]),
+                    UNNotificationAction(
+                        identifier: Self.denyActionID, title: "Deny",
+                        options: [.authenticationRequired, .destructive]),
+                ],
+                intentIdentifiers: [], options: [])
+        ])
     }
 
     /// User preference. Defaults to on; the permission prompt happens on first use rather than
@@ -100,6 +137,9 @@ final class NotificationCoordinator {
         }
     }
 
+    /// Actions appear only on simple permission requests (G19): one tool call, no
+    /// free-text input, no question options — and only when the reader opted in.
+    /// Anything richer keeps the transcript card as its only surface.
     private func post(_ intent: AttentionIntent) {
         let content = UNMutableNotificationContent()
         content.title = intent.title
@@ -108,18 +148,54 @@ final class NotificationCoordinator {
         content.threadIdentifier = "paseo.attention"
         var userInfo: [AnyHashable: Any] = [:]
         for (key, value) in intent.target.userInfo { userInfo[key] = value }
+        if intent.reason == "permission",
+            UserDefaults.standard.bool(forKey: PaseoSettingsKeys.notificationActions),
+            let agentId = intent.target.agentId,
+            let (request, hostServerID) = permissionRequestProvider?(agentId),
+            let mapped = PermissionNotificationMapping.actions(for: request)
+        {
+            content.categoryIdentifier = Self.permissionCategoryID
+            userInfo[Self.requestIdKey] = request.id
+            userInfo[Self.agentIdKey] = agentId
+            userInfo[Self.hostKey] = hostServerID
+            userInfo[Self.allowIdKey] = mapped.allowActionId
+            userInfo[Self.denyIdKey] = mapped.denyActionId
+        }
         content.userInfo = userInfo
 
         let request = UNNotificationRequest(
             identifier: intent.id, content: content, trigger: nil)
         Task { try? await UNUserNotificationCenter.current().add(request) }
     }
+
+    static let requestIdKey = "paseo.permission.requestId"
+    static let agentIdKey = "paseo.permission.agentId"
+    static let hostKey = "paseo.permission.hostServerID"
+    static let allowIdKey = "paseo.permission.allowActionId"
+    static let denyIdKey = "paseo.permission.denyActionId"
+
+    /// The "Open" fallback (G19): when a notification answer cannot be sent
+    /// (nothing pending, reconnect failed), deep-link the agent so the reader
+    /// sees the state instead of nothing.
+    func postOpenFallback(agentId: String, hostServerID: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Review in Paseo"
+        content.body = "Open the agent to answer."
+        content.sound = .default
+        content.threadIdentifier = "paseo.attention"
+        content.userInfo = AttentionTarget.agent(agentId, workspaceId: nil).userInfo
+        let request = UNNotificationRequest(
+            identifier: "paseo.permission-fallback.\(agentId)", content: content,
+            trigger: nil)
+        Task { try? await UNUserNotificationCenter.current().add(request) }
+    }
 }
 
-/// The UNUserNotificationCenter delegate must be an NSObject. It carries no state beyond the tap
-/// closure, which the coordinator installs once before any callback can run.
+/// The UNUserNotificationCenter delegate must be an NSObject. It carries no state beyond the
+/// callbacks the coordinator installs once before any callback can run.
 private final class NotificationDelegateProxy: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     var onTap: (@Sendable (AttentionTarget) -> Void)?
+    var onPermissionAction: (@Sendable (PendingPermissionAction) -> Void)?
 
     /// Foreground notifications are the point of this ticket (the agent is rarely on screen);
     /// `AttentionCenter` already suppressed the conversation the user is reading.
@@ -134,14 +210,55 @@ private final class NotificationDelegateProxy: NSObject, UNUserNotificationCente
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let content = response.notification.request.content
         var info: [String: String] = [:]
-        for (key, value) in response.notification.request.content.userInfo {
+        for (key, value) in content.userInfo {
             guard let key = key as? String, let value = value as? String else { continue }
             info[key] = value
+        }
+        // Allow/Deny land here with the action id, not the default tap id.
+        // Anything unparseable falls through to the tap path (or nothing).
+        if content.categoryIdentifier == NotificationCoordinator.permissionCategoryID,
+            let action = PendingPermissionAction(response: response, userInfo: info)
+        {
+            completionHandler()
+            onPermissionAction?(action)
+            return
         }
         let target = AttentionTarget(userInfo: info)
         completionHandler()
         guard let target else { return }
         onTap?(target)
+    }
+}
+
+private extension PendingPermissionAction {
+    /// The tapped action plus the daemon action id it answers with. Nil unless every
+    /// piece survived the userInfo round-trip.
+    init?(response: UNNotificationResponse, userInfo: [String: String]) {
+        let actionId = response.actionIdentifier
+        let allow: Bool
+        let daemonKey: String
+        if actionId == NotificationCoordinator.allowActionID {
+            allow = true
+            daemonKey = NotificationCoordinator.allowIdKey
+        } else if actionId == NotificationCoordinator.denyActionID {
+            allow = false
+            daemonKey = NotificationCoordinator.denyIdKey
+        } else {
+            return nil
+        }
+        guard let requestId = userInfo[NotificationCoordinator.requestIdKey],
+            !requestId.isEmpty,
+            let agentId = userInfo[NotificationCoordinator.agentIdKey],
+            !agentId.isEmpty,
+            let hostServerID = userInfo[NotificationCoordinator.hostKey],
+            !hostServerID.isEmpty,
+            let daemonActionId = userInfo[daemonKey],
+            !daemonActionId.isEmpty
+        else { return nil }
+        self.init(
+            requestId: requestId, agentId: agentId, hostServerID: hostServerID, allow: allow,
+            daemonActionId: daemonActionId)
     }
 }

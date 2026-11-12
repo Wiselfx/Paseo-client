@@ -71,6 +71,20 @@ public enum AttentionNotificationKeys {
     public static let enabled = "paseo.notifications.enabled"
 }
 
+/// One daemon-confirmed permission answer, kept on the conversation store so card taps
+/// and notification actions land in the same place. Rendered only after the daemon
+/// confirms (the request leaves `pendingPermissions`); until then the card owns the
+/// pending state (D8).
+public struct AnsweredPermission: Sendable, Hashable, Identifiable {
+    public var id: String
+    public var line: String
+
+    public init(id: String, line: String) {
+        self.id = id
+        self.line = line
+    }
+}
+
 /// One notification the app should post. Carries only plain values so the app layer never has
 /// to reach back into a store to render it.
 public struct AttentionIntent: Identifiable, Sendable, Equatable {

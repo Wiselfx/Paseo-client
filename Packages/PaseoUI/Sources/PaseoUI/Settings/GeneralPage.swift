@@ -22,8 +22,10 @@ struct GeneralPage: View {
     /// M7f: Full / Collapse tool calls / Collapse turns.
     @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
     @AppStorage("paseo.reasoning.alwaysExpand") private var alwaysExpandReasoning = false
-    /// G16: agent titles on the Lock Screen and system surfaces. Off by default.
+    /// G16: agent names on the Lock Screen and system surfaces. Off by default.
     @AppStorage(PaseoSettingsKeys.showAgentNames) private var showAgentNames = false
+    /// G19: Allow/Deny buttons on permission notifications. Off by default.
+    @AppStorage(PaseoSettingsKeys.notificationActions) private var notificationActions = false
 
     @Environment(\.notificationPermissionAction) private var requestNotificationPermission
     @Environment(\.notificationTestAction) private var notificationTestAction
@@ -166,6 +168,17 @@ struct GeneralPage: View {
             } footer: {
                 Text(
                     "Play a cue when a task finishes or is blocked. Local notifications while Paseo is open or recently backgrounded. True push while the app is closed is not available without a relay."
+                )
+            }
+            Section {
+                ListRow(title: "Allow and deny from notifications", systemImage: "checkmark.circle", accessory: ListRow.Accessory.toggle($notificationActions))
+                    .panelRow()
+                    .accessibilityIdentifier("settings.notifications.actions")
+            } header: {
+                Text("Permissions")
+            } footer: {
+                Text(
+                    "With this on, simple permission requests offer Allow and Deny buttons right on the notification. Answering needs the phone unlocked. Anything richer stays in the chat."
                 )
             }
             Section {

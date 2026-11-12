@@ -195,8 +195,7 @@ struct TranscriptJump: Equatable {
     var renameText = ""
     var archiveConfirm = false
 
-    // Permission lines and provider rows.
-    var permissionResolvedLines: [AnsweredPermission] = []
+    // Provider rows.
     var hiddenSubagentIds: Set<String> = []
 
     // Slash commands.

@@ -18,6 +18,9 @@ public final class HostSession {
     /// Agents with status `.running`. Maintained on every `agents` change, so views observe one
     /// number instead of scanning the list.
     public private(set) var runningAgentCount = 0
+    /// The daemon-confirmed permission answers for this agent (card taps and
+    /// notification actions alike). Rendered only after confirmation (D8).
+    public internal(set) var permissionResolvedLines: [AnsweredPermission] = []
     /// Sum of `pendingPermissions.count` over `agents`.
     public private(set) var pendingPermissionCount = 0
     /// Agents with `requiresAttention == true`.

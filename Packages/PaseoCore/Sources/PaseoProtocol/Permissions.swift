@@ -41,6 +41,25 @@ public struct AgentPermissionRequest: Sendable, Hashable, Decodable, Identifiabl
         case id, provider, name, kind, title, description, input, detail, suggestions, actions, metadata
     }
 
+    public init(
+        id: String, provider: String, name: String, kind: Kind, title: String? = nil,
+        description: String? = nil, input: JSONValue? = nil, detail: ToolCallDetail? = nil,
+        suggestions: [JSONValue]? = nil, actions: [AgentPermissionAction]? = nil,
+        metadata: JSONValue? = nil
+    ) {
+        self.id = id
+        self.provider = provider
+        self.name = name
+        self.kind = kind
+        self.title = title
+        self.description = description
+        self.input = input
+        self.detail = detail
+        self.suggestions = suggestions
+        self.actions = actions
+        self.metadata = metadata
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: K.self)
         id = try c.decode(String.self, forKey: .id)
@@ -96,6 +115,17 @@ public struct AgentPermissionAction: Sendable, Hashable, Decodable, Identifiable
     public var behavior: Behavior
     public var variant: Variant?
     public var intent: Intent?
+
+    public init(
+        id: String, label: String, behavior: Behavior, variant: Variant? = nil,
+        intent: Intent? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.behavior = behavior
+        self.variant = variant
+        self.intent = intent
+    }
 
     private enum K: String, CodingKey { case id, label, behavior, variant, intent }
 

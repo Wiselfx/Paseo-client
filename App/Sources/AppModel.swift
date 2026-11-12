@@ -417,6 +417,36 @@ final class AppModel {
     private var lastDirectoryProjection: [AgentDirectoryEntry] = []
     private var lastDirectoryAttention: [String] = []
 
+    /// Sends a notification Allow/Deny through the store's permission path (G19):
+    /// reconnects to the action's host if needed, verifies the request is still
+    /// pending, and records the line (which the transcript shows only after the
+    /// daemon confirms, D8). On any failure, posts the "Open" fallback so the
+    /// reader sees the state instead of nothing.
+    func performPermissionAction(_ action: PendingPermissionAction, notifications: NotificationCoordinator) async {
+        guard let host = savedHosts.host(serverID: action.hostServerID) else {
+            notifications.postOpenFallback(agentId: action.agentId, hostServerID: action.hostServerID)
+            return
+        }
+        if currentHostID != host.id {
+            await connectToSaved(host.id)
+        }
+        guard case .connected(let session) = phase else {
+            notifications.postOpenFallback(agentId: action.agentId, hostServerID: action.hostServerID)
+            return
+        }
+        let store = session.conversation(for: action.agentId)
+        guard let request = store.pendingPermissions.first(where: { $0.id == action.requestId }) else {
+            notifications.postOpenFallback(agentId: action.agentId, hostServerID: action.hostServerID)
+            return
+        }
+        let response = action.allow
+            ? AgentPermissionResponse.allowing(selectedActionId: action.daemonActionId)
+            : AgentPermissionResponse.denying(selectedActionId: action.daemonActionId)
+        await store.respond(to: action.requestId, with: response)
+        store.permissionResolvedLines.append(AnsweredPermission(
+            id: action.requestId, line: ResolutionLine.text(for: response, request: request)))
+    }
+
     /// Keeps the intents/Spotlight snapshot with the agent list: one write per
     /// change, off main, through `AgentDirectory` (which diffs Spotlight by id).
     private func watchAgentDirectory(session: HostSession) {

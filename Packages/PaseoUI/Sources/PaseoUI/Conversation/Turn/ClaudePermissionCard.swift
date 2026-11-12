@@ -586,13 +586,6 @@ private struct QuestionSection: View {
     }
 }
 
-/// The one quiet line left behind when a request resolves; kept in the transcript by the client,
-/// because the store drops resolved requests from `pendingPermissions` without remembering the answer.
-struct AnsweredPermission: Identifiable, Hashable {
-    var id: String
-    var line: String
-}
-
 enum ResolutionLine {
     static func text(for response: AgentPermissionResponse, request: AgentPermissionRequest) -> String {
         if request.kind == .plan {

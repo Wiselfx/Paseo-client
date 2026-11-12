@@ -126,6 +126,32 @@ struct RootView: View {
                     AttentionDelivery(
                         session: session, scenePhase: scenePhase,
                         notifications: notifications))
+                .onAppear {
+                    // The latest simple permission request per agent, for notification
+                    // actions (G19). The session resolves at call time (reconnects
+                    // replace it); host id rides along so the answer reconnects
+                    // to the right daemon.
+                    notifications.permissionRequestProvider = { [weak model] agentId in
+                        guard let model,
+                            case .connected(let session) = model.phase,
+                            let serverID = model.connectedHostID.flatMap({
+                                model.savedHosts.host($0)?.serverID
+                            }), !serverID.isEmpty
+                        else { return nil }
+                        let store = session.conversation(for: agentId)
+                        guard
+                            let request = store.pendingPermissions.last(where: {
+                                PermissionNotificationMapping.actions(for: $0) != nil
+                            })
+                        else { return nil }
+                        return (request, serverID)
+                    }
+                }
+                .onChange(of: notifications.pendingPermissionAction) { _, action in
+                    guard let action else { return }
+                    notifications.pendingPermissionAction = nil
+                    Task { await model.performPermissionAction(action, notifications: notifications) }
+                }
             }
         }
         .dynamicTypeSize(dynamicTypeSize.shifted(by: contentStep))
