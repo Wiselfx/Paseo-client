@@ -47,10 +47,10 @@ final class NotificationCoordinator {
     init() {
         let proxy = NotificationDelegateProxy()
         self.proxy = proxy
-        proxy.onResponse = { [weak self] response, completion in
+        proxy.onResponse = { [weak self] actionId, info, completion in
             Task { @MainActor [weak self] in
                 guard let self else { completion(); return }
-                await self.handleResponse(response, completion: completion)
+                await self.handleResponse(actionId: actionId, info: info, completion: completion)
             }
         }
         UNUserNotificationCenter.current().delegate = proxy
@@ -259,27 +259,18 @@ final class NotificationCoordinator {
     /// app — the scene may be backgrounded or gone — so the send cannot depend
     /// on any SwiftUI view: hold a background task, await the handler, and only
     /// then complete. Expiry posts the Open fallback instead of losing the tap.
-    private func handleResponse(_ response: UNNotificationResponse, completion: @escaping () -> Void) async {
-        guard response.actionIdentifier == Self.allowActionID
-            || response.actionIdentifier == Self.denyActionID
-        else {
-            var info: [String: String] = [:]
-            for (key, value) in response.notification.request.content.userInfo {
-                guard let key = key as? String, let value = value as? String else { continue }
-                info[key] = value
-            }
+    /// Values only cross the hop from the delegate (the response object is not Sendable).
+    private func handleResponse(
+        actionId: String, info: [String: String], completion: @escaping @Sendable () -> Void
+    ) async {
+        guard actionId == Self.allowActionID || actionId == Self.denyActionID else {
             if let target = AttentionTarget(userInfo: info) {
                 pendingTarget = target
             }
             completion()
             return
         }
-        var info: [String: String] = [:]
-        for (key, value) in response.notification.request.content.userInfo {
-            guard let key = key as? String, let value = value as? String else { continue }
-            info[key] = value
-        }
-        guard let action = PendingPermissionAction(response: response, userInfo: info) else {
+        guard let action = PendingPermissionAction(actionId: actionId, userInfo: info) else {
             completion()
             return
         }
@@ -311,7 +302,7 @@ private final class NotificationDelegateProxy: NSObject, UNUserNotificationCente
     /// The raw response plus its completion, for the coordinator to answer
     /// (possibly after async work) and complete exactly once.
     var onResponse:
-        (@Sendable (UNNotificationResponse, @escaping () -> Void) -> Void)?
+        (@Sendable (String, [String: String], @escaping @Sendable () -> Void) -> Void)?
 
     /// Foreground notifications are the point of this ticket (the agent is rarely on screen);
     /// `AttentionCenter` already suppressed the conversation the user is reading.
@@ -333,15 +324,20 @@ private final class NotificationDelegateProxy: NSObject, UNUserNotificationCente
             completionHandler()
             return
         }
-        onResponse(response, completionHandler)
+        var info: [String: String] = [:]
+        for (key, value) in response.notification.request.content.userInfo {
+            guard let key = key as? String, let value = value as? String else { continue }
+            info[key] = value
+        }
+        let completion = CompletionBox(completionHandler)
+        onResponse(response.actionIdentifier, info) { completion.call() }
     }
 }
 
 private extension PendingPermissionAction {
     /// The tapped action plus the daemon action id it answers with. Nil unless every
     /// piece survived the userInfo round-trip.
-    init?(response: UNNotificationResponse, userInfo: [String: String]) {
-        let actionId = response.actionIdentifier
+    init?(actionId: String, userInfo: [String: String]) {
         let allow: Bool
         let daemonKey: String
         if actionId == NotificationCoordinator.allowActionID {
@@ -366,4 +362,12 @@ private extension PendingPermissionAction {
             requestId: requestId, agentId: agentId, hostServerID: hostServerID, allow: allow,
             daemonActionId: daemonActionId)
     }
+}
+
+/// The system's completion handler, carried across the main-actor hop. UserNotifications
+/// documents it as callable from any thread, exactly once; the coordinator calls it once.
+private final class CompletionBox: @unchecked Sendable {
+    private let handler: () -> Void
+    init(_ handler: @escaping () -> Void) { self.handler = handler }
+    func call() { handler() }
 }
