@@ -201,6 +201,39 @@ private enum YouTubeTitleCache {
     }
 }
 
+/// Decoded heroes and icons, by page URL. The provider hands over full `UIImage`s
+/// that decode lazily on main at first draw; the cache holds the width-exact
+/// thumbnails, and remembers misses so a revisit never refetches a failure.
+/// `NSCache` reads are O(1) and thread-safe, so the first pass after a remount
+/// lays the hero box out instead of flashing the text row for one frame.
+@MainActor
+enum RichLinkHeroCache {
+    nonisolated(unsafe) private static let images: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 32
+        return cache
+    }()
+
+    private static var misses: Set<String> = []
+
+    static func image(for key: String) -> UIImage? {
+        images.object(forKey: key as NSString)
+    }
+
+    static func store(_ image: UIImage, for key: String) {
+        images.setObject(image, forKey: key as NSString)
+        misses.remove(key)
+    }
+
+    static func noteMiss(for key: String) {
+        misses.insert(key)
+    }
+
+    static func missed(_ key: String) -> Bool {
+        misses.contains(key)
+    }
+}
+
 struct RichLinkCard: View {
     let url: String
 
@@ -216,7 +249,7 @@ struct RichLinkCard: View {
 
     /// The OG image slot: 1.91:1 reserved from the first layout, so the card never
     /// changes height when the pixels land (C6). Tiles crop; the viewer never does.
-    private var heroAspect: CGFloat { 1.91 }
+    private var heroAspect: CGFloat { Metrics.ogHeroAspect }
 
     private var policy: MediaFetchPolicy {
         mediaFetchPolicy(
@@ -224,8 +257,29 @@ struct RichLinkCard: View {
             condition: richActions?.linkCondition ?? .assumed)
     }
 
+    /// The metadata reads the cache on the first pass: remounts show the title
+    /// immediately, and `.task` only fetches what is missing.
+    private var resolvedMetadata: LPLinkMetadata? {
+        if let metadata { return metadata }
+        guard let parsed = URL(string: url) else { return nil }
+        return RichLinkMetadataCache.metadata(for: parsed)
+    }
+
+    private var heroCacheKey: String { "hero:\(url)" }
+    private var iconCacheKey: String { "icon:\(url)" }
+
+    /// The hero reads the decoded cache on the first pass: a revisit lays the hero
+    /// box out on frame one instead of flashing the text row.
+    private var resolvedHero: UIImage? {
+        hero ?? RichLinkHeroCache.image(for: heroCacheKey)
+    }
+
+    private var resolvedIcon: UIImage? {
+        icon ?? RichLinkHeroCache.image(for: iconCacheKey)
+    }
+
     private var linkTitle: String {
-        if let title = metadata?.title, !title.isEmpty { return title }
+        if let title = resolvedMetadata?.title, !title.isEmpty { return title }
         return RichContentDetector.domain(for: url)
     }
 
@@ -237,15 +291,20 @@ struct RichLinkCard: View {
         Button {
             showSafari = true
         } label: {
-            if hero != nil {
+            if let hero = resolvedHero {
                 PaseoMediaCard(
-                    media: heroSlot,
+                    media: heroSlot(hero),
                     header: PaseoCardHeader(title: linkTitle, meta: linkMeta))
             } else {
                 PaseoCard(content: rowContent)
             }
         }
         .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+        // The first-ever hero grows the card once, animated; revisits lay the
+        // cached hero out on frame one and never animate.
+        .animation(
+            Motion.disclosure.resolved(reduceMotion: reduceMotion),
+            value: resolvedHero != nil)
         .paseoCardMenu(
             openTitle: "Open",
             onOpen: { showSafari = true },
@@ -271,30 +330,28 @@ struct RichLinkCard: View {
         }
     }
 
-    @ViewBuilder private var heroSlot: some View {
-        if let hero {
-            Image(uiImage: hero)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(heroAspect, contentMode: .fit)
-                .clipped()
-                .contentShape(.rect)
-        }
+    @ViewBuilder private func heroSlot(_ hero: UIImage) -> some View {
+        Image(uiImage: hero)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(heroAspect, contentMode: .fit)
+            .clipped()
+            .contentShape(.rect)
     }
 
     private var rowContent: some View {
         HStack(alignment: .center, spacing: 10) {
-            if let icon {
+            if let icon = resolvedIcon {
                 Image(uiImage: icon)
                     .resizable()
-                    .frame(width: 32, height: 32)
+                    .frame(width: Metrics.linkIconSize, height: Metrics.linkIconSize)
                     .clipShape(.rect(cornerRadius: Radius.sm, style: .continuous))
                     .accessibilityHidden(true)
             } else {
                 RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                     .fill(Palette.chip)
-                    .frame(width: 32, height: 32)
+                    .frame(width: Metrics.linkIconSize, height: Metrics.linkIconSize)
                     .overlay {
                         Image(systemName: "link")
                             .font(.glyph(.regular))
@@ -349,21 +406,50 @@ struct RichLinkCard: View {
 
     @MainActor
     private func loadHero() async {
-        guard heroKey != nil, hero == nil else { return }
-        guard let provider = metadata?.imageProvider else { return }
-        guard let loaded: UIImage = try? await Self.loadImage(from: provider) else { return }
+        guard heroKey != nil, resolvedHero == nil,
+            !RichLinkHeroCache.missed(heroCacheKey)
+        else { return }
+        guard let provider = resolvedMetadata?.imageProvider else { return }
+        guard let loaded: UIImage = try? await Self.loadImage(from: provider) else {
+            RichLinkHeroCache.noteMiss(for: heroCacheKey)
+            return
+        }
         guard !Task.isCancelled else { return }
-        // The provider hands over pixels, not bytes, so width-exact ImageIO decode
-        // does not apply; OG images are already web-sized and the strip crops.
-        hero = loaded
+        // The provider hands over a full `UIImage` that decodes lazily on main at
+        // first draw; thumbnail it off main at the card's pixel width first.
+        let pixels = MediaSizing.pixelWidth(points: max(width, 1), scale: displayScale)
+        guard
+            let prepared = await loaded.byPreparingThumbnail(ofSize: CGSize(
+                width: pixels, height: pixels))
+        else {
+            RichLinkHeroCache.noteMiss(for: heroCacheKey)
+            return
+        }
+        RichLinkHeroCache.store(prepared, for: heroCacheKey)
+        guard !Task.isCancelled else { return }
+        hero = prepared
     }
 
     @MainActor
     private func loadIcon() async {
-        guard icon == nil, let provider = metadata?.iconProvider else { return }
-        guard let loaded = try? await Self.loadImage(from: provider) else { return }
+        guard resolvedIcon == nil, !RichLinkHeroCache.missed(iconCacheKey),
+            let provider = resolvedMetadata?.iconProvider
+        else { return }
+        guard let loaded = try? await Self.loadImage(from: provider) else {
+            RichLinkHeroCache.noteMiss(for: iconCacheKey)
+            return
+        }
         guard !Task.isCancelled else { return }
-        icon = loaded
+        guard
+            let prepared = await loaded.byPreparingThumbnail(ofSize: CGSize(
+                width: 96, height: 96))
+        else {
+            RichLinkHeroCache.noteMiss(for: iconCacheKey)
+            return
+        }
+        RichLinkHeroCache.store(prepared, for: iconCacheKey)
+        guard !Task.isCancelled else { return }
+        icon = prepared
     }
 
     /// `NSItemProvider.loadObject(ofClass:)` is the async bridge for metadata images.
@@ -423,6 +509,7 @@ struct YouTubeRichCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.richActions) private var richActions
 
     /// The 16:9 card's still. Decoded once through the shared loader and cached by URL, so
     /// scrolling past and back does not re-download or re-flash it (H5 round 2: this used to be
@@ -476,7 +563,7 @@ struct YouTubeRichCard: View {
             }
             if full {
                 VStack(alignment: .leading, spacing: 2) {
-                    if let title = videoTitle {
+                    if let title = resolvedTitle {
                         Text(title)
                             .font(.paseo(.callout))
                             .foregroundStyle(Palette.ink)
@@ -486,7 +573,7 @@ struct YouTubeRichCard: View {
                         Image(systemName: "play")
                             .font(.glyph(.small, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
-                        Text(videoChannel ?? "youtube.com · \(reference.id)")
+                        Text(resolvedChannel ?? "youtube.com · \(reference.id)")
                             .font(.paseo(.caption))
                             .foregroundStyle(Palette.secondaryInk)
                             .lineLimit(1)
@@ -500,6 +587,9 @@ struct YouTubeRichCard: View {
                     }
                 }
                 .padding(.horizontal, 4)
+                .animation(
+                    Motion.disclosure.resolved(reduceMotion: reduceMotion),
+                    value: resolvedTitle != nil)
                 .task(id: reference.id) { await loadTitle() }
             }
         }
@@ -526,12 +616,12 @@ struct YouTubeRichCard: View {
             }
 
             Circle()
-                .fill(.black.opacity(0.55))
+                .fill(Palette.mediaBadge)
                 .frame(width: 34, height: 34)
                 .overlay {
                     Image(systemName: "play.fill")
                         .font(.glyph(.regular, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Palette.onMediaBadge)
                         .offset(x: 1)
                 }
                 .accessibilityHidden(true)
@@ -558,15 +648,27 @@ struct YouTubeRichCard: View {
         }
     }
 
+    /// The title strip reads the cache on the first pass (remounts never flash the
+    /// domain fallback); the fetch fills it in once, animated, on cheap links only.
+    private var resolvedTitle: String? {
+        videoTitle ?? YouTubeTitleCache.entry(for: reference.id)?.title
+    }
+
+    private var resolvedChannel: String? {
+        videoChannel ?? YouTubeTitleCache.entry(for: reference.id)?.channel
+    }
+
     /// YouTube's public oEmbed endpoint, fetched once per id and cached: the same
     /// third-party class as the thumbnail fetch, never the relay or the daemon.
+    /// Gated like any other third-party metadata (§12): cheap links only.
     @MainActor
     private func loadTitle() async {
-        if let cached = YouTubeTitleCache.entry(for: reference.id) {
-            videoTitle = cached.title
-            videoChannel = cached.channel
-            return
-        }
+        if YouTubeTitleCache.entry(for: reference.id) != nil { return }
+        guard
+            mediaFetchPolicy(
+                kind: .youTube, knownBytes: nil,
+                condition: richActions?.linkCondition ?? .assumed) == .automatic
+        else { return }
         var components = URLComponents(string: "https://www.youtube.com/oembed")
         components?.queryItems = [
             URLQueryItem(
@@ -574,7 +676,7 @@ struct YouTubeRichCard: View {
             URLQueryItem(name: "format", value: "json"),
         ]
         guard let endpoint = components?.url,
-            let (data, _) = try? await URLSession.shared.data(from: endpoint),
+            let (data, _) = try? await MediaPipeline.fetchMetadataData(from: endpoint),
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let title = json["title"] as? String, !title.isEmpty
         else { return }

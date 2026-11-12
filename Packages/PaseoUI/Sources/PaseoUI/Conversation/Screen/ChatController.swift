@@ -433,7 +433,8 @@ struct TranscriptJump: Equatable {
     /// The checkout the open agent belongs to, if any.
     private var currentCheckout: CheckoutStore? {
         guard let agent = store.agent,
-            let descriptor = session.workspaceDirectory.workspace(id: agent.workspaceId)
+            let workspaceId = agent.workspaceId,
+            let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
         else { return nil }
         return session.checkout(for: descriptor)
     }
@@ -458,7 +459,8 @@ struct TranscriptJump: Equatable {
     /// degrades to the metadata link card.
     private func lookupGitHub(_ parsed: GitHubURL) async -> GitHubLinkInfo? {
         guard let agent = store.agent,
-            let descriptor = session.workspaceDirectory.workspace(id: agent.workspaceId)
+            let workspaceId = agent.workspaceId,
+            let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
         else { return nil }
         let query: String
         switch parsed.kind {

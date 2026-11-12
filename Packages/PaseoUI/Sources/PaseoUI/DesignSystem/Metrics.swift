@@ -74,6 +74,14 @@ enum Metrics {
     static let mermaidRenderTimeout: Double = 20
     /// The inline code icon buttons (G5 C8 Preview): 28 pt glyph in a 44 pt hit area.
     static let codeIconSize: CGFloat = 28
+    /// The OG image slot (G9 C6): unfurl heroes crop to 1.91:1, reserved from frame one.
+    static let ogHeroAspect: CGFloat = 1.91
+    /// The link row's icon box (G9 C6): 32 pt glyph well in the 56 pt row.
+    static let linkIconSize: CGFloat = 32
+    /// The overlay pill's vertical inset (G11 C3): the duration pill floats 3 pt in.
+    static let overlayVPadding: CGFloat = 3
+    /// The audio waveform's bar count (G11 C4): fixed, so the draw is O(1) per paint.
+    static let audioBarCount = 48
 }
 
 /// The sidebar's rows.

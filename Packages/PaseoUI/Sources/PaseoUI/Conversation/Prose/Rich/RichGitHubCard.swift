@@ -78,13 +78,56 @@ struct RichGitHubCard: View {
         }
     }
 
+    /// The row shape from the first frame: a GitHub URL never shows the generic
+    /// hero link card. The title and state fill in in place (same height) when the
+    /// lookup lands; the live PR card grows once, animated, when it can be known.
     var body: some View {
-        if let matchedPR {
-            prCard(matchedPR)
-        } else if let info {
-            linkedRow(title: info.title, state: info.state)
-        } else {
-            RichLinkCard(url: url)
+        Group {
+            if let matchedPR {
+                prCard(matchedPR)
+            } else if let info {
+                linkedRow(title: info.title, state: info.state)
+            } else {
+                unresolvedRow
+            }
+        }
+        .task(id: lookupKey) { await lookup() }
+        .animation(
+            Motion.disclosure.resolved(reduceMotion: reduceMotion), value: cardShape)
+    }
+
+    /// What the card is showing, as one value, so the taller live PR card grows
+    /// once (animated) instead of swapping heights under the reader.
+    private var cardShape: Int {
+        if matchedPR != nil { return 2 }
+        if info != nil { return 1 }
+        return 0
+    }
+
+    /// Before the lookup answers: slug, kind and glyph, no state yet.
+    private var unresolvedRow: some View {
+        Button {
+            showSafari = true
+        } label: {
+            PaseoRowCard(
+                glyph: glyph, title: "\(parsed.slug)\(kindSuffix)",
+                meta: "github.com")
+        }
+        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+        .paseoCardMenu(
+            openTitle: "Open",
+            onOpen: { showSafari = true },
+            copyTitle: "Copy link",
+            copyText: url,
+            externalTitle: "Open on GitHub",
+            externalURL: URL(string: url))
+        .paseoCardAccessibility(
+            kind: "GitHub link", title: "\(parsed.slug)\(kindSuffix)",
+            meta: "github.com", isButton: true)
+        .fullScreenCover(isPresented: $showSafari) {
+            if let target = URL(string: url) {
+                SafariView(url: target).ignoresSafeArea()
+            }
         }
     }
 
@@ -231,7 +274,7 @@ struct RichGitHubCard: View {
     private func prStateLabel(_ pr: CheckoutPrStatus) -> String {
         if pr.isMerged { return "Merged" }
         if pr.isDraft == true { return "Draft" }
-        switch pr.state.lowercased() {
+        return switch pr.state.lowercased() {
         case "closed": "Closed"
         default: "Open"
         }
@@ -240,7 +283,7 @@ struct RichGitHubCard: View {
     private func prStateTone(_ pr: CheckoutPrStatus) -> StatePill.Tone {
         if pr.isMerged { return .success }
         if pr.isDraft == true { return .neutral }
-        switch pr.state.lowercased() {
+        return switch pr.state.lowercased() {
         case "closed": .failure
         default: .success
         }
@@ -279,7 +322,6 @@ struct RichGitHubCard: View {
         .paseoCardAccessibility(
             kind: "GitHub link", title: title,
             meta: "\(parsed.slug) \(stateLabel(state))", isButton: true)
-        .task(id: lookupKey) { await lookup() }
         .fullScreenCover(isPresented: $showSafari) {
             if let target = URL(string: url) {
                 SafariView(url: target).ignoresSafeArea()
@@ -288,7 +330,7 @@ struct RichGitHubCard: View {
     }
 
     private func stateLabel(_ state: String) -> String {
-        switch state.lowercased() {
+        return switch state.lowercased() {
         case "open": "Open"
         case "closed": "Closed"
         case "merged": "Merged"
@@ -298,7 +340,7 @@ struct RichGitHubCard: View {
     }
 
     private func stateTone(_ state: String) -> StatePill.Tone {
-        switch state.lowercased() {
+        return switch state.lowercased() {
         case "open", "merged": .success
         case "closed": .failure
         default: .neutral
