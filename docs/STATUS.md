@@ -11,6 +11,8 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 **2026-11-12 Phase B part 1 (G4 Mermaid + G5 artifact page) MERGED** (fd98bac). Review: chat full-HTML artifacts were online (now WKContentRuleList + always-injected CSP), mermaid runtime loaded once in the shared offscreen host (no extra web view/window), generation-guarded timeout, SVG cache for the live page. Gate green, PaseoCore 835+208+145 green. Worker told: continue to the rest of Phase B (G6, G8, G9, G7, G10, G11, G12, G13), stop and report. IPA after Phase B.
 
+**2026-11-12 Phase B part 2 (G6–G12) in review** (G13 not started). Gate FAILED (~14 errors). Review sent in 2 batches: media index never sees the streaming turn; change summary re-parses diffs per token; cache reads in .task cause remount flashes/jumps (link hero, gallery, terminal, YouTube title); 64 MB Data.write on main (video/file); remote audio bypasses pipeline; oEmbed/PDF/poster ignore §12; openDiff ignores the turn; GitHub lookup task never attached; gallery a11y collapsed; audio scrub steals scrolls; Now Playing without handlers; session left in .playback. Waiting for the fix report.
+
 (the rich UI plan made coherent; decisions D1–D8 taken by the lead on the user's delegation:
 Mermaid bundled, Live Activity / Share ext / Expo deferred, extensions built but not embedded,
 notification Allow/Deny off by default, §15 copy approved with upstream-first, permission line only
