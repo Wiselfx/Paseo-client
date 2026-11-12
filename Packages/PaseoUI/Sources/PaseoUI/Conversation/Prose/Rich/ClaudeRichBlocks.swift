@@ -32,6 +32,16 @@ struct ClaudeRichBlockView: View {
             RichLocalImage(path: path, alt: alt)
         case .imageGroup(let images, _):
             RichGalleryCard(images: images)
+        case .localMedia(let path, let kind, _):
+            switch kind {
+            case .video: VideoCard(input: .local(path: path))
+            case .audio: AudioRow(input: .local(path: path))
+            }
+        case .remoteMedia(let url, let kind, _):
+            switch kind {
+            case .video: VideoCard(input: .remote(url: url))
+            case .audio: AudioRow(input: .remote(url: url))
+            }
         case .localFileLink(let path, _):
             RichPathChip(path: path, glyph: "doc.text")
         case .rawSVG(let source, _):
@@ -403,15 +413,6 @@ struct RichLinkCard: View {
 
 // MARK: - YouTube (§1.2)
 
-/// One inline player at a time across the transcript (E3 §3.4). Switching the active id rebuilds
-/// the previous card without its web view, which tears the player down and stops playback.
-@MainActor
-@Observable
-final class InlineYouTubePlayback {
-    static let shared = InlineYouTubePlayback()
-    var activeID: String?
-}
-
 /// Thumbnail card at 16:9, full width; tapping swaps it in place for an inline player. The web
 /// view is created by the tap, never for every card, and is destroyed when the card scrolls away.
 /// "Open in YouTube" in the context menu keeps the old external path.
@@ -436,7 +437,7 @@ struct YouTubeRichCard: View {
     @State private var videoTitle: String?
     @State private var videoChannel: String?
 
-    private let playback = InlineYouTubePlayback.shared
+    private let playback = MediaPlaybackCoordinator.shared
     private var isPlaying: Bool { playback.activeID == reference.id }
 
     /// One decode per (URL, pixel bucket). Nil while playing — the player covers the still —
@@ -471,7 +472,7 @@ struct YouTubeRichCard: View {
             .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: isPlaying)
             .onScrollVisibilityChange(threshold: 0.05) { visible in
                 // Far enough off screen: destroy the player rather than let audio keep running.
-                if !visible, isPlaying { playback.activeID = nil }
+                if !visible, isPlaying { playback.stop(reference.id) }
             }
             if full {
                 VStack(alignment: .leading, spacing: 2) {
@@ -491,7 +492,7 @@ struct YouTubeRichCard: View {
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         if isPlaying {
-                            Button("Close") { playback.activeID = nil }
+                            Button("Close") { playback.stop(reference.id) }
                                 .font(.paseo(.caption, weight: .medium))
                                 .foregroundStyle(Palette.secondaryInk)
                                 .buttonStyle(.plain)
@@ -536,7 +537,7 @@ struct YouTubeRichCard: View {
                 .accessibilityHidden(true)
         }
         .contentShape(.rect)
-        .onTapGesture { playback.activeID = reference.id }
+        .onTapGesture { playback.play(reference.id) }
         .contextMenu {
             Button("Open in YouTube", systemImage: "play.rectangle") { openInYouTube() }
         }

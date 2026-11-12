@@ -171,6 +171,8 @@ import Testing
             case .visualize: kind = "visualize"
             case .mermaid: kind = "mermaid"
             case .imageGroup: kind = "imageGroup"
+            case .localMedia: kind = "localMedia"
+            case .remoteMedia: kind = "remoteMedia"
             case .mapCard: kind = "mapCard"
             }
             return "\(kind):\(source[block.range])"

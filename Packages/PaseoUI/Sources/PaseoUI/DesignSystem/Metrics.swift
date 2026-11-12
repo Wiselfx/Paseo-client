@@ -66,6 +66,8 @@ enum Metrics {
     static let placeholderCompactHeight: CGFloat = 120
     /// The offscreen snapshot clamp (G4 §4.1): snapshots never exceed ~4 MP.
     static let offscreenSnapshotMaxWidth: CGFloat = 1365
+    /// The audio waveform's tallest bar (G11 C4), in the row and the dictation overlay.
+    static let audioWaveformHeight: CGFloat = 28
     /// Gallery tile gutters (G7 C2): 2 pt hairlines between tiles.
     static let galleryTileSpacing: CGFloat = 2
     /// The mermaid render timeout (G4 §4.1): WebKit answers in ms; 20 s is failure.

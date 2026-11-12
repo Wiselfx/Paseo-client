@@ -50,6 +50,8 @@ extension RichContentBlock {
         case .visualize: "visualize"
         case .mermaid: "mermaid"
         case .imageGroup: "gallery"
+        case .localMedia(_, let kind, _): kind == .video ? "video" : "audio"
+        case .remoteMedia(_, let kind, _): kind == .video ? "video" : "audio"
         case .mapCard: "map"
         }
     }
@@ -106,6 +108,25 @@ func richPieces(_ source: String) -> [RichPiece] {
 
     for range in RichContentDetector.splitIntoBlocks(source) {
         let unit = String(source[range])
+        // A standalone playable path or URL becomes a player card first (G11 C3/C4);
+        // anything else falls through to the file card (G10) or existing rendering.
+        if let media = RichStandaloneMedia.match(
+            blocks: RichContentCache.detect(unit), unitText: unit)
+        {
+            flushPending()
+            previousUnitEnd = range.upperBound
+            switch media {
+            case .local(let path, let kind):
+                pieces.append(.block(
+                    .localMedia(path: path, kind: kind, range: range),
+                    utf16Length: unit.utf16.count))
+            case .remote(let url, let kind):
+                pieces.append(.block(
+                    .remoteMedia(url: url, kind: kind, range: range),
+                    utf16Length: unit.utf16.count))
+            }
+            continue
+        }
         // A bare non-image path standing alone on its line is a file card (G10 C10),
         // decided from the raw unit so linkification cannot hide it. Images and
         // inline mentions keep their existing rendering.
