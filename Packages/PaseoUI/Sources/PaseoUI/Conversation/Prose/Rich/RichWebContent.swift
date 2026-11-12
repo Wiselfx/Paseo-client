@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import OSLog
 import SwiftUI
 import UIKit
 import WebKit
@@ -156,13 +157,17 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
     }
 
     /// The pinned runtime, read off main once and kept for the session.
+    ///
+    /// `Package.swift` builds resources with `.process("Resources")`, which **flattens** folders in
+    /// the built bundle — the file ships as `mermaid.min.js`, not `mermaid/mermaid.min.js`. Asking
+    /// only for the subdirectory found nothing on device, so every diagram rendered
+    /// "Couldn't render diagram" (J1 §2). Both lookups are tried, subdirectory first, the same way
+    /// `ClaudeCrabView` finds its sheets.
     private func runtimeScript() async -> String? {
         if let runtimeScript { return runtimeScript }
         if let runtimeLoad { return await runtimeLoad.value }
         let task = Task.detached(priority: .utility) { () -> String? in
-            guard
-                let url = Bundle.module.url(
-                    forResource: "mermaid.min", withExtension: "js", subdirectory: "mermaid"),
+            guard let url = Self.mermaidRuntimeURL(),
                 let script = try? String(contentsOf: url, encoding: .utf8), !script.isEmpty
             else { return nil }
             return script
@@ -170,8 +175,23 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         runtimeLoad = task
         let script = await task.value
         runtimeLoad = nil
-        if let script { runtimeScript = script }
+        if let script {
+            runtimeScript = script
+        } else {
+            // Once per process: the next device run says why instead of just drawing the failure
+            // card. `mermaid.min.js` is a local resource, so reading it touches no network.
+            Self.runtimeLog.error("mermaid.min.js is not in the built bundle; diagrams cannot render")
+        }
         return script
+    }
+
+    private static let runtimeLog = Logger(
+        subsystem: "com.wiselfx.paseoclient", category: "mermaid")
+
+    /// The flattened name first, then the folder name a differently built bundle would keep.
+    private static func mermaidRuntimeURL() -> URL? {
+        Bundle.module.url(forResource: "mermaid.min", withExtension: "js", subdirectory: "mermaid")
+            ?? Bundle.module.url(forResource: "mermaid.min", withExtension: "js")
     }
 
     /// The single host document: the runtime inline once, then one

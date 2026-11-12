@@ -24,17 +24,25 @@
         public var lineSpacing: CGFloat = 9
         public var listSpacing: CGFloat = 9
         public var tableColumnWidth: CGFloat = 150
+        /// The theme is built from one number — the body size in points — so inline strong and
+        /// emphasis runs can ask `ProseFonts` for a *real* face (J1 §1: the bundled serif is one
+        /// static Regular, so `.weight()` and `.italic()` on it draw Regular).
+        public var bodySize: CGFloat = 20
+        /// Heading sizes are ratios of `bodySize`: h1 1.5, h2 1.29, h3 1.14, h4 1, h5 0.93, h6 0.86
+        /// (the sizes measured at 14 pt: 21 / 18 / 16 / 14 / 13 / 12).
+        public static let headingRatios: [CGFloat] = [1.5, 1.286, 1.143, 1, 0.929, 0.857]
+
         public init(serifName: String = "Newsreader16pt-Regular", bodySize: CGFloat = 20) {
             foreground = Palette.ink
             // Dynamic Type (shifted by Content size in `RootView`) scales prose; the theme no
             // longer multiplies sizes by hand.
+            self.bodySize = bodySize
             bodyFont = ProseFonts.serif(size: bodySize)
-            // The Claude ladder as ratios of the body: h1 1.5, h2 1.29, h3 1.14, h4 1, h5 0.93,
-            // h6 0.86 (the sizes measured at 14 pt: 21 / 18 / 16 / 14 / 13 / 12).
-            let headingRatios: [CGFloat] = [1.5, 1.286, 1.143, 1, 0.929, 0.857]
-            headingFonts = headingRatios.enumerated().map { index, ratio in
-                ProseFonts.serif(size: bodySize * ratio, relativeTo: index < 3 ? .headline : .body)
-                    .weight(index < 3 ? .bold : .semibold)
+            headingFonts = Self.headingRatios.enumerated().map { index, ratio in
+                // h1–h3 are bold, h4–h6 semibold, as real faces.
+                ProseFonts.serif(
+                    size: bodySize * ratio, relativeTo: index < 3 ? .headline : .body,
+                    weight: index < 3 ? .bold : .semibold)
             }
             // ~0.88 of the body: 15 pt at the 17 pt Claude body. The code-size step is applied by
             // the code container (`codeTypeScale()`), not baked into the face.
@@ -43,9 +51,40 @@
         public static var artifact: Self {
             var theme = Self()
             theme.bodyFont = .system(size: 17)
+            theme.bodySize = 17
             theme.codeFont = .system(size: 13, design: .monospaced)
             theme.lineSpacing = 6
             return theme
+        }
+
+        /// The face for a run of prose: `font` is the run's base (the body face or one heading of
+        /// the ladder), `strong`/`emphasis` the markdown marks on top of it. Returns a real face:
+        /// strong is 600 (DSH strong is semibold, not 700), emphasis is the base weight slanted.
+        /// A heading keeps its ladder size; anything this theme did not build is left alone.
+        public func face(for font: Font, strong: Bool, emphasis: Bool) -> Font {
+            guard let role = role(of: font) else { return font }
+            let weight: Font.Weight = strong ? .semibold : role.weight
+            return ProseFonts.serif(
+                size: role.size, relativeTo: role.relativeTo, weight: weight, italic: emphasis)
+        }
+
+        /// `face(for:strong:emphasis:)` with an explicit weight instead of strong/emphasis — the
+        /// prose link's 500. Callers pass the run's base weight (the theme's role weight).
+        func face(for font: Font, weight: Font.Weight) -> Font {
+            guard let role = role(of: font) else { return font }
+            return ProseFonts.serif(
+                size: role.size, relativeTo: role.relativeTo, weight: weight, italic: false)
+        }
+
+        /// Which rung of this theme's ladder `font` is: the body, or one heading. `Font` is
+        /// equatable, and the ladder is seven values, so this is O(7) with no allocation.
+        private func role(of font: Font) -> (size: CGFloat, relativeTo: Font.TextStyle, weight: Font.Weight)? {
+            if font == bodyFont { return (bodySize, .body, .regular) }
+            guard let index = headingFonts.firstIndex(of: font) else { return nil }
+            let ratio = Self.headingRatios[min(index, Self.headingRatios.count - 1)]
+            return (
+                bodySize * ratio, index < 3 ? .headline : .body, index < 3 ? .bold : .semibold
+            )
         }
     }
 
@@ -220,7 +259,7 @@
                 inline(
                     content,
                     font: (theme.headingFonts.isEmpty
-                        ? theme.bodyFont.bold()
+                        ? ProseFonts.serif(size: theme.bodySize, relativeTo: .headline, weight: .semibold)
                         : theme.headingFonts[min(max(level - 1, 0), theme.headingFonts.count - 1)])
                 ).accessibilityAddTraits(.isHeader)
             case .rule:
@@ -510,7 +549,7 @@
             alignments: [MarkdownColumnAlignment], columns: Int
         ) -> some View {
             inline(
-                cell, font: isHeader ? theme.bodyFont.bold() : theme.bodyFont,
+                cell, font: isHeader ? theme.face(for: theme.bodyFont, strong: true, emphasis: false) : theme.bodyFont,
                 alignment: alignment
             )
             .padding(.horizontal, 12).padding(.vertical, 10)
@@ -601,31 +640,44 @@
         }
         private func inlineText(
             _ children: [MarkdownInline], font: Font, bold: Bool = false, italic: Bool = false, strike: Bool = false,
-            link: URL? = nil
+            link: URL? = nil, linkWeight: Font.Weight = .regular
         ) -> Text {
             children.reduce(Text("")) { result, child in
                 let piece: Text
                 switch child {
                 case .strong(let nested):
-                    piece = inlineText(nested, font: font, bold: true, italic: italic, strike: strike, link: link)
+                    piece = inlineText(
+                        nested, font: font, bold: true, italic: italic, strike: strike, link: link,
+                        linkWeight: linkWeight)
                 case .emphasis(let nested):
-                    piece = inlineText(nested, font: font, bold: bold, italic: true, strike: strike, link: link)
+                    piece = inlineText(
+                        nested, font: font, bold: bold, italic: true, strike: strike, link: link,
+                        linkWeight: linkWeight)
                 case .strikethrough(let nested):
-                    piece = inlineText(nested, font: font, bold: bold, italic: italic, strike: true, link: link)
+                    piece = inlineText(
+                        nested, font: font, bold: bold, italic: italic, strike: true, link: link,
+                        linkWeight: linkWeight)
                 case .link(let destination, let nested):
                     piece = inlineText(
-                        nested, font: font, bold: bold, italic: italic, strike: strike, link: URL(string: destination))
+                        nested, font: font, bold: bold, italic: italic, strike: strike,
+                        // The prose link is 500.
+                        link: URL(string: destination), linkWeight: .medium)
                 default:
                     var value = attributed([child], font: font, bold: bold, italic: italic, strike: strike)
                     if let link {
                         value.link = link
                         value.foregroundColor = theme.link
                         value.underlineStyle = .single
-                        value.font = value.font?.weight(.medium) // the prose link is 500
                     }
                     if case .code = child {
+                        // Inline code keeps the mono face: no strong, no emphasis (as before).
                         piece = Text(value).customAttribute(InlineCodeAttribute())
                     } else {
+                        if link != nil, !bold, !italic {
+                            // The prose link is 500. A real face only where the face table has one;
+                            // an unstyled face keeps the modifier exactly as it was.
+                            value.font = theme.face(for: font, weight: linkWeight)
+                        }
                         piece = Text(value)
                     }
                 }
@@ -661,9 +713,11 @@
                     if case .code = child {
                         face = theme.codeFont
                         run.foregroundColor = theme.inlineCodeForeground
+                    } else if bold || italic {
+                        // A real face: the bundled serif has no bold or italic, so `.weight()`
+                        // and `.italic()` would draw Regular (J1 §1).
+                        face = theme.face(for: font, strong: bold, emphasis: italic)
                     }
-                    if bold { face = face.weight(.semibold) } // DSH strong is 600, not 700
-                    if italic { face = face.italic() }
                     run.font = face
                     run.strikethroughStyle = strike ? .single : nil
                     if case .image(let image) = child {

@@ -1676,6 +1676,8 @@ struct MermaidCard: View {
     @State private var image: UIImage?
     @State private var aspectRatio: CGFloat?
     @State private var svg: String?
+    /// The renderer's message for a refused source. `.unavailable` is not a message: the card's
+    /// title already says it (J1 §2 — never print the same sentence twice).
     @State private var errorMessage: String?
     @State private var showSource = false
     @State private var width: CGFloat = 0
@@ -1705,6 +1707,10 @@ struct MermaidCard: View {
     private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
+
+    /// The failure title, and the sentinel a `.unavailable` render stores in `errorMessage`: the
+    /// renderer has no message of its own there, and printing this one twice is the J1 §2 bug.
+    static let unavailable = "Couldn't render diagram"
 
     /// What the card's box is doing, as one value: the one animated settle is the
     /// placeholder → true ratio, once, and failures keep their box (§0).
@@ -1739,6 +1745,8 @@ struct MermaidCard: View {
                 header
                 if showSource {
                     source
+                } else if let errorMessage, errorMessage == Self.unavailable {
+                    unavailableStage
                 } else if let errorMessage {
                     errorStage(message: errorMessage)
                 } else {
@@ -1815,7 +1823,8 @@ struct MermaidCard: View {
         }
     }
 
-    /// Syntax errors show the source as code, plus the renderer's message.
+    /// A refused source shows the source as code, plus the renderer's message as a footer. An
+    /// unavailable renderer has no message to add: the title is the whole failure (J1 §2).
     private func errorStage(message: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Couldn't render diagram")
@@ -1828,6 +1837,17 @@ struct MermaidCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Diagram could not be rendered. \(message)")
+    }
+
+    private var unavailableStage: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Couldn't render diagram")
+                .font(.paseo(.caption, weight: .medium))
+                .foregroundStyle(Palette.failureInk)
+            source
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Diagram could not be rendered.")
     }
 
     private var source: some View {
@@ -1893,7 +1913,8 @@ struct MermaidCard: View {
         case .error(let message):
             errorMessage = message
         case .unavailable:
-            errorMessage = "Couldn't render diagram"
+            // The title alone: the source, then no second copy of the same sentence.
+            errorMessage = Self.unavailable
         }
     }
 }

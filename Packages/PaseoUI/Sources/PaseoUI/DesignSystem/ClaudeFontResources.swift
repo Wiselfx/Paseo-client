@@ -11,9 +11,15 @@
         public static let anthropicMono = "AnthropicMonoWebWeb-Regular"
         public static let newsreader = "Newsreader16pt-Regular"
 
+        /// The two files register together, so the declared faces below are either all present or
+        /// all absent (J1 §1). Only the roman file was registered before, which left the italic
+        /// file's faces (and every italic in prose) unreachable.
+        static let newsreaderRomanFile = "Newsreader"
+        static let newsreaderItalicFile = "Newsreader-Italic"
+
         private static let registration: Void = {
             for name in [
-                "Newsreader", "Newsreader-Italic",
+                newsreaderRomanFile, newsreaderItalicFile,
                 "AnthropicSansWebText", "AnthropicSerifWebText", "AnthropicMonoWeb",
             ] {
                 if let url = Bundle.module.url(forResource: name, withExtension: "ttf") {
