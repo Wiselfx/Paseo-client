@@ -130,7 +130,8 @@ func richPieces(_ source: String, home: String? = nil) -> [RichPiece] {
         let unit = String(source[range])
         // J2 §1: several images in one paragraph are a gallery. Checked before the
         // single-image rules below, from the raw unit (linkification would wrap them).
-        if let images = RichImageGrouping.imagesOnly(unit: unit, home: home) {
+        let shape = RichUnitShapeCache.shape(unit, home: home)
+        if let images = shape.images {
             let unitRange = range
             if images.count >= 2 {
                 flushPending()
@@ -157,7 +158,7 @@ func richPieces(_ source: String, home: String? = nil) -> [RichPiece] {
         }
         // J2 §2: every line is a file — a bare path or an authored link to one — so the
         // unit becomes one card per file rather than a run of blue links.
-        if let paths = RichStandaloneFile.linkLines(unit: unit, home: home) {
+        if let paths = shape.filePaths {
             flushPending()
             previousUnitEnd = range.upperBound
             pieces.append(contentsOf: fileLinePieces(paths, range: range, unit: unit))
@@ -233,18 +234,16 @@ func richPieces(_ source: String, home: String? = nil) -> [RichPiece] {
         // inside a list item at the URL's range; splicing the unit at that range removed
         // the item's text and split the list in two. The whole unit renders as markdown —
         // the URL is a link now (§3) — and the players follow it, in order.
-        if RichStandaloneFile.isListUnit(unit) {
+        if shape.isList {
             let inlinePlayers = blocks.filter {
                 if case .youTubeInline = $0 { return true } else { return false }
             }
             if !inlinePlayers.isEmpty {
-                pieces.append(.markdown(unit))
+                // The markdown piece carries the whole unit's length; the players after it
+                // add none, so the reveal's running offsets stay exact (lead fix).
+                pieces.append(.markdown(linked))
                 for block in inlinePlayers {
-                    let blockRange = block.range
-                    pieces.append(.block(
-                        block,
-                        utf16Length: linked.utf16.distance(
-                            from: blockRange.lowerBound, to: blockRange.upperBound)))
+                    pieces.append(.block(block, utf16Length: 0))
                 }
                 continue
             }
@@ -257,6 +256,39 @@ func richPieces(_ source: String, home: String? = nil) -> [RichPiece] {
     }
     flushPending()
     return pieces
+}
+
+/// The unit-shape checks J2 added (images-only, file-link lines, list unit) scan the whole
+/// unit; `richPieces` runs from view bodies, so they are memoized per (unit, home) like
+/// `RichContentCache` — never re-scanned per render (lead fix, mission-critical §1).
+@MainActor
+enum RichUnitShapeCache {
+    struct Shape {
+        let images: [RichImage]?
+        let filePaths: [String]?
+        let isList: Bool
+    }
+
+    private struct Key: Hashable {
+        let unit: String
+        let home: String?
+    }
+
+    private static let table = ProseCache<Key, Shape>(
+        budget: 4 * 1024 * 1024,
+        countLimit: 512,
+        cost: { key, _ in key.unit.utf8.count })
+
+    static func shape(_ unit: String, home: String?) -> Shape {
+        let key = Key(unit: unit, home: home)
+        if let cached = table.value(for: key) { return cached }
+        let shape = Shape(
+            images: RichImageGrouping.imagesOnly(unit: unit, home: home),
+            filePaths: RichStandaloneFile.linkLines(unit: unit, home: home),
+            isList: RichStandaloneFile.isListUnit(unit))
+        table.setValue(shape, for: key)
+        return shape
+    }
 }
 
 /// J2 §2: one piece per file path, in order. The UTF-16 lengths sum to the unit's length
