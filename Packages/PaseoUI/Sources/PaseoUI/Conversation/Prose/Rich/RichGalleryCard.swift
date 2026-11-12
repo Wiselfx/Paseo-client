@@ -391,7 +391,7 @@ struct RichGalleryCard: View {
 
     private func cacheIdentity(for image: RichImage) -> String? {
         switch image.source {
-        case .remote(let urlString): MediaPipeline.cacheIdentity(for: urlString)
+        case .remote(let urlString): return MediaPipeline.cacheIdentity(for: urlString)
         case .local(let path):
             guard let workspaceID = richActions?.daemonWorkspaceID else { return nil }
             return MediaPipeline.liveKey(ref: DaemonFileRef(
