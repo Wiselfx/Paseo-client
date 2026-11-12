@@ -40,3 +40,4 @@ per-frame cost unless the ticket spells them out. Needs a strict reviewer.
 | G Phase E (Muse Spark) | B | Clean D1 compliance (extension built, not embedded, verified in pbxproj); clear turn-on list | 1 gate round (undefined serverID, optional unwrap) | 1 lead fix | Lessons from D applied; best compile pass of the round. |
 
 **Harness average:** A−. Pi workers were stronger than OMP on diagnosis and design; still miss Apple-specific traps (TextKit, project files, numeric bridging) that only the gate or the lead catch.
+| J1 prose faces + Mermaid | DeepSeek v4.1 flash (pi, minimal) | B | Root causes right; first cut changed the body face app-wide (claimed byte-identical), missing helper, nonexistent `Font.Weight.extraLight`; 1 review round + 1 lead isolation fix + lead fix for inline-code paragraphs |
