@@ -46,3 +46,4 @@ per-frame cost unless the ticket spells them out. Needs a strict reviewer.
 | Ticket | Worker | Grade | Notes |
 |---|---|---|---|
 | J1 prose faces + Mermaid | DeepSeek v4.1 flash (pi, minimal) | B | Root causes right; first cut changed the body face app-wide (claimed byte-identical), missing helper, nonexistent `Font.Weight.extraLight`; 1 review round + 1 lead isolation fix + lead fix for inline-code paragraphs |
+| J3 composer + back-to-end | DeepSeek v4.1 flash (pi, minimal) | C+ | Root causes for tile + hit-testing right; item 3 "fix" used the same inset formula (no-op, and would re-decide per keyboard frame), undefined `previous` var, forced 56 pt frame on file pills, dropped the decode tile; lead fixed all four |
