@@ -22,6 +22,10 @@ public struct Turn: Sendable, Equatable, Identifiable {
     /// The turn's file changes (G6 C11), or nil when it changed nothing. Computed
     /// with the turn, so the incremental tail rebuild recomputes only rebuilt turns.
     public var changeSummary: TurnChangeSummary? = nil
+    /// The turn's todo/plan state (Phase C §9.2), or nil when the turn has neither.
+    /// An O(rows) scan with no parsing, so it runs on every rebuild — including the
+    /// running tail — and the card updates live.
+    public var todoState: TurnTodoState? = nil
 
     public enum Phase: Sendable, Equatable {
         case running
@@ -176,6 +180,7 @@ private struct TurnDraft {
         // The card only shows at turn end: a running tail is rebuilt on every stream
         // event, so parsing its diffs here would cost O(diff size) per token on main.
         finished.changeSummary = isRunning ? nil : TurnChangeSummary.summarize(turn: finished)
+        finished.todoState = TurnTodoState.reduce(turn: finished)
         return finished
     }
 }
