@@ -113,6 +113,18 @@ public final class WorkspaceFiles {
         return file
     }
 
+    /// A parent listing without touching the Files page's state (`read`/`list` reset
+    /// `file`, `entries` and `phase`, which the open panel shows). Throws when the
+    /// daemon answers without a directory. The transcript uses it for lazy file sizes.
+    public func entries(at path: String?) async throws -> [FileExplorerEntry] {
+        let response = try await client.send(
+            FileExplorerRequest(cwd: cwd, mode: .list, path: normalized(path)))
+        guard let directory = response.directory else {
+            throw PaseoStoreError.missingFile(path: path ?? "", message: response.error)
+        }
+        return directory.entries
+    }
+
     /// Drops the last file so a view can go back to the listing without a re-read.
     public func clearFile() {
         file = nil

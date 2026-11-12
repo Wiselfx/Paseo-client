@@ -2,13 +2,16 @@
 import Foundation
 import PaseoStore
 
-/// One piece of assistant prose in document order: a chunk of Markdown, or a rich-content
-/// block detected by `RichContentDetector`.
+/// One piece of assistant prose in document order: a chunk of Markdown, a rich-content
+/// block detected by `RichContentDetector`, or a standalone file line (G10).
 enum RichPiece {
     case markdown(String)
     /// The block plus its UTF-16 length in the unit it was detected from (the unit is
     /// linkified, so its ranges do not index the original source).
     case block(RichContentBlock, utf16Length: Int)
+    /// A bare non-image path standing alone on its line: a file card, not a chip.
+    /// Detected from the raw unit (the detector sees linkified text and stays out).
+    case file(path: String, utf16Length: Int)
 }
 
 /// Small in-memory memo for `RichContentDetector.detect(in:)`. The prose re-renders on
@@ -103,6 +106,17 @@ func richPieces(_ source: String) -> [RichPiece] {
 
     for range in RichContentDetector.splitIntoBlocks(source) {
         let unit = String(source[range])
+        // A bare non-image path standing alone on its line is a file card (G10 C10),
+        // decided from the raw unit so linkification cannot hide it. Images and
+        // inline mentions keep their existing rendering.
+        if let filePath = RichStandaloneFile.path(
+            in: RichContentCache.detect(unit), unitText: unit)
+        {
+            flushPending()
+            previousUnitEnd = range.upperBound
+            pieces.append(.file(path: filePath, utf16Length: unit.utf16.count))
+            continue
+        }
         let linked = FilePathLinks.linkifiedForProse(unit)
         let blocks = RichContentCache.detect(linked)
         guard !blocks.isEmpty else {

@@ -335,6 +335,12 @@ struct TranscriptJump: Equatable {
         richActions.githubLookup = { [weak self] parsed in
             await self?.lookupGitHub(parsed)
         }
+        richActions.listDaemonDirectory = { [weak self] workspaceID, dir in
+            guard let self,
+                let descriptor = self.session.workspaceDirectory.workspace(id: workspaceID)
+            else { return nil }
+            return try? await self.session.checkout(for: descriptor).files.entries(at: dir)
+        }
         startCheckoutPRMirror()
         // The pipeline's only daemon entry: socket bytes in, decoded pixels out. The fetch
         // reads the live agent at call time and runs off main inside the driver. Registered

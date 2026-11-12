@@ -338,6 +338,14 @@ actor MediaPipeline {
         resolvers[workspaceID]?.fetch
     }
 
+    /// A raw daemon read for non-image clients (G10 file cards): socket bytes in,
+    /// nothing cached (files live in the panel's domain, not the image cache).
+    /// `.unavailable` means no resolver; everything else mirrors the fetch.
+    func fetchDaemonFile(ref: DaemonFileRef, maxBytes: Int) async -> DaemonMediaResult {
+        guard let fetch = resolver(for: ref.workspaceID) else { return .unavailable }
+        return await fetch(ref, maxBytes)
+    }
+
     /// The app's identity on the wire. Wikimedia answers **403** to a request with no
     /// User-Agent at all (checked with `curl` against `upload.wikimedia.org`); a stable,
     /// generic app UA is the polite answer everywhere else. No user data, no device name.

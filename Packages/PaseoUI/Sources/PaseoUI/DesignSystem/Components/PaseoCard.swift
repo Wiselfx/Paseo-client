@@ -40,6 +40,9 @@ final class RichActions {
         UIPasteboard.general.image = image
         Haptics.light()
     }
+    /// Lists a daemon directory without touching the Files page's state (G10 C10).
+    /// Nil outside a conversation; nil entries keep the card honest about unknowns.
+    var listDaemonDirectory: ((String, String) async -> [FileExplorerEntry]?)?
     /// Opens a file's diff (G6 C11): the tool call's own diff when this conversation
     /// has one, else the file viewer. No-op until the host sets it.
     var openDiff: (String) -> Void = { _ in }
