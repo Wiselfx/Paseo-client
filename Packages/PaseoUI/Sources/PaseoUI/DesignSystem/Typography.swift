@@ -290,12 +290,18 @@ enum ProseFonts {
         let size: CGFloat
         let relativeTo: Font.TextStyle
         let weight: Font.Weight
+        let italic: Bool
     }
 
     private static let fonts = Mutex<[Key: Font]>([:])
 
-    static func serif(size: CGFloat, relativeTo: Font.TextStyle = .body, weight: Font.Weight = .regular) -> Font {
-        font(.serif, size: size, relativeTo: relativeTo, weight: weight)
+    /// Real faces, not modifiers: the bundled serif has no bold or italic face, so `.weight(_:)`
+    /// and `.italic()` on it draw Regular. `ProseFaceTable` picks the face name; this builds it.
+    static func serif(
+        size: CGFloat, relativeTo: Font.TextStyle = .body, weight: Font.Weight = .regular,
+        italic: Bool = false
+    ) -> Font {
+        font(.serif, size: size, relativeTo: relativeTo, weight: weight, italic: italic)
     }
 
     static func sans(size: CGFloat, relativeTo: Font.TextStyle = .body, weight: Font.Weight = .regular) -> Font {
@@ -307,20 +313,41 @@ enum ProseFonts {
     }
 
     private static func font(
-        _ face: TextRole.Face, size: CGFloat, relativeTo style: Font.TextStyle, weight: Font.Weight
+        _ face: TextRole.Face, size: CGFloat, relativeTo style: Font.TextStyle, weight: Font.Weight,
+        italic: Bool = false
     ) -> Font {
-        let key = Key(face: face, size: size, relativeTo: style, weight: weight)
+        let key = Key(face: face, size: size, relativeTo: style, weight: weight, italic: italic)
         return fonts.withLock { cache in
             if let hit = cache[key] { return hit }
-            let name: String?
+            var name: String?
             switch face {
             case .serif: name = Typography.serifName
             case .sans: name = Typography.sansName
             case .mono: name = Typography.monoName
             }
+            // The serif asks ProseFaceTable for the face that draws this weight and slant. A real
+            // face gets no `.weight()`/`.italic()` (the file has no such face, which was the bug);
+            // the Regular roman keeps exactly the modifiers it had before J1.
+            var serifFace: ProseFaceTable.Face?
+            if face == .serif {
+                let resolved = ProseFaceTable.face(weight: weight, italic: italic)
+                name = resolved.postScriptName
+                serifFace = resolved
+            }
             let font: Font
             if let name {
-                font = Font.custom(name, size: size, relativeTo: style).weight(weight)
+                var built = Font.custom(name, size: size, relativeTo: style)
+                if let serifFace {
+                    if let visible = ProseFaceTable.visibleWeight(serifFace, requested: weight) {
+                        built = built.weight(visible)
+                    }
+                    if ProseFaceTable.visibleItalic(serifFace, requested: italic) {
+                        built = built.italic()
+                    }
+                } else {
+                    built = built.weight(weight)
+                }
+                font = built
             } else {
                 switch face {
                 case .serif:
@@ -389,9 +416,10 @@ public struct ClaudeTypography: Sendable {
 
     /// Assistant prose, greeting, sidebar title, headings.
     public func serif(
-        _ size: CGFloat, relativeTo style: Font.TextStyle = .body, weight: Font.Weight = .regular
+        _ size: CGFloat, relativeTo style: Font.TextStyle = .body, weight: Font.Weight = .regular,
+        italic: Bool = false
     ) -> Font {
-        ProseFonts.serif(size: size, relativeTo: style, weight: weight)
+        ProseFonts.serif(size: size, relativeTo: style, weight: weight, italic: italic)
     }
 
     /// UI text, buttons, composer, sidebar rows.

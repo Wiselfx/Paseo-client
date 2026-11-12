@@ -84,9 +84,10 @@
                         face = theme.codeFont
                         attributes[.foregroundColor] = UIColor(theme.inlineCodeForeground)
                         attributes[.inlineCodeFill] = UIColor(theme.inlineCodeBackground)
+                    } else if bold || italic {
+                        // A real face: the bundled serif has no bold or italic (J1 §1).
+                        face = theme.face(for: font, strong: bold, emphasis: italic)
                     }
-                    if bold { face = face.bold() }
-                    if italic { face = face.italic() }
                     attributes[.font] = face.resolve(in: context.environment.fontResolutionContext).ctFont as UIFont
                     if strike { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
                     var text = child.plainText
