@@ -26,6 +26,10 @@ public enum DeepLink: Sendable, Equatable {
     case offer(ConnectionOffer)
     /// `/open-project` or `/h/<serverID>/open-project`. `serverID` is present on host routes.
     case openProject(serverID: String?)
+    /// `/new-agent` or `/h/<serverID>/new-agent`, with an optional `?workspace=<id>`:
+    /// start a draft in the workspace (or the most recent one) and focus the
+    /// composer. Never sends: creation stays user-driven.
+    case newAgent(serverID: String?, workspaceID: String?)
     /// `/h/<serverID>/agent/<agentID>`.
     case agent(serverID: String, agentID: String)
     /// `/h/<serverID>/workspace/<workspaceID>` with its optional `?open=` intent.
@@ -57,20 +61,20 @@ public enum DeepLink: Sendable, Equatable {
         switch self {
         case .agent(let serverID, _), .workspace(let serverID, _, _), .host(let serverID):
             return serverID
-        case .openProject(let serverID):
+        case .openProject(let serverID), .newAgent(let serverID, _):
             return serverID
         case .offer, .unsupported:
             return nil
         }
     }
 
-    /// Navigation links (agent, workspace, host root, open project) route inside a shell.
-    /// Offers go to the pairing flow; unsupported routes only get a message.
+    /// Navigation links (agent, workspace, host root, open project, new agent) route
+    /// inside a shell. Offers go to the pairing flow; unsupported routes only get a message.
     public var isNavigation: Bool {
         switch self {
         case .offer, .unsupported:
             return false
-        case .agent, .workspace, .host, .openProject:
+        case .agent, .workspace, .host, .openProject, .newAgent:
             return true
         }
     }
@@ -164,6 +168,8 @@ public enum DeepLink: Sendable, Equatable {
         switch screen {
         case "open-project":
             return .openProject(serverID: serverID)
+        case "new-agent":
+            return .newAgent(serverID: serverID, workspaceID: nil)
         case "new", "sessions", "schedules", "settings", "welcome", "plugin":
             return .unsupported(screen)
         default:
@@ -191,6 +197,10 @@ public enum DeepLink: Sendable, Equatable {
         case "open-project":
             guard rest.count == 1 else { return nil }
             return .openProject(serverID: serverID)
+        case "new-agent":
+            guard rest.count == 1 else { return nil }
+            let workspaceID = queryValue(route.query, "workspace").flatMap(decodeWorkspaceID)
+            return .newAgent(serverID: serverID, workspaceID: workspaceID)
         case "sessions", "settings", "plugin":
             return .unsupported(section)
         default:

@@ -343,6 +343,13 @@ struct ComposerView: View {
             focused = true
             composerFocusRequested.wrappedValue = false
         }
+        // A request set before this composer mounted (the new-agent deep link
+        // creates its draft first): consume it on appear, or it would never fire.
+        .onAppear {
+            guard composerFocusRequested.wrappedValue else { return }
+            focused = true
+            composerFocusRequested.wrappedValue = false
+        }
         .onChange(of: controller?.dismissKeyboardRequest) { _, _ in
             focused = false
         }

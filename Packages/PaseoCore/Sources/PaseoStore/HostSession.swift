@@ -707,6 +707,17 @@ public final class ConversationStore: Identifiable {
     /// Pending permission requests, oldest first. Seeded from the agent snapshot and kept live by
     /// `agent_permission_request`/`agent_permission_resolved` (and the stream's permission events).
     public private(set) var pendingPermissions: [AgentPermissionRequest] = []
+    /// The daemon-confirmed permission answers for this agent (card taps and
+    /// notification actions alike). Rendered only after confirmation (D8).
+    /// Appended only through `recordAnsweredPermission`, once per request id.
+    public internal(set) var permissionResolvedLines: [AnsweredPermission] = []
+
+    /// Records a confirmed answer, once per request id. Never removes: a rewind
+    /// does not un-spend an answer.
+    public func recordAnsweredPermission(_ answered: AnsweredPermission) {
+        guard !permissionResolvedLines.contains(where: { $0.id == answered.id }) else { return }
+        permissionResolvedLines.append(answered)
+    }
     /// The provider's notice from the last accepted change, e.g. "applies next turn". Render as a
     /// toast; `clearNotice()` once shown.
     public internal(set) var lastNotice: AgentProviderNotice?

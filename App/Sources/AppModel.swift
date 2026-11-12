@@ -270,6 +270,7 @@ final class AppModel {
             defaults.set(true, forKey: Keys.welcomeCompleted)
             let session = HostSession(client: connection)
             phase = .connected(session)
+            watchAgentDirectory(session: session)
             await session.start()
             return nil
         } catch let error as ConnectionError {
@@ -407,5 +408,94 @@ final class AppModel {
         case .protocolViolation(let message): "Unexpected reply from the host: \(message)"
         case .disconnected: "Disconnected."
         }
+    }
+
+    // MARK: Agent directory (Phase D G16)
+
+    /// The last published projection: the write happens only when ids, titles or
+    /// attention change — never per stream event, never per snapshot fetch.
+    private var lastDirectoryProjection: [AgentDirectoryEntry] = []
+    private var lastDirectoryAttention: [String] = []
+
+    /// The latest simple permission request for an agent, plus the daemon server
+    /// id to answer on. Backs the notification action provider (G19).
+    func latestSimplePermissionRequest(for agentId: String) -> (AgentPermissionRequest, String)? {
+        guard case .connected(let session) = phase,
+            let serverID = currentHostID.flatMap({ savedHosts.host($0)?.serverID }),
+            !serverID.isEmpty
+        else { return nil }
+        let store = session.conversation(for: agentId)
+        guard let request = store.pendingPermissions.last(where: {
+            PermissionNotificationMapping.actions(for: $0) != nil
+        }) else { return nil }
+        return (request, serverID)
+    }
+
+    /// Sends a notification Allow/Deny through the store's permission path (G19):
+    /// verifies the request is still pending, sends, and waits up to ~8 s for the
+    /// daemon's confirmation (the request leaving `pendingPermissions`) before
+    /// reporting success. Records the line, which the transcript shows only
+    /// after that confirmation (D8). Never switches the visible connection to
+    /// another host: answering on a different daemon silently is out of scope,
+    /// so a host mismatch is a failure and the coordinator posts "Open".
+    func performPermissionAction(_ action: PendingPermissionAction) async -> Bool {
+        guard case .connected(let session) = phase,
+            let serverID = currentHostID.flatMap({ savedHosts.host($0)?.serverID }),
+            serverID == action.hostServerID
+        else { return false }
+        let store = session.conversation(for: action.agentId)
+        guard let request = store.pendingPermissions.first(where: { $0.id == action.requestId }) else {
+            return false
+        }
+        let response = action.allow
+            ? AgentPermissionResponse.allowing(selectedActionId: action.daemonActionId)
+            : AgentPermissionResponse.denying(selectedActionId: action.daemonActionId)
+        await store.respond(to: action.requestId, with: response)
+        let deadline = Date().addingTimeInterval(8)
+        while store.pendingPermissions.contains(where: { $0.id == action.requestId }) {
+            if Date() > deadline { return false }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        store.recordAnsweredPermission(AnsweredPermission(
+            id: action.requestId, line: ResolutionLine.text(for: response, request: request)))
+        return true
+    }
+
+    /// Keeps the intents/Spotlight snapshot with the agent list: one write per
+    /// change, off main, through `AgentDirectory` (which diffs Spotlight by id).
+    private func watchAgentDirectory(session: HostSession) {
+        withObservationTracking {
+            _ = session.agents.map { ($0.id, $0.title) }
+            _ = session.attention.pending.map(\.id)
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.publishAgentDirectory(session: session)
+                self?.watchAgentDirectory(session: session)
+            }
+        }
+        Task { [weak self] in await self?.publishAgentDirectory(session: session) }
+    }
+
+    /// Merges by host: only the connected host's entries are replaced, other
+    /// hosts' agents and Spotlight items survive a switch. Attention is the
+    /// connected host's; stale ids never match the merged list.
+    private func publishAgentDirectory(session: HostSession) async {
+        let serverID = currentHostID.flatMap { savedHosts.host($0)?.serverID }
+        let entries = session.agents.compactMap { agent -> AgentDirectoryEntry? in
+            guard let serverID, !serverID.isEmpty else { return nil }
+            return AgentDirectoryEntry(
+                id: agent.id, title: agent.title ?? "Agent", hostServerID: serverID)
+        }
+        let attention = session.attention.pending.compactMap(\.agentId)
+        guard entries != lastDirectoryProjection || attention != lastDirectoryAttention else {
+            return
+        }
+        lastDirectoryProjection = entries
+        lastDirectoryAttention = attention
+        var merged = AgentDirectory.load()
+        merged.agents.removeAll(where: { $0.hostServerID == serverID })
+        merged.agents.append(contentsOf: entries)
+        merged.attentionIds = attention
+        await AgentDirectory.publish(snapshot: merged)
     }
 }

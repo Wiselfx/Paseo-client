@@ -320,7 +320,7 @@ struct TranscriptView: View {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(store.pendingPermissions) { request in
                     ClaudePermissionCard(request: request, store: store) { answered in
-                        controller.permissionResolvedLines.append(answered)
+                        store.recordAnsweredPermission(answered)
                     }
                 }
             }
@@ -336,7 +336,7 @@ struct TranscriptView: View {
     /// A small child view reads the confirmation state, so a permission change
     /// never re-evaluates the transcript's body (R-1).
     @ViewBuilder private var resolvedPermissionLines: some View {
-        ResolvedPermissionLines(store: store, controller: controller)
+        ResolvedPermissionLines(store: store)
     }
 
     @ViewBuilder private var backgroundWorkRow: some View {
@@ -1011,15 +1011,14 @@ struct LandingLine: View {
 }
 
 /// The daemon-confirmed resolution lines (D8), factored out of the transcript body:
-/// this small view reads `pendingPermissions` and the controller's answered lines,
+/// this small view reads `pendingPermissions` and the store's answered lines,
 /// so a permission change re-evaluates only this view — never the transcript (R-1).
 private struct ResolvedPermissionLines: View {
     @Bindable var store: ConversationStore
-    @Bindable var controller: ChatController
 
     var body: some View {
         let pendingIds = Set(store.pendingPermissions.map(\.id))
-        let confirmed = controller.permissionResolvedLines.filter { !pendingIds.contains($0.id) }
+        let confirmed = store.permissionResolvedLines.filter { !pendingIds.contains($0.id) }
         if !confirmed.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(confirmed) { item in
