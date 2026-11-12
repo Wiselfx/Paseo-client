@@ -11,22 +11,67 @@ struct ClaudeCodeBlock: View {
     var output: String?
     var status: ToolCallPresentation.Status
     var maxHeight: CGFloat
+    /// Terminal mode (G8 C12): ANSI colors, a 12-line tail, the exit pill and the
+    /// test chip. Parses off main, once per output (never per body pass).
+    var terminal: Bool = false
+    /// The shell exit code, for the exit pill. Nil when the call never reported one.
+    var exitCode: Double? = nil
 
+    /// The parsed terminal: tail runs for the card, full runs for Show all, the test
+    /// summary for the chip, and the total line count for the Show-all label.
+    private struct ParsedTerminal: Equatable {
+        var tail: [AnsiRun]
+        var full: [AnsiRun]
+        var summary: TestSummary?
+        var lineCount: Int
+    }
+
+    @State private var parsed: ParsedTerminal?
+    @State private var showAll = false
 
     init(
         title: String? = nil, command: String? = nil, output: String?,
-        status: ToolCallPresentation.Status = .succeeded, maxHeight: CGFloat = 260
+        status: ToolCallPresentation.Status = .succeeded, maxHeight: CGFloat = 260,
+        terminal: Bool = false, exitCode: Double? = nil
     ) {
         self.title = title
         self.command = command
         self.output = output
         self.status = status
         self.maxHeight = maxHeight
+        self.terminal = terminal
+        self.exitCode = exitCode
+    }
+
+    /// The last 12 lines: the tail that carries the verdict (G8 C12).
+    private static let tailLines = 12
+
+    private var copyText: String {
+        if let parsed {
+            return parsed.full.map(\.text).joined()
+        }
+        return [command, output].compactMap { $0 }.joined(separator: "\n")
+    }
+
+    /// Exit code as a StatePill: quiet success for 0, failure ink otherwise (G8 C12).
+    @ViewBuilder private var exitPill: some View {
+        if let exitCode {
+            let code = Int(exitCode)
+            StatePill("Exit \(code)", tone: code == 0 ? .success : .failure)
+        }
+    }
+
+    /// The test chip: "{passed} passed · {failed} failed" when a known runner's
+    /// summary parsed, nothing otherwise (never an invented count).
+    @ViewBuilder private var testChip: some View {
+        if let summary = parsed?.summary, summary.hasSummary {
+            StatePill(summary.chipText, tone: summary.failed > 0 ? .failure : .success)
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if command != nil || title != nil {
+            if command != nil || title != nil || terminal {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     ClaudeStatusDot(status: status)
                     if let title {
@@ -39,32 +84,120 @@ struct ClaudeCodeBlock: View {
                         ).lineLimit(3)
                     }
                     Spacer(minLength: 8)
-                    ClaudeCopyButton(text: [command, output].compactMap { $0 }.joined(separator: "\n"))
+                    testChip
+                    exitPill
+                    ClaudeCopyButton(text: copyText)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
                 if hasOutput { ClaudeDivider() }
             }
-            if hasOutput, let output {
-                ScrollView([.vertical, .horizontal]) {
-                    Text(output)
-                        .font(.paseo(.codeSmall))
-                        .foregroundStyle(Palette.ink.opacity(0.85))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            if hasOutput {
+                if terminal, let parsed {
+                    terminalOutput(parsed)
+                } else if let output {
+                    ScrollView([.vertical, .horizontal]) {
+                        Text(output)
+                            .font(.paseo(.codeSmall))
+                            .foregroundStyle(Palette.ink.opacity(0.85))
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .frame(maxHeight: maxHeight)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
-                .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: maxHeight)
-                .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .task(id: terminal ? output : nil) { await parseTerminal() }
         .background(Palette.codeSurface, in: .rect(cornerRadius: Radius.md))
         .overlay {
             RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
         }
         .codeTypeScale()
+    }
+
+    /// Parses the output off main when it changes (never per body pass): ANSI runs,
+    /// the tail slice, and the test summary. State writes only when the output changes.
+    @MainActor
+    private func parseTerminal() async {
+        guard terminal, let output, !output.isEmpty else {
+            parsed = nil
+            return
+        }
+        let result = await Task.detached(priority: .userInitiated) { () -> ParsedTerminal in
+            let runs = AnsiText.parse(output)
+            let tail = AnsiText.tail(runs, maxLines: Self.tailLines)
+            let summary = TestSummaryParser.parse(output)
+            let lines = runs.reduce(0) { $0 + $1.text.filter { $0.isNewline }.count }
+            return ParsedTerminal(tail: tail, full: runs, summary: summary, lineCount: lines)
+        }.value
+        guard !Task.isCancelled else { return }
+        parsed = result
+    }
+
+    /// The tail in ANSI colors, with "Show all" opening the full output.
+    private func terminalOutput(_ parsed: ParsedTerminal) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView([.vertical, .horizontal]) {
+                Text(attributedText(parsed.tail))
+                    .font(.paseo(.codeSmall))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: maxHeight)
+            .fixedSize(horizontal: false, vertical: true)
+            if parsed.lineCount > Self.tailLines {
+                Button("Show all \(parsed.lineCount) lines") { showAll = true }
+                    .font(.paseo(.caption, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .frame(minHeight: Metrics.hitSize)
+                    .accessibilityHint("Opens the full terminal output")
+                    .sheet(isPresented: $showAll) {
+                        SheetScaffold("Output", detents: [.large]) {
+                            ScrollView([.vertical, .horizontal]) {
+                                Text(attributedText(parsed.full))
+                                    .font(.paseo(.codeSmall))
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .padding(Space.md)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+            }
+        }
+    }
+
+    /// Runs to a colored `Text`: one `AttributedString` built once per paint from the
+    /// cached runs (never parsed here).
+    private func attributedText(_ runs: [AnsiRun]) -> AttributedString {
+        var out = AttributedString()
+        for run in runs {
+            var part = AttributedString(run.text)
+            part.font = .paseo(.codeSmall)
+            if run.style.bold { part.font = part.font?.bold() }
+            if let foreground = run.style.foreground {
+                part.foregroundColor = Palette.ansi(foreground)
+            } else {
+                part.foregroundColor = Palette.ink.opacity(0.85)
+            }
+            if run.style.dim, let color = part.foregroundColor {
+                part.foregroundColor = color.opacity(0.65)
+            }
+            if let background = run.style.background {
+                part.backgroundColor = Palette.ansi(background)
+            }
+            if run.style.underline { part.underlineStyle = .single }
+            if run.style.strikethrough { part.strikethroughStyle = .single }
+            out += part
+        }
+        return out
     }
 
     private var hasOutput: Bool { !(output ?? "").isEmpty }
