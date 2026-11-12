@@ -333,25 +333,10 @@ struct TranscriptView: View {
     /// The resolution lines (D8): an answer renders only after the daemon confirms
     /// it — the request disappearing from `pendingPermissions` (by a resolution
     /// event or a snapshot refresh). Until then the card owns the pending state.
+    /// A small child view reads the confirmation state, so a permission change
+    /// never re-evaluates the transcript's body (R-1).
     @ViewBuilder private var resolvedPermissionLines: some View {
-        let pendingIds = Set(store.pendingPermissions.map(\.id))
-        let confirmed = controller.permissionResolvedLines.filter { !pendingIds.contains($0.id) }
-        if !confirmed.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(confirmed) { item in
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle")
-                            .font(.glyph(.small))
-                        Text(item.line)
-                            .font(.paseo(.caption))
-                    }
-                    .foregroundStyle(Palette.tertiaryInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel(item.line)
-                }
-            }
-            .transition(.opacity)
-        }
+        ResolvedPermissionLines(store: store, controller: controller)
     }
 
     @ViewBuilder private var backgroundWorkRow: some View {
@@ -1022,6 +1007,35 @@ struct LandingLine: View {
         if t < 0.7 { return (1, 1) }
         if t < 1 { return (1 - (t - 0.7) / 0.3, 1) }
         return (0, 1)
+    }
+}
+
+/// The daemon-confirmed resolution lines (D8), factored out of the transcript body:
+/// this small view reads `pendingPermissions` and the controller's answered lines,
+/// so a permission change re-evaluates only this view — never the transcript (R-1).
+private struct ResolvedPermissionLines: View {
+    @Bindable var store: ConversationStore
+    @Bindable var controller: ChatController
+
+    var body: some View {
+        let pendingIds = Set(store.pendingPermissions.map(\.id))
+        let confirmed = controller.permissionResolvedLines.filter { !pendingIds.contains($0.id) }
+        if !confirmed.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(confirmed) { item in
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.glyph(.small))
+                        Text(item.line)
+                            .font(.paseo(.caption))
+                    }
+                    .foregroundStyle(Palette.tertiaryInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel(item.line)
+                }
+            }
+            .transition(.opacity)
+        }
     }
 }
 
