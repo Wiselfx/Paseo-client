@@ -330,10 +330,15 @@ struct TranscriptView: View {
         }
     }
 
+    /// The resolution lines (D8): an answer renders only after the daemon confirms
+    /// it — the request disappearing from `pendingPermissions` (by a resolution
+    /// event or a snapshot refresh). Until then the card owns the pending state.
     @ViewBuilder private var resolvedPermissionLines: some View {
-        if !controller.permissionResolvedLines.isEmpty {
+        let pendingIds = Set(store.pendingPermissions.map(\.id))
+        let confirmed = controller.permissionResolvedLines.filter { !pendingIds.contains($0.id) }
+        if !confirmed.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(controller.permissionResolvedLines) { item in
+                ForEach(confirmed) { item in
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle")
                             .font(.glyph(.small))
