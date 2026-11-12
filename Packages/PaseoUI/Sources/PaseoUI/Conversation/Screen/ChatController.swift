@@ -318,6 +318,7 @@ struct TranscriptJump: Equatable {
             self?.retractMessage(userRow: row)
         }
         richActions.daemonWorkspaceID = store.agent?.workspaceId
+        startHomeDirectoryMirror()
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
         }
@@ -447,6 +448,22 @@ struct TranscriptJump: Equatable {
             let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
         else { return nil }
         return session.checkout(for: descriptor)
+    }
+
+    /// Mirrors the agent's working directory into `RichActions` (J2): prose resolves
+    /// `![a](~/shots/a.png)` and `[doc](docs/a.pdf)` against it. One write per change,
+    /// never per scroll frame — the same mirror pattern as the PR status (R-1).
+    private func startHomeDirectoryMirror() {
+        richActions.homeDirectory = store.agent?.cwd
+        withObservationTracking { [weak self] in
+            _ = self?.store.agent?.cwd
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.richActions.homeDirectory = self.store.agent?.cwd
+                self.startHomeDirectoryMirror()
+            }
+        }
     }
 
     /// Mirrors the provider subagents into the cards by tool call id (C4 §9.4): one

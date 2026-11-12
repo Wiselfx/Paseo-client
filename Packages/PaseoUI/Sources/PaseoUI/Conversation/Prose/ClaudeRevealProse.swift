@@ -28,6 +28,9 @@ struct ClaudeRevealProse: View {
     static let sweepRamp: CGFloat = 0.18
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The agent's working directory (J2): `![a](~/shots/a.png)` and `[doc](docs/a.pdf)`
+    /// resolve against it. Read here, in the leaf body, once per markdown change (R-1).
+    @Environment(\.richActions) private var richActions
     /// Bumped on every streaming delta; drives the sweep animation task and the block fade.
     @State private var revealTick = 0
     /// Sweep boundary inside the tail piece: 1 renders the mask off; everything left of the
@@ -71,7 +74,7 @@ struct ClaudeRevealProse: View {
     }
 
     private func pieceRefs(_ source: String) -> [PieceRef] {
-        let raw = richPieces(source)
+        let raw = richPieces(source, home: richActions?.homeDirectory)
         var refs: [PieceRef] = []
         var offset = 0
         for (index, piece) in raw.enumerated() {
@@ -106,7 +109,7 @@ struct ClaudeRevealProse: View {
                     let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         ClaudeMarkdownView(
-                            document: .cached(trimmed), theme: theme,
+                            document: .cached(trimmed, home: richActions?.homeDirectory), theme: theme,
                             imageContent: imageContent, isStreaming: isStreaming,
                             onAction: onAction)
                             .frame(maxWidth: .infinity, alignment: .leading)
