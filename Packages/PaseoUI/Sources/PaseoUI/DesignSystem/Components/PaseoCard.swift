@@ -49,9 +49,10 @@ final class RichActions {
     var openDiff: (String, String) -> Void = { _, _ in }
     /// Jumps the transcript to a media-sheet item's turn (G12 C15). No-op until set.
     var openMediaItem: (ConversationMediaItem) -> Void = { _ in }
-    /// The provider subagent spawned by a tool call, matched by `toolCallId
-    /// (C4 §9.4). Nil when the daemon hasn't listed one: the row stays informational.
-    var subagentForCallId: (String) -> ProviderSubagent? = { _ in nil }
+    /// Provider subagents by originating tool call id (C4 §9.4): mirrored from the
+    /// store's subagent list, one write per change — the same pattern as
+    /// `checkoutPR`. Rows read one small value that changes rarely (R-1).
+    var subagentsByCallId: [String: ProviderSubagent] = [:]
     /// Pushes a provider subagent's read-only timeline (C4 §9.4). No-op until set.
     var openSubagent: (ProviderSubagent) -> Void = { _ in }
     /// The checkout's PR status (G9 C13), mirrored by the conversation controller.

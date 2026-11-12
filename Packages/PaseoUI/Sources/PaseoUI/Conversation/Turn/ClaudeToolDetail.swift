@@ -314,7 +314,13 @@ private struct ClaudeSubagentRow: View {
 
     @Environment(\.richActions) private var richActions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var subagent: ProviderSubagent?
+
+    /// The mirrored match (C4 review): the daemon usually lists the subagent after
+    /// the tool call row appears, so a one-shot lookup would stay blank forever.
+    /// A dictionary read in body is O(1); the value changes rarely (R-1).
+    private var subagent: ProviderSubagent? {
+        richActions?.subagentsByCallId[call.callId]
+    }
 
     private var subAgentType: String? {
         if case .subAgent(let type_, _, _) = call.detail { type_ } else { nil }
@@ -330,28 +336,21 @@ private struct ClaudeSubagentRow: View {
     }
 
     var body: some View {
-        Group {
-            if subagent != nil {
-                Button {
-                    Haptics.selection()
-                    if let subagent { richActions?.openSubagent(subagent) }
-                } label: {
-                    card(accessory: chevron)
-                }
-                .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-                .accessibilityLabel("Subagent \(title)")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("Opens the subagent's timeline")
-            } else {
-                card(accessory: EmptyView())
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Subagent \(title)")
+        if subagent != nil {
+            Button {
+                Haptics.selection()
+                if let subagent { richActions?.openSubagent(subagent) }
+            } label: {
+                card(accessory: chevron)
             }
-        }
-        // One lookup per call id, never per body pass: the match arrives with the
-        // daemon's subagent list, after the tool call rendered.
-        .task(id: call.callId) {
-            subagent = richActions?.subagentForCallId(call.callId)
+            .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+            .accessibilityLabel("Subagent \(title)")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Opens the subagent's timeline")
+        } else {
+            card(accessory: EmptyView())
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Subagent \(title)")
         }
     }
 

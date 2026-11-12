@@ -325,12 +325,10 @@ struct TranscriptJump: Equatable {
         richActions.openMediaItem = { [weak self] item in
             self?.openMediaItem(item)
         }
-        richActions.subagentForCallId = { [weak self] callId in
-            self?.store.subagents.items.first(where: { $0.toolCallId == callId })
-        }
         richActions.openSubagent = { [weak self] subagent in
             self?.pushedSubagent = subagent
         }
+        startSubagentsMirror()
         richActions.openArtifact = { [weak self] document in
             self?.artifactDocument = document
         }
@@ -447,6 +445,27 @@ struct TranscriptJump: Equatable {
             let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
         else { return nil }
         return session.checkout(for: descriptor)
+    }
+
+    /// Mirrors the provider subagents into the cards by tool call id (C4 §9.4): one
+    /// write per list change, never per scroll frame. Cards read only the value (R-1).
+    private func startSubagentsMirror() {
+        richActions.subagentsByCallId = Dictionary(
+            uniqueKeysWithValues: store.subagents.items.compactMap { item in
+                item.toolCallId.map { ($0, item) }
+            })
+        withObservationTracking { [weak self] in
+            _ = self?.store.subagents.items
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.richActions.subagentsByCallId = Dictionary(
+                    uniqueKeysWithValues: self.store.subagents.items.compactMap { item in
+                        item.toolCallId.map { ($0, item) }
+                    })
+                self.startSubagentsMirror()
+            }
+        }
     }
 
     /// Mirrors the live PR status into the cards (C13): one write per change, never per
