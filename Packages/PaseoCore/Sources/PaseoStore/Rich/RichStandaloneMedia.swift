@@ -65,4 +65,13 @@ public enum RichStandaloneMedia {
     public static func kindForURL(_ url: URL) -> MediaFileKind? {
         kindForPath(url.path)
     }
+
+    /// The playable kind for a URL string, or nil when it is not a URL or has no
+    /// playable extension.
+    public static func kindForURLString(_ urlString: String) -> MediaFileKind? {
+        guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
+            url.scheme?.lowercased() == "http" || url.scheme?.lowercased() == "https"
+        else { return nil }
+        return kindForURL(url)
+    }
 }

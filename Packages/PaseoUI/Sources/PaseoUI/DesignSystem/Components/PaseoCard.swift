@@ -46,6 +46,8 @@ final class RichActions {
     /// Opens a file's diff (G6 C11): the tool call's own diff when this conversation
     /// has one, else the file viewer. No-op until the host sets it.
     var openDiff: (String) -> Void = { _ in }
+    /// Jumps the transcript to a media-sheet item's turn (G12 C15). No-op until set.
+    var openMediaItem: (ConversationMediaItem) -> Void = { _ in }
     /// The checkout's PR status (G9 C13), mirrored by the conversation controller.
     /// Cards read only this value; the subscription lives in the store (R-1).
     var checkoutPR: CheckoutPrStatus?

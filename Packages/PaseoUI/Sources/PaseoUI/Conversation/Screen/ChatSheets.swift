@@ -8,6 +8,7 @@ enum ClaudeChatSheet: String, Identifiable {
     case subagents
     case backgroundWork
     case turnNav
+    case media
     var id: String { rawValue }
 }
 
@@ -104,6 +105,8 @@ struct ChatSheets: ViewModifier {
                 })
         case .backgroundWork:
             ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork)
+        case .media:
+            ChatMediaSheet(store: store)
         case .turnNav:
             ChatTurnNavSheet(
                 store: store, items: controller.outlineItems,

@@ -318,6 +318,9 @@ struct TranscriptJump: Equatable {
         richActions.openDiff = { [weak self] path in
             self?.openDiff(at: path)
         }
+        richActions.openMediaItem = { [weak self] item in
+            self?.openMediaItem(item)
+        }
         richActions.openArtifact = { [weak self] document in
             self?.artifactDocument = document
         }
@@ -680,6 +683,15 @@ struct TranscriptJump: Equatable {
             }
         }
         openFileViewer(at: path)
+    }
+
+    /// Jumps the transcript to a media-sheet item's turn (G12 C15): the sheet closes,
+    /// follow disengages, and the existing scroll jump lands on the row.
+    func openMediaItem(_ item: ConversationMediaItem) {
+        Haptics.selection()
+        sheet = nil
+        isFollowing = false
+        pendingJump = TranscriptJump(id: "row:\(item.seqEnd)")
     }
 
     // MARK: Find

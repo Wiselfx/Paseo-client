@@ -680,6 +680,9 @@ public final class ConversationStore: Identifiable {
     public private(set) var timeline = TimelineState()
     /// `TurnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)`, kept in sync.
     public private(set) var turns: [Turn] = []
+    /// The conversation's media (G12 C15), derived from `turns` on the same funnel:
+    /// the sheet reads this, never the turns themselves.
+    public private(set) var mediaIndex = ConversationMediaIndex()
     /// The running turn. From the agent snapshot, made snappier by `turn_started`/`turn_completed`
     /// stream events.
     public private(set) var activeTurnId: String?
@@ -1088,6 +1091,7 @@ public final class ConversationStore: Identifiable {
     private func updateTurns() {
         turnCommits += 1
         turns = turnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
+        mediaIndex.update(turns: turns)
         // The chat outline is stale whenever the newest prompt moves (a turn started, a page
         // arrived, the timeline was replaced). Upstream's `latestPromptSeq` effect.
         promptOutline.timelineChanged(epoch: timeline.epoch, latestPromptSeq: latestPromptSeq)
