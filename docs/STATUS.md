@@ -5,7 +5,7 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 ## Next session starts here (2026-11-11)
 
-**G-round IN FLIGHT (launched 2026-11-11, after the H-round).** Contract: `docs/tickets/G-rich-ui.md`
+**G-round COMPLETE (2026-11-12) (launched 2026-11-11, after the H-round).** Contract: `docs/tickets/G-rich-ui.md`
 
 **2026-11-11 Phase A review:** report in (c4c0377, fff269b, decc50a). Gate FAILED (~25 compile errors). Review found: per-byte AsyncBytes work (actor hop per byte), relay rule applied to remote web images, daemon cap applied after transfer, disk-cache key mismatch/staleness, singleton daemon-fetch hook, dismiss pan steals paging, zoom relayout, preferredColorScheme in cover, NSCache cost, cap vs shared flight. Fixed over 3 rounds (+1 lead isolation fix). **Phase A MERGED** into foundation; gate green; PaseoCore green; IPA `Paseo-20261111-1531-b49ebb2.ipa`. Worker told: continue to Phase B (G4 Mermaid + G5 artifact page), stop and report.
 
@@ -18,6 +18,8 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 **2026-11-12 Phase C MERGED** (wide tables w/ content-versioned measure, todo/plan card, permission previews + D8 confirmed-only lines, subagent cards via mirrored map, user-bubble images w/ ratio manifest). PaseoCore 912+208+145 green. Worker sent to Phase D (G16 intents/Spotlight, G19 Allow/Deny off by default, §11 notification thumbnails).
 
 **2026-11-12 Phase D MERGED.** App Shortcuts (Open agent / New agent, never sends), Spotlight titles, Settings → Privacy "Show agent names" (off by default → notifications read "Paseo / An agent needs your attention"), notification Allow/Deny (off by default, auth-required, sent from the delegate with a background task + ~8 s confirmation wait, else "Open" fallback; never switches host), cached-only notification thumbnails. No entitlements/App Group/extensions. PaseoCore 923+208+145 green. IPA `Paseo-20261111-2032-47cc1f4.ipa`; worker sent to Phase E (built, not embedded).
+
+**2026-11-12 Phase E MERGED — G-round COMPLETE.** GlanceSnapshot (Core, tests) + throttled writer (no-op without App Group). `PaseoWidgets` extension target (small/medium/accessory widgets, 2 Controls) built but NOT embedded (pbxproj verified: no dependency, no embed phase); widget scheme not compiled by the gate (gate builds the app scheme only). Turn-on: paid team → App Group `group.com.wiselfx.paseoclient` → add PaseoWidgets to the app target's dependencies in project.yml + regenerate → App Groups capability on the app. PaseoCore 926+208+145 green. Worker 3d870bb3 idle with context. Open: device feedback on IPAs; G17/Live Activity/Share/Expo/G22 deferred; G23 doc.
 
 (the rich UI plan made coherent; decisions D1–D8 taken by the lead on the user's delegation:
 Mermaid bundled, Live Activity / Share ext / Expo deferred, extensions built but not embedded,
