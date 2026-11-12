@@ -3,6 +3,37 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
+/// The parsed terminal, by output identity: every remount reads the same parse
+/// synchronously instead of re-parsing (a remount storm on a 1 MB log is a jump
+/// plus repeated work). `NSCache` reads are O(1) and thread-safe.
+private enum TerminalParseCache {
+    nonisolated(unsafe) private static let table: NSCache<NSString, ParsedTerminalBox> = {
+        let cache = NSCache<NSString, ParsedTerminalBox>()
+        cache.countLimit = 16
+        return cache
+    }()
+
+    /// Stable per content: length plus hash (a display cache — a collision shows
+    /// the wrong tail until the output changes again, at ~2^-64 odds).
+    static func key(for output: String) -> String {
+        "\(output.count)-\(output.hashValue)"
+    }
+
+    static func entry(for output: String) -> ParsedTerminal? {
+        table.object(forKey: key(for: output) as NSString)?.value
+    }
+
+    static func store(_ parsed: ParsedTerminal, for output: String) {
+        table.setObject(ParsedTerminalBox(value: parsed), forKey: key(for: output) as NSString)
+    }
+}
+
+/// `NSCache` holds objects: the parse it carries.
+private final class ParsedTerminalBox {
+    let value: ParsedTerminal
+    init(value: ParsedTerminal) { self.value = value }
+}
+
 /// Terminal-style output: an optional command line, then output that scrolls both ways inside a
 /// capped height, so a 2,000-line log never takes over the conversation.
 struct ClaudeCodeBlock: View {
@@ -17,17 +48,25 @@ struct ClaudeCodeBlock: View {
     /// The shell exit code, for the exit pill. Nil when the call never reported one.
     var exitCode: Double? = nil
 
-    /// The parsed terminal: tail runs for the card, full runs for Show all, the test
-    /// summary for the chip, and the total line count for the Show-all label.
-    private struct ParsedTerminal: Equatable {
+    /// The parsed terminal: tail runs for the card, full runs for Copy all, the
+    /// capped sheet runs for Show all (a SwiftUI `Text` with 1 MB of
+    /// `AttributedString` is very slow), the test summary for the chip, the built
+    /// sheet `AttributedString` (once per parse, cached here), and the total line
+    /// count for the Show-all label.
+    struct ParsedTerminal: Equatable {
         var tail: [AnsiRun]
         var full: [AnsiRun]
+        var sheet: [AnsiRun]
+        var sheetAttributed: AttributedString
         var summary: TestSummary?
         var lineCount: Int
     }
 
     @State private var parsed: ParsedTerminal?
     @State private var showAll = false
+
+    /// The sheet's line cap (G8 review): full output scrolls nowhere fast.
+    private static let sheetLines = 2000
 
     init(
         title: String? = nil, command: String? = nil, output: String?,
@@ -93,8 +132,8 @@ struct ClaudeCodeBlock: View {
                 if hasOutput { ClaudeDivider() }
             }
             if hasOutput {
-                if terminal, let parsed {
-                    terminalOutput(parsed)
+                if terminal, let output {
+                    terminalOutput(output)
                 } else if let output {
                     ScrollView([.vertical, .horizontal]) {
                         Text(output)
@@ -120,53 +159,92 @@ struct ClaudeCodeBlock: View {
     }
 
     /// Parses the output off main when it changes (never per body pass): ANSI runs,
-    /// the tail slice, and the test summary. State writes only when the output changes.
+    /// the tail slice, the capped sheet slice, and the test summary. The sheet's
+    /// `AttributedString` builds once here (never per body pass) and rides with the
+    /// parse into the cache. State writes only when the output changes.
     @MainActor
     private func parseTerminal() async {
         guard terminal, let output, !output.isEmpty else {
             parsed = nil
             return
         }
+        if let cached = TerminalParseCache.entry(for: output) {
+            parsed = cached
+            return
+        }
         let result = await Task.detached(priority: .userInitiated) { () -> ParsedTerminal in
             let runs = AnsiText.parse(output)
             let tail = AnsiText.tail(runs, maxLines: Self.tailLines)
+            let sheet = AnsiText.tail(runs, maxLines: Self.sheetLines)
             let summary = TestSummaryParser.parse(output)
             let lines = runs.reduce(0) { $0 + $1.text.filter { $0.isNewline }.count }
-            return ParsedTerminal(tail: tail, full: runs, summary: summary, lineCount: lines)
+            return ParsedTerminal(
+                tail: tail, full: runs, sheet: sheet,
+                sheetAttributed: Self.attributedText(sheet), summary: summary,
+                lineCount: lines)
         }.value
         guard !Task.isCancelled else { return }
+        TerminalParseCache.store(result, for: output)
         parsed = result
     }
 
-    /// The tail in ANSI colors, with "Show all" opening the full output.
-    private func terminalOutput(_ parsed: ParsedTerminal) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+    /// The tail in ANSI colors, with "Show all" opening the capped sheet. Until the
+    /// first parse lands, the plain last 12 lines hold the final box height and only
+    /// the colors change — no jump, no repeated work on remount.
+    private func terminalOutput(_ output: String) -> some View {
+        let display = parsed ?? TerminalParseCache.entry(for: output)
+        return VStack(alignment: .leading, spacing: 0) {
             ScrollView([.vertical, .horizontal]) {
-                Text(attributedText(parsed.tail))
-                    .font(.paseo(.codeSmall))
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let display {
+                    Text(Self.attributedText(display.tail))
+                        .font(.paseo(.codeSmall))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text(AnsiText.plainTail(output, maxLines: Self.tailLines))
+                        .font(.paseo(.codeSmall))
+                        .foregroundStyle(Palette.ink.opacity(0.85))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .scrollBounceBehavior(.basedOnSize)
             .frame(maxHeight: maxHeight)
             .fixedSize(horizontal: false, vertical: true)
-            if parsed.lineCount > Self.tailLines {
-                Button("Show all \(parsed.lineCount) lines") { showAll = true }
+            if let display, display.lineCount > Self.tailLines {
+                Button("Show all \(display.lineCount) lines") { showAll = true }
                     .font(.paseo(.caption, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(minHeight: Metrics.hitSize)
                     .accessibilityHint("Opens the full terminal output")
                     .sheet(isPresented: $showAll) {
                         SheetScaffold("Output", detents: [.large]) {
-                            ScrollView([.vertical, .horizontal]) {
-                                Text(attributedText(parsed.full))
-                                    .font(.paseo(.codeSmall))
-                                    .textSelection(.enabled)
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    .padding(Space.md)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 0) {
+                                HStack {
+                                    if display.lineCount > Self.sheetLines {
+                                        Text(
+                                            "Showing the last \(Self.sheetLines) of \(display.lineCount) lines"
+                                        )
+                                        .font(.paseo(.caption))
+                                        .foregroundStyle(Palette.secondaryInk)
+                                    }
+                                    Spacer(minLength: Space.sm)
+                                    ClaudeCopyButton(text: copyText, label: "Copy all")
+                                }
+                                .padding(.horizontal, Space.md)
+                                .padding(.vertical, Space.sm)
+                                ScrollView([.vertical, .horizontal]) {
+                                    Text(display.sheetAttributed)
+                                        .font(.paseo(.codeSmall))
+                                        .textSelection(.enabled)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                        .padding(Space.md)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                             }
                         }
                     }
@@ -174,9 +252,9 @@ struct ClaudeCodeBlock: View {
         }
     }
 
-    /// Runs to a colored `Text`: one `AttributedString` built once per paint from the
-    /// cached runs (never parsed here).
-    private func attributedText(_ runs: [AnsiRun]) -> AttributedString {
+    /// Runs to a colored `Text`: the tail builds per paint (12 lines, cheap); the
+    /// sheet builds once per parse and rides with it.
+    private static func attributedText(_ runs: [AnsiRun]) -> AttributedString {
         var out = AttributedString()
         for run in runs {
             var part = AttributedString(run.text)

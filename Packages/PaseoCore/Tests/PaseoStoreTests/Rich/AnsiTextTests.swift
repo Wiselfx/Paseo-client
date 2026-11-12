@@ -70,6 +70,25 @@ struct AnsiTextTests {
         #expect(colored.first?.style.foreground == .red)
     }
 
+    /// The cheap tail matches the parsed tail line-for-line (the placeholder shows
+    /// what the parse will show, at the same height).
+    @Test("plain tail matches parsed tail")
+    func plainTailMatchesParsedTail() {
+        let lines = (1...30).map { "line \($0)" }
+        let input = lines.joined(separator: "\n") + "\n"
+        let colored = lines.enumerated().map { index, line in
+            "\u{1B}[3\(index % 8)m" + line + "\u{1B}[0m"
+        }.joined(separator: "\n") + "\n"
+        #expect(AnsiText.plainTail(input, maxLines: 12) == AnsiText.tail(
+            AnsiText.parse(input), maxLines: 12).map(\.text).joined())
+        #expect(AnsiText.plainTail(colored, maxLines: 12) == AnsiText.tail(
+            AnsiText.parse(colored), maxLines: 12).map(\.text).joined())
+        #expect(AnsiText.plainTail("one\n", maxLines: 12) == "one\n")
+        #expect(AnsiText.plainTail("", maxLines: 12) == "")
+        #expect(AnsiText.plainTail("a\nb\nc", maxLines: 2) == "b\nc")
+        #expect(AnsiText.plainTail("a\nb\nc\n", maxLines: 2) == "b\nc\n")
+    }
+
     /// 1 MB of SGR-heavy output parses well under the 50 ms budget (G8 acceptance,
     /// measured on Linux CI; typical runs land an order of magnitude below).
     @Test("one megabyte parses in under 50 ms")

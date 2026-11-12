@@ -239,6 +239,74 @@ public enum AnsiText {
         parse(input).map(\.text).joined()
     }
 
+    /// The last lines of raw output without parsing ANSI: a byte walks back over
+    /// the last `maxLines` newlines, then a cheap byte filter strips `ESC`
+    /// sequences (CSI, OSC, lone `ESC` + byte). The terminal card's first-pass
+    /// placeholder: the final box height with no parse. O(tail) — never the whole
+    /// megabyte. A single trailing newline terminates the last line (as `tail`
+    /// does); it does not add a line.
+    public static func plainTail(_ input: String, maxLines: Int) -> String {
+        guard maxLines > 0, !input.isEmpty else { return "" }
+        let bytes = Array(input.utf8)
+        var end = bytes.count
+        if end > 0, bytes[end - 1] == 0x0A { end -= 1 }
+        var start = 0
+        var lines = 0
+        var index = end - 1
+        while index >= 0 {
+            if bytes[index] == 0x0A {
+                lines += 1
+                if lines >= maxLines {
+                    start = index + 1
+                    break
+                }
+            }
+            index -= 1
+        }
+        var out = [UInt8]()
+        out.reserveCapacity(bytes.count - start)
+        var cursor = start
+        while cursor < bytes.count {
+            let byte = bytes[cursor]
+            guard byte == 0x1B else {
+                out.append(byte)
+                cursor += 1
+                continue
+            }
+            cursor += 1
+            guard cursor < bytes.count else { break }
+            if bytes[cursor] == 0x5B {
+                // CSI: `ESC [ params… final` — the final byte is 0x40…0x7E.
+                cursor += 1
+                while cursor < bytes.count,
+                    !(bytes[cursor] >= 0x40 && bytes[cursor] <= 0x7E)
+                {
+                    cursor += 1
+                }
+                cursor += 1
+            } else if bytes[cursor] == 0x5D {
+                // OSC: `ESC ] … BEL` or `… ESC \`.
+                cursor += 1
+                while cursor < bytes.count {
+                    if bytes[cursor] == 0x07 {
+                        cursor += 1
+                        break
+                    }
+                    if bytes[cursor] == 0x1B, cursor + 1 < bytes.count,
+                        bytes[cursor + 1] == 0x5C
+                    {
+                        cursor += 2
+                        break
+                    }
+                    cursor += 1
+                }
+            } else {
+                cursor += 1
+            }
+        }
+        return String(decoding: out, as: UTF8.self)
+    }
+
     // MARK: Sequences
 
     /// `ESC [ params final` → the integer params, the final byte, and the index after it.
