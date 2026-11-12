@@ -320,7 +320,7 @@ struct TranscriptView: View {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(store.pendingPermissions) { request in
                     ClaudePermissionCard(request: request, store: store) { answered in
-                        store.permissionResolvedLines.append(answered)
+                        store.recordAnsweredPermission(answered)
                     }
                 }
             }

@@ -25,12 +25,16 @@ struct PendingPermissionAction: Sendable, Hashable {
 final class NotificationCoordinator {
     /// A tap waiting for the shell to route it. The shell clears it after selecting.
     var pendingTarget: AttentionTarget?
-    /// A notification answer waiting for the shell to perform. Cleared when taken.
-    var pendingPermissionAction: PendingPermissionAction?
+    /// Answers a notification Allow/Deny: reconnects if needed and sends through
+    /// the store's permission path. Set once at launch by the composition root
+    /// (never by a view). Returns whether the daemon confirmed.
+    var performPermissionAction: (@MainActor (PendingPermissionAction) async -> Bool)?
     /// Resolves an agent id to its latest permission request plus the daemon
-    /// server id to answer on (or nil). Set by the composition root, which owns
-    /// the session.
+    /// server id to answer on (or nil). Set once at launch by the composition
+    /// root, which owns the session.
     var permissionRequestProvider: ((String) -> (AgentPermissionRequest, String)?)?
+    /// The in-flight answer's background task, so expiry and completion end it.
+    private var permissionTask: UIBackgroundTaskIdentifier = .invalid
 
     private let proxy: NotificationDelegateProxy
 
@@ -42,11 +46,11 @@ final class NotificationCoordinator {
     init() {
         let proxy = NotificationDelegateProxy()
         self.proxy = proxy
-        proxy.onTap = { [weak self] target in
-            Task { @MainActor in self?.pendingTarget = target }
-        }
-        proxy.onPermissionAction = { [weak self] action in
-            Task { @MainActor in self?.pendingPermissionAction = action }
+        proxy.onResponse = { [weak self] response, completion in
+            Task { @MainActor [weak self] in
+                guard let self else { completion(); return }
+                await self.handleResponse(response, completion: completion)
+            }
         }
         UNUserNotificationCenter.current().delegate = proxy
         UNUserNotificationCenter.current().setNotificationCategories([
@@ -248,13 +252,65 @@ final class NotificationCoordinator {
             trigger: nil)
         Task { try? await UNUserNotificationCenter.current().add(request) }
     }
+
+    /// Answers one notification response. With `.authenticationRequired` and no
+    /// `.foreground` option the system handles the action without opening the
+    /// app — the scene may be backgrounded or gone — so the send cannot depend
+    /// on any SwiftUI view: hold a background task, await the handler, and only
+    /// then complete. Expiry posts the Open fallback instead of losing the tap.
+    private func handleResponse(_ response: UNNotificationResponse, completion: @escaping () -> Void) async {
+        guard response.actionIdentifier == Self.allowActionID
+            || response.actionIdentifier == Self.denyActionID
+        else {
+            var info: [String: String] = [:]
+            for (key, value) in response.notification.request.content.userInfo {
+                guard let key = key as? String, let value = value as? String else { continue }
+                info[key] = value
+            }
+            if let target = AttentionTarget(userInfo: info) {
+                pendingTarget = target
+            }
+            completion()
+            return
+        }
+        var info: [String: String] = [:]
+        for (key, value) in response.notification.request.content.userInfo {
+            guard let key = key as? String, let value = value as? String else { continue }
+            info[key] = value
+        }
+        guard let action = PendingPermissionAction(response: response, userInfo: info) else {
+            completion()
+            return
+        }
+        permissionTask = UIApplication.shared.beginBackgroundTask(withName: "paseo.permission-response") { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.postOpenFallback(agentId: action.agentId, hostServerID: action.hostServerID)
+                self.endPermissionTask()
+            }
+        }
+        let confirmed = await performPermissionAction?(action) ?? false
+        if !confirmed {
+            postOpenFallback(agentId: action.agentId, hostServerID: action.hostServerID)
+        }
+        completion()
+        endPermissionTask()
+    }
+
+    private func endPermissionTask() {
+        guard permissionTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(permissionTask)
+        permissionTask = .invalid
+    }
 }
 
 /// The UNUserNotificationCenter delegate must be an NSObject. It carries no state beyond the
 /// callbacks the coordinator installs once before any callback can run.
 private final class NotificationDelegateProxy: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
-    var onTap: (@Sendable (AttentionTarget) -> Void)?
-    var onPermissionAction: (@Sendable (PendingPermissionAction) -> Void)?
+    /// The raw response plus its completion, for the coordinator to answer
+    /// (possibly after async work) and complete exactly once.
+    var onResponse:
+        (@Sendable (UNNotificationResponse, @escaping () -> Void) -> Void)?
 
     /// Foreground notifications are the point of this ticket (the agent is rarely on screen);
     /// `AttentionCenter` already suppressed the conversation the user is reading.
@@ -275,19 +331,16 @@ private final class NotificationDelegateProxy: NSObject, UNUserNotificationCente
             guard let key = key as? String, let value = value as? String else { continue }
             info[key] = value
         }
-        // Allow/Deny land here with the action id, not the default tap id.
-        // Anything unparseable falls through to the tap path (or nothing).
-        if content.categoryIdentifier == NotificationCoordinator.permissionCategoryID,
-            let action = PendingPermissionAction(response: response, userInfo: info)
-        {
+        // The coordinator answers (possibly after async work) and completes
+        // exactly once; without a handler this falls through to the tap path.
+        guard let onResponse else {
+            let target = AttentionTarget(userInfo: info)
             completionHandler()
-            onPermissionAction?(action)
+            guard let target else { return }
+            onTap?(target)
             return
         }
-        let target = AttentionTarget(userInfo: info)
-        completionHandler()
-        guard let target else { return }
-        onTap?(target)
+        onResponse(response, completionHandler)
     }
 }
 

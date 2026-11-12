@@ -45,8 +45,7 @@ enum AgentDirectory {
 
     /// Writes the snapshot and syncs Spotlight, off main. Coalesced by the caller:
     /// only changed projections reach here.
-    static func publish(agents: [AgentDirectoryEntry], attentionIds: [String]) async {
-        let snapshot = AgentDirectorySnapshot(agents: agents, attentionIds: attentionIds)
+    static func publish(snapshot: AgentDirectorySnapshot) async {
         await Task.detached(priority: .utility) {
             if let url = fileURL() {
                 do {
@@ -58,7 +57,7 @@ enum AgentDirectory {
                     return
                 }
             }
-            await syncSpotlight(agents: agents)
+            await syncSpotlight(agents: snapshot.agents)
         }.value
     }
 
