@@ -82,6 +82,7 @@ public enum TimelineItem: Sendable, Hashable, Decodable {
 
     public struct TodoList: Sendable, Hashable, Decodable {
         public var items: [Todo]
+        public init(items: [Todo]) { self.items = items }
         public struct Todo: Sendable, Hashable, Decodable {
             public var text: String
             public var completed: Bool

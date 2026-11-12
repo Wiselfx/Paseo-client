@@ -37,13 +37,13 @@ final class UserImageCache {
     private var manifestLoaded = false
     private var manifestLoad: Task<[String: [Double]], Never>?
 
-    private static let fileExtension = "jpg"
+    nonisolated private static let fileExtension = "jpg"
     /// LRU bound: user thumbnails are small; 50 MB is thousands of sends.
-    private static let diskCapBytes = 50 * 1024 * 1024
+    nonisolated private static let diskCapBytes = 50 * 1024 * 1024
     /// The bubble's thumbnail width: downscaled once at send, drawn as-is.
-    private static let thumbnailMaxPixels = 600
+    nonisolated private static let thumbnailMaxPixels = 600
     /// More images than any bubble draws; bounds the disk scan per message.
-    private static let maxImagesPerMessage = 8
+    nonisolated private static let maxImagesPerMessage = 8
 
     /// The manifest, once: the JSON read happens off main, the published
     /// dictionary lands on main (which re-renders any waiting bubble).
@@ -167,11 +167,11 @@ final class UserImageCache {
 
     // MARK: Manifest file
 
-    private static func manifestURL() -> URL? {
+    nonisolated private static func manifestURL() -> URL? {
         diskDirectory()?.appending(path: "manifest.json", directoryHint: .notDirectory)
     }
 
-    private static func readManifestFile() -> [String: [Double]] {
+    nonisolated private static func readManifestFile() -> [String: [Double]] {
         guard let url = manifestURL(),
             let data = try? Data(contentsOf: url),
             var decoded = try? JSONDecoder().decode([String: [Double]].self, from: data)
@@ -188,7 +188,7 @@ final class UserImageCache {
         return decoded
     }
 
-    private static func hasFiles(for clientMessageId: String) -> Bool {
+    nonisolated private static func hasFiles(for clientMessageId: String) -> Bool {
         guard let directory = diskDirectory() else { return false }
         for index in 0..<maxImagesPerMessage {
             let url = directory.appending(path: "\(clientMessageId)-\(index).\(fileExtension)")
@@ -200,7 +200,7 @@ final class UserImageCache {
     /// Merges one send's ratios into the manifest file. Runs off main; the published
     /// dictionary is updated separately on main, so concurrent sends can't clobber
     /// each other in memory (the file is rewritten, not patched, per send).
-    private static func writeManifestFile(merging entry: [String: [Double]]) {
+    nonisolated private static func writeManifestFile(merging entry: [String: [Double]]) {
         var manifest = readManifestFile()
         for (key, value) in entry { manifest[key] = value }
         guard let url = manifestURL(),
@@ -209,7 +209,7 @@ final class UserImageCache {
         try? data.write(to: url, options: .atomic)
     }
 
-    private static func writeManifestFile(removing clientMessageId: String) {
+    nonisolated private static func writeManifestFile(removing clientMessageId: String) {
         var manifest = readManifestFile()
         manifest[clientMessageId] = nil
         guard let url = manifestURL(),
@@ -220,12 +220,12 @@ final class UserImageCache {
 
     // MARK: Disk
 
-    private static func diskDirectory() -> URL? {
+    nonisolated private static func diskDirectory() -> URL? {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
             .appending(path: "user-images", directoryHint: .notDirectory)
     }
 
-    private static func downscaled(data: Data) -> UIImage? {
+    nonisolated private static func downscaled(data: Data) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
