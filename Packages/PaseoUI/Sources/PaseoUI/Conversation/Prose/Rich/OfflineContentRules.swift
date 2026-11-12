@@ -22,17 +22,13 @@ enum OfflineContentRules {
     static func list() async -> WKContentRuleList? {
         if let cached { return cached }
         if let compileTask { return await compileTask.value }
-        let task = Task.detached(priority: .utility) { () -> WKContentRuleList? in
+        // `WKContentRuleListStore` is main-actor API, but the compile itself runs in
+        // WebKit's own process; the main actor only starts it and receives the result.
+        let task = Task { @MainActor () -> WKContentRuleList? in
             guard let store = WKContentRuleListStore.default() else { return nil }
-            return try? await withCheckedThrowingContinuation {
-                (continuation: CheckedContinuation<WKContentRuleList?, Error>) in
-                store.compileContentRuleList(
-                    forIdentifier: "paseo-offline-chat",
-                    encodedContentRuleList: OfflineContentRules.json
-                ) { list, _ in
-                    continuation.resume(returning: list)
-                }
-            }
+            return try? await store.compileContentRuleList(
+                forIdentifier: "paseo-offline-chat",
+                encodedContentRuleList: OfflineContentRules.json)
         }
         compileTask = task
         let list = await task.value
