@@ -10,32 +10,45 @@
 		021D7A4965E87D4DB3C858D1 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A6CDB060911D3A7AA1CF59 /* AppModel.swift */; };
 		049611178B625E349F188C4E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5BA54415A9997E52BAA8657 /* RootView.swift */; };
 		13ED90D46385376ABC5FBBCF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9088EF8AC3E2485FA76459E0 /* Assets.xcassets */; };
+		205C4B6177546CED803DB3AB /* PaseoWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53DE4116B84C675AF45EA705 /* PaseoWidgets.swift */; };
 		57436A836FCA8CAF191560A7 /* PaseoStore in Frameworks */ = {isa = PBXBuildFile; productRef = F6A7FCB2B479A9CC8D1703B5 /* PaseoStore */; };
+		64CC4FC98F63D9055290C03D /* GlanceEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30AA9F81CB0D401959EA7278 /* GlanceEntry.swift */; };
 		7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */; };
+		873FB425FA59049A656672C1 /* WidgetTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE98F4E6F9B3C2D8C166E9A /* WidgetTokens.swift */; };
 		8EA2C4203BFC6D5F3E4D36FB /* SavedHosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */; };
 		A171A48B81A851AF22D95177 /* PaseoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 63BF84ADEB1A8868F43ED3F6 /* PaseoUI */; };
 		BD7EE413467BC9F20E8C33C3 /* AgentDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB7D7187DB3305BFFBE378E /* AgentDirectory.swift */; };
 		C3820ADA9A162AE49F3CCFF0 /* WindowAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905593B3877EF01FF916BC8D /* WindowAppearance.swift */; };
 		C747E80867BDD9BD71FC8B6B /* AgentIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49AFF0D471630BA44685EC6B /* AgentIntents.swift */; };
+		C9C616099F1004A8772E9146 /* AgentsControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD8E64F3E4DAE2D40D534BBA /* AgentsControls.swift */; };
 		CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64108FA9FC10EE10BE16975 /* Keychain.swift */; };
 		FE9768F7EBE6971D19A0BABA /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */; };
+		FFADFC02861BE2DBDD9A2BF5 /* AgentsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C70B264A7541A03BA3004D5 /* AgentsWidget.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedHosts.swift; sourceTree = "<group>"; };
 		0EB7D7187DB3305BFFBE378E /* AgentDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDirectory.swift; sourceTree = "<group>"; };
+		114450C635D0AE4E08B8CFE2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		30AA9F81CB0D401959EA7278 /* GlanceEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlanceEntry.swift; sourceTree = "<group>"; };
 		3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationCoordinator.swift; sourceTree = "<group>"; };
+		417005487002A9CAD893F8C3 /* PaseoWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PaseoWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		49AFF0D471630BA44685EC6B /* AgentIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIntents.swift; sourceTree = "<group>"; };
+		53DE4116B84C675AF45EA705 /* PaseoWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaseoWidgets.swift; sourceTree = "<group>"; };
 		67A6CDB060911D3A7AA1CF59 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		905593B3877EF01FF916BC8D /* WindowAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAppearance.swift; sourceTree = "<group>"; };
 		9088EF8AC3E2485FA76459E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		93A7A34FF872890A0D7B1BE1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9C70B264A7541A03BA3004D5 /* AgentsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsWidget.swift; sourceTree = "<group>"; };
+		AD8E64F3E4DAE2D40D534BBA /* AgentsControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsControls.swift; sourceTree = "<group>"; };
+		B588CF3701396881BDA29431 /* PaseoWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaseoWidgets.entitlements; sourceTree = "<group>"; };
 		B5BA54415A9997E52BAA8657 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B64108FA9FC10EE10BE16975 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaseoClientApp.swift; sourceTree = "<group>"; };
 		D583D4EC5FCF8C4E46667749 /* PaseoCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaseoCore; path = ../Packages/PaseoCore; sourceTree = SOURCE_ROOT; };
 		E0973B3517160F9D49A8F309 /* PaseoClient.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PaseoClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E534C96E3E952966814440BD /* PaseoUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaseoUI; path = ../Packages/PaseoUI; sourceTree = SOURCE_ROOT; };
+		FBE98F4E6F9B3C2D8C166E9A /* WidgetTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetTokens.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -51,6 +64,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		59EB7B63E1C578F8093C4B0D /* PaseoWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				AD8E64F3E4DAE2D40D534BBA /* AgentsControls.swift */,
+				9C70B264A7541A03BA3004D5 /* AgentsWidget.swift */,
+				30AA9F81CB0D401959EA7278 /* GlanceEntry.swift */,
+				114450C635D0AE4E08B8CFE2 /* Info.plist */,
+				B588CF3701396881BDA29431 /* PaseoWidgets.entitlements */,
+				53DE4116B84C675AF45EA705 /* PaseoWidgets.swift */,
+				FBE98F4E6F9B3C2D8C166E9A /* WidgetTokens.swift */,
+			);
+			path = PaseoWidgets;
+			sourceTree = "<group>";
+		};
 		9255BF8717729F0324C5A138 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
@@ -89,6 +116,7 @@
 			isa = PBXGroup;
 			children = (
 				E0973B3517160F9D49A8F309 /* PaseoClient.app */,
+				417005487002A9CAD893F8C3 /* PaseoWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -97,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				9255BF8717729F0324C5A138 /* Packages */,
+				59EB7B63E1C578F8093C4B0D /* PaseoWidgets */,
 				B2A20E73B4645BB46B5138FD /* Resources */,
 				A2D0FF96299ED473709B96E0 /* Sources */,
 				DB67F85C32AC358061AB4C0E /* Products */,
@@ -106,6 +135,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		29FBE5EC03855F4EA89B070A /* PaseoWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3EFE888FE15FE4922AED6519 /* Build configuration list for PBXNativeTarget "PaseoWidgets" */;
+			buildPhases = (
+				FCB4F49D08B73B904DE6C4B5 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PaseoWidgets;
+			packageProductDependencies = (
+			);
+			productName = PaseoWidgets;
+			productReference = 417005487002A9CAD893F8C3 /* PaseoWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		695AC63E85C1D490585D5CEC /* PaseoClient */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3E4B282C2CFF866454FEE917 /* Build configuration list for PBXNativeTarget "PaseoClient" */;
@@ -136,6 +182,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					29FBE5EC03855F4EA89B070A = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
 					695AC63E85C1D490585D5CEC = {
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
@@ -161,6 +211,7 @@
 			projectRoot = "";
 			targets = (
 				695AC63E85C1D490585D5CEC /* PaseoClient */,
+				29FBE5EC03855F4EA89B070A /* PaseoWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -193,9 +244,40 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FCB4F49D08B73B904DE6C4B5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C9C616099F1004A8772E9146 /* AgentsControls.swift in Sources */,
+				FFADFC02861BE2DBDD9A2BF5 /* AgentsWidget.swift in Sources */,
+				64CC4FC98F63D9055290C03D /* GlanceEntry.swift in Sources */,
+				205C4B6177546CED803DB3AB /* PaseoWidgets.swift in Sources */,
+				873FB425FA59049A656672C1 /* WidgetTokens.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		19116AE27D59EB0BF9CDC02C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PaseoWidgets/PaseoWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = PaseoWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.wiselfx.paseoclient.PaseoWidgets;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		8107233E789A81CCA8C81118 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -353,6 +435,25 @@
 			};
 			name = Debug;
 		};
+		F6A01D2CDBC1569CF4A008D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PaseoWidgets/PaseoWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = PaseoWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.wiselfx.paseoclient.PaseoWidgets;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -361,6 +462,15 @@
 			buildConfigurations = (
 				880D9623B5779E85985B9682 /* Debug */,
 				8107233E789A81CCA8C81118 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3EFE888FE15FE4922AED6519 /* Build configuration list for PBXNativeTarget "PaseoWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6A01D2CDBC1569CF4A008D6 /* Debug */,
+				19116AE27D59EB0BF9CDC02C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
