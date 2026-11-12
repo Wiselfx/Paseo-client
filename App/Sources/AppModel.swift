@@ -501,6 +501,11 @@ final class AppModel {
         lastGlanceWrite = Date()
         lastGlanceAttention = attentionIds
         let showNames = defaults.bool(forKey: PaseoSettingsKeys.showAgentNames)
+        // Widgets deep-link with the daemon's server id; without one there is nothing
+        // a widget could open, so nothing is written.
+        guard let serverID = currentHostID.flatMap({ savedHosts.host($0)?.serverID }),
+            !serverID.isEmpty
+        else { return }
         let agents = GlanceSnapshot.sortAgents(session.agents.map { agent in
             GlanceSnapshot.Agent(
                 id: agent.id,
@@ -520,7 +525,7 @@ final class AppModel {
         let snapshot = GlanceSnapshot(
             agents: agents, runningCount: session.runningAgentCount, capturedAt: Date(),
             hostDisplayName: showNames
-                ? savedHosts.host(currentHostID)?.label : nil)
+                ? currentHostID.flatMap { savedHosts.host($0)?.label } : nil)
         await Task.detached(priority: .utility) {
             guard
                 let container = FileManager.default.containerURL(
