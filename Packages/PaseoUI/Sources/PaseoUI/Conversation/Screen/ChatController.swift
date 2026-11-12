@@ -230,6 +230,8 @@ struct TranscriptJump: Equatable {
 
     /// An inline prose image the reader tapped, for the full-screen viewer (`ChatSheets`).
     var inlineImage: InlineProseImage?
+    /// A tool call's own diff, opened from the turn changes card (G6 C11).
+    var diffDocument: ClaudeDiffDocument?
     /// The artifact on the full-screen page (`ChatSheets`). Setting it raises
     /// `artifactPageOpen`, which yields the transcript's pooled web views to the page.
     var artifactDocument: ArtifactDocument? {
@@ -313,6 +315,12 @@ struct TranscriptJump: Equatable {
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
         }
+        richActions.openDiff = { [weak self] turnID, path in
+            self?.openDiff(turnID: turnID, path: path)
+        }
+        richActions.openMediaItem = { [weak self] item in
+            self?.openMediaItem(item)
+        }
         richActions.openArtifact = { [weak self] document in
             self?.artifactDocument = document
         }
@@ -321,6 +329,22 @@ struct TranscriptJump: Equatable {
             self.attachmentStore.addImage(
                 data: data, fileName: fileName, to: self.store.agentId, store: self.store)
         }
+        richActions.openPRPane = { [weak self] in
+            // The PR pane lives in the workspace panel; deep-linking to its tab needs
+            // shell plumbing (cut in G9: the live card is the deliverable, and the
+            // panel remembers its page). One tap away via the existing route.
+            self?.onOpenPanel?()
+        }
+        richActions.githubLookup = { [weak self] parsed in
+            await self?.lookupGitHub(parsed)
+        }
+        richActions.listDaemonDirectory = { [weak self] workspaceID, dir in
+            guard let self,
+                let descriptor = self.session.workspaceDirectory.workspace(id: workspaceID)
+            else { return nil }
+            return try? await self.session.checkout(for: descriptor).files.entries(at: dir)
+        }
+        startCheckoutPRMirror()
         // The pipeline's only daemon entry: socket bytes in, decoded pixels out. The fetch
         // reads the live agent at call time and runs off main inside the driver. Registered
         // per workspace (last registration wins) and unregistered in `deinit`, so a stale
@@ -402,6 +426,64 @@ struct TranscriptJump: Equatable {
                     for: workspaceID, token: token)
             }
         }
+    }
+
+    // MARK: Checkout PR mirror + GitHub lookup (G9 C7/C13)
+
+    /// The checkout the open agent belongs to, if any.
+    private var currentCheckout: CheckoutStore? {
+        guard let agent = store.agent,
+            let workspaceId = agent.workspaceId,
+            let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
+        else { return nil }
+        return session.checkout(for: descriptor)
+    }
+
+    /// Mirrors the live PR status into the cards (C13): one write per change, never per
+    /// scroll frame. Cards read only the value (R-1).
+    private func startCheckoutPRMirror() {
+        richActions.checkoutPR = currentCheckout?.prStatus
+        withObservationTracking { [weak self] in
+            _ = self?.currentCheckout?.prStatus
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.richActions.checkoutPR = self.currentCheckout?.prStatus
+                self.startCheckoutPRMirror()
+            }
+        }
+    }
+
+    /// Same-repo GitHub link resolution through forge search (G9 C7), matched on number
+    /// and kind. Runs off the socket (suspends, never blocks); nil means the card
+    /// degrades to the metadata link card.
+    private func lookupGitHub(_ parsed: GitHubURL) async -> GitHubLinkInfo? {
+        guard let agent = store.agent,
+            let workspaceId = agent.workspaceId,
+            let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
+        else { return nil }
+        let query: String
+        switch parsed.kind {
+        case .pull(let number), .issue(let number):
+            query = "#\(number)"
+        default:
+            return nil
+        }
+        let kinds: [ForgeSearchItem.Kind] = [.changeRequest, .issue]
+        guard
+            let result = await session.forgeSearch.search(
+                cwd: descriptor.projectRootPath, query: query, kinds: kinds, limit: 5)
+        else { return nil }
+        for item in result.items {
+            switch (parsed.kind, item.kind) {
+            case (.pull(let number), .changeRequest), (.issue(let number), .issue)
+            where item.number == number:
+                return GitHubLinkInfo(title: item.title, state: item.state, labels: item.labels)
+            default:
+                break
+            }
+        }
+        return nil
     }
 
     // MARK: Media link condition (G2 §12)
@@ -581,6 +663,55 @@ struct TranscriptJump: Equatable {
 
     func openFileViewer(at path: String) {
         openFilePath = path
+    }
+
+    /// This turn's edit/write calls for `path`, in order, for the turn changes card
+    /// (G6 C11): the concatenated unified diffs, or the combined old-to-new when the
+    /// calls carry old/new. O(turn rows) on tap — never per frame. Falls back to the
+    /// file viewer when the turn never touched the path.
+    func openDiff(turnID: String, path: String) {
+        guard let turn = store.turns.first(where: { $0.id == turnID }) else {
+            openFileViewer(at: path)
+            return
+        }
+        var diffs: [String] = []
+        var firstOld: String?
+        var lastNew: String?
+        for segment in turn.segments {
+            guard case .work(let group) = segment else { continue }
+            for row in group.rows {
+                guard case .toolCall(let call) = row.item else { continue }
+                switch call.detail {
+                case .edit(let edited, let old, let new, let diff) where edited == path:
+                    if let diff, !diff.isEmpty { diffs.append(diff) }
+                    if firstOld == nil { firstOld = old }
+                    if new != nil { lastNew = new }
+                case .write(let written, let content) where written == path:
+                    lastNew = content
+                default:
+                    break
+                }
+            }
+        }
+        guard !diffs.isEmpty || firstOld != nil || lastNew != nil else {
+            openFileViewer(at: path)
+            return
+        }
+        let concatenated = diffs.joined(separator: "\n")
+        diffDocument = ClaudeDiffDocument(
+            path: path,
+            unifiedDiff: concatenated.isEmpty ? nil : concatenated,
+            old: firstOld,
+            new: lastNew)
+    }
+
+    /// Jumps the transcript to a media-sheet item's turn (G12 C15): the sheet closes,
+    /// follow disengages, and the existing scroll jump lands on the row.
+    func openMediaItem(_ item: ConversationMediaItem) {
+        Haptics.selection()
+        sheet = nil
+        isFollowing = false
+        pendingJump = TranscriptJump(id: "row:\(item.seqEnd)")
     }
 
     // MARK: Find

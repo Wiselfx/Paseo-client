@@ -19,6 +19,9 @@ public struct Turn: Sendable, Equatable, Identifiable {
     public var startedAt: Date?
     /// Timestamp of the turn's last row. Nil while running.
     public var endedAt: Date?
+    /// The turn's file changes (G6 C11), or nil when it changed nothing. Computed
+    /// with the turn, so the incremental tail rebuild recomputes only rebuilt turns.
+    public var changeSummary: TurnChangeSummary? = nil
 
     public enum Phase: Sendable, Equatable {
         case running
@@ -169,7 +172,11 @@ private struct TurnDraft {
             phase = .completed
         }
 
-        return Turn(id: id, turnId: turnId, userMessage: userMessage, segments: segments, phase: phase, startedAt: startedAt, endedAt: endedAt)
+        var finished = Turn(id: id, turnId: turnId, userMessage: userMessage, segments: segments, phase: phase, startedAt: startedAt, endedAt: endedAt)
+        // The card only shows at turn end: a running tail is rebuilt on every stream
+        // event, so parsing its diffs here would cost O(diff size) per token on main.
+        finished.changeSummary = isRunning ? nil : TurnChangeSummary.summarize(turn: finished)
+        return finished
     }
 }
 

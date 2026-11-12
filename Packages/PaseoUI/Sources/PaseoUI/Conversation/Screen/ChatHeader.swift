@@ -171,6 +171,9 @@ struct ChatHeaderBar: View {
             Button("Search in conversation", systemImage: "magnifyingglass") {
                 controller.openFind(anchor: nil)
             }
+            Button("Media in this chat", systemImage: "photo.on.rectangle") {
+                controller.sheet = .media
+            }
             Button("Rename…", systemImage: "pencil") {
                 controller.beginRename()
             }

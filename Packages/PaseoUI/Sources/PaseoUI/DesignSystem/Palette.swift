@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import PaseoStore
 import SwiftUI
 import UIKit
 
@@ -278,6 +279,59 @@ enum Palette {
                 ? UIColor(red: 0.435, green: 0.749, blue: 0.494, alpha: 1)
                 : UIColor(red: 0.231, green: 0.545, blue: 0.310, alpha: 1)
         })
+
+    // MARK: ANSI terminal colors (G8 C12)
+
+    /// The 16 terminal slots, tuned to read on `codeSurface` in light, dark and pure
+    /// black (pure black follows dark: the slots are hue-anchored, not canvas-matched).
+    /// `ansiWhite` tracks secondary ink and `ansiBrightWhite` ink: a light slot must
+    /// stay legible on a light surface, which real terminals never promise.
+    private static func ansi(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
+        Color(uiColor: UIColor {
+            $0.userInterfaceStyle == .dark
+                ? UIColor(red: dark.0 / 255, green: dark.1 / 255, blue: dark.2 / 255, alpha: 1)
+                : UIColor(red: light.0 / 255, green: light.1 / 255, blue: light.2 / 255, alpha: 1)
+        })
+    }
+
+    static let ansiBlack = ansi(light: (26, 26, 26), dark: (232, 232, 232))
+    static let ansiRed = ansi(light: (176, 0, 0), dark: (255, 123, 123))
+    static let ansiGreen = ansi(light: (0, 122, 0), dark: (125, 255, 138))
+    static let ansiYellow = ansi(light: (138, 109, 0), dark: (255, 226, 122))
+    static let ansiBlue = ansi(light: (11, 70, 218), dark: (138, 180, 255))
+    static let ansiMagenta = ansi(light: (160, 0, 160), dark: (255, 123, 255))
+    static let ansiCyan = ansi(light: (0, 112, 112), dark: (111, 242, 234))
+    static let ansiWhite = ansi(light: (118, 118, 118), dark: (207, 207, 207))
+    static let ansiBrightBlack = ansi(light: (118, 118, 118), dark: (154, 154, 154))
+    static let ansiBrightRed = ansi(light: (229, 72, 77), dark: (255, 155, 155))
+    static let ansiBrightGreen = ansi(light: (48, 164, 108), dark: (143, 245, 176))
+    static let ansiBrightYellow = ansi(light: (138, 109, 0), dark: (255, 232, 154))
+    static let ansiBrightBlue = ansi(light: (62, 99, 221), dark: (157, 185, 255))
+    static let ansiBrightMagenta = ansi(light: (201, 89, 201), dark: (255, 168, 255))
+    static let ansiBrightCyan = ansi(light: (18, 165, 148), dark: (127, 243, 236))
+    static let ansiBrightWhite = ansi(light: (17, 17, 17), dark: (255, 255, 255))
+
+    /// `AnsiColor` to its token.
+    static func ansi(_ color: AnsiColor) -> Color {
+        switch color {
+        case .black: ansiBlack
+        case .red: ansiRed
+        case .green: ansiGreen
+        case .yellow: ansiYellow
+        case .blue: ansiBlue
+        case .magenta: ansiMagenta
+        case .cyan: ansiCyan
+        case .white: ansiWhite
+        case .brightBlack: ansiBrightBlack
+        case .brightRed: ansiBrightRed
+        case .brightGreen: ansiBrightGreen
+        case .brightYellow: ansiBrightYellow
+        case .brightBlue: ansiBrightBlue
+        case .brightMagenta: ansiBrightMagenta
+        case .brightCyan: ansiBrightCyan
+        case .brightWhite: ansiBrightWhite
+        }
+    }
 
     // MARK: Diff and selection
 

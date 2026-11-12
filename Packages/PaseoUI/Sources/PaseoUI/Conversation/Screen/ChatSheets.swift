@@ -8,6 +8,7 @@ enum ClaudeChatSheet: String, Identifiable {
     case subagents
     case backgroundWork
     case turnNav
+    case media
     var id: String { rawValue }
 }
 
@@ -59,6 +60,13 @@ struct ChatSheets: ViewModifier {
             .fullScreenCover(item: $controller.inlineImage) { item in
                 InlineProseImageViewer(item: item) { controller.inlineImage = nil }
             }
+            .sheet(item: $controller.diffDocument) { document in
+                SheetScaffold(document.fileName, detents: .large) {
+                    ClaudeDiffView(
+                        path: document.path, unifiedDiff: document.unifiedDiff,
+                        old: document.old, new: document.new)
+                }
+            }
             .environment(\.artifactZoomNamespace, artifactZoom)
             .fullScreenCover(item: $controller.artifactDocument) { document in
                 ArtifactPage(
@@ -97,6 +105,8 @@ struct ChatSheets: ViewModifier {
                 })
         case .backgroundWork:
             ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork)
+        case .media:
+            ChatMediaSheet(store: store)
         case .turnNav:
             ChatTurnNavSheet(
                 store: store, items: controller.outlineItems,
@@ -152,6 +162,21 @@ struct InlineProseImage: Identifiable {
     let uiImage: UIImage?
 
     var id: String { markdown.source }
+}
+
+/// One file's diff, opened from the turn changes card (G6 C11): the tool call's own
+/// unified diff when this conversation has one, else the file viewer.
+struct ClaudeDiffDocument: Identifiable {
+    var id: String { path }
+    let path: String
+    let unifiedDiff: String?
+    let old: String?
+    let new: String?
+
+    /// The file name for the sheet title.
+    var fileName: String {
+        (path as NSString).lastPathComponent
+    }
 }
 
 /// The full-screen viewer for an image tapped inside a sentence — the same `MediaViewerView`

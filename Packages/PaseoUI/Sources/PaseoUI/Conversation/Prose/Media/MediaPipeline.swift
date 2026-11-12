@@ -338,6 +338,56 @@ actor MediaPipeline {
         resolvers[workspaceID]?.fetch
     }
 
+    /// A raw daemon read for non-image clients (G10 file cards): socket bytes in,
+    /// nothing cached (files live in the panel's domain, not the image cache).
+    /// `.unavailable` means no resolver; everything else mirrors the fetch.
+    func fetchDaemonFile(ref: DaemonFileRef, maxBytes: Int) async -> DaemonMediaResult {
+        guard let fetch = resolver(for: ref.workspaceID) else { return .unavailable }
+        return await fetch(ref, maxBytes)
+    }
+
+    /// Fetched daemon bytes to a stable cache file, off main (G10/G11): AVPlayer,
+    /// AVAudioPlayer and Quick Look need files, not `Data`, and a 64 MB write must
+    /// never happen on the main actor. Same SHA naming as the image disk cache, with
+    /// the file name kept so the system can sniff the kind.
+    static func cacheDaemonFile(data: Data, ref: DaemonFileRef) async -> URL? {
+        guard
+            let url = diskDirectory()?.appending(
+                path: diskKey(ref: ref, revision: nil) + "-"
+                    + (ref.path as NSString).lastPathComponent,
+                directoryHint: .notDirectory)
+        else { return nil }
+        return await Task.detached(priority: .userInitiated) { () -> URL? in
+            do {
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try data.write(to: url, options: .atomic)
+                return url
+            } catch {
+                return nil
+            }
+        }.value
+    }
+
+    /// The pipeline's metadata session (G9): the same UA and timeouts as image
+    /// loads, but no data-task delegate and no image cache — for small metadata
+    /// fetches (oEmbed) that must never ride the streaming machinery.
+    private static let metadataSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForResource = 60
+        configuration.httpMaximumConnectionsPerHost = 4
+        configuration.httpAdditionalHeaders = ["User-Agent": userAgent()]
+        return URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
+    }()
+
+    /// A small metadata fetch (oEmbed) on the pipeline's session: same UA and
+    /// timeouts, none of the streaming delegate machinery.
+    static func fetchMetadataData(from url: URL) async throws -> (Data, URLResponse) {
+        try await metadataSession.data(from: url)
+    }
+
     /// The app's identity on the wire. Wikimedia answers **403** to a request with no
     /// User-Agent at all (checked with `curl` against `upload.wikimedia.org`); a stable,
     /// generic app UA is the polite answer everywhere else. No user data, no device name.

@@ -28,6 +28,9 @@ public enum RichContentBlock: Sendable, Equatable {
     /// §1.4 — a bare remote image URL, trailing punctuation already stripped. Renders
     /// as an image, not a link.
     case bareImageURL(url: String, range: Range<String.Index>)
+    /// C2 — two or more adjacent image blocks separated only by blank text, in
+    /// document order. Ranges from the first block's start to the last block's end.
+    case imageGroup(images: [RichImage], range: Range<String.Index>)
     /// §1.5 — a bare absolute or `~/` image path; `alt` is the basename. The UI
     /// resolves the path through the daemon (never reads the file directly).
     case localImage(path: String, alt: String, range: Range<String.Index>)
@@ -43,6 +46,12 @@ public enum RichContentBlock: Sendable, Equatable {
     /// C9 — a closed ` ```mermaid ` fence with a non-blank body: a diagram the client
     /// renders natively. A streaming (unclosed) fence stays a code block until it closes.
     case mermaid(source: String, range: Range<String.Index>)
+    /// C3/C4 — a standalone bare path (daemon file) or bare URL (remote) with a
+    /// playable extension. Synthesized by the splice from the raw unit, never by the
+    /// detector (linkification hides standalone paths from it); the unit text is the
+    /// verbatim path or URL.
+    case localMedia(path: String, kind: MediaFileKind, range: Range<String.Index>)
+    case remoteMedia(url: String, kind: MediaFileKind, range: Range<String.Index>)
     /// M17 — a standalone line that is exactly a coordinate pair (`lat, lng`), a `geo:`
     /// URI, or an Apple/Google Maps URL. Doc 05 specifies no map rule, so this is the
     /// strict §1.1-shaped rule: standalone line only, never inside lists/headings, and
@@ -74,11 +83,14 @@ public extension RichContentBlock {
              .youTubePlayer(_, let range),
              .youTubeInline(_, let range),
              .bareImageURL(_, let range),
+             .imageGroup(_, let range),
              .localImage(_, _, let range),
              .localFileLink(_, let range),
              .rawSVG(_, let range),
              .visualize(_, let range),
              .mermaid(_, let range),
+             .localMedia(_, _, let range),
+             .remoteMedia(_, _, let range),
              .mapCard(_, let range):
             range
         }

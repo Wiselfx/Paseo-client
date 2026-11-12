@@ -2,13 +2,16 @@
 import Foundation
 import PaseoStore
 
-/// One piece of assistant prose in document order: a chunk of Markdown, or a rich-content
-/// block detected by `RichContentDetector`.
+/// One piece of assistant prose in document order: a chunk of Markdown, a rich-content
+/// block detected by `RichContentDetector`, or a standalone file line (G10).
 enum RichPiece {
     case markdown(String)
     /// The block plus its UTF-16 length in the unit it was detected from (the unit is
     /// linkified, so its ranges do not index the original source).
     case block(RichContentBlock, utf16Length: Int)
+    /// A bare non-image path standing alone on its line: a file card, not a chip.
+    /// Detected from the raw unit (the detector sees linkified text and stays out).
+    case file(path: String, utf16Length: Int)
 }
 
 /// Small in-memory memo for `RichContentDetector.detect(in:)`. The prose re-renders on
@@ -46,6 +49,9 @@ extension RichContentBlock {
         case .rawSVG: "svg"
         case .visualize: "visualize"
         case .mermaid: "mermaid"
+        case .imageGroup: "gallery"
+        case .localMedia(_, let kind, _): kind == .video ? "video" : "audio"
+        case .remoteMedia(_, let kind, _): kind == .video ? "video" : "audio"
         case .mapCard: "map"
         }
     }
@@ -60,28 +66,155 @@ extension RichContentBlock {
 @MainActor
 func richPieces(_ source: String) -> [RichPiece] {
     var pieces: [RichPiece] = []
-    for range in RichContentDetector.splitIntoBlocks(source) {
-        let unit = String(source[range])
-        let linked = FilePathLinks.linkifiedForProse(unit)
-        let blocks = RichContentCache.detect(linked)
-        guard !blocks.isEmpty else {
-            pieces.append(.markdown(linked))
-            continue
+    // Adjacent single-image units whose only separation is blank text merge into
+    // one gallery block (G7 C2). Standalone files (G10) and playable media (G11)
+    // are claimed first, from the raw unit, so linkification cannot hide them.
+    // The pending run buffers one unit so a lone image re-emits exactly what the
+    // old code produced.
+    var pendingImages: [RichImage] = []
+    var pendingRange: Range<String.Index>? = nil
+    var previousUnitEnd: String.Index? = nil
+
+    /// One image as the block the old code would have emitted for its unit.
+    func singleImageBlock(_ image: RichImage, range: Range<String.Index>) -> RichPiece {
+        let length = source[range].utf16.count
+        switch image.source {
+        case .remote(let url):
+            return .block(.bareImageURL(url: url, range: range), utf16Length: length)
+        case .local(let path):
+            return .block(
+                .localImage(path: path, alt: image.alt, range: range), utf16Length: length)
         }
+    }
+
+    func flushPending() {
+        if pendingImages.count >= 2, let range = pendingRange {
+            let length = source[range].utf16.count
+            pieces.append(.block(
+                RichImageGrouping.group(images: pendingImages, range: range), utf16Length: length))
+        } else if let first = pendingImages.first, let range = pendingRange {
+            pieces.append(singleImageBlock(first, range: range))
+        }
+        pendingImages = []
+        pendingRange = nil
+    }
+
+    func gapIsBlank(to upperBound: String.Index) -> Bool {
+        guard let previousUnitEnd else { return true }
+        return source[previousUnitEnd..<upperBound].allSatisfy(\.isWhitespace)
+    }
+
+    func spliceUnit(linked: String, blocks: [RichContentBlock]) -> [RichPiece] {
+        var out: [RichPiece] = []
         var cursor = linked.startIndex
         for block in blocks {
             let blockRange = block.range
             if cursor < blockRange.lowerBound {
-                pieces.append(.markdown(String(linked[cursor..<blockRange.lowerBound])))
+                out.append(.markdown(String(linked[cursor..<blockRange.lowerBound])))
             }
             let length = linked.utf16.distance(from: blockRange.lowerBound, to: blockRange.upperBound)
-            pieces.append(.block(block, utf16Length: length))
+            out.append(.block(block, utf16Length: length))
             cursor = blockRange.upperBound
         }
         if cursor < linked.endIndex {
-            pieces.append(.markdown(String(linked[cursor...])))
+            out.append(.markdown(String(linked[cursor...])))
+        }
+        return out
+    }
+
+    for range in RichContentDetector.splitIntoBlocks(source) {
+        let unit = String(source[range])
+        // Playable media first (G11): a standalone path or bare URL with a playable
+        // extension becomes a player card.
+        if let media = RichStandaloneMedia.match(
+            blocks: RichContentCache.detect(unit), unitText: unit)
+        {
+            flushPending()
+            previousUnitEnd = range.upperBound
+            switch media {
+            case .local(let path, let kind):
+                pieces.append(.block(
+                    .localMedia(path: path, kind: kind, range: range),
+                    utf16Length: unit.utf16.count))
+            case .remote(let url, let kind):
+                pieces.append(.block(
+                    .remoteMedia(url: url, kind: kind, range: range),
+                    utf16Length: unit.utf16.count))
+            }
+            continue
+        }
+        // A bare non-image path standing alone on its line is a file card (G10),
+        // decided from the raw unit so linkification cannot hide it.
+        if let filePath = RichStandaloneFile.path(
+            in: RichContentCache.detect(unit), unitText: unit)
+        {
+            flushPending()
+            previousUnitEnd = range.upperBound
+            pieces.append(.file(path: filePath, utf16Length: unit.utf16.count))
+            continue
+        }
+        let linked = FilePathLinks.linkifiedForProse(unit)
+        let blocks = RichContentCache.detect(linked)
+        // A sole image unit joins the gallery run when only blank text separates it
+        // from the previous one (G7). Remote images arrive as blocks here; a sole
+        // *local* image is detected from the raw unit, since linkification wraps it
+        // into an authored link the detector then skips.
+        let soleRemote: RichImage? = {
+            guard blocks.count == 1, let image = RichImage.of(block: blocks[0]) else {
+                return nil
+            }
+            let markdown = linkedWithoutBlocks(linked, blocks: blocks)
+            guard markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return nil
+            }
+            return image
+        }()
+        let soleLocal: RichImage? = {
+            guard soleRemote == nil else { return nil }
+            let detected = RichContentCache.detect(unit)
+            guard detected.count == 1,
+                case .localImage(let path, let alt, _) = detected[0],
+                unit.trimmingCharacters(in: .whitespacesAndNewlines) == path
+            else { return nil }
+            return RichImage(source: .local(path: path), alt: alt)
+        }()
+        if let soleImage = soleRemote ?? soleLocal, gapIsBlank(to: range.lowerBound) {
+            if let pending = pendingRange {
+                pendingRange = pending.lowerBound..<range.upperBound
+            } else {
+                pendingRange = range
+            }
+            pendingImages.append(soleImage)
+            previousUnitEnd = range.upperBound
+            continue
+        }
+        flushPending()
+        previousUnitEnd = range.upperBound
+        if blocks.isEmpty {
+            pieces.append(.markdown(linked))
+        } else {
+            pieces.append(contentsOf: spliceUnit(linked: linked, blocks: blocks))
         }
     }
+    flushPending()
     return pieces
+}
+
+/// The unit's text with its detected blocks removed: blank means the unit carries no
+/// visible prose and a sole image block in it may join a gallery run.
+private func linkedWithoutBlocks(_ linked: String, blocks: [RichContentBlock]) -> String {
+    var cursor = linked.startIndex
+    var out = ""
+    for block in blocks {
+        let blockRange = block.range
+        if cursor < blockRange.lowerBound {
+            out += linked[cursor..<blockRange.lowerBound]
+        }
+        cursor = blockRange.upperBound
+    }
+    if cursor < linked.endIndex {
+        out += linked[cursor...]
+    }
+    return out
 }
 #endif

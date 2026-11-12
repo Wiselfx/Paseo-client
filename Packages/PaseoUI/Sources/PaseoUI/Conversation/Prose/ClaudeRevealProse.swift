@@ -39,6 +39,15 @@ struct ClaudeRevealProse: View {
     @State private var tailStart = -1
     @State private var tailLength = 0
 
+    /// A trailing rich block or file card fades in like a trailing block: it has no
+    /// text range the sweep mask can lean on.
+    private func matchesBlockOrFile(_ piece: RichPiece) -> Bool {
+        switch piece {
+        case .block, .file: true
+        case .markdown: false
+        }
+    }
+
     private struct PieceRef {
         let id: Int
         let piece: RichPiece
@@ -56,6 +65,7 @@ struct ClaudeRevealProse: View {
             switch piece {
             case .markdown: "md:\(id)"
             case .block(let block, _): "block:\(block.cardKindKey):\(start)"
+            case .file(let path, _): "file:\(path):\(start)"
             }
         }
     }
@@ -69,7 +79,7 @@ struct ClaudeRevealProse: View {
             switch piece {
             case .markdown(let chunk):
                 length = chunk.utf16.count
-            case .block(_, let blockLength):
+            case .block(_, let blockLength), .file(_, let blockLength):
                 length = blockLength
             }
             refs.append(
@@ -104,6 +114,15 @@ struct ClaudeRevealProse: View {
                     }
                 case .block(let block, _):
                     ClaudeRichBlockView(block: block)
+                        .phaseAnimator([Self.minOpacity, 1.0], trigger: revealTick) { content, phase in
+                            content.opacity(
+                                reduceMotion || !isStreaming || ref.id != refs.count - 1 ? 1 : phase)
+                        } animation: { _ in
+                            // R-4: the design system's fade, which Reduce Motion allows.
+                            Motion.fade.animation
+                        }
+                case .file(let path, _):
+                    RichFileCard(path: path)
                         .phaseAnimator([Self.minOpacity, 1.0], trigger: revealTick) { content, phase in
                             content.opacity(
                                 reduceMotion || !isStreaming || ref.id != refs.count - 1 ? 1 : phase)
@@ -183,7 +202,9 @@ struct ClaudeRevealProse: View {
             return
         }
         guard let tail = refs.last(where: { $0.isTailMarkdown }) else {
-            if let last = refs.last, case .block = last.piece {
+            if let last = refs.last,
+                matchesBlockOrFile(last.piece)
+            {
                 revealTick += 1
             }
             return

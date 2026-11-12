@@ -25,9 +25,10 @@ struct ClaudeToolCallDetail: View {
 
     @ViewBuilder private var content: some View {
         switch call.detail {
-        case .shell(let command, let cwd, let output, _):
+        case .shell(let command, let cwd, let output, let exitCode):
             ClaudeCodeBlock(
-                title: cwd.map(Self.lastPathComponent), command: command, output: output, status: status)
+                title: cwd.map(Self.lastPathComponent), command: command, output: output,
+                status: status, terminal: true, exitCode: exitCode)
         case .read(let path, let content):
             ClaudeCodeBlock(title: path, output: content)
         case .write(let path, let content):

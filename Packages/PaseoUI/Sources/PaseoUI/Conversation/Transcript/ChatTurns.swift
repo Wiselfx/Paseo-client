@@ -179,6 +179,9 @@ struct ClaudeTurnView: View {
             .accessibilityLabel(turnSummaryLabel)
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown)
+                if !isRunning, let summary = turn.changeSummary {
+                    TurnChangesCard(summary: summary, turnID: turn.id).equatable()
+                }
             } else {
                 // A turn with no answer section (all work / no prose): keep it honest.
                 Text("This turn ended without a reply.")
@@ -228,6 +231,10 @@ struct ClaudeTurnView: View {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: isRunning)
                     .id("row:\(finalProse.seqEnd)")
                     .background(findHighlight(finalProse.seqEnd))
+            }
+            if !isRunning, let summary = turn.changeSummary {
+                // The turn's file changes close the turn, after the final prose.
+                TurnChangesCard(summary: summary, turnID: turn.id).equatable()
             }
             if !isRunning, showsAnswerFooter {
                 HStack(spacing: 17) {
