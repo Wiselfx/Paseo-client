@@ -1633,7 +1633,6 @@ struct RichWebCard: View {
     let code: String
 
     @State private var showSource = false
-    @State private var showFullScreen = false
     @State private var contentHeight: CGFloat = 240
     @State private var overflows = false
     @State private var isVisible = false
@@ -1686,14 +1685,6 @@ struct RichWebCard: View {
             }
         }
         .task(id: snapshotKey) { await captureSnapshotIfNeeded() }
-        .sheet(isPresented: $showFullScreen) {
-            SheetScaffold("Visualization", detents: .large) {
-                SandboxedHTMLView(
-                    html: document, heightFloor: 0, heightCeiling: .greatestFiniteMagnitude,
-                    onHeightChange: { _ in }, fillsFrame: true)
-                    .ignoresSafeArea(edges: .bottom)
-            }
-        }
     }
 
     private var header: some View {
@@ -1744,9 +1735,14 @@ struct RichWebCard: View {
         }
     }
 
+    /// Open goes to the artifact page (G5 C8): the live stage, source toggle, Reload
+    /// and Share as .html live there, not in a transcript sheet.
     private var openFullScreenButton: some View {
         Button {
-            showFullScreen = true
+            if let richActions {
+                richActions.openArtifact(
+                    ArtifactDocument(kind: .visualize(code: code), shareImage: nil))
+            }
         } label: {
             Label("Open", systemImage: "arrow.up.left.and.arrow.down.right")
                 .font(.paseo(.caption, weight: .medium))

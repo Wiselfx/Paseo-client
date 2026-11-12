@@ -1068,6 +1068,19 @@ struct TranscriptJump: Equatable {
             // `![alt](url)` inside a sentence renders as one link-styled run (a thumbnail
             // would reflow the line), so tapping it is the only way to see the picture.
             presentInlineImage(image)
+        case .previewCode(let language, let content):
+            // Preview is explicit and never automatic (G5 §2 C8): closed html/svg fences
+            // open the artifact page instead of rendering inline.
+            let kind = language?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            switch kind {
+            case "svg":
+                artifactDocument = ArtifactDocument(kind: .svg(source: content), shareImage: nil)
+            case "html":
+                artifactDocument = ArtifactDocument(
+                    kind: .html(source: content, fileName: nil), shareImage: nil)
+            default:
+                break
+            }
         default:
             break
         }

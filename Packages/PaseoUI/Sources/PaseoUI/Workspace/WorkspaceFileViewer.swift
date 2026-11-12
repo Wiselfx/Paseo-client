@@ -44,6 +44,8 @@ struct WorkspaceFileViewer: View {
     @State private var saveSuccessFlash = false
     /// The decoded/highlighted file, built once per path + revision.
     @State private var render: FileRenderModel?
+    /// An `.html` file opened full screen on the artifact page (G5 C8).
+    @State private var htmlArtifact: ArtifactDocument?
     /// Where the dirty-edit dialog should go if the reader confirms.
     @State private var pendingExit: ExitAction?
     @Environment(\.openURL) private var openURL
@@ -202,6 +204,14 @@ struct WorkspaceFileViewer: View {
             if let previewLink {
                 SafariView(url: previewLink).ignoresSafeArea()
             }
+        }
+        .fullScreenCover(item: $htmlArtifact) { document in
+            ArtifactPage(
+                document: document,
+                sourceID: document.id,
+                namespace: imageZoom,
+                previewFiles: PreviewFileSource(files: files, workspaceId: checkout.workspaceId),
+                onClose: { htmlArtifact = nil })
         }
         .fileExporter(
             isPresented: Binding(
@@ -568,6 +578,17 @@ struct WorkspaceFileViewer: View {
             .padding(2)
             .background(Palette.chip, in: .capsule)
             Spacer(minLength: 0)
+            // Full screen is the only zoom the inline frame cannot give: the live
+            // page keeps the vector sharp and offers Share as .html (G5 C8).
+            if isHTML, !previewAsSource, file?.textContent != nil {
+                Button("Full screen") {
+                    openHTMLArtifact()
+                }
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Open HTML file full screen")
+            }
         }
         .padding(.horizontal, Space.sm)
         .padding(.vertical, 6)
@@ -687,6 +708,16 @@ struct WorkspaceFileViewer: View {
             previewFiles: allowsScripts
                 ? PreviewFileSource(files: files, workspaceId: checkout.workspaceId) : nil
         )
+    }
+
+    /// An `.html` file on the artifact page: the live document with workspace file
+    /// access, Reload and Share as .html (G5 C8). Inline stays the preview.
+    private func openHTMLArtifact() {
+        guard let file, let text = file.textContent else { return }
+        Haptics.light()
+        htmlArtifact = ArtifactDocument(
+            kind: .html(source: text, fileName: fileName),
+            shareImage: nil)
     }
 
     /// The image at its fitted size; tap opens the shared full-screen viewer (G3 §4.6).

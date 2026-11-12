@@ -259,6 +259,31 @@ enum RichHTMLDocument {
         """
     }
 
+    /// An html fence or `.html` file for the artifact page: a full document when the source
+    /// carries `<html>`, otherwise the fragment wrapped in the offline shell (scripts run,
+    /// like the visualize stage, but the CSP keeps the network closed). The export shares
+    /// this same build, so what exports is what the page showed.
+    static func artifactHTML(source: String, dark: Bool) -> String {
+        if source.lowercased().contains("<html") { return source }
+        let scheme = dark ? "dark" : "light"
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'">
+        <style>:root { color-scheme: \(scheme); }
+        html, body { margin: 0; padding: 0; background: transparent; color: CanvasText; font-family: -apple-system, sans-serif; }
+        </style>
+        </head>
+        <body>
+        \(source)
+        </body>
+        </html>
+        """
+    }
+
     /// A raw `<svg>…</svg>` block, inlined. Scripts never run: the CSP has no `script-src`,
     /// so inline SVG event handlers and `<script>` children are all blocked.
     static func rawSVG(source: String, dark: Bool) -> String {
