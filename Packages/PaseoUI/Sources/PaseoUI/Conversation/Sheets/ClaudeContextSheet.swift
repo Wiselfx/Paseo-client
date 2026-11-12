@@ -169,7 +169,7 @@ struct ClaudeContextSheet: View {
                     .foregroundStyle(Palette.accent)
             }
             .chartXAxis {
-                AxisMarks(values: .stride(by: max(1, points.count / 5))) { _ in
+                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                     AxisGridLine()
                     AxisValueLabel()
                 }
@@ -181,8 +181,8 @@ struct ClaudeContextSheet: View {
                 }
             }
             .frame(height: Metrics.turnChartHeight)
-            .accessibilityChartDescriptor(outputDescriptor(points))
-            .accessibilityLabel(outputSummary(points))
+            .accessibilityLabel("Output per turn")
+            .accessibilityValue(outputSummary(points))
         }
         .padding(.horizontal, Space.lg)
     }
@@ -199,7 +199,7 @@ struct ClaudeContextSheet: View {
                     .foregroundStyle(Palette.ink.opacity(0.85))
             }
             .chartXAxis {
-                AxisMarks(values: .stride(by: max(1, points.count / 5))) { _ in
+                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                     AxisGridLine()
                     AxisValueLabel()
                 }
@@ -211,8 +211,8 @@ struct ClaudeContextSheet: View {
                 }
             }
             .frame(height: Metrics.turnChartHeight)
-            .accessibilityChartDescriptor(costDescriptor(points))
-            .accessibilityLabel(costSummary(points))
+            .accessibilityLabel("Cost per turn")
+            .accessibilityValue(costSummary(points))
         }
         .padding(.horizontal, Space.lg)
     }
@@ -233,49 +233,6 @@ struct ClaudeContextSheet: View {
             "turn \(index + 1): \(Self.cost(point.costUsd))"
         }.joined(separator: ", ")
         return "\(Self.cost(total)) over \(points.count) turns: \(turns)"
-    }
-
-    /// The audio graph twin: one data point per bar, in chart order.
-    private func outputDescriptor(_ points: [TurnUsagePoint]) -> AXChartDescriptor {
-        let labels = points.indices.map { "Turn \($0 + 1)" }
-        let values = points.map { Double($0.outputTokens) }
-        return AXChartDescriptor(
-            title: "Output tokens per turn",
-            summary: outputSummary(points),
-            xAxis: AXCategoricalDataAxisDescriptor(title: "Turn", categoryOrder: labels),
-            yAxis: AXNumericDataAxisDescriptor(
-                title: "Output tokens",
-                range: 0...(max(values.max() ?? 0, 1)),
-                gridlinePositions: []),
-            series: [
-                AXDataSeriesDescriptor(
-                    name: "Output tokens",
-                    isContinuous: false,
-                    dataPoints: zip(labels, values).map { pair in
-                        AXDataPointDescriptor(x: pair.0, y: pair.1)
-                    })
-            ])
-    }
-
-    private func costDescriptor(_ points: [TurnUsagePoint]) -> AXChartDescriptor {
-        let labels = points.indices.map { "Turn \($0 + 1)" }
-        let values = points.map { $0.costUsd }
-        return AXChartDescriptor(
-            title: "Cost per turn",
-            summary: costSummary(points),
-            xAxis: AXCategoricalDataAxisDescriptor(title: "Turn", categoryOrder: labels),
-            yAxis: AXNumericDataAxisDescriptor(
-                title: "Cost in USD",
-                range: 0...(max(values.max() ?? 0, 0.01)),
-                gridlinePositions: []),
-            series: [
-                AXDataSeriesDescriptor(
-                    name: "Cost",
-                    isContinuous: false,
-                    dataPoints: zip(labels, values).map { pair in
-                        AXDataPointDescriptor(x: pair.0, y: pair.1)
-                    })
-            ])
     }
 
     // MARK: Cost by model

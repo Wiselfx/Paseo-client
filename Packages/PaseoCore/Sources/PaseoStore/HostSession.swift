@@ -683,11 +683,20 @@ public final class ConversationStore: Identifiable {
     /// The conversation's media (G12 C15), derived from `turns` on the same funnel:
     /// the sheet reads this, never the turns themselves.
     public private(set) var mediaIndex = ConversationMediaIndex()
-    /// Per-turn usage points in completion order (G13 C16): appended on
-    /// `turn_completed`, read by the context sheet's charts. Never reset by
+    /// Per-turn usage points in completion order (G13 C16): frozen on the next
+    /// turn's start, read by the context sheet's charts. Never reset by
     /// rewinds — spent cost stays spent. Settable inside the module (the M8c
     /// pattern) so `ConversationContext` owns the append rule.
     public internal(set) var turnUsage: [TurnUsagePoint] = []
+    /// The still-open turn's collection (G13 C16): updated in place by every
+    /// usage figure until the next `turn_started` freezes it.
+    public internal(set) var openUsageTurnID: String?
+    public internal(set) var openUsageTokens: Int?
+    public internal(set) var openUsageCost: Double?
+    /// The previous turn's final cumulative figures: the delta baseline. Reset
+    /// by a session reset (a drop restarts the baseline instead of going negative).
+    public internal(set) var baselineTokens: Int?
+    public internal(set) var baselineCost: Double?
     /// The running turn. From the agent snapshot, made snappier by `turn_started`/`turn_completed`
     /// stream events.
     public private(set) var activeTurnId: String?
@@ -931,16 +940,22 @@ public final class ConversationStore: Identifiable {
         switch payload.event {
         case .turnStarted(let turnId):
             setActiveTurn(turnId)
+            freezeOpenUsage()
+            openUsageTurnID = turnId
 
         case .turnCompleted(let turnId, let usage):
             setActiveTurn(nil)
             if let usage {
                 applyContextWindow(usage)
-                recordTurnUsage(turnId: turnId, usage: usage)
+                recordTurnUsage(turnId: turnId, provider: agent?.provider, usage: usage)
             }
 
-        case .usageUpdated(_, let usage, _):
-            if let usage { applyContextWindow(usage) }
+        case .usageUpdated(let eventProvider, let usage, let turnId):
+            if let usage {
+                applyContextWindow(usage)
+                recordTurnUsage(
+                    turnId: turnId, provider: eventProvider ?? agent?.provider, usage: usage)
+            }
 
         case .turnFailed, .turnCanceled:
             setActiveTurn(nil)
