@@ -326,6 +326,16 @@ struct TranscriptJump: Equatable {
             self.attachmentStore.addImage(
                 data: data, fileName: fileName, to: self.store.agentId, store: self.store)
         }
+        richActions.openPRPane = { [weak self] in
+            // The PR pane lives in the workspace panel; deep-linking to its tab needs
+            // shell plumbing (cut in G9: the live card is the deliverable, and the
+            // panel remembers its page). One tap away via the existing route.
+            self?.onOpenPanel?()
+        }
+        richActions.githubLookup = { [weak self] parsed in
+            await self?.lookupGitHub(parsed)
+        }
+        startCheckoutPRMirror()
         // The pipeline's only daemon entry: socket bytes in, decoded pixels out. The fetch
         // reads the live agent at call time and runs off main inside the driver. Registered
         // per workspace (last registration wins) and unregistered in `deinit`, so a stale
@@ -407,6 +417,62 @@ struct TranscriptJump: Equatable {
                     for: workspaceID, token: token)
             }
         }
+    }
+
+    // MARK: Checkout PR mirror + GitHub lookup (G9 C7/C13)
+
+    /// The checkout the open agent belongs to, if any.
+    private var currentCheckout: CheckoutStore? {
+        guard let agent = store.agent,
+            let descriptor = session.workspaceDirectory.workspace(id: agent.workspaceId)
+        else { return nil }
+        return session.checkout(for: descriptor)
+    }
+
+    /// Mirrors the live PR status into the cards (C13): one write per change, never per
+    /// scroll frame. Cards read only the value (R-1).
+    private func startCheckoutPRMirror() {
+        richActions.checkoutPR = currentCheckout?.prStatus
+        withObservationTracking { [weak self] in
+            _ = self?.currentCheckout?.prStatus
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.richActions.checkoutPR = self.currentCheckout?.prStatus
+                self.startCheckoutPRMirror()
+            }
+        }
+    }
+
+    /// Same-repo GitHub link resolution through forge search (G9 C7), matched on number
+    /// and kind. Runs off the socket (suspends, never blocks); nil means the card
+    /// degrades to the metadata link card.
+    private func lookupGitHub(_ parsed: GitHubURL) async -> GitHubLinkInfo? {
+        guard let agent = store.agent,
+            let descriptor = session.workspaceDirectory.workspace(id: agent.workspaceId)
+        else { return nil }
+        let query: String
+        switch parsed.kind {
+        case .pull(let number), .issue(let number):
+            query = "#\(number)"
+        default:
+            return nil
+        }
+        let kinds: [ForgeSearchItem.Kind] = [.changeRequest, .issue]
+        guard
+            let result = await session.forgeSearch.search(
+                cwd: descriptor.projectRootPath, query: query, kinds: kinds, limit: 5)
+        else { return nil }
+        for item in result.items {
+            switch (parsed.kind, item.kind) {
+            case (.pull(let number), .changeRequest), (.issue(let number), .issue)
+            where item.number == number:
+                return GitHubLinkInfo(title: item.title, state: item.state, labels: item.labels)
+            default:
+                break
+            }
+        }
+        return nil
     }
 
     // MARK: Media link condition (G2 §12)

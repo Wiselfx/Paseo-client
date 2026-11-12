@@ -309,19 +309,24 @@ struct MediaViewerView: View {
     }
 
     /// The composer attachment path (M6a): JPEG-encode off main, then hand the bytes to the
-    /// tray, which decodes and uploads like a picked photo.
+    /// tray, which decodes and uploads like a picked photo. The `UIImage` crossing uses
+    /// the same `@unchecked Sendable` box the pipeline uses (immutable once decoded).
     private func addCurrentToChat() {
         guard let currentImage, let item = currentItem else { return }
         let fileName = item.fileName
         Task { @MainActor in
             let data = await Task.detached(priority: .userInitiated) {
-                currentImage.jpegData(compressionQuality: 0.85)
+                ImageBox(image: currentImage).image.jpegData(compressionQuality: 0.85)
             }.value
             guard let data else { return }
             if let richActions {
                 richActions.addImageToChat(fileName, data)
             }
         }
+    }
+
+    private struct ImageBox: @unchecked Sendable {
+        let image: UIImage
     }
 }
 #endif

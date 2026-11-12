@@ -43,6 +43,15 @@ final class RichActions {
     /// Opens a file's diff (G6 C11): the tool call's own diff when this conversation
     /// has one, else the file viewer. No-op until the host sets it.
     var openDiff: (String) -> Void = { _ in }
+    /// The checkout's PR status (G9 C13), mirrored by the conversation controller.
+    /// Cards read only this value; the subscription lives in the store (R-1).
+    var checkoutPR: CheckoutPrStatus?
+    /// Resolves a same-repo GitHub link through forge search (G9 C7). Nil outside a
+    /// conversation, and nil for repos the lookup cannot see: the card degrades to
+    /// the metadata link card.
+    var githubLookup: ((GitHubURL) async -> GitHubLinkInfo?)?
+    /// Opens the workspace panel (G9 C13): the PR pane lives there. No-op until set.
+    var openPRPane: () -> Void = {}
     /// Opens an artifact full screen (G4/G5). No-op until the host sets it.
     var openArtifact: (ArtifactDocument) -> Void = { _ in }
     /// True while the artifact page covers the transcript (G4/G5): web cards yield
