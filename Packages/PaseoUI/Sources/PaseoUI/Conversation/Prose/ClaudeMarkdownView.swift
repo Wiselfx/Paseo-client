@@ -131,12 +131,12 @@
                     VStack(spacing: 30) {
                         ZStack {
                             Text(item.language.map { $0.prefix(1).uppercased() + $0.dropFirst() + " code" } ?? "Code")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(.paseo(.headline))
                             HStack {
                                 Button {
                                     expandedCode = nil
                                 } label: {
-                                    Image(systemName: "xmark").font(.system(size: 20)).frame(width: 44, height: 44)
+                                    Image(systemName: "xmark").font(.glyph(.large)).frame(width: 44, height: 44)
                                 }.glassEffect(in: .circle).accessibilityLabel("Close code").accessibilityIdentifier(
                                     "markdown.code.close")
                                 Spacer()
@@ -282,7 +282,7 @@
             case .code(let language, let content):
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Text(language ?? "").font(.system(size: 14, design: .monospaced)).foregroundStyle(
+                        Text(language ?? "").font(.paseo(.code)).foregroundStyle(
                             theme.secondary)
                         Spacer()
                         Button {
