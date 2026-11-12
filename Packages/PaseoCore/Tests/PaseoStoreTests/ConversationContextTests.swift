@@ -110,6 +110,63 @@ struct ConversationContextTests {
         #expect(store.agent?.lastUsage?.cacheWriteTokens == nil)
     }
 
+    // MARK: Per-turn usage series (G13 C16)
+
+    /// A completed turn's own figures land in the series, in completion order.
+    @Test func turnCompletedRecordsItsUsage() async throws {
+        let store = makeStore()
+        for (index, output) in [120, 340].enumerated() {
+            let payload = try Self.streamPayload(agentId: "agent-1", event: [
+                "type": "turn_completed",
+                "turnId": "turn-\(index)",
+                "usage": ["outputTokens": output, "totalCostUsd": 0.01],
+            ])
+            await store.handleStream(payload)
+        }
+        #expect(store.turnUsage.map(\.outputTokens) == [120, 340])
+        #expect(store.turnUsage.map(\.turnId) == ["turn-0", "turn-1"])
+    }
+
+    /// A completion without figures records nothing: the chart starts where data
+    /// starts, never with fake zeros.
+    @Test func turnCompletedWithoutFiguresRecordsNothing() async throws {
+        let store = makeStore()
+        let payload = try Self.streamPayload(agentId: "agent-1", event: [
+            "type": "turn_completed",
+            "turnId": "turn-1",
+            "usage": ["contextWindowUsedTokens": 10],
+        ])
+        await store.handleStream(payload)
+        #expect(store.turnUsage.isEmpty)
+    }
+
+    /// Nonsense figures (negatives) never become bars.
+    @Test func negativeFiguresAreSkipped() async throws {
+        let store = makeStore()
+        let payload = try Self.streamPayload(agentId: "agent-1", event: [
+            "type": "turn_completed",
+            "turnId": "turn-1",
+            "usage": ["outputTokens": -5, "totalCostUsd": -0.1],
+        ])
+        await store.handleStream(payload)
+        #expect(store.turnUsage.isEmpty)
+    }
+
+    /// The store keeps three chart windows; the chart reads the last one.
+    @Test func seriesIsBoundedAndWindowed() async throws {
+        let store = makeStore()
+        for index in 0..<100 {
+            store.recordTurnUsage(
+                turnId: "turn-\(index)",
+                usage: AgentUsage(outputTokens: index, totalCostUsd: 0.01))
+        }
+        #expect(store.turnUsage.count == TurnUsagePoint.keepWindow)
+        #expect(store.turnUsage.first?.outputTokens == 10)
+        #expect(store.recentTurnUsage.count == TurnUsagePoint.chartWindow)
+        #expect(store.recentTurnUsage.first?.outputTokens == 70)
+        #expect(store.recentTurnUsage.last?.outputTokens == 99)
+    }
+
     private static func minimalAgent() throws -> AgentSnapshot {
         let object: [String: Any] = [
             "id": "agent-1",

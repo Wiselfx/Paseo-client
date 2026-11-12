@@ -7,6 +7,27 @@ import PaseoProtocol
 // The daemon reports usage on snapshots (`agent.lastUsage`) and merges the window fields on
 // `usage.list_reports`-style stream events; totals and windowing never go backwards here.
 
+/// One live turn's usage, in completion order (G13 C16). Only turns observed live carry
+/// per-turn figures (`turn_completed`/`usage_updated`); the projected history does not.
+/// The chart starts where these start — never fake zeros for older turns. Both figures
+/// are plain values: a turn that reported nothing for a metric keeps 0, and the bar
+/// for a recorded turn is always that turn's own figure, never a delta.
+public struct TurnUsagePoint: Sendable, Hashable, Equatable {
+    /// The daemon's turn id, when the event carried one. Nil points still order by
+    /// completion (append order).
+    public var turnId: String?
+    /// This turn's output tokens, or 0 when the event carried no figure.
+    public var outputTokens: Int
+    /// This turn's cost in USD, or 0 when the event carried no figure.
+    public var costUsd: Double
+
+    public init(turnId: String?, outputTokens: Int, costUsd: Double) {
+        self.turnId = turnId
+        self.outputTokens = outputTokens
+        self.costUsd = costUsd
+    }
+}
+
 /// What the composer's context meter renders: how full the window is, plus the session's cost
 /// and cache figures when the provider reports them. All fields are optional; a provider that
 /// says nothing about usage leaves `contextUsage` nil.
@@ -66,4 +87,34 @@ extension ConversationStore {
         updated.lastUsage = merged
         applyAgent(updated)
     }
+
+    /// The per-turn chart window (G13 C16): the last 30 recorded turns, oldest first.
+    /// The sheet draws this directly — values, never a re-parse per body pass.
+    public var recentTurnUsage: [TurnUsagePoint] {
+        Array(turnUsage.suffix(TurnUsagePoint.chartWindow))
+    }
+
+    /// Appends one live turn's per-turn figures (G13 C16): the `turn_completed`
+    /// event's own usage, not a delta. A point is recorded only when the event
+    /// carries at least one non-negative figure; nonsense (negatives) never
+    /// becomes a bar. Bounded: the chart shows 30, the store keeps three windows.
+    internal func recordTurnUsage(turnId: String?, usage: AgentUsage) {
+        let tokens = usage.outputTokens ?? -1
+        let cost = usage.totalCostUsd ?? -1
+        guard tokens >= 0 || cost >= 0 else { return }
+        turnUsage.append(TurnUsagePoint(
+            turnId: turnId,
+            outputTokens: max(tokens, 0),
+            costUsd: max(cost, 0)))
+        if turnUsage.count > TurnUsagePoint.keepWindow {
+            turnUsage.removeFirst(turnUsage.count - TurnUsagePoint.keepWindow)
+        }
+    }
+}
+
+extension TurnUsagePoint {
+    /// Bars on screen.
+    static let chartWindow = 30
+    /// Points kept in the store (three chart windows; rewinds never un-spend cost).
+    static let keepWindow = 90
 }

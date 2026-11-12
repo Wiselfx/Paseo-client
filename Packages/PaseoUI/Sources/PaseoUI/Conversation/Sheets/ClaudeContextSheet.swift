@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import Charts
 import PaseoStore
 import SwiftUI
 
@@ -23,6 +24,7 @@ struct ClaudeContextSheet: View {
                             noWindowRow
                         }
                         detailsSection(usage: usage)
+                        turnChartsSection(points: store.recentTurnUsage)
                         costByModelSection(usage: usage)
                     } else {
                         EmptyState(
@@ -130,34 +132,201 @@ struct ClaudeContextSheet: View {
         return rows
     }
 
+    // MARK: Per-turn charts (G13 C16)
+
+    /// Output tokens and cost per turn, last 30, live turns only: the series starts
+    /// where data starts, never with fake zeros for older turns. Both boxes are
+    /// reserved from the first frame whether or not any turn has been observed.
+    @ViewBuilder
+    private func turnChartsSection(points: [TurnUsagePoint]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("Usage per turn")
+            if points.isEmpty {
+                Text("Per-turn charts appear as turns complete.")
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: Metrics.turnChartHeight)
+                    .padding(.horizontal, Space.lg)
+            } else {
+                outputChart(points)
+                costChart(points)
+            }
+        }
+    }
+
+    /// One accent, no legend (one series): the dataviz rule is one accent total,
+    /// so the cost bars below stay neutral ink.
+    private func outputChart(_ points: [TurnUsagePoint]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Output per turn")
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+            Chart(Array(points.enumerated()), id: \.offset) { index, point in
+                BarMark(
+                    x: .value("Turn", index + 1),
+                    y: .value("Output", point.outputTokens))
+                    .foregroundStyle(Palette.accent)
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: max(1, points.count / 5))) { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine()
+                    AxisValueLabel(format: .number.notation(.compactName))
+                }
+            }
+            .frame(height: Metrics.turnChartHeight)
+            .accessibilityChartDescriptor(outputDescriptor(points))
+            .accessibilityLabel(outputSummary(points))
+        }
+        .padding(.horizontal, Space.lg)
+    }
+
+    private func costChart(_ points: [TurnUsagePoint]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Cost per turn")
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+            Chart(Array(points.enumerated()), id: \.offset) { index, point in
+                BarMark(
+                    x: .value("Turn", index + 1),
+                    y: .value("Cost", point.costUsd))
+                    .foregroundStyle(Palette.ink.opacity(0.85))
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: max(1, points.count / 5))) { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
+            }
+            .frame(height: Metrics.turnChartHeight)
+            .accessibilityChartDescriptor(costDescriptor(points))
+            .accessibilityLabel(costSummary(points))
+        }
+        .padding(.horizontal, Space.lg)
+    }
+
+    /// The plain-text twin of the output chart for VoiceOver: totals plus the
+    /// per-turn values the bars draw.
+    private func outputSummary(_ points: [TurnUsagePoint]) -> String {
+        let total = points.reduce(0) { $0 + $1.outputTokens }
+        let turns = points.enumerated().map { index, point in
+            "turn \(index + 1): \(Self.tokenCount(point.outputTokens))"
+        }.joined(separator: ", ")
+        return "\(Self.tokenCount(total)) output tokens over \(points.count) turns: \(turns)"
+    }
+
+    private func costSummary(_ points: [TurnUsagePoint]) -> String {
+        let total = points.reduce(0) { $0 + $1.costUsd }
+        let turns = points.enumerated().map { index, point in
+            "turn \(index + 1): \(Self.cost(point.costUsd))"
+        }.joined(separator: ", ")
+        return "\(Self.cost(total)) over \(points.count) turns: \(turns)"
+    }
+
+    /// The audio graph twin: one data point per bar, in chart order.
+    private func outputDescriptor(_ points: [TurnUsagePoint]) -> AXChartDescriptor {
+        let labels = points.indices.map { "Turn \($0 + 1)" }
+        let values = points.map { Double($0.outputTokens) }
+        return AXChartDescriptor(
+            title: "Output tokens per turn",
+            summary: outputSummary(points),
+            xAxis: AXCategoricalDataAxisDescriptor(title: "Turn", categoryOrder: labels),
+            yAxis: AXNumericDataAxisDescriptor(
+                title: "Output tokens",
+                range: 0...(max(values.max() ?? 0, 1)),
+                gridlinePositions: []),
+            series: [
+                AXDataSeriesDescriptor(
+                    name: "Output tokens",
+                    isContinuous: false,
+                    dataPoints: zip(labels, values).map { pair in
+                        AXDataPointDescriptor(x: pair.0, y: pair.1)
+                    })
+            ])
+    }
+
+    private func costDescriptor(_ points: [TurnUsagePoint]) -> AXChartDescriptor {
+        let labels = points.indices.map { "Turn \($0 + 1)" }
+        let values = points.map { $0.costUsd }
+        return AXChartDescriptor(
+            title: "Cost per turn",
+            summary: costSummary(points),
+            xAxis: AXCategoricalDataAxisDescriptor(title: "Turn", categoryOrder: labels),
+            yAxis: AXNumericDataAxisDescriptor(
+                title: "Cost in USD",
+                range: 0...(max(values.max() ?? 0, 0.01)),
+                gridlinePositions: []),
+            series: [
+                AXDataSeriesDescriptor(
+                    name: "Cost",
+                    isContinuous: false,
+                    dataPoints: zip(labels, values).map { pair in
+                        AXDataPointDescriptor(x: pair.0, y: pair.1)
+                    })
+            ])
+    }
+
     // MARK: Cost by model
 
+    /// The horizontal bar list: each model row carries a proportional bar under the
+    /// figures (neutral ink — the per-turn output chart owns the one accent).
+    /// The bar is decorative; the numbers carry the meaning for VoiceOver.
     @ViewBuilder private func costByModelSection(usage: ContextUsage) -> some View {
         if let costByModel = usage.costByModel, !costByModel.isEmpty {
+            let peak = max(costByModel.map(\.costUsd).max() ?? 0, 0.0001)
             VStack(alignment: .leading, spacing: 8) {
                 sectionLabel("Cost by model")
                 RowGroup {
                     ForEach(Array(costByModel.enumerated()), id: \.offset) { index, entry in
-                        HStack(spacing: 12) {
-                            Text(Self.modelName(entry.key))
-                                .font(.paseo(.code))
-                                .foregroundStyle(Palette.ink)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer(minLength: 8)
-                            VStack(alignment: .trailing, spacing: 1) {
-                                Text(Self.cost(entry.costUsd, fractionDigits: 4))
-                                    .monospacedDigit()
-                                    .font(.paseo(.callout, weight: .medium))
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 12) {
+                                Text(Self.modelName(entry.key))
+                                    .font(.paseo(.code))
                                     .foregroundStyle(Palette.ink)
-                                Text("\(Self.tokenCount(entry.tokens)) tokens")
-                                    .monospacedDigit()
-                                    .font(.paseo(.caption2))
-                                    .foregroundStyle(Palette.secondaryInk)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer(minLength: 8)
+                                VStack(alignment: .trailing, spacing: 1) {
+                                    Text(Self.cost(entry.costUsd, fractionDigits: 4))
+                                        .monospacedDigit()
+                                        .font(.paseo(.callout, weight: .medium))
+                                        .foregroundStyle(Palette.ink)
+                                    Text("\(Self.tokenCount(entry.tokens)) tokens")
+                                        .monospacedDigit()
+                                        .font(.paseo(.caption2))
+                                        .foregroundStyle(Palette.secondaryInk)
+                                }
                             }
+                            GeometryReader { proxy in
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Palette.chip)
+                                        .frame(height: Metrics.costBarThickness)
+                                    Capsule()
+                                        .fill(Palette.ink.opacity(0.45))
+                                        .frame(
+                                            width: proxy.size.width
+                                                * max(0, CGFloat(entry.costUsd / peak)),
+                                            height: Metrics.costBarThickness)
+                                }
+                            }
+                            .accessibilityHidden(true)
+                            .frame(height: Metrics.costBarThickness)
                         }
                         .padding(.horizontal, 16)
-                        .frame(minHeight: 44)
+                        .padding(.vertical, 8)
                         if index < costByModel.count - 1 { RowDivider() }
                     }
                 }

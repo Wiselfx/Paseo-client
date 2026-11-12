@@ -683,6 +683,11 @@ public final class ConversationStore: Identifiable {
     /// The conversation's media (G12 C15), derived from `turns` on the same funnel:
     /// the sheet reads this, never the turns themselves.
     public private(set) var mediaIndex = ConversationMediaIndex()
+    /// Per-turn usage points in completion order (G13 C16): appended on
+    /// `turn_completed`, read by the context sheet's charts. Never reset by
+    /// rewinds — spent cost stays spent. Settable inside the module (the M8c
+    /// pattern) so `ConversationContext` owns the append rule.
+    public internal(set) var turnUsage: [TurnUsagePoint] = []
     /// The running turn. From the agent snapshot, made snappier by `turn_started`/`turn_completed`
     /// stream events.
     public private(set) var activeTurnId: String?
@@ -927,9 +932,12 @@ public final class ConversationStore: Identifiable {
         case .turnStarted(let turnId):
             setActiveTurn(turnId)
 
-        case .turnCompleted(_, let usage):
+        case .turnCompleted(let turnId, let usage):
             setActiveTurn(nil)
-            if let usage { applyContextWindow(usage) }
+            if let usage {
+                applyContextWindow(usage)
+                recordTurnUsage(turnId: turnId, usage: usage)
+            }
 
         case .usageUpdated(_, let usage, _):
             if let usage { applyContextWindow(usage) }
