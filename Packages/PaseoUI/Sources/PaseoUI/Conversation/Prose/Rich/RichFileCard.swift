@@ -1,5 +1,4 @@
 #if canImport(UIKit)
-import CryptoKit
 import PaseoStore
 import QuickLook
 import SwiftUI
@@ -53,9 +52,29 @@ struct RichFileCard: View {
 
     private var isPDF: Bool { fileExtension == "pdf" }
 
+    /// The size reads the directory cache on the first pass: a remount shows the
+    /// size on frame one instead of flashing the bare row until the listing lands.
+    private var resolvedSize: Int64? {
+        if let fileSize { return fileSize }
+        guard let workspaceID = richActions?.daemonWorkspaceID,
+            let cached = DaemonDirectoryCache.shared.cached(
+                workspaceID: workspaceID, dir: rawParentDirectory),
+            let entry = cached.first(where: { entry in
+                (entry.path as NSString).lastPathComponent == fileName
+            })
+        else { return nil }
+        return Int64(entry.size)
+    }
+
     private var metaText: String? {
-        guard let fileSize else { return parentDirectory }
-        return "\(parentDirectory) · \(Self.byteCount(fileSize))"
+        guard let size = resolvedSize else { return parentDirectory }
+        return "\(parentDirectory) · \(Self.byteCount(size))"
+    }
+
+    /// The raw parent path for the daemon listing (never the truncated display form).
+    private var rawParentDirectory: String {
+        let parent = (path as NSString).deletingLastPathComponent
+        return parent.isEmpty ? "/" : parent
     }
 
     private static let byteFormatter: ByteCountFormatter = {
@@ -186,10 +205,15 @@ struct RichFileCard: View {
     private func loadMetadata() async {
         guard fileSize == nil, !listedDirectories else { return }
         listedDirectories = true
+        // Coalesced with every other card in this directory (one listing, 30 s TTL);
+        // the size publishes from the same fetch the first pass already drew.
         guard let workspaceID = richActions?.daemonWorkspaceID,
-            let list = await richActions?.listDaemonDirectory(workspaceID, parentPath) else { return }
+            let list = richActions?.listDaemonDirectory,
+            let fetched = await DaemonDirectoryCache.shared.entries(
+                workspaceID: workspaceID, dir: rawParentDirectory, fetch: list)
+        else { return }
         guard !Task.isCancelled else { return }
-        if let entry = list.first(where: { entry in
+        if let entry = fetched.first(where: { entry in
             (entry.path as NSString).lastPathComponent == fileName
         }) {
             fileSize = Int64(entry.size)
@@ -199,8 +223,14 @@ struct RichFileCard: View {
 
     @MainActor
     private func loadPDFThumbnailIfSmall() async {
-        guard isPDF, pdfThumbnail == nil, let size = fileSize, size <= 5 * 1024 * 1024,
-            let ref
+        guard isPDF, pdfThumbnail == nil, let size = fileSize, let ref else { return }
+        // A thumbnail is a download: relay ≤ 1 MB auto (the `.daemonImage` rule),
+        // Low Data Mode waits for the tap. The ≤ 5 MB bound is the fetch cap below.
+        guard
+            mediaFetchPolicy(
+                kind: .daemonImage, knownBytes: size,
+                condition: richActions?.linkCondition ?? .assumed) == .automatic,
+            size <= 5 * 1024 * 1024
         else { return }
         guard case .bytes(let bytes) = await MediaPipeline.shared.fetchDaemonFile(ref: ref, maxBytes: 5 * 1024 * 1024) else { return }
         let width = 44 * displayScale
@@ -252,8 +282,9 @@ struct RichFileCard: View {
         guard !Task.isCancelled else { return }
         switch result {
         case .bytes(let fetched):
-            guard let url = Self.cachedFileURL(for: path, workspaceID: ref.workspaceID),
-                (try? fetched.data.write(to: url, options: .atomic)) != nil
+            // The write — and the cache-file naming — happen off main; the card
+            // only ever holds the resulting URL.
+            guard let url = await MediaPipeline.cacheDaemonFile(data: fetched.data, ref: ref)
             else {
                 loadFailed = true
                 return
@@ -270,17 +301,6 @@ struct RichFileCard: View {
         case .unavailable:
             loadFailed = true
         }
-    }
-
-    private static func cachedFileURL(for path: String, workspaceID: String) -> URL? {
-        // Stable across launches (unlike `Hasher`), so the LRU directory does not
-        // accumulate one entry per launch.
-        var digest = SHA256()
-        digest.update(data: Data("\(workspaceID)\0\(path)".utf8))
-        let key = digest.finalize().map { String(format: "%02x", $0) }.joined()
-        return FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-            .appending(path: "daemon-files", directoryHint: .isDirectory)
-            .appending(path: key + "-" + (path as NSString).lastPathComponent, directoryHint: .notDirectory)
     }
 }
 #endif
