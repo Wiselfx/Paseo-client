@@ -3,14 +3,31 @@
 #
 # Installed as a forced command in ~/.ssh/authorized_keys of a dedicated, non-admin macOS user.
 # Whatever the client asks for arrives in $SSH_ORIGINAL_COMMAND; anything that is not one of the
-# verbs below is refused. It never opens a shell, never launches the app, never takes screenshots.
+# verbs below is refused. It never opens a shell. Since v2 it can run the app's UI tests in the
+# iOS Simulator and hand back their artifacts (screenshots, logs); it still touches nothing
+# outside its own home directory.
 #
 # Verbs:
 #   build <ref>   fetch, check out <ref> (branch name or commit sha), compile for the iOS Simulator
 #                 with signing off, print the errors/warnings and the result line
 #   ipa <ref>     same checkout, Release build for devices with signing off, packed as an unsigned
 #                 .ipa into /Users/Shared/Paseo-ipas/ (readable by the owner's own account)
-#   ping          print the Xcode and macOS versions
+#   ping          print the gate version, the Xcode and macOS versions
+#   sims          list the installed simulator runtimes and available iPhone simulators
+#   uitest <ref> [filter]
+#                 same checkout, build and run the `PaseoUITests` scheme in an iPhone simulator.
+#                 `filter` narrows to a class or a class/method (`ChatFlowTests/testRewind`).
+#                 Prints one line per test, the failures, and the list of artifacts kept under
+#                 ~/sim-artifacts/<run>/ (newest 5 runs kept): exported attachments
+#                 (screenshots, accessibility dumps, wire logs the tests attach) and app.log.
+#   ls [run]      list the runs, or one run's files
+#   get <path>    write one artifact (path as printed by uitest/ls) to stdout
+#   simreset      erase the test simulator (a clean install on the next run)
+#
+# Optional ~/paseo-sim.env on the Mac (never in the repo), `KEY=value` lines:
+#   PASEO_*=...       passed to the tests as environment (e.g. PASEO_TEST_HOST=host:port)
+#   SIM_NAME=...      simulator device name (default: the first available iPhone)
+#   SIM_SIGN=none     build the tests with signing off instead of ad-hoc ("-")
 set -euo pipefail
 
 REPO="$HOME/Paseo-client"
@@ -18,16 +35,65 @@ DERIVED="$HOME/build-derived-data"
 LOG="$HOME/build-gate.log"
 # Hard cap on one build so a hang never ties up the Mac.
 MAX_SECONDS=1500
+GATE_VERSION=2
+ART="$HOME/sim-artifacts"
+SIM_ENV="$HOME/paseo-sim.env"
+UITEST_MAX_SECONDS=2700
 
-read -r verb ref extra <<<"${SSH_ORIGINAL_COMMAND:-}"
+read -r verb ref arg2 extra <<<"${SSH_ORIGINAL_COMMAND:-}"
 
 if [[ -n "${extra:-}" ]]; then
     echo "refused: too many arguments" >&2
     exit 2
 fi
+if [[ -n "${arg2:-}" && "${verb:-}" != "uitest" ]]; then
+    echo "refused: too many arguments" >&2
+    exit 2
+fi
+
+# One value from ~/paseo-sim.env (empty when absent). Values are taken literally, never evaluated.
+sim_env() {
+    [[ -f "$SIM_ENV" ]] || return 0
+    grep -E "^$1=" "$SIM_ENV" | tail -1 | cut -d= -f2- || true
+}
+
+# The UDID of the test simulator: SIM_NAME from the env file, else the first available iPhone.
+pick_sim() {
+    local name
+    name="$(sim_env SIM_NAME)"
+    if [[ -n "$name" ]]; then
+        xcrun simctl list devices available | grep -F "    $name (" | head -1 \
+            | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}' | head -1
+    else
+        xcrun simctl list devices available | grep -E '^    iPhone' | head -1 \
+            | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}' | head -1
+    fi
+}
+
+# Fetch and check out $1 (a validated ref), detached and clean.
+checkout_ref() {
+    local r="$1" target
+    if [[ ! "$r" =~ ^[A-Za-z0-9._/-]{1,100}$ ]] || [[ "$r" == *..* ]] || [[ "$r" == -* ]]; then
+        echo "refused: bad ref" >&2
+        exit 2
+    fi
+    cd "$REPO"
+    git fetch --quiet --prune origin
+    if git rev-parse --verify --quiet "origin/$r^{commit}" >/dev/null; then
+        target="origin/$r"
+    elif git rev-parse --verify --quiet "$r^{commit}" >/dev/null; then
+        target="$r"
+    else
+        echo "refused: unknown ref $r" >&2
+        exit 2
+    fi
+    git checkout --quiet --force --detach "$target"
+    git clean -fdq
+}
 
 case "${verb:-}" in
 ping)
+    echo "gate v$GATE_VERSION"
     xcodebuild -version
     sw_vers -productVersion
     ;;
@@ -125,8 +191,128 @@ ipa)
     ls -1t /Users/Shared/Paseo-ipas/*.ipa 2>/dev/null | tail -n +6 | while read -r old; do rm -f "$old"; done
     echo "IPA /Users/Shared/Paseo-ipas/$name"
     ;;
+sims)
+    xcrun simctl list runtimes | grep -i ios || echo "no iOS simulator runtime installed"
+    xcrun simctl list devices available | grep -E '^    iPhone' || echo "no iPhone simulator available"
+    echo "selected: $(pick_sim || true)"
+    ;;
+simreset)
+    udid="$(pick_sim || true)"
+    if [[ -z "$udid" ]]; then echo "no simulator" >&2; exit 2; fi
+    xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
+    xcrun simctl erase "$udid"
+    echo "erased $udid"
+    ;;
+uitest)
+    if [[ -n "${arg2:-}" ]] && [[ ! "$arg2" =~ ^[A-Za-z0-9_]{1,80}(/[A-Za-z0-9_]{1,80})?$ ]]; then
+        echo "refused: bad filter" >&2
+        exit 2
+    fi
+    checkout_ref "${ref:-}"
+    sha="$(git rev-parse --short HEAD)"
+    echo "commit $sha"
+    udid="$(pick_sim || true)"
+    if [[ -z "$udid" ]]; then
+        echo "refused: no iPhone simulator available (install an iOS runtime in Xcode)" >&2
+        exit 2
+    fi
+    xcrun simctl boot "$udid" >/dev/null 2>&1 || true
+    xcrun simctl bootstatus "$udid" >/dev/null 2>&1 || true
+
+    run="$(date +%Y%m%d-%H%M%S)-$sha"
+    mkdir -p "$ART/$run"
+    out="$ART/$run/xcodebuild.log"
+
+    # PASEO_* lines reach the test process as environment (xcodebuild strips TEST_RUNNER_).
+    if [[ -f "$SIM_ENV" ]]; then
+        while IFS= read -r line; do
+            key="${line%%=*}"
+            if [[ "$key" =~ ^PASEO_[A-Z0-9_]{1,60}$ ]]; then
+                export "TEST_RUNNER_$key=${line#*=}"
+            fi
+        done <"$SIM_ENV"
+    fi
+    export TEST_RUNNER_PASEO_TEST_COMMIT="$sha"
+
+    sign=(CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO)
+    if [[ "$(sim_env SIM_SIGN)" == "none" ]]; then
+        sign=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=)
+    fi
+    only=()
+    if [[ -n "${arg2:-}" ]]; then only=("-only-testing:PaseoUITests/$arg2"); fi
+
+    started="$(date +%s)"
+    set +e
+    perl -e 'alarm shift; exec @ARGV' "$UITEST_MAX_SECONDS" \
+        xcodebuild -project App/PaseoClient.xcodeproj -scheme PaseoUITests \
+        -configuration Debug -destination "platform=iOS Simulator,id=$udid" \
+        -derivedDataPath "$DERIVED" -resultBundlePath "$ART/$run/result.xcresult" \
+        -skipPackagePluginValidation -skipMacroValidation \
+        -parallel-testing-enabled NO \
+        "${sign[@]}" ${only[@]+"${only[@]}"} \
+        test >"$out" 2>&1
+    status=$?
+    set -e
+    echo "$(date -u +%FT%TZ) uitest $ref ${arg2:-} status=$status" >>"$LOG"
+
+    # The app's own log for the length of the run.
+    minutes=$(( ( $(date +%s) - started ) / 60 + 1 ))
+    xcrun simctl spawn "$udid" log show --last "${minutes}m" --style compact --info --debug \
+        --predicate 'subsystem BEGINSWITH "com.wiselfx.paseoclient"' 2>/dev/null \
+        | tail -20000 >"$ART/$run/app.log" || true
+
+    # Attachments (screenshots, text dumps) out of the result bundle, with shell-safe names.
+    if [[ -d "$ART/$run/result.xcresult" ]]; then
+        xcrun xcresulttool export attachments --path "$ART/$run/result.xcresult" \
+            --output-path "$ART/$run/attachments" >/dev/null 2>&1 || true
+        if [[ -d "$ART/$run/attachments" ]]; then
+            find "$ART/$run/attachments" -type f | while IFS= read -r f; do
+                base="$(basename "$f")"
+                safe="$(printf '%s' "$base" | tr -c 'A-Za-z0-9._-' '_')"
+                [[ "$base" == "$safe" ]] || mv "$f" "$(dirname "$f")/$safe"
+            done
+        fi
+        rm -rf "$ART/$run/result.xcresult"
+    fi
+
+    grep -E '(error|warning): ' "$out" | grep -v 'warning: ' | sed "s#$REPO/##g" | sort -u | head -150 || true
+    grep -E "^Test Case .* (passed|failed)" "$out" | sed -E "s/^Test Case '-\[[A-Za-z0-9_.]+ ([A-Za-z0-9_]+)\]' /\1 /" || true
+    if [[ $status -eq 142 ]]; then
+        echo "UITEST TIMED OUT after ${UITEST_MAX_SECONDS}s"
+    elif [[ $status -ne 0 ]] && ! grep -qE "^Test Case .* failed" "$out"; then
+        tail -40 "$out" | sed "s#$REPO/##g"
+    fi
+    grep -E '\*\* TEST (SUCCEEDED|FAILED|EXECUTE SUCCEEDED|EXECUTE FAILED) \*\*' "$out" || echo "TEST exit $status"
+    echo "run $run"
+    (cd "$ART" && find "$run" -type f | sort | head -400)
+    # Keep the newest five runs.
+    ls -1t "$ART" | tail -n +6 | while IFS= read -r old; do rm -rf "${ART:?}/$old"; done
+    exit "$status"
+    ;;
+ls)
+    mkdir -p "$ART"
+    if [[ -z "${ref:-}" ]]; then
+        ls -1t "$ART"
+    elif [[ "$ref" =~ ^[A-Za-z0-9._-]{1,80}$ ]] && [[ "$ref" != .* ]] && [[ -d "$ART/$ref" ]]; then
+        (cd "$ART" && find "$ref" -type f | sort | head -400)
+    else
+        echo "refused: unknown run" >&2
+        exit 2
+    fi
+    ;;
+get)
+    if [[ ! "${ref:-}" =~ ^[A-Za-z0-9._/-]{1,300}$ ]] || [[ "$ref" == *..* ]] || [[ "$ref" == /* ]] || [[ "$ref" == -* ]]; then
+        echo "refused: bad path" >&2
+        exit 2
+    fi
+    if [[ ! -f "$ART/$ref" ]] || [[ -L "$ART/$ref" ]]; then
+        echo "refused: no such artifact" >&2
+        exit 2
+    fi
+    cat "$ART/$ref"
+    ;;
 *)
-    echo "refused: allowed verbs are 'build <ref>', 'ipa <ref>' and 'ping'" >&2
+    echo "refused: allowed verbs are build, ipa, ping, sims, uitest, ls, get, simreset" >&2
     exit 2
     ;;
 esac
