@@ -28,6 +28,9 @@ public enum RichContentBlock: Sendable, Equatable {
     /// §1.4 — a bare remote image URL, trailing punctuation already stripped. Renders
     /// as an image, not a link.
     case bareImageURL(url: String, range: Range<String.Index>)
+    /// C2 — two or more adjacent image blocks separated only by blank text, in
+    /// document order. Ranges from the first block's start to the last block's end.
+    case imageGroup(images: [RichImage], range: Range<String.Index>)
     /// §1.5 — a bare absolute or `~/` image path; `alt` is the basename. The UI
     /// resolves the path through the daemon (never reads the file directly).
     case localImage(path: String, alt: String, range: Range<String.Index>)
@@ -74,6 +77,7 @@ public extension RichContentBlock {
              .youTubePlayer(_, let range),
              .youTubeInline(_, let range),
              .bareImageURL(_, let range),
+             .imageGroup(_, let range),
              .localImage(_, _, let range),
              .localFileLink(_, let range),
              .rawSVG(_, let range),

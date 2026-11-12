@@ -46,6 +46,7 @@ extension RichContentBlock {
         case .rawSVG: "svg"
         case .visualize: "visualize"
         case .mermaid: "mermaid"
+        case .imageGroup: "gallery"
         case .mapCard: "map"
         }
     }
@@ -60,28 +61,103 @@ extension RichContentBlock {
 @MainActor
 func richPieces(_ source: String) -> [RichPiece] {
     var pieces: [RichPiece] = []
+    // Adjacent single-image units whose only separation is blank text merge into one
+    // gallery block (G7 C2). The decision is the pure `RichImageGrouping` rule; this
+    // loop only tracks unit ranges and buffers one unit's normal splice, so a lone
+    // image re-emits exactly what the old code produced.
+    var pendingImages: [RichImage] = []
+    var pendingRange: Range<String.Index>?
+    var pendingPieces: [RichPiece] = []
+    var previousUnitEnd: String.Index? = nil
+
+    func spliceUnit(linked: String, blocks: [RichContentBlock]) -> [RichPiece] {
+        var out: [RichPiece] = []
+        var cursor = linked.startIndex
+        for block in blocks {
+            let blockRange = block.range
+            if cursor < blockRange.lowerBound {
+                out.append(.markdown(String(linked[cursor..<blockRange.lowerBound])))
+            }
+            let length = linked.utf16.distance(from: blockRange.lowerBound, to: blockRange.upperBound)
+            out.append(.block(block, utf16Length: length))
+            cursor = blockRange.upperBound
+        }
+        if cursor < linked.endIndex {
+            out.append(.markdown(String(linked[cursor...])))
+        }
+        return out
+    }
+
+    func flushPending() {
+        if pendingImages.count >= 2, let range = pendingRange {
+            let length = source[range].utf16.count
+            pieces.append(.block(
+                RichImageGrouping.group(images: pendingImages, range: range), utf16Length: length))
+        } else {
+            pieces.append(contentsOf: pendingPieces)
+        }
+        pendingImages = []
+        pendingRange = nil
+        pendingPieces = []
+    }
+
     for range in RichContentDetector.splitIntoBlocks(source) {
         let unit = String(source[range])
         let linked = FilePathLinks.linkifiedForProse(unit)
         let blocks = RichContentCache.detect(linked)
         guard !blocks.isEmpty else {
+            flushPending()
+            previousUnitEnd = range.upperBound
             pieces.append(.markdown(linked))
             continue
         }
-        var cursor = linked.startIndex
-        for block in blocks {
-            let blockRange = block.range
-            if cursor < blockRange.lowerBound {
-                pieces.append(.markdown(String(linked[cursor..<blockRange.lowerBound])))
+        // A sole-image unit: exactly one image block and no visible markdown.
+        let soleImage: RichImage? = {
+            guard blocks.count == 1, let image = RichImage.of(block: blocks[0]) else { return nil }
+            let markdown = linkedWithoutBlocks(linked, blocks: blocks)
+            guard markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return image
+        }()
+        if let soleImage {
+            let gapBlank: Bool = {
+                guard let previousUnitEnd else { return true }
+                return source[previousUnitEnd..<range.lowerBound].allSatisfy(\.isWhitespace)
+            }()
+            if gapBlank {
+                if let pending = pendingRange {
+                    pendingRange = pending.lowerBound..<range.upperBound
+                } else {
+                    pendingRange = range
+                }
+                pendingImages.append(soleImage)
+                pendingPieces = spliceUnit(linked: linked, blocks: blocks)
+                previousUnitEnd = range.upperBound
+                continue
             }
-            let length = linked.utf16.distance(from: blockRange.lowerBound, to: blockRange.upperBound)
-            pieces.append(.block(block, utf16Length: length))
-            cursor = blockRange.upperBound
         }
-        if cursor < linked.endIndex {
-            pieces.append(.markdown(String(linked[cursor...])))
-        }
+        flushPending()
+        previousUnitEnd = range.upperBound
+        pieces.append(contentsOf: spliceUnit(linked: linked, blocks: blocks))
     }
+    flushPending()
     return pieces
+}
+
+/// The unit's text with its detected blocks removed: blank means the unit carries no
+/// visible prose and a sole image block in it may join a gallery run.
+private func linkedWithoutBlocks(_ linked: String, blocks: [RichContentBlock]) -> String {
+    var cursor = linked.startIndex
+    var out = ""
+    for block in blocks {
+        let blockRange = block.range
+        if cursor < blockRange.lowerBound {
+            out += linked[cursor..<blockRange.lowerBound]
+        }
+        cursor = blockRange.upperBound
+    }
+    if cursor < linked.endIndex {
+        out += linked[cursor...]
+    }
+    return out
 }
 #endif

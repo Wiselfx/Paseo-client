@@ -170,6 +170,7 @@ import Testing
             case .rawSVG: kind = "rawSVG"
             case .visualize: kind = "visualize"
             case .mermaid: kind = "mermaid"
+            case .imageGroup: kind = "imageGroup"
             case .mapCard: kind = "mapCard"
             }
             return "\(kind):\(source[block.range])"

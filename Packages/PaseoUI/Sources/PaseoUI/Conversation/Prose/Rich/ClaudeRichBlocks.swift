@@ -30,6 +30,8 @@ struct ClaudeRichBlockView: View {
             RichRemoteImage(urlString: url, alt: "")
         case .localImage(let path, let alt, _):
             RichLocalImage(path: path, alt: alt)
+        case .imageGroup(let images, _):
+            RichGalleryCard(images: images)
         case .localFileLink(let path, _):
             RichPathChip(path: path, glyph: "doc.text")
         case .rawSVG(let source, _):
