@@ -63,8 +63,12 @@ extension RichContentBlock {
 /// so a streamed token only re-parses the open unit; each unit is linkified (M7g) and
 /// detected through its own memo. Markdown chunks are otherwise passed through untouched;
 /// rich blocks are emitted whole.
+///
+/// `home` is the agent's working directory (J2): markdown images `![alt](~/a.png)` that
+/// sat in a paragraph with anything else now render as images, and text the reader sees
+/// gets links for bare URLs (item 3). Nil keeps today's behaviour.
 @MainActor
-func richPieces(_ source: String) -> [RichPiece] {
+func richPieces(_ source: String, home: String? = nil) -> [RichPiece] {
     var pieces: [RichPiece] = []
     // Adjacent single-image units whose only separation is blank text merge into
     // one gallery block (G7 C2). Standalone files (G10) and playable media (G11)
@@ -124,6 +128,41 @@ func richPieces(_ source: String) -> [RichPiece] {
 
     for range in RichContentDetector.splitIntoBlocks(source) {
         let unit = String(source[range])
+        // J2 §1: several images in one paragraph are a gallery. Checked before the
+        // single-image rules below, from the raw unit (linkification would wrap them).
+        if let images = RichImageGrouping.imagesOnly(unit: unit, home: home) {
+            let unitRange = range
+            if images.count >= 2 {
+                flushPending()
+                previousUnitEnd = range.upperBound
+                pieces.append(.block(
+                    RichImageGrouping.group(images: images, range: unitRange),
+                    utf16Length: unit.utf16.count))
+                continue
+            }
+            if let image = images.first, gapIsBlank(to: range.lowerBound) {
+                if let pending = pendingRange {
+                    pendingRange = pending.lowerBound..<range.upperBound
+                } else {
+                    pendingRange = range
+                }
+                pendingImages.append(image)
+                previousUnitEnd = range.upperBound
+                continue
+            }
+            flushPending()
+            previousUnitEnd = range.upperBound
+            pieces.append(singleImageBlock(images[0], range: unitRange))
+            continue
+        }
+        // J2 §2: every line is a file — a bare path or an authored link to one — so the
+        // unit becomes one card per file rather than a run of blue links.
+        if let paths = RichStandaloneFile.linkLines(unit: unit, home: home) {
+            flushPending()
+            previousUnitEnd = range.upperBound
+            pieces.append(contentsOf: fileLinePieces(paths, range: range, unit: unit))
+            continue
+        }
         // Playable media first (G11): a standalone path or bare URL with a playable
         // extension becomes a player card.
         if let media = RichStandaloneMedia.match(
@@ -190,6 +229,26 @@ func richPieces(_ source: String) -> [RichPiece] {
         }
         flushPending()
         previousUnitEnd = range.upperBound
+        // J2 §4: a list unit is never cut apart. The detector reports the YouTube player
+        // inside a list item at the URL's range; splicing the unit at that range removed
+        // the item's text and split the list in two. The whole unit renders as markdown —
+        // the URL is a link now (§3) — and the players follow it, in order.
+        if RichStandaloneFile.isListUnit(unit) {
+            let inlinePlayers = blocks.filter {
+                if case .youTubeInline = $0 { return true } else { return false }
+            }
+            if !inlinePlayers.isEmpty {
+                pieces.append(.markdown(unit))
+                for block in inlinePlayers {
+                    let blockRange = block.range
+                    pieces.append(.block(
+                        block,
+                        utf16Length: linked.utf16.distance(
+                            from: blockRange.lowerBound, to: blockRange.upperBound)))
+                }
+                continue
+            }
+        }
         if blocks.isEmpty {
             pieces.append(.markdown(linked))
         } else {
@@ -198,6 +257,57 @@ func richPieces(_ source: String) -> [RichPiece] {
     }
     flushPending()
     return pieces
+}
+
+/// J2 §2: one piece per file path, in order. The UTF-16 lengths sum to the unit's length
+/// (the reveal animation walks the pieces by length) — split by line, and the remainder
+/// rides the last piece, which keeps the sum exact even when a line's stored text is
+/// longer than its path (an authored `[name](path)`).
+@MainActor
+private func fileLinePieces(
+    _ paths: [String], range: Range<String.Index>, unit: String
+) -> [RichPiece] {
+    let unitLength = unit.utf16.count
+    let lineLengths = unitLineLengths(unit)
+    var pieces: [RichPiece] = []
+    var used = 0
+    for (index, path) in paths.enumerated() {
+        let isLast = index == paths.count - 1
+        let length: Int
+        if isLast {
+            length = max(0, unitLength - used)
+        } else {
+            length = lineLengths.indices.contains(index) ? lineLengths[index] : 0
+        }
+        used += length
+        if let kind = RichStandaloneMedia.kindForPath(path) {
+            pieces.append(.block(.localMedia(path: path, kind: kind, range: range), utf16Length: length))
+        } else if RichContentDetector.isLocalImagePath(path) {
+            let alt = path.split(separator: "/", omittingEmptySubsequences: true).last.map(String.init) ?? path
+            pieces.append(.block(.localImage(path: path, alt: alt, range: range), utf16Length: length))
+        } else {
+            pieces.append(.file(path: path, utf16Length: length))
+        }
+    }
+    return pieces
+}
+
+/// The unit's non-blank lines as UTF-16 lengths, each followed by the line's terminator,
+/// so consecutive lengths cover the whole unit. Blank lines ride the line before them.
+private func unitLineLengths(_ unit: String) -> [Int] {
+    var lengths: [Int] = []
+    var current = 0
+    var lineHasContent = false
+    for line in unit.split(omittingEmptySubsequences: false, whereSeparator: \Character.isNewline) {
+        let content = line.trimmingCharacters(in: .whitespaces)
+        if content.isEmpty && !lineHasContent { continue }
+        current += line.utf16.count + 1 // + the newline that followed it
+        lineHasContent = true
+        lengths.append(current)
+        current = 0
+        lineHasContent = false
+    }
+    return lengths
 }
 
 /// The unit's text with its detected blocks removed: blank means the unit carries no

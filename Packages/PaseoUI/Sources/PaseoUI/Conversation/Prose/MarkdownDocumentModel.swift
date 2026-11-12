@@ -1,5 +1,6 @@
 import Foundation
 import Markdown
+import PaseoStore
 
 /// Value-only rendering model. Parsing uses Swift's official CommonMark/GFM AST.
 public struct MarkdownDocumentModel: Equatable, Sendable {
@@ -13,7 +14,20 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
     public var tableVersions: [Int: Int]
     public init(source: String) {
         self.source = source
-        let parsed = Document(parsing: source, options: [.disableSmartOpts]).children.map(MarkdownBlock.convert)
+        let parsed = Document(parsing: source, options: [.disableSmartOpts]).children.map(
+            MarkdownBlock.convert)
+        blocks = parsed
+        tableVersions = Self.tableVersions(for: parsed)
+    }
+
+    /// J2: authored destinations the app's environment must handle itself — a local file
+    /// (`paseo-file:` links, and a link whose scheme was missing) and a bare URL wrapped
+    /// into a link. Nil is the common case and keeps rendering exactly as before.
+    public init(source: String, home: String?) {
+        self.source = source
+        let parsed = Document(parsing: source, options: [.disableSmartOpts]).children.map {
+            MarkdownBlock.convert($0, context: MarkdownInlineContext(home: home))
+        }
         blocks = parsed
         tableVersions = Self.tableVersions(for: parsed)
     }
@@ -47,8 +61,12 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
     /// changes — any store change, a keystroke somewhere else, a streamed token elsewhere — and
     /// every one of those used to re-parse every visible message. Main actor only, called from
     /// view bodies, like `RichContentCache`.
-    @MainActor public static func cached(_ source: String) -> MarkdownDocumentModel {
-        MarkdownDocumentCache.document(for: source)
+    ///
+    /// `home` (the agent's working directory) rewrites authored links to local files into
+    /// `paseo-file:` URLs and wraps bare URLs found in text (J2); nil is the plain parse. It is
+    /// part of the cache key, so one text parsed for two workspaces is two entries.
+    @MainActor public static func cached(_ source: String, home: String? = nil) -> MarkdownDocumentModel {
+        MarkdownDocumentCache.document(for: source, home: home)
     }
 }
 
@@ -57,15 +75,21 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
 /// earlier message re-parsed it. Keys share storage with the strings the views hold.
 @MainActor
 enum MarkdownDocumentCache {
-    private static let table = ProseCache<String, MarkdownDocumentModel>(
+    private struct Key: Hashable {
+        let source: String
+        let home: String?
+    }
+
+    private static let table = ProseCache<Key, MarkdownDocumentModel>(
         budget: 4 * 1024 * 1024,
         countLimit: 512,
-        cost: { source, _ in source.utf8.count * 4 })
+        cost: { key, _ in key.source.utf8.count * 4 })
 
-    static func document(for source: String) -> MarkdownDocumentModel {
-        if let cached = table.value(for: source) { return cached }
-        let document = MarkdownDocumentModel(source: source)
-        table.setValue(document, for: source)
+    static func document(for source: String, home: String? = nil) -> MarkdownDocumentModel {
+        let key = Key(source: source, home: home?.isEmpty == true ? nil : home)
+        if let cached = table.value(for: key) { return cached }
+        let document = MarkdownDocumentModel(source: source, home: key.home)
+        table.setValue(document, for: key)
         return document
     }
 }
@@ -211,46 +235,145 @@ public indirect enum MarkdownBlock: Equatable, Sendable {
 }
 extension MarkdownBlock {
     static func convert(_ node: any Markup) -> MarkdownBlock {
+        convert(node, context: MarkdownInlineContext(home: nil))
+    }
+
+    static func convert(_ node: any Markup, context: MarkdownInlineContext) -> MarkdownBlock {
         switch node {
-        case let n as Paragraph: .paragraph(n.children.map(MarkdownInline.convert))
-        case let n as Heading: .heading(level: n.level, content: n.children.map(MarkdownInline.convert))
-        case let n as BlockQuote: .quote(n.children.map(convert))
+        case let n as Paragraph: .paragraph(n.children.flatMap { MarkdownInline.convertList($0, context: context) })
+        case let n as Heading:
+            .heading(
+                level: n.level,
+                content: n.children.flatMap { MarkdownInline.convertList($0, context: context) })
+        case let n as BlockQuote: .quote(n.children.map { convert($0, context: context) })
         case is ThematicBreak: .rule
         case let n as CodeBlock: .code(language: n.language, content: n.code)
         case let n as OrderedList:
-            .list(start: Int(n.startIndex), items: n.children.compactMap { ($0 as? ListItem).map(convertItem) })
+            .list(
+                start: Int(n.startIndex),
+                items: n.children.compactMap {
+                    ($0 as? ListItem).map { convertItem($0, context: context) }
+                })
         case let n as UnorderedList:
-            .list(start: nil, items: n.children.compactMap { ($0 as? ListItem).map(convertItem) })
+            .list(
+                start: nil,
+                items: n.children.compactMap {
+                    ($0 as? ListItem).map { convertItem($0, context: context) }
+                })
         case let n as Table:
             .table(
-                header: n.head.children.map { $0.children.map(MarkdownInline.convert) },
-                rows: n.body.children.map { $0.children.map { $0.children.map(MarkdownInline.convert) } },
+                header: n.head.children.map {
+                    $0.children.flatMap { MarkdownInline.convertList($0, context: context) }
+                },
+                rows: n.body.children.map {
+                    $0.children.map {
+                        $0.children.flatMap { MarkdownInline.convertList($0, context: context) }
+                    }
+                },
                 alignments: n.columnAlignments.map { $0 == .right ? .right : $0 == .center ? .center : .left })
         case let n as HTMLBlock: .unsupported(kind: .html, source: n.rawHTML)
         default: .unsupported(kind: .other, source: node.format())
         }
     }
-    private static func convertItem(_ item: ListItem) -> MarkdownListItem {
-        .init(checked: item.checkbox.map { $0 == .checked }, blocks: item.children.map(convert))
+    private static func convertItem(_ item: ListItem, context: MarkdownInlineContext) -> MarkdownListItem {
+        .init(
+            checked: item.checkbox.map { $0 == .checked },
+            blocks: item.children.map { convert($0, context: context) })
     }
 }
 extension MarkdownInline {
     static func convert(_ node: any Markup) -> MarkdownInline {
+        convert(node, context: MarkdownInlineContext(home: nil))
+    }
+
+    /// The children a node contributes: one inline for most nodes, but plain text that
+    /// carries bare URLs contributes `.text` + `.link` pieces, so callers flat-map.
+    static func convertList(_ node: any Markup, context: MarkdownInlineContext) -> [MarkdownInline] {
+        switch convert(node, context: context) {
+        case .text(let text): return context.linkingBareURLs ? bareURLPieces(text) : [.text(text)]
+        case let inline: return [inline]
+        }
+    }
+
+    /// J2 §3: swift-markdown has no GFM autolink, so `https://swift.org/blog/` in a
+    /// sentence stayed plain `.text`. Each URL becomes a `.link` whose only child is its
+    /// own text, the shape an authored link has. Runs once per parse (the document
+    /// cache), never per render, and never on text already inside a link.
+    static func bareURLPieces(_ text: String) -> [MarkdownInline] {
+        let ranges = BareURLScanner.ranges(in: text)
+        guard !ranges.isEmpty else { return [.text(text)] }
+        var pieces: [MarkdownInline] = []
+        var cursor = text.startIndex
+        for range in ranges {
+            if cursor < range.lowerBound {
+                pieces.append(.text(String(text[cursor..<range.lowerBound])))
+            }
+            let url = String(text[range])
+            pieces.append(.link(destination: url, children: [.text(url)]))
+            cursor = range.upperBound
+        }
+        if cursor < text.endIndex { pieces.append(.text(String(text[cursor...]))) }
+        return pieces
+    }
+
+    static func convert(_ node: any Markup, context: MarkdownInlineContext) -> MarkdownInline {
         switch node {
         case let n as Markdown.Text: .text(n.string)
         case is SoftBreak: .softBreak
         case is LineBreak: .hardBreak
         case let n as InlineCode: .code(n.code)
-        case let n as Emphasis: .emphasis(n.children.map(convert))
-        case let n as Strong: .strong(n.children.map(convert))
-        case let n as Strikethrough: .strikethrough(n.children.map(convert))
-        case let n as Markdown.Link: .link(destination: n.destination ?? "", children: n.children.map(convert))
+        case let n as Emphasis: .emphasis(n.children.map { convert($0, context: context) })
+        case let n as Strong: .strong(n.children.map { convert($0, context: context) })
+        case let n as Strikethrough: .strikethrough(n.children.map { convert($0, context: context) })
+        case let n as Markdown.Link:
+            .link(
+                destination: context.destination(n.destination ?? ""),
+                children: n.children.map { convert($0, context: context) })
         case let n as Markdown.Image:
             .image(
-                .init(source: n.source ?? "", title: n.title, alt: n.children.map(convert).map(\.plainText).joined()))
+                .init(
+                    source: context.imageSource(n.source ?? ""), title: n.title,
+                    alt: n.children.map { convert($0, context: context) }.map(\.plainText).joined()))
         case let n as InlineHTML: .unsupported(kind: .html, source: n.rawHTML)
         default: .unsupported(kind: .other, source: node.format())
         }
+    }
+}
+
+/// How authored destinations are rewritten and whether bare URLs become links (J2).
+/// A value with no home and no autolinking is the historical parse.
+struct MarkdownInlineContext: Sendable {
+    var home: String?
+    var linkingBareURLs = true
+
+    /// A link to a local file becomes the app's `paseo-file:` URL — exactly what a
+    /// linkified bare path is turned into, and what `ChatController.fileLinkAction`
+    /// opens in the file viewer, so a tap on `[clip.mp4](/media/clip.mp4)` now opens the
+    /// file instead of nothing. A scheme-less web destination gains `https://`. Anchors
+    /// and `mailto:` are untouched.
+    func destination(_ raw: String) -> String {
+        guard home != nil else { return raw }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("#"), !trimmed.hasPrefix("mailto:"),
+            RichLocalSource.filePath(trimmed, home: home) != nil
+        else { return raw }
+        return FilePathLinks.url(forPath: trimmed)?.absoluteString ?? raw
+    }
+
+    /// An image keeps its bare form when it is already something the image pipeline
+    /// loads — a local path (absolute, `~/`, `./`; the pipeline resolves those itself —
+    /// see `ProseMarkdownImage`) or a remote image URL. Only a local path written
+    /// relative to the agent's working directory gets expanded, because nothing else
+    /// would resolve it.
+    func imageSource(_ raw: String) -> String {
+        guard let home else { return raw }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("/") || trimmed.hasPrefix("~/") || trimmed.hasPrefix("./") {
+            return raw
+        }
+        if RichContentDetector.isRemoteImageURL(trimmed) { return raw }
+        guard case .file(let path)? = RichLocalSource.image(trimmed, home: home) else { return raw }
+        return path
     }
 }
 

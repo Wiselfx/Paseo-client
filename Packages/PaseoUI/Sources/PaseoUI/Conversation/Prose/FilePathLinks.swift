@@ -15,8 +15,11 @@ enum FilePathLinks {
     static let queryName = "path"
 
     /// Path candidate, optionally `@`-prefixed, any relative/absolute shape.
+    /// J2 §5: the extension must start with a letter — `[A-Za-z0-9]{1,8}` matched table
+    /// numbers (`98.5`, `87.2`) as name `98` + extension `5`, so every score rendered blue
+    /// and underlined. That also takes the version strings (`1.2.3`, `v2.0`).
     private static let pathPattern =
-        #"(?<![\w/~@.-])(?:@)?(?:~?/|\.{1,2}/)?(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,8}(?![\w/~.-])"#
+        #"(?<![\w/~@.-])(?:@)?(?:~?/|\.{1,2}/)?(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z][A-Za-z0-9]{0,7}(?![\w/~.-])"#
 
     /// The raw text of the matched token (including a leading `@`).
     struct Match {

@@ -59,4 +59,74 @@ public enum RichImageGrouping {
     public static func group(images: [RichImage], range: Range<String.Index>) -> RichContentBlock {
         .imageGroup(images: images, range: range)
     }
+
+    // MARK: - Images in one paragraph (J2 §1)
+
+    /// NOTE: J2: an agent writes four screenshots on one line —
+    /// `![one](/a.png) ![two](/b.png) ![remote](https://…)` — and markdown keeps them in
+    /// one paragraph. Those are four `.image` inline children, not four units, so the
+    /// run-merging above never saw them and each fell back to `"▧ alt"` text.
+    ///
+    /// The images when the unit's text, trimmed, is nothing but markdown images separated
+    /// by whitespace (spaces, line breaks). Any other character — prose, a link, a code
+    /// span, a list marker — returns nil and the unit renders as markdown. `home` expands
+    /// `~/` and relative sources for the viewer (nil keeps them as written).
+    public static func imagesOnly(unit: String, home: String? = nil) -> [RichImage]? {
+        var images: [RichImage] = []
+        var i = unit.startIndex
+        while true {
+            while i < unit.endIndex, unit[i].isWhitespace { i = unit.index(after: i) }
+            guard i < unit.endIndex else { break }
+            guard let image = parseImage(unit, at: &i, home: home) else { return nil }
+            images.append(image)
+        }
+        return images.isEmpty ? nil : images
+    }
+
+    /// One `![alt](src "title")` at `i` (no whitespace allowed between the three parts, as
+    /// in CommonMark). Advances `i` past it, or returns nil without moving past `i`.
+    private static func parseImage(
+        _ unit: String, at i: inout String.Index, home: String?
+    ) -> RichImage? {
+        var cursor = i
+        func next(_ index: String.Index) -> String.Index { unit.index(after: index) }
+        guard cursor < unit.endIndex, unit[cursor] == "!", next(cursor) < unit.endIndex,
+            unit[next(cursor)] == "["
+        else { return nil }
+        let altStart = next(next(cursor))
+        var j = altStart
+        var altEnd: String.Index?
+        while j < unit.endIndex {
+            if unit[j] == "]" { altEnd = j; break }
+            if unit[j] == "[" || unit[j] == "\n" { break }
+            j = next(j)
+        }
+        guard let altEnd, next(altEnd) < unit.endIndex, unit[next(altEnd)] == "(" else {
+            return nil
+        }
+        var k = next(next(altEnd))
+        var close: String.Index?
+        while k < unit.endIndex {
+            if unit[k] == ")" { close = k; break }
+            if unit[k] == "(" || unit[k] == "\n" { break }
+            k = next(k)
+        }
+        guard let close else { return nil }
+        let inner = String(unit[unit.index(after: next(altEnd))..<close])
+            .trimmingCharacters(in: .whitespaces)
+        // Destination, then optional "title" / 'title' / (title).
+        let destination = inner.split(whereSeparator: { $0.isWhitespace }).first.map(String.init)
+        let alt = String(unit[altStart..<altEnd])
+        cursor = unit.index(after: close)
+        guard let destination else { return nil }
+        let target = destination.trimmingCharacters(in: CharacterSet(charactersIn: "<>"))
+        let source: RichImage.Source
+        switch RichLocalSource.image(target, home: home) {
+        case .remoteImage(let url): source = .remote(url: url)
+        case .file(let path): source = .local(path: path)
+        case nil: return nil
+        }
+        i = cursor
+        return RichImage(source: source, alt: alt)
+    }
 }
