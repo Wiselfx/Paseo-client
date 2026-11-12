@@ -26,6 +26,10 @@ final class RichActions {
     /// The workspace daemon files resolve against (workspaceId). Nil outside a conversation:
     /// without it, local images render as path chips.
     var daemonWorkspaceID: String?
+    /// The agent's working directory: markdown images written `![a](~/shots/a.png)` or
+    /// `![a](./a.png)` and authored links to files resolve against it (J2). Read inside a
+    /// leaf view's body, like the other conversation values (R-1).
+    var homeDirectory: String?
     /// Ordinary links: the host's handler (file links open the viewer, the rest fall through).
     /// Defaults to the application opener so a card without a host still does the obvious thing.
     var openURL: (URL) -> Void = { url in UIApplication.shared.open(url) }
