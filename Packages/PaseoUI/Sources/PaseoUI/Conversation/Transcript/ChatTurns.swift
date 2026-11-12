@@ -152,7 +152,8 @@ struct ClaudeTurnView: View {
                     canRewrite: canRewrite,
                     onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
                     onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
-                    onRetract: retractible ? { onRetract?(row) } : nil
+                    onRetract: retractible ? { onRetract?(row) } : nil,
+                    clientMessageId: message.clientMessageId
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -214,7 +215,8 @@ struct ClaudeTurnView: View {
                     canRewrite: canRewrite,
                     onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
                     onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
-                    onRetract: retractible ? { onRetract?(row) } : nil
+                    onRetract: retractible ? { onRetract?(row) } : nil,
+                    clientMessageId: message.clientMessageId
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))

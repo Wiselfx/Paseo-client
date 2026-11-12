@@ -12,14 +12,18 @@ extension ConversationStore {
     ///
     /// File attachments must already exist on the daemon (`uploaded_file`); the byte upload is a
     /// separate `file.upload.request` + binary-frame flow.
+    ///
+    /// Returns the send's id (generated when `clientId` is nil): the caller keys
+    /// this device's sent-image thumbnails by it (Phase C §9.5).
+    @discardableResult
     public func sendWithAttachments(
         _ text: String, images: [ImageAttachment] = [], attachments: [AgentAttachment] = [],
-        behavior: String? = nil
-    ) async {
+        behavior: String? = nil, clientId: String? = nil
+    ) async -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !images.isEmpty || !attachments.isEmpty, let client else { return }
+        guard !trimmed.isEmpty || !images.isEmpty || !attachments.isEmpty, let client else { return nil }
 
-        let clientId = UUID().uuidString
+        let clientId = clientId ?? UUID().uuidString
         showPendingSend(
             text: trimmed, clientId: clientId, timestamp: Self.nowTimestamp())
         if !trimmed.isEmpty, trimmed == draft.trimmingCharacters(in: .whitespacesAndNewlines) {
@@ -37,6 +41,7 @@ extension ConversationStore {
                     attachments: attachments.isEmpty ? nil : attachments))
             if response.accepted {
                 markSendAccepted()
+                return clientId
             } else {
                 rollBackSend(
                     clientId: clientId, text: trimmed,
@@ -45,6 +50,8 @@ extension ConversationStore {
         } catch {
             rollBackSend(clientId: clientId, text: trimmed, error: conversationErrorText(error))
         }
+        // Refused or failed: the pending bubble is rolled back, so no images.
+        return nil
     }
 
     /// Called once per `server_info` and when a conversation opens.

@@ -969,10 +969,18 @@ struct TranscriptJump: Equatable {
         Haptics.send()
         // Capture the text before the hop: the store clears the draft as it sends.
         let text = trimmedDraft
+        // This device's images ride into the user bubble under the send's id: seed
+        // memory now (the pending bubble renders before the network answers) and
+        // persist thumbnails off main for history. Another device's bubbles — and
+        // evicted entries — have no entry and show nothing.
+        let trayImages = attachmentStore.items(for: store.agentId).filter(\.isImage)
+        let sendId = UUID().uuidString
+        UserImageCache.seed(trayImages.compactMap(\.thumbnail), for: sendId)
+        UserImageCache.persist(trayImages.map(\.data), for: sendId)
         Task { [weak self] in
             guard let self else { return }
             await self.store.sendWithAttachments(
-                text, attachments: attachments, behavior: behavior)
+                text, attachments: attachments, behavior: behavior, clientId: sendId)
             if self.store.actionError == nil {
                 self.attachmentStore.consumeDoneAttachments(for: self.store.agentId)
             }

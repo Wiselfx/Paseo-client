@@ -90,6 +90,9 @@ enum Metrics {
     /// The table overflow fade (C1 §9.1): the trailing strip that hints scrollability
     /// and opens the full screen. Narrow enough to never cover a cell's content.
     static let tableFadeWidth: CGFloat = 24
+    /// A sent image's height cap in the user bubble (C5 §9.5): full-bleed width,
+    /// aspect-fit, never taller than this.
+    static let userImageMaxHeight: CGFloat = 220
 }
 
 /// The sidebar's rows.
