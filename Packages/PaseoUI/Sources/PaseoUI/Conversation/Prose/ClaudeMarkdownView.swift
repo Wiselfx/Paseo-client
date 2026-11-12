@@ -354,6 +354,7 @@
             // Pin only a label column on an overflowing table: short, non-numeric
             // first cells. Numbers scroll with their column; short tables need no pin.
             let pinned = MarkdownTablePlan.isLabelColumn(firstCells) && overflow && planFits
+            let contentVersion = document.tableVersions[blockIndex] ?? 0
             Group {
                 if pinned, let plan {
                     pinnedTable(
@@ -362,7 +363,8 @@
                 } else {
                     scrollingTable(
                         header: header, rows: rows, alignments: alignments,
-                        columns: columns, cacheKey: key, blockIndex: blockIndex)
+                        columns: columns, cacheKey: key, contentVersion: contentVersion,
+                        blockIndex: blockIndex)
                 }
             }
             .accessibilityIdentifier("markdown.table")
@@ -372,7 +374,8 @@
                         ClaudeMarkdownTableLayout(
                             columns: table.columns, availableWidth: .greatestFiniteMagnitude,
                             maximumColumnWidth: max(50, theme.tableColumnWidth) + 24,
-                            cacheKey: key + "|full"
+                            cacheKey: key + "|full",
+                            contentVersion: document.tableVersions[table.index] ?? 0
                         ) {
                             tableCells(
                                 header: table.header, rows: table.rows,
@@ -392,7 +395,7 @@
         private func scrollingTable(
             header: [[MarkdownInline]], rows: [[[MarkdownInline]]],
             alignments: [MarkdownColumnAlignment], columns: Int, cacheKey: String,
-            blockIndex: Int
+            contentVersion: Int, blockIndex: Int
         ) -> some View {
             let overflow = MarkdownTablePlan.overflows(
                 totalWidth: Double(tableContentWidths[blockIndex] ?? 0),
@@ -401,7 +404,7 @@
                 ClaudeMarkdownTableLayout(
                     columns: columns, availableWidth: tableViewport,
                     maximumColumnWidth: max(50, theme.tableColumnWidth) + 24,
-                    cacheKey: cacheKey
+                    cacheKey: cacheKey, contentVersion: contentVersion
                 ) {
                     tableCells(
                         header: header, rows: rows, alignments: alignments,

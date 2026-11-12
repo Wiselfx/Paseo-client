@@ -5,13 +5,39 @@ import Markdown
 public struct MarkdownDocumentModel: Equatable, Sendable {
     public let source: String
     public var blocks: [MarkdownBlock]
+    /// Per-table content versions, by block index (Phase C §9.1): a hash of the
+    /// table's cell text, computed once per parse and memoised with the cached
+    /// document. The layout remeasures when it changes (streamed text grows with
+    /// the cell count unchanged); settled tables never change it, so steady state
+    /// is still zero measurement.
+    public var tableVersions: [Int: Int]
     public init(source: String) {
         self.source = source
-        blocks = Document(parsing: source, options: [.disableSmartOpts]).children.map(MarkdownBlock.convert)
+        let parsed = Document(parsing: source, options: [.disableSmartOpts]).children.map(MarkdownBlock.convert)
+        blocks = parsed
+        tableVersions = Self.tableVersions(for: parsed)
     }
     public init(source: String, blocks: [MarkdownBlock]) {
         self.source = source
         self.blocks = blocks
+        tableVersions = Self.tableVersions(for: blocks)
+    }
+
+    private static func tableVersions(for blocks: [MarkdownBlock]) -> [Int: Int] {
+        var versions: [Int: Int] = [:]
+        for (index, block) in blocks.enumerated() {
+            guard case .table(let header, let rows, _) = block else { continue }
+            var hasher = Hasher()
+            hasher.combine(rows.count)
+            for cell in header { hasher.combine(cell.map(\.plainText).joined(separator: "\u{1F}")) }
+            for row in rows {
+                for cell in row {
+                    hasher.combine(cell.map(\.plainText).joined(separator: "\u{1F}"))
+                }
+            }
+            versions[index] = hasher.finalize()
+        }
+        return versions
     }
 
     /// The document for `source`, reusing the last parse of the same text (P3).

@@ -72,11 +72,15 @@ public enum MarkdownTableMetrics {
         var availableWidth: CGFloat
         var maximumColumnWidth: CGFloat
         var cacheKey: String
+        /// A hash of the table's cell text, memoised with the parse: streamed text
+        /// grows with the cell count unchanged, so shape alone misses it.
+        var contentVersion: Int
 
         struct Cache {
             var key: String = ""
             var columns: Int = 0
             var cellCount: Int = 0
+            var version: Int = 0
             var widths: [CGFloat] = []
             var heights: [CGFloat] = []
         }
@@ -106,9 +110,9 @@ public enum MarkdownTableMetrics {
             let widths = MarkdownTablePlan.mergedWidths(
                 cached: MarkdownTablePlanCache.lookup(key: cacheKey).flatMap { seed in
                     seed.widths.count == measured.widths.count
-                        ? seed.widths.map(Double.init) : nil
+                        ? seed.widths.map { Double($0) } : nil
                 },
-                fresh: measured.widths.map(Double.init)).map(CGFloat.init)
+                fresh: measured.widths.map { Double($0) }).map { CGFloat($0) }
             MarkdownTablePlanCache.store(widths: widths, heights: measured.heights, key: cacheKey)
             return Cache(
                 key: cacheKey, columns: columns, cellCount: subviews.count,
@@ -125,24 +129,32 @@ public enum MarkdownTableMetrics {
                 if seed.heights.count == rows {
                     return Cache(
                         key: cacheKey, columns: columns, cellCount: subviews.count,
-                        widths: seed.widths, heights: seed.heights)
+                        version: contentVersion, widths: seed.widths, heights: seed.heights)
                 }
             }
-            return adopt(measured(subviews), subviews: subviews)
+            var fresh = adopt(measured(subviews), subviews: subviews)
+            fresh.version = contentVersion
+            return fresh
         }
 
         func updateCache(_ cache: inout Cache, subviews: Subviews) {
-            guard subviews.count != cache.cellCount || columns != cache.columns else { return }
-            cache = adopt(measured(subviews), subviews: subviews)
+            guard subviews.count != cache.cellCount || columns != cache.columns
+                || contentVersion != cache.version
+            else { return }
+            var fresh = adopt(measured(subviews), subviews: subviews)
+            fresh.version = contentVersion
+            cache = fresh
         }
 
         func sizeThatFits(
             proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
         ) -> CGSize {
             if cache.key != cacheKey || cache.columns != columns
-                || cache.cellCount != subviews.count
+                || cache.cellCount != subviews.count || cache.version != contentVersion
             {
-                cache = adopt(measured(subviews), subviews: subviews)
+                var fresh = adopt(measured(subviews), subviews: subviews)
+                fresh.version = contentVersion
+                cache = fresh
             }
             return CGSize(width: cache.widths.reduce(0, +), height: cache.heights.reduce(0, +))
         }
