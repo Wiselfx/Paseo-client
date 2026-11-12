@@ -74,6 +74,11 @@ enum Metrics {
     static let mermaidRenderTimeout: Double = 20
     /// The inline code icon buttons (G5 C8 Preview): 28 pt glyph in a 44 pt hit area.
     static let codeIconSize: CGFloat = 28
+    /// The per-turn chart boxes (G13 C16): fixed from the first frame whether or not
+    /// any turn has been observed, so the sheet never jumps when data arrives.
+    static let turnChartHeight: CGFloat = 120
+    /// The cost-by-model bar thickness (G13 C16): a hairline under each row's figures.
+    static let costBarThickness: CGFloat = 4
     /// The OG image slot (G9 C6): unfurl heroes crop to 1.91:1, reserved from frame one.
     static let ogHeroAspect: CGFloat = 1.91
     /// The link row's icon box (G9 C6): 32 pt glyph well in the 56 pt row.
