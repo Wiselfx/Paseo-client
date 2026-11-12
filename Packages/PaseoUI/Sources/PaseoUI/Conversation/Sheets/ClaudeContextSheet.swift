@@ -177,7 +177,7 @@ struct ClaudeContextSheet: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { _ in
                     AxisGridLine()
-                    AxisValueLabel(format: .number.notation(.compactName))
+                    AxisValueLabel(format: IntegerFormatStyle<Int>.number.notation(.compactName))
                 }
             }
             .frame(height: Metrics.turnChartHeight)
