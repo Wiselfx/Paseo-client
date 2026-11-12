@@ -80,7 +80,8 @@ enum AnimatedImageDecoder {
 
 /// The cover transition: zoom from the exact thumbnail, or the system default under
 /// Reduce Motion. A modifier (not a ternary): the two transition types do not mix.
-private struct MediaViewerTransition: ViewModifier {
+/// Shared with the artifact page, which enters the same way.
+struct MediaViewerTransition: ViewModifier {
     let sourceID: String
     let namespace: Namespace.ID
     let reduceMotion: Bool

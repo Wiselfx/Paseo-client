@@ -232,6 +232,8 @@ extension MarkdownInline {
 @nonexhaustive public enum MarkdownAction: Equatable, Sendable {
     case openLink(URL), image(MarkdownImage), copyCode(String)
     case expandCode(language: String?, content: String)
+    /// "Preview" on a closed html/svg fence (G5 C8): never auto-rendered, always explicit.
+    case previewCode(language: String?, content: String)
     case unsupported(kind: MarkdownUnsupportedKind, source: String)
     var presentationURL: URL? {
         var components = URLComponents()

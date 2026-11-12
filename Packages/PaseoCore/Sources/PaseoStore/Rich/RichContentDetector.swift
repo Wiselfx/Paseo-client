@@ -40,6 +40,9 @@ public enum RichContentBlock: Sendable, Equatable {
     /// §2 — a ` ```visualize ` fence with a non-blank body: a self-contained HTML
     /// fragment hosting the sandboxed stage. Unclosed (streaming) fences are detected.
     case visualize(code: String, range: Range<String.Index>)
+    /// C9 — a closed ` ```mermaid ` fence with a non-blank body: a diagram the client
+    /// renders natively. A streaming (unclosed) fence stays a code block until it closes.
+    case mermaid(source: String, range: Range<String.Index>)
     /// M17 — a standalone line that is exactly a coordinate pair (`lat, lng`), a `geo:`
     /// URI, or an Apple/Google Maps URL. Doc 05 specifies no map rule, so this is the
     /// strict §1.1-shaped rule: standalone line only, never inside lists/headings, and
@@ -75,6 +78,7 @@ public extension RichContentBlock {
              .localFileLink(_, let range),
              .rawSVG(_, let range),
              .visualize(_, let range),
+             .mermaid(_, let range),
              .mapCard(_, let range):
             range
         }
@@ -126,6 +130,14 @@ public enum RichContentDetector {
                 // §2 — fence value must be non-blank or the fence renders nothing.
                 if !fence.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     blocks.append(.visualize(code: fence.body, range: fence.range))
+                }
+            case "mermaid":
+                // C9 — closed fences only: a streaming fence stays a code block, so the
+                // half-written diagram never flashes or errors mid-stream.
+                if fence.closed
+                    && !fence.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
+                    blocks.append(.mermaid(source: fence.body, range: fence.range))
                 }
             case "youtube":
                 // §1.2 — fence body is a watch URL or a bare ID. An unparseable body
@@ -565,7 +577,7 @@ func scanFences(in source: String) -> [Fence] {
         if let current = open {
             if isClosingFence(text, marker: current.marker, length: current.length) {
                 let body = fenceBody(source, lines: lines, from: current.start + 1, to: index)
-                fences.append(Fence(range: lines[current.start].range.lowerBound..<line.range.upperBound, info: current.info, body: body))
+                fences.append(Fence(range: lines[current.start].range.lowerBound..<line.range.upperBound, info: current.info, body: body, closed: true))
                 open = nil
             }
             continue
@@ -576,7 +588,7 @@ func scanFences(in source: String) -> [Fence] {
     }
     if let current = open {
         let body = fenceBody(source, lines: lines, from: current.start + 1, to: lines.count)
-        fences.append(Fence(range: lines[current.start].range.lowerBound..<source.endIndex, info: current.info, body: body))
+        fences.append(Fence(range: lines[current.start].range.lowerBound..<source.endIndex, info: current.info, body: body, closed: false))
     }
     return fences.sorted { $0.range.lowerBound < $1.range.lowerBound }
 }
@@ -585,6 +597,9 @@ struct Fence {
     var range: Range<String.Index>
     var info: String
     var body: String
+    /// True when a closing fence terminated the block. Unclosed (streaming) fences run
+    /// to the end of input; only hosts that render partial content claim them.
+    var closed: Bool
 }
 
 private func openingFence<S: StringProtocol>(_ line: S) -> (marker: Character, length: Int, info: String)? {

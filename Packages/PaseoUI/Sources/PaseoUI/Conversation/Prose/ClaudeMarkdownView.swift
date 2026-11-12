@@ -266,6 +266,22 @@
                                 .frame(width: 44, height: 44)
                                 .contentShape(.rect)
                         }.accessibilityLabel("Expand code").accessibilityIdentifier("markdown.code.expand")
+                        // Preview is explicit and never automatic (G5 §2 C8): closed html/svg
+                        // fences offer it; a streaming fence is still arriving, so it doesn't.
+                        if !isStreaming, let language,
+                            ["html", "svg"].contains(
+                                language.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+                        {
+                            Button {
+                                onAction(.previewCode(language: language, content: content))
+                            } label: {
+                                Image(systemName: "eye")
+                                    .frame(width: Metrics.codeIconSize, height: Metrics.codeIconSize)
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(.rect)
+                            }.accessibilityLabel("Preview").accessibilityIdentifier(
+                                "markdown.code.preview")
+                        }
                     }.foregroundStyle(theme.secondary).padding(.horizontal, 16).padding(.vertical, 8)
                     Rectangle().fill(theme.rule).frame(height: 0.5)
                     ScrollView(.horizontal) {

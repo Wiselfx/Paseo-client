@@ -230,6 +230,11 @@ struct TranscriptJump: Equatable {
 
     /// An inline prose image the reader tapped, for the full-screen viewer (`ChatSheets`).
     var inlineImage: InlineProseImage?
+    /// The artifact on the full-screen page (`ChatSheets`). Setting it raises
+    /// `artifactPageOpen`, which yields the transcript's pooled web views to the page.
+    var artifactDocument: ArtifactDocument? {
+        didSet { richActions.artifactPageOpen = artifactDocument != nil }
+    }
 
     /// The shell's toast center, injected by `ChatScreen` (`@Environment(\.toast)`).
     var toastCenter: ToastCenter?
@@ -307,6 +312,9 @@ struct TranscriptJump: Equatable {
         richActions.daemonWorkspaceID = store.agent?.workspaceId
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
+        }
+        richActions.openArtifact = { [weak self] document in
+            self?.artifactDocument = document
         }
         richActions.addImageToChat = { [weak self] fileName, data in
             guard let self else { return }
@@ -1060,6 +1068,19 @@ struct TranscriptJump: Equatable {
             // `![alt](url)` inside a sentence renders as one link-styled run (a thumbnail
             // would reflow the line), so tapping it is the only way to see the picture.
             presentInlineImage(image)
+        case .previewCode(let language, let content):
+            // Preview is explicit and never automatic (G5 §2 C8): closed html/svg fences
+            // open the artifact page instead of rendering inline.
+            let kind = language?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            switch kind {
+            case "svg":
+                artifactDocument = ArtifactDocument(kind: .svg(source: content), shareImage: nil)
+            case "html":
+                artifactDocument = ArtifactDocument(
+                    kind: .html(source: content, fileName: nil), shareImage: nil)
+            default:
+                break
+            }
         default:
             break
         }

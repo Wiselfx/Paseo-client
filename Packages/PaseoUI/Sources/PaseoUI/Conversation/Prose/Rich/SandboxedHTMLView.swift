@@ -60,6 +60,12 @@ struct SandboxedHTMLView: UIViewRepresentable {
     /// have no access to workspace files. The scheme handler is built with the web view, so no
     /// object is allocated per `body` pass.
     var previewFiles: PreviewFileSource? = nil
+    /// The compiled offline rule list for chat documents (`OfflineContentRules`). Nil
+    /// renders as today (Files previews keep their CDN access).
+    var contentRuleList: WKContentRuleList? = nil
+    /// When true the first load waits for the rule list: a chat document must never
+    /// paint unprotected, even for the milliseconds the first compile takes.
+    var awaitContentRules = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onHeightChange: onHeightChange, floor: heightFloor, ceiling: heightCeiling)
@@ -101,7 +107,15 @@ struct SandboxedHTMLView: UIViewRepresentable {
         context.coordinator.allowsExternalNavigation = onExternalNavigation != nil
         webView.scrollView.isScrollEnabled = fillsFrame
         webView.scrollView.bounces = fillsFrame
-        if context.coordinator.loadedHTML != html {
+        if context.coordinator.appliedRuleList !== contentRuleList {
+            context.coordinator.appliedRuleList = contentRuleList
+            webView.configuration.userContentController.removeAllContentRuleLists()
+            if let contentRuleList {
+                webView.configuration.userContentController.add(contentRuleList)
+            }
+        }
+        let rulesReady = !awaitContentRules || contentRuleList != nil
+        if rulesReady, context.coordinator.loadedHTML != html {
             context.coordinator.loadedHTML = html
             webView.loadHTMLString(html, baseURL: nil)
         }
@@ -121,6 +135,9 @@ struct SandboxedHTMLView: UIViewRepresentable {
         var floor: CGFloat
         var ceiling: CGFloat
         var loadedHTML: String?
+        /// The rule list currently installed on the web view; nil after a removal.
+        /// Compared by identity: a new compile is a new object.
+        var appliedRuleList: WKContentRuleList?
 
         /// The last height handed to `onHeightChange`; reports closer than 2 pt are ignored.
         private var lastHeight: CGFloat?
@@ -229,6 +246,56 @@ enum RichHTMLDocument {
         <body>
         \(code)
         \(heightReporter)
+        </body>
+        </html>
+        """
+    }
+
+    /// A rendered artifact SVG (mermaid output, G4/G5): the same static guarantees as the
+    /// raw block, but sized for a full-screen page instead of a card — the drawing fills
+    /// the viewport width at its intrinsic ratio and the page scrolls what exceeds it.
+    /// No height reporter: the page is not sized to its content.
+    static func artifactSVG(source: String, dark: Bool) -> String {
+        let scheme = dark ? "dark" : "light"
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+        <style>:root { color-scheme: \(scheme); }
+        html, body { margin: 0; padding: 0; background: transparent; }
+        svg { width: 100%; height: auto; display: block; }
+        </style>
+        </head>
+        <body>
+        \(source)
+        </body>
+        </html>
+        """
+    }
+
+    /// An html fence or `.html` file for the artifact page: a full document when the source
+    /// carries `<html>`, otherwise the fragment wrapped in the offline shell (scripts run,
+    /// like the visualize stage, but the CSP keeps the network closed). The export shares
+    /// this same build, so what exports is what the page showed.
+    static func artifactHTML(source: String, dark: Bool) -> String {
+        if source.lowercased().contains("<html") { return OfflineCSP.inject(into: source) }
+        let scheme = dark ? "dark" : "light"
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'">
+        <style>:root { color-scheme: \(scheme); }
+        html, body { margin: 0; padding: 0; background: transparent; color: CanvasText; font-family: -apple-system, sans-serif; }
+        </style>
+        </head>
+        <body>
+        \(source)
         </body>
         </html>
         """
