@@ -45,6 +45,17 @@ public struct ChatScreen: View {
         // D1 §1: the transcript is the screen's base layer; the chrome floats over it in
         // safe-area bars and the system's scroll edge effect is the only background.
         TranscriptView(store: store, controller: controller)
+            // "Back to the end" rides the transcript, not the composer bar (J3 §2). The bar lives
+            // in `.safeAreaBar(edge: .bottom)`, whose host does not hit-test outside the bar's own
+            // frame, so a touch on a button pushed above it landed on the transcript underneath
+            // and only dropped the keyboard. An overlay on the transcript is inside its own
+            // hit-testable frame, and it respects the safe area the bottom bar and the keyboard
+            // contribute, so it sits `Space.sm` above the bar (and above the subagent pill),
+            // moving with the keyboard and with the composer's growth. No inset arithmetic.
+            .overlay(alignment: .bottom) {
+                TranscriptBackToEndButton(controller: controller)
+                    .padding(.bottom, Space.sm)
+            }
             .safeAreaBar(edge: .top) { topChrome }
             .safeAreaBar(edge: .bottom) { bottomChrome }
             .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
@@ -87,21 +98,15 @@ public struct ChatScreen: View {
     }
 
     /// The bottom bar: the subagent pill and the composer, both clear behind their own cards, so
-    /// the transcript runs under them (D1 §1). "Back to the end" rides the composer card's top
-    /// edge, so it moves with the keyboard and the card's growth and needs no inset math (E2b §9).
+    /// the transcript runs under them (D1 §1). "Back to the end" is **not** here: it is an overlay
+    /// on the transcript, because a `safeAreaBar` host does not hit-test outside its own frame
+    /// (J3 §2, `ChatScreen`).
     private var bottomChrome: some View {
         VStack(spacing: 0) {
             SubagentPill(store: store, controller: controller)
             ComposerView(
                 mode: .conversation, store: store, controller: controller,
                 focused: $composerFocused)
-        }
-        // On the whole bar, not the composer: the subagent pill sits above the composer, and the
-        // button must clear it too (lead fix at the E2b merge). A guide of `bottom + Space.sm` on
-        // the overlay's top edge puts the button's bottom Space.sm above the bar's top.
-        .overlay(alignment: .top) {
-            TranscriptBackToEndButton(controller: controller)
-                .alignmentGuide(.top) { $0[.bottom] + Space.sm }
         }
     }
 }

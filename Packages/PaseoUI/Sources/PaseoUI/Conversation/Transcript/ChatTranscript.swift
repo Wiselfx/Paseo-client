@@ -12,7 +12,7 @@ import UIKit
 /// composer's wish and the button's order). It reads `store.timeline` only for the pending-row
 /// signature (one dictionary-free pass over the ids while a send is pending).
 ///
-/// **Writes:** `controller.isFollowing`, `controller.anchoringToAnswer`, `controller.showsBackToEnd`
+/// **Writes:** `controller.isFollowing`, `controller.anchoringToAnswer`, `controller.backToEnd`
 /// and `controller.headerHidden`, each only when its boundary flips — never per scroll frame. The
 /// signed scroll travel and the top visible turn stay in `TranscriptScrollTrack`, which nothing
 /// observes.
@@ -222,6 +222,13 @@ struct TranscriptView: View {
                         // content you can actually see, so 0 is the end and negative is past it.
                         distanceFromBottom: geometry.contentSize.height - geometry.contentOffset.y
                             - geometry.bounds.height + geometry.contentInsets.bottom,
+                        // J3 §3: the end of the content to the scroll view's own bottom edge, with
+                        // no inset term. The keyboard and a growing composer only change
+                        // `contentInsets.bottom`, so this does not move when they come and go
+                        // (lead fix: the first cut kept `+ contentInsets.bottom`, i.e. the old
+                        // distance). At the end it is minus the bar's inset, which reads as the end.
+                        distanceFromContentBottom: geometry.contentSize.height
+                            - geometry.contentOffset.y - geometry.bounds.height,
                         distanceFromTop: geometry.contentOffset.y,
                         contentHeight: geometry.contentSize.height,
                         offsetY: geometry.contentOffset.y,
@@ -357,6 +364,7 @@ struct TranscriptView: View {
         }
         scrollTrack.contentOffset = metrics.offsetY
         scrollTrack.distanceFromBottom = metrics.distanceFromBottom
+        scrollTrack.distanceFromContentBottom = metrics.distanceFromContentBottom
         scrollTrack.contentHeight = metrics.contentHeight
         if scrollTrack.visibleHeight != metrics.visibleHeight {
             scrollTrack.visibleHeight = metrics.visibleHeight
@@ -397,9 +405,9 @@ struct TranscriptView: View {
         updateHeaderReveal(metrics, from: previous)
         releaseFollowWhileDragging(metrics)
         // "Back to the end" flips only when the content itself moved. An inset-only frame is what
-        // the keyboard animates, and it must never flash the button (H2 §2).
+        // the keyboard animates, and it must never flash the button (H2 §2, J3 §3).
         if backToEndMayFlip,
-            metrics.offsetY != previous.offsetY || metrics.contentHeight != previous.contentHeight
+            metrics.distanceFromContentBottom != previous.distanceFromContentBottom
         {
             decideBackToEnd()
         }
@@ -442,13 +450,17 @@ struct TranscriptView: View {
         controller.isFollowing = true
     }
 
-    /// "Back to the end" is offered only once the reader is more than a screen from the end. The
-    /// screen is the keyboard-independent viewport: the sliver above the keyboard is not one, so
-    /// focusing the composer can never flash the button (H2 §2).
+    /// "Back to the end" is offered only once the reader is more than a screen from the end of the
+    /// content. The screen is the keyboard-independent viewport — the sliver above the keyboard is
+    /// not one — and the distance is the content's own, without the composer or the keyboard inset
+    /// in it (J3 §3), so focusing the composer can never flash the button.
     private func decideBackToEnd() {
-        let screen = stableViewportHeight > 0 ? stableViewportHeight : scrollTrack.visibleHeight
-        let shows = !controller.isFollowing && scrollTrack.distanceFromBottom > max(screen, 1)
-        if controller.showsBackToEnd != shows { controller.showsBackToEnd = shows }
+        var state = controller.backToEnd
+        state.update(
+            distanceFromContentBottom: scrollTrack.distanceFromContentBottom,
+            screen: stableViewportHeight > 0 ? stableViewportHeight : scrollTrack.visibleHeight,
+            isFollowing: controller.isFollowing)
+        if controller.backToEnd != state { controller.backToEnd = state }
     }
 
     /// The button's visibility is decided on user motion and at rest, never while the scroll view
@@ -619,7 +631,12 @@ struct TranscriptView: View {
 
     private struct ScrollFollowMetrics: Equatable {
         /// Distance from the end of the content to the bottom of what you can see. 0 at the end.
+        /// Includes the inset, so it is what the follow and runway rules compare against the
+        /// visible area; the button's decision never uses it (J3 §3).
         var distanceFromBottom: CGFloat
+        /// J3 §3: the same distance without the scrolling behaviour's viewport contribution —
+        /// the end of the content to the bottom of the content area. It is the *content's* own gap.
+        var distanceFromContentBottom: CGFloat
         /// Offset below the top of the content. 0 at the very top.
         var distanceFromTop: CGFloat
         var contentHeight: CGFloat
@@ -824,6 +841,10 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     var phase: ScrollPhase = .idle
     /// How far the content's end is below the visible bottom, from the last scroll frame.
     var distanceFromBottom: CGFloat = 0
+    /// The end of the content to the bottom of the content area, inset-free (J3 §3). This is the
+    /// value the "Back to the end" decision reads; it is unaffected by the keyboard and the
+    /// composer's height.
+    var distanceFromContentBottom: CGFloat = 0
     /// The content's own height, from the last scroll frame; the runway's close at rest reads it.
     var contentHeight: CGFloat = 0
     /// The space the bars leave for content, from the last scroll frame.
@@ -900,15 +921,22 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     func offset(of id: String) -> CGFloat? { turnOffsets[id] }
 }
 
-/// "Back to the end": offered once you are more than a screen from the end (D1 §3). It fades and
-/// scales in from 0.9 through `Motion.fade`, and tapping it turns follow back on at once. Hidden,
-/// it stays in place, so nothing else can move when it comes and goes.
+/// "Back to the end": offered once you are more than a screen from the end of the content
+/// (D1 §3). It fades and scales in from 0.9 through `Motion.fade`, and tapping it turns follow
+/// back on at once. Hidden, it stays in place, so nothing else can move when it comes and goes.
 ///
-/// It is hosted by the composer bar, not the transcript (E2b §9): the bar already moves with the
-/// keyboard and grows with the composer, so the button is always `Space.sm` above the card with no
-/// inset arithmetic. The old placement padded the scroll view's overlay by
-/// `geometry.contentInsets.bottom`, which the bottom `safeAreaBar` already contributes to the
-/// scroll view's frame, so the composer (and the keyboard) was counted twice.
+/// It is hosted by the **transcript**, as an `.overlay(alignment: .bottom)` (J3 §2). It used to
+/// hang above the composer bar through `.overlay(alignment: .top)` on `bottomChrome`, pushed out
+/// with `.alignmentGuide(.top)`; the bar is itself hosted by `.safeAreaBar(edge: .bottom)`, whose
+/// host does not hit-test outside the bar's own frame, so every touch on the circle landed on the
+/// transcript underneath (which only drops the keyboard) and the button looked dead.
+///
+/// On the transcript, the overlay respects the safe area the bottom bar and the keyboard
+/// contribute, so the button sits `Space.sm` above the bar — and above the subagent pill — moves
+/// with the keyboard and with the composer's growth, and needs no inset arithmetic. The old
+/// placement padded the scroll view's overlay by `geometry.contentInsets.bottom`, which the bottom
+/// `safeAreaBar` already contributes to the scroll view's frame, so the composer (and the keyboard)
+/// was counted twice.
 struct TranscriptBackToEndButton: View {
     let controller: ChatController
 
