@@ -9,6 +9,8 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 **2026-11-11 Phase A review:** report in (c4c0377, fff269b, decc50a). Gate FAILED (~25 compile errors). Review found: per-byte AsyncBytes work (actor hop per byte), relay rule applied to remote web images, daemon cap applied after transfer, disk-cache key mismatch/staleness, singleton daemon-fetch hook, dismiss pan steals paging, zoom relayout, preferredColorScheme in cover, NSCache cost, cap vs shared flight. Fixed over 3 rounds (+1 lead isolation fix). **Phase A MERGED** into foundation; gate green; PaseoCore green; IPA `Paseo-20261111-1531-b49ebb2.ipa`. Worker told: continue to Phase B (G4 Mermaid + G5 artifact page), stop and report.
 
+**2026-11-12 Phase B part 1 (G4 Mermaid + G5 artifact page) MERGED** (fd98bac). Review: chat full-HTML artifacts were online (now WKContentRuleList + always-injected CSP), mermaid runtime loaded once in the shared offscreen host (no extra web view/window), generation-guarded timeout, SVG cache for the live page. Gate green, PaseoCore 835+208+145 green. Worker told: continue to the rest of Phase B (G6, G8, G9, G7, G10, G11, G12, G13), stop and report. IPA after Phase B.
+
 (the rich UI plan made coherent; decisions D1–D8 taken by the lead on the user's delegation:
 Mermaid bundled, Live Activity / Share ext / Expo deferred, extensions built but not embedded,
 notification Allow/Deny off by default, §15 copy approved with upstream-first, permission line only
