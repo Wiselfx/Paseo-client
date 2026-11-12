@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Observation
 import PaseoStore
 import PaseoUI

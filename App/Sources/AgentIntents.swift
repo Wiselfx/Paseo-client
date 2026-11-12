@@ -22,13 +22,13 @@ private var showAgentNames: Bool {
 
 /// One agent, resolved from the persisted directory at query time.
 struct AgentEntity: AppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Agents"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Agents"
 
     var id: String
     var title: String
     var hostServerID: String
 
-    static var defaultQuery = AgentQuery()
+    static let defaultQuery = AgentQuery()
 
     var displayRepresentation: DisplayRepresentation {
         // Outside the app, names show only with opt-in. The toggle is read at
@@ -74,7 +74,7 @@ struct AgentQuery: EntityQuery {
 }
 
 extension AgentQuery: EntityStringQuery {
-    func entities(for string: String) async throws -> [AgentEntity] {
+    func entities(matching string: String) async throws -> [AgentEntity] {
         let needle = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return try await suggestedEntities() }
         return AgentDirectory.load().agents
@@ -94,9 +94,9 @@ private extension AgentEntity {
 
 /// Opens the agent in the app through the existing deep-link route. Never sends.
 struct OpenAgentIntent: AppIntent {
-    static var title: LocalizedStringResource = "Open agent"
-    static var description = IntentDescription("Open one of your agents.")
-    static var openAppWhenRun = true
+    static let title: LocalizedStringResource = "Open agent"
+    static let description = IntentDescription("Open one of your agents.")
+    static let openAppWhenRun = true
 
     @Parameter(title: "Agent")
     var agent: AgentEntity
@@ -119,9 +119,9 @@ struct OpenAgentIntent: AppIntent {
 /// Starts a new agent draft and focuses its composer. Never sends: creation stays
 /// user-driven — the draft waits for the reader.
 struct NewAgentIntent: AppIntent {
-    static var title: LocalizedStringResource = "New agent"
-    static var description = IntentDescription("Start a new agent.")
-    static var openAppWhenRun = true
+    static let title: LocalizedStringResource = "New agent"
+    static let description = IntentDescription("Start a new agent.")
+    static let openAppWhenRun = true
 
     func perform() async throws -> some IntentResult & OpensIntent {
         guard let url = URL(string: "paseo://new-agent") else {
