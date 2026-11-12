@@ -586,8 +586,10 @@ private struct QuestionSection: View {
     }
 }
 
-enum ResolutionLine {
-    static func text(for response: AgentPermissionResponse, request: AgentPermissionRequest) -> String {
+/// The quiet line for a permission answer. Shared with the notification fallback
+/// path, so taps and notification actions read identically.
+public enum ResolutionLine {
+    public static func text(for response: AgentPermissionResponse, request: AgentPermissionRequest) -> String {
         if request.kind == .plan {
             if case .allow = response { return "Approved plan" }
             return "Rejected plan"

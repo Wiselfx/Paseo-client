@@ -141,18 +141,23 @@ final class NotificationCoordinator {
     /// free-text input, no question options — and only when the reader opted in.
     /// Anything richer keeps the transcript card as its only surface.
     private func post(_ intent: AttentionIntent) {
+        // Privacy (§11): agent names stay on the Lock Screen only with opt-in.
+        // Off means a generic title/body and no thumbnail — while routing
+        // (userInfo) still works, since it is never shown.
+        let namesAllowed = UserDefaults.standard.bool(forKey: PaseoSettingsKeys.showAgentNames)
         let content = UNMutableNotificationContent()
-        content.title = intent.title
-        content.body = intent.body
+        content.title = namesAllowed ? intent.title : "Paseo"
+        content.body = namesAllowed ? intent.body : "An agent needs your attention."
         content.sound = .default
         content.threadIdentifier = "paseo.attention"
         var userInfo: [AnyHashable: Any] = [:]
         for (key, value) in intent.target.userInfo { userInfo[key] = value }
-        if intent.reason == "permission",
+        let thumbnail = namesAllowed ? thumbnailSource(for: intent) : nil
+        if let agentId = intent.target.agentId,
             UserDefaults.standard.bool(forKey: PaseoSettingsKeys.notificationActions),
-            let agentId = intent.target.agentId,
             let (request, hostServerID) = permissionRequestProvider?(agentId),
-            let mapped = PermissionNotificationMapping.actions(for: request)
+            let mapped = PermissionNotificationMapping.actions(for: request),
+            intent.reason == "permission"
         {
             content.categoryIdentifier = Self.permissionCategoryID
             userInfo[Self.requestIdKey] = request.id
@@ -165,7 +170,61 @@ final class NotificationCoordinator {
 
         let request = UNNotificationRequest(
             identifier: intent.id, content: content, trigger: nil)
-        Task { try? await UNUserNotificationCenter.current().add(request) }
+        Task {
+            // §11: the thumbnail comes only from the pipeline's caches (memory,
+            // then the daemon disk cache) via a temp-file copy. Never a fetch:
+            // nothing cached means no image.
+            if let thumbnail,
+                let fileURL = await Task.detached(priority: .utility, operation: { () -> URL? in
+                    guard
+                        let data = MediaPipeline.cachedNotificationThumbnail(
+                            remoteURL: thumbnail.remoteURL, daemonPath: thumbnail.daemonPath,
+                            workspaceID: thumbnail.workspaceID),
+                        !data.isEmpty
+                    else { return nil }
+                    let url = FileManager.default.temporaryDirectory.appending(
+                        path: "paseo-notif-\(abs(intent.id.hashValue)).\(thumbnail.fileExtension)")
+                    try? data.write(to: url, options: .atomic)
+                    return url
+                }).value,
+                let attachment = try? UNNotificationAttachment(
+                    identifier: "paseo.thumbnail", url: fileURL)
+            {
+                content.attachments = [attachment]
+            }
+            try? await UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    /// What the notification may show a thumbnail for: a permission request about
+    /// an image (edit/read of a local image path, fetch of a remote image URL).
+    /// Anything else has no honest image.
+    private func thumbnailSource(for intent: AttentionIntent) ->
+        (remoteURL: String?, daemonPath: String?, workspaceID: String?, fileExtension: String)?
+    {
+        guard let agentId = intent.target.agentId,
+            let (request, _) = permissionRequestProvider?(agentId),
+            let detail = request.detail
+        else { return nil }
+        let imageExtensions = ["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp"]
+        func imageExtension(ofPath path: String) -> String? {
+            let ext = (path as NSString).pathExtension.lowercased()
+            return imageExtensions.contains(ext) ? ext : nil
+        }
+        switch detail {
+        case .edit(let path, _, _, _), .read(let path, _), .write(let path, _):
+            guard let ext = imageExtension(ofPath: path),
+                let workspaceID = intent.target.workspaceId
+            else { return nil }
+            return (nil, path, workspaceID, ext)
+        case .fetch(let urlString, _, _):
+            guard let url = URL(string: urlString),
+                imageExtensions.contains(url.pathExtension.lowercased())
+            else { return nil }
+            return (urlString, nil, nil, url.pathExtension.lowercased())
+        default:
+            return nil
+        }
     }
 
     static let requestIdKey = "paseo.permission.requestId"

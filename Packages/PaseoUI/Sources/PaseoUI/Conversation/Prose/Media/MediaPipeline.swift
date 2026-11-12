@@ -388,6 +388,26 @@ actor MediaPipeline {
         try await metadataSession.data(from: url)
     }
 
+    /// Read-only cache probe for notification thumbnails (§11): the decoded
+    /// memory cache first, then the daemon disk cache. Never fetches — the
+    /// caller copies the bytes to a temp file for `UNNotificationAttachment`.
+    /// Nil when nothing is cached: the notification posts without an image.
+    public static func cachedNotificationThumbnail(
+        remoteURL: String? = nil, daemonPath: String? = nil, workspaceID: String? = nil
+    ) -> Data? {
+        if let remoteURL, let target = MediaPipeline.target(for: remoteURL),
+            let cached = MediaPipeline.cached(for: MediaPipeline.cacheIdentity(for: target.absoluteString))
+        {
+            if let full = cached.fullData { return full }
+            return cached.image.jpegData(compressionQuality: 0.85)
+        }
+        if let daemonPath, let workspaceID {
+            let ref = DaemonFileRef(workspaceID: workspaceID, path: daemonPath, revision: nil)
+            return diskRead(key: diskKey(ref: ref, revision: nil))
+        }
+        return nil
+    }
+
     /// The app's identity on the wire. Wikimedia answers **403** to a request with no
     /// User-Agent at all (checked with `curl` against `upload.wikimedia.org`); a stable,
     /// generic app UA is the polite answer everywhere else. No user data, no device name.
