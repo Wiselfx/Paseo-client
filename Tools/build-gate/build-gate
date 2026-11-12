@@ -41,7 +41,7 @@
 #   statusbar on|off      fixed 9:41 status bar for comparable screenshots
 #   privacy <grant|revoke|reset> <service>   photos camera microphone location contacts calendar
 #   crashes [n]   newest n (max 3) Paseo crash reports from this Mac, trimmed
-#   status        disk, simulator state, installed app, lock holder, last gate log lines
+#   status        disk, memory use of this user's processes, simulator state, installed app, lock holder, last gate log lines
 #   clean         delete derived data and artifacts under the claude home (nothing else)
 #
 # Safety model: forced command, fixed verbs, every argument matched against a strict pattern,
@@ -506,6 +506,10 @@ status)
     if [[ -n "$udid" ]]; then
         xcrun simctl get_app_container "$udid" "$BUNDLE_ID" >/dev/null 2>&1 && echo "app: installed" || echo "app: not installed"
     fi
+    echo "memory (this user's processes by resident size, MB):"
+    ps -u "$(id -u)" -o pid=,rss=,etime=,comm= -r 2>/dev/null | head -12 \
+        | awk '{printf "%7d  %6.0f MB  %10s  %s\n", $1, $2/1024, $3, $4}' || true
+    echo "mac memory: $(memory_pressure 2>/dev/null | grep -i 'free percentage' || true)"
     echo "recent gate log:"; tail -8 "$LOG" 2>/dev/null || true
     du -sh "$DERIVED" "$ART" 2>/dev/null || true
     ;;
