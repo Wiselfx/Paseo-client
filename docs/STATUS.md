@@ -13,7 +13,7 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 **2026-11-12 Phase B part 2 (G6–G12) in review** (G13 not started). Gate FAILED (~14 errors). Review sent in 2 batches: media index never sees the streaming turn; change summary re-parses diffs per token; cache reads in .task cause remount flashes/jumps (link hero, gallery, terminal, YouTube title); 64 MB Data.write on main (video/file); remote audio bypasses pipeline; oEmbed/PDF/poster ignore §12; openDiff ignores the turn; GitHub lookup task never attached; gallery a11y collapsed; audio scrub steals scrolls; Now Playing without handlers; session left in .playback. Fixed; 3 lead compile fixes. **MERGED** (gate green, PaseoCore 889+208+145). IPA `Paseo-20261111-1855-3e8a7a6.ipa`; worker on G13 (charts), then Phase C.
 
-**2026-11-12 G13 MERGED — Phase B complete.** Per-turn usage/cost charts: usage attributed by time (turn_started→next turn_started), cumulative figures as per-turn deltas with a frozen baseline (provider table in ConversationContext.swift). PaseoCore 900+208+145 green. Worker sent to Phase C.
+**2026-11-12 G13 MERGED — Phase B complete.** Per-turn usage/cost charts: usage attributed by time (turn_started→next turn_started), cumulative figures as per-turn deltas with a frozen baseline (provider table in ConversationContext.swift). PaseoCore 900+208+145 green. IPA `Paseo-20261111-1915-fc2f8e3.ipa`. Worker sent to Phase C.
 
 (the rich UI plan made coherent; decisions D1–D8 taken by the lead on the user's delegation:
 Mermaid bundled, Live Activity / Share ext / Expo deferred, extensions built but not embedded,
