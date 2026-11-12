@@ -148,17 +148,26 @@ extension ConversationStore {
                 // final. The first observation has no previous: the bar is the
                 // value itself. A drop is a session reset: no negative bars,
                 // the baseline restarts here.
-                let base = baselineTokens ?? 0
-                openUsageTokens = max(0, tokens - base)
-                baselineTokens = tokens
+                // `baselineTokens` is the previous turn's final cumulative value and
+                // moves only when a turn freezes, so several events inside one turn
+                // (opencode reports per step) all measure from the same baseline.
+                // A drop is a session reset: rebase on the new value (no negatives).
+                if let prior = openLatestTokens ?? baselineTokens, tokens < prior {
+                    baselineTokens = tokens
+                }
+                openLatestTokens = tokens
+                openUsageTokens = max(0, tokens - (baselineTokens ?? 0))
             }
         }
         if let cost = usage.totalCostUsd, cost >= 0 {
             // Cost is always cumulative (see the table): the bar is the growth.
             // The first observation has no previous, so it records no cost.
             // A drop is a reset: no negative, baseline restarts.
-            openUsageCost = baselineCost.map { max(0, cost - $0) } ?? 0
-            baselineCost = cost
+            // Baseline: the previous turn's final, else the first value seen (cost
+            // before our first observation is not attributable). A drop rebases.
+            openLatestCost = cost
+            if baselineCost == nil || cost < (baselineCost ?? 0) { baselineCost = cost }
+            openUsageCost = max(0, cost - (baselineCost ?? cost))
         }
     }
 
@@ -167,6 +176,11 @@ extension ConversationStore {
     /// three windows. Rewinds never un-spend: nothing here is ever removed.
     internal func freezeOpenUsage() {
         defer {
+            // The frozen turn's final cumulative figures become the next baseline.
+            if let latest = openLatestTokens { baselineTokens = latest }
+            if let latest = openLatestCost { baselineCost = latest }
+            openLatestTokens = nil
+            openLatestCost = nil
             openUsageTurnID = nil
             openUsageTokens = nil
             openUsageCost = nil

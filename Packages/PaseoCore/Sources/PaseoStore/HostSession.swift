@@ -697,6 +697,9 @@ public final class ConversationStore: Identifiable {
     /// by a session reset (a drop restarts the baseline instead of going negative).
     public internal(set) var baselineTokens: Int?
     public internal(set) var baselineCost: Double?
+    /// The open turn's latest cumulative figures, promoted to the baseline on freeze.
+    public internal(set) var openLatestTokens: Int?
+    public internal(set) var openLatestCost: Double?
     /// The running turn. From the agent snapshot, made snappier by `turn_started`/`turn_completed`
     /// stream events.
     public private(set) var activeTurnId: String?
