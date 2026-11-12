@@ -5,10 +5,18 @@ import Testing
 
 // G5: chat artifacts stay offline even when the agent wrote a full document.
 struct OfflineCSPTests {
-    @Test("a document that already has a CSP is untouched")
-    func existingCSPIsUntouched() {
-        let html = "<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'\"></head></html>"
-        #expect(OfflineCSP.inject(into: html) == html)
+    @Test("an author's own permissive CSP cannot opt out: ours is added too")
+    func permissiveAuthorCSPStillGetsOurs() {
+        let html = "<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"connect-src *\"></head></html>"
+        let out = OfflineCSP.inject(into: html)
+        #expect(out.contains(OfflineCSP.meta))
+        #expect(out.contains("connect-src *"))
+    }
+
+    @Test("injection is idempotent")
+    func idempotent() {
+        let once = OfflineCSP.inject(into: "<html><head></head><body></body></html>")
+        #expect(OfflineCSP.inject(into: once) == once)
     }
 
     @Test("the meta lands right after <head>, case-insensitively")

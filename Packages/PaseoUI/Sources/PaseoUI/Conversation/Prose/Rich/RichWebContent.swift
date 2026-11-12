@@ -103,14 +103,13 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         }
     }
 
-    /// The timeout wins only for the render that is still current; a stale timer never
-    /// resolves — it waits to be cancelled with the group.
+    /// The timeout's answer. A stale generation answers `.unavailable` at once: it can
+    /// only win the race for a render that is already superseded, whose result nobody
+    /// shows. (Never park on a continuation that is never resumed — cancelling the group
+    /// does not resume it, so the group would wait forever.)
     private func mermaidTimeout(generation: Int) async -> MermaidRenderOutcome {
-        guard generation == mermaidGeneration else {
-            await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
-            return .unavailable
-        }
-        return .error("The diagram took too long to render.")
+        guard generation == mermaidGeneration else { return .unavailable }
+        return .error(message: "The diagram took too long to render.")
     }
 
     private func doMermaidRender(
@@ -131,7 +130,7 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
                 "return await window.paseoRender(src, theme)",
                 arguments: ["src": source, "theme": theme], in: nil, contentWorld: .page)
         } catch {
-            return .error((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return .error(message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
         guard generation == mermaidGeneration else { return .unavailable }
         guard let dict = result as? [String: Any],
@@ -212,7 +211,7 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
             // Defense in depth on the shared view, applied when the first compile
             // lands; every document here already carries an offline CSP.
             if let rules = await OfflineContentRules.list() {
-                configuration.userContentController.addContentRuleList(rules)
+                configuration.userContentController.add(rules)
             }
         }
         let view = WKWebView(frame: CGRect(x: 0, y: 0, width: width, height: 1), configuration: configuration)

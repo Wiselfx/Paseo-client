@@ -18,14 +18,13 @@ public enum OfflineCSP {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         """
 
-    /// Returns the HTML with the offline CSP applied. Documents that already carry a
-    /// `Content-Security-Policy` meta are returned unchanged (idempotent: the builder
-    /// docs keep their own copy). Otherwise the meta is injected right after `<head>`
-    /// (or a `<head>` is prepended when there is none).
+    /// Returns the HTML with the offline CSP applied, right after `<head>` (or in a
+    /// prepended `<head>` when there is none). Always injected, even when the document
+    /// carries its own policy: an author's permissive `connect-src *` must not opt out,
+    /// and multiple CSPs are all enforced (the effective policy is their intersection),
+    /// so ours only ever narrows. Idempotent on our own meta.
     public static func inject(into html: String) -> String {
-        if html.range(of: "Content-Security-Policy", options: .caseInsensitive) != nil {
-            return html
-        }
+        if html.contains(meta) { return html }
         if let headRange = html.range(of: "<head", options: .caseInsensitive),
             let headEnd = html[headRange.upperBound...].firstIndex(of: ">")
         {

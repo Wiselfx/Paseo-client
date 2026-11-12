@@ -23,7 +23,7 @@ enum OfflineContentRules {
         if let cached { return cached }
         if let compileTask { return await compileTask.value }
         let task = Task.detached(priority: .utility) { () -> WKContentRuleList? in
-            let store = WKContentRuleListStore.default()
+            guard let store = WKContentRuleListStore.default() else { return nil }
             return try? await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<WKContentRuleList?, Error>) in
                 store.compileContentRuleList(

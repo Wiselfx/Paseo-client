@@ -111,7 +111,7 @@ struct SandboxedHTMLView: UIViewRepresentable {
             context.coordinator.appliedRuleList = contentRuleList
             webView.configuration.userContentController.removeAllContentRuleLists()
             if let contentRuleList {
-                webView.configuration.userContentController.addContentRuleList(contentRuleList)
+                webView.configuration.userContentController.add(contentRuleList)
             }
         }
         let rulesReady = !awaitContentRules || contentRuleList != nil
