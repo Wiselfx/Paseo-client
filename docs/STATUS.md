@@ -17,6 +17,8 @@ Last updated 2026-11-11. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 **2026-11-12 Phase C MERGED** (wide tables w/ content-versioned measure, todo/plan card, permission previews + D8 confirmed-only lines, subagent cards via mirrored map, user-bubble images w/ ratio manifest). PaseoCore 912+208+145 green. Worker sent to Phase D (G16 intents/Spotlight, G19 Allow/Deny off by default, §11 notification thumbnails).
 
+**2026-11-12 Phase D MERGED.** App Shortcuts (Open agent / New agent, never sends), Spotlight titles, Settings → Privacy "Show agent names" (off by default → notifications read "Paseo / An agent needs your attention"), notification Allow/Deny (off by default, auth-required, sent from the delegate with a background task + ~8 s confirmation wait, else "Open" fallback; never switches host), cached-only notification thumbnails. No entitlements/App Group/extensions. PaseoCore 923+208+145 green. IPA after Phase E; worker sent to Phase E (built, not embedded).
+
 (the rich UI plan made coherent; decisions D1–D8 taken by the lead on the user's delegation:
 Mermaid bundled, Live Activity / Share ext / Expo deferred, extensions built but not embedded,
 notification Allow/Deny off by default, §15 copy approved with upstream-first, permission line only
