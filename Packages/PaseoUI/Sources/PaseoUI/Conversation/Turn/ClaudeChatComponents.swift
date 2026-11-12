@@ -415,22 +415,33 @@ struct ClaudeUserBubble: View {
             value: entered)
         .onAppear { entered = true }
         // Disk fills what memory lost (relaunch, eviction): one lookup per send,
-        // never per body pass. Unknown stays empty — no placeholder, no fetch.
+        // never per body pass. The manifest loads first so the boxes reserve before
+        // the pixels land. Unknown stays empty — no box, no placeholder, no fetch.
         .task(id: clientMessageId) {
-            guard let id = clientMessageId,
-                UserImageCache.memoryThumbnails(for: id) == nil
-            else { return }
-            diskImages = await UserImageCache.diskThumbnails(for: id)
+            guard let id = clientMessageId else { return }
+            await UserImageCache.shared.ensureManifestLoaded()
+            guard UserImageCache.shared.memoryThumbnails(for: id) == nil else { return }
+            diskImages = await UserImageCache.shared.diskThumbnails(for: id)
         }
     }
 
     /// This device's sent images for the send, memory first: the seed lands at send
     /// time, disk fills history after a relaunch. Unknown stays empty.
     private var sentImages: [UIImage] {
-        if let id = clientMessageId, let memory = UserImageCache.memoryThumbnails(for: id) {
+        if let id = clientMessageId,
+            let memory = UserImageCache.shared.memoryThumbnails(for: id)
+        {
             return memory
         }
         return diskImages ?? []
+    }
+
+    /// Reserved boxes from the manifest: the bubble keeps its height while the
+    /// pixels load, so nothing jumps. No manifest entry means no box at all.
+    private var reservedRatios: [CGFloat] {
+        if !sentImages.isEmpty { return [] }
+        guard let id = clientMessageId else { return [] }
+        return UserImageCache.shared.manifestRatios(for: id) ?? []
     }
 
     /// The filled bubble, and the thing the context-menu preview shows.
@@ -442,10 +453,20 @@ struct ClaudeUserBubble: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: Metrics.userImageMaxHeight)
                     .clipShape(.rect(cornerRadius: Radius.sm))
+                    .transition(.opacity)
                     .accessibilityLabel("Sent image \(index + 1)")
+            }
+            ForEach(Array(reservedRatios.enumerated()), id: \.offset) { _, ratio in
+                Rectangle()
+                    .fill(.clear)
+                    .aspectRatio(ratio, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
             }
             bodyText
         }
+        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: sentImages.count)
             // UX-SPEC §4.1 (amended): the user bubble is 17 pt with 4 pt line spacing.
             .font(.paseo(.body))
             .foregroundStyle(Palette.ink)

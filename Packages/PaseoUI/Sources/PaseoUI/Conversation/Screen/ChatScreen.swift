@@ -68,6 +68,9 @@ public struct ChatScreen: View {
                 controller.toastCenter = toast
                 controller.reduceMotion = reduceMotion
                 controller.openURLFromEnvironment = { url in openURL(url) }
+                // The user-image manifest loads once, off main: bubbles with history
+                // reserve their image boxes on the first pass instead of jumping.
+                Task { await UserImageCache.shared.ensureManifestLoaded() }
             }
             .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
             .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }

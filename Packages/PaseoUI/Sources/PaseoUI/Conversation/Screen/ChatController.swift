@@ -990,18 +990,21 @@ struct TranscriptJump: Equatable {
         let text = trimmedDraft
         // This device's images ride into the user bubble under the send's id: seed
         // memory now (the pending bubble renders before the network answers) and
-        // persist thumbnails off main for history. Another device's bubbles — and
-        // evicted entries — have no entry and show nothing.
+        // persist thumbnails off main only if the daemon accepts the send. Another
+        // device's bubbles — and evicted entries — have nothing and show nothing.
         let trayImages = attachmentStore.items(for: store.agentId).filter(\.isImage)
         let sendId = UUID().uuidString
-        UserImageCache.seed(trayImages.compactMap(\.thumbnail), for: sendId)
-        UserImageCache.persist(trayImages.map(\.data), for: sendId)
+        UserImageCache.shared.seed(trayImages.compactMap(\.thumbnail), for: sendId)
         Task { [weak self] in
             guard let self else { return }
-            await self.store.sendWithAttachments(
+            let accepted = await self.store.sendWithAttachments(
                 text, attachments: attachments, behavior: behavior, clientId: sendId)
-            if self.store.actionError == nil {
+            if accepted != nil {
+                UserImageCache.shared.persist(trayImages.map(\.data), for: sendId)
                 self.attachmentStore.consumeDoneAttachments(for: self.store.agentId)
+            } else {
+                // Refused or failed: the pending bubble rolls back, so forget the send.
+                UserImageCache.shared.discard(sendId)
             }
         }
     }
