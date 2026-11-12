@@ -19,19 +19,19 @@ private enum TerminalParseCache {
         "\(output.count)-\(output.hashValue)"
     }
 
-    static func entry(for output: String) -> ParsedTerminal? {
+    static func entry(for output: String) -> ClaudeCodeBlock.ParsedTerminal? {
         table.object(forKey: key(for: output) as NSString)?.value
     }
 
-    static func store(_ parsed: ParsedTerminal, for output: String) {
+    static func store(_ parsed: ClaudeCodeBlock.ParsedTerminal, for output: String) {
         table.setObject(ParsedTerminalBox(value: parsed), forKey: key(for: output) as NSString)
     }
 }
 
 /// `NSCache` holds objects: the parse it carries.
 private final class ParsedTerminalBox {
-    let value: ParsedTerminal
-    init(value: ParsedTerminal) { self.value = value }
+    let value: ClaudeCodeBlock.ParsedTerminal
+    init(value: ClaudeCodeBlock.ParsedTerminal) { self.value = value }
 }
 
 /// Terminal-style output: an optional command line, then output that scrolls both ways inside a
