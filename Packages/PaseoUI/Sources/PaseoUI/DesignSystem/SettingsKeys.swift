@@ -13,4 +13,5 @@ public enum PaseoSettingsKeys {
     /// Off by default: allow/deny actions never appear on notifications unless
     /// the reader opts in (G19).
     public static let notificationActions = "paseo.notifications.actions"
+}
 #endif
