@@ -66,14 +66,43 @@ extension RichContentBlock {
 @MainActor
 func richPieces(_ source: String) -> [RichPiece] {
     var pieces: [RichPiece] = []
-    // Adjacent single-image units whose only separation is blank text merge into one
-    // gallery block (G7 C2). The decision is the pure `RichImageGrouping` rule; this
-    // loop only tracks unit ranges and buffers one unit's normal splice, so a lone
-    // image re-emits exactly what the old code produced.
+    // Adjacent single-image units whose only separation is blank text merge into
+    // one gallery block (G7 C2). Standalone files (G10) and playable media (G11)
+    // are claimed first, from the raw unit, so linkification cannot hide them.
+    // The pending run buffers one unit so a lone image re-emits exactly what the
+    // old code produced.
     var pendingImages: [RichImage] = []
-    var pendingRange: Range<String.Index>?
-    var pendingPieces: [RichPiece] = []
+    var pendingRange: Range<String.Index>? = nil
     var previousUnitEnd: String.Index? = nil
+
+    /// One image as the block the old code would have emitted for its unit.
+    func singleImageBlock(_ image: RichImage, range: Range<String.Index>) -> RichPiece {
+        let length = source[range].utf16.count
+        switch image.source {
+        case .remote(let url):
+            return .block(.bareImageURL(url: url, range: range), utf16Length: length)
+        case .local(let path):
+            return .block(
+                .localImage(path: path, alt: image.alt, range: range), utf16Length: length)
+        }
+    }
+
+    func flushPending() {
+        if pendingImages.count >= 2, let range = pendingRange {
+            let length = source[range].utf16.count
+            pieces.append(.block(
+                RichImageGrouping.group(images: pendingImages, range: range), utf16Length: length))
+        } else if let first = pendingImages.first, let range = pendingRange {
+            pieces.append(singleImageBlock(first, range: range))
+        }
+        pendingImages = []
+        pendingRange = nil
+    }
+
+    func gapIsBlank(to upperBound: String.Index) -> Bool {
+        guard let previousUnitEnd else { return true }
+        return source[previousUnitEnd..<upperBound].allSatisfy(\.isWhitespace)
+    }
 
     func spliceUnit(linked: String, blocks: [RichContentBlock]) -> [RichPiece] {
         var out: [RichPiece] = []
@@ -93,23 +122,10 @@ func richPieces(_ source: String) -> [RichPiece] {
         return out
     }
 
-    func flushPending() {
-        if pendingImages.count >= 2, let range = pendingRange {
-            let length = source[range].utf16.count
-            pieces.append(.block(
-                RichImageGrouping.group(images: pendingImages, range: range), utf16Length: length))
-        } else {
-            pieces.append(contentsOf: pendingPieces)
-        }
-        pendingImages = []
-        pendingRange = nil
-        pendingPieces = []
-    }
-
     for range in RichContentDetector.splitIntoBlocks(source) {
         let unit = String(source[range])
-        // A standalone playable path or URL becomes a player card first (G11 C3/C4);
-        // anything else falls through to the file card (G10) or existing rendering.
+        // Playable media first (G11): a standalone path or bare URL with a playable
+        // extension becomes a player card.
         if let media = RichStandaloneMedia.match(
             blocks: RichContentCache.detect(unit), unitText: unit)
         {
@@ -127,9 +143,8 @@ func richPieces(_ source: String) -> [RichPiece] {
             }
             continue
         }
-        // A bare non-image path standing alone on its line is a file card (G10 C10),
-        // decided from the raw unit so linkification cannot hide it. Images and
-        // inline mentions keep their existing rendering.
+        // A bare non-image path standing alone on its line is a file card (G10),
+        // decided from the raw unit so linkification cannot hide it.
         if let filePath = RichStandaloneFile.path(
             in: RichContentCache.detect(unit), unitText: unit)
         {
@@ -140,39 +155,45 @@ func richPieces(_ source: String) -> [RichPiece] {
         }
         let linked = FilePathLinks.linkifiedForProse(unit)
         let blocks = RichContentCache.detect(linked)
-        guard !blocks.isEmpty else {
-            flushPending()
-            previousUnitEnd = range.upperBound
-            pieces.append(.markdown(linked))
-            continue
-        }
-        // A sole-image unit: exactly one image block and no visible markdown.
-        let soleImage: RichImage? = {
-            guard blocks.count == 1, let image = RichImage.of(block: blocks[0]) else { return nil }
+        // A sole image unit joins the gallery run when only blank text separates it
+        // from the previous one (G7). Remote images arrive as blocks here; a sole
+        // *local* image is detected from the raw unit, since linkification wraps it
+        // into an authored link the detector then skips.
+        let soleRemote: RichImage? = {
+            guard blocks.count == 1, let image = RichImage.of(block: blocks[0]) else {
+                return nil
+            }
             let markdown = linkedWithoutBlocks(linked, blocks: blocks)
-            guard markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            guard markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return nil
+            }
             return image
         }()
-        if let soleImage {
-            let gapBlank: Bool = {
-                guard let previousUnitEnd else { return true }
-                return source[previousUnitEnd..<range.lowerBound].allSatisfy(\.isWhitespace)
-            }()
-            if gapBlank {
-                if let pending = pendingRange {
-                    pendingRange = pending.lowerBound..<range.upperBound
-                } else {
-                    pendingRange = range
-                }
-                pendingImages.append(soleImage)
-                pendingPieces = spliceUnit(linked: linked, blocks: blocks)
-                previousUnitEnd = range.upperBound
-                continue
+        let soleLocal: RichImage? = {
+            guard soleRemote == nil,
+                RichContentCache.detect(unit).count == 1,
+                case .localImage(let path, let alt, _) = RichContentCache.detect(unit).first!,
+                unit.trimmingCharacters(in: .whitespacesAndNewlines) == path
+            else { return nil }
+            return RichImage(source: .local(path: path), alt: alt)
+        }()
+        if let soleImage = soleRemote ?? soleLocal, gapIsBlank(to: range.lowerBound) {
+            if let pending = pendingRange {
+                pendingRange = pending.lowerBound..<range.upperBound
+            } else {
+                pendingRange = range
             }
+            pendingImages.append(soleImage)
+            previousUnitEnd = range.upperBound
+            continue
         }
         flushPending()
         previousUnitEnd = range.upperBound
-        pieces.append(contentsOf: spliceUnit(linked: linked, blocks: blocks))
+        if blocks.isEmpty {
+            pieces.append(.markdown(linked))
+        } else {
+            pieces.append(contentsOf: spliceUnit(linked: linked, blocks: blocks))
+        }
     }
     flushPending()
     return pieces

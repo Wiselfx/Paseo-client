@@ -65,6 +65,7 @@ struct ClaudeRevealProse: View {
             switch piece {
             case .markdown: "md:\(id)"
             case .block(let block, _): "block:\(block.cardKindKey):\(start)"
+            case .file(let path, _): "file:\(path):\(start)"
             }
         }
     }
