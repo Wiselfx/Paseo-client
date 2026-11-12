@@ -330,7 +330,7 @@ enum ProseFonts {
             // the Regular roman keeps exactly the modifiers it had before J1.
             var serifFace: ProseFaceTable.Face?
             if face == .serif {
-                let resolved = ProseFaceTable.face(weight: weight.rank, italic: italic)
+                let resolved = ProseFaceTable.face(weight: weight, italic: italic)
                 name = resolved.postScriptName
                 serifFace = resolved
             }

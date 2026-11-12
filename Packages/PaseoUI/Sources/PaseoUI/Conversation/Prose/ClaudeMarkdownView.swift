@@ -68,14 +68,6 @@
                 size: role.size, relativeTo: role.relativeTo, weight: weight, italic: emphasis)
         }
 
-        /// `face(for:strong:emphasis:)` with an explicit weight instead of strong/emphasis — the
-        /// prose link's 500. Callers pass the run's base weight (the theme's role weight).
-        func face(for font: Font, weight: Font.Weight) -> Font {
-            guard let role = role(of: font) else { return font }
-            return ProseFonts.serif(
-                size: role.size, relativeTo: role.relativeTo, weight: weight, italic: false)
-        }
-
         /// Which rung of this theme's ladder `font` is: the body, or one heading. `Font` is
         /// equatable, and the ladder is seven values, so this is O(7) with no allocation.
         private func role(of font: Font) -> (size: CGFloat, relativeTo: Font.TextStyle, weight: Font.Weight)? {
@@ -640,28 +632,20 @@
         }
         private func inlineText(
             _ children: [MarkdownInline], font: Font, bold: Bool = false, italic: Bool = false, strike: Bool = false,
-            link: URL? = nil, linkWeight: Font.Weight = .regular
+            link: URL? = nil
         ) -> Text {
             children.reduce(Text("")) { result, child in
                 let piece: Text
                 switch child {
                 case .strong(let nested):
-                    piece = inlineText(
-                        nested, font: font, bold: true, italic: italic, strike: strike, link: link,
-                        linkWeight: linkWeight)
+                    piece = inlineText(nested, font: font, bold: true, italic: italic, strike: strike, link: link)
                 case .emphasis(let nested):
-                    piece = inlineText(
-                        nested, font: font, bold: bold, italic: true, strike: strike, link: link,
-                        linkWeight: linkWeight)
+                    piece = inlineText(nested, font: font, bold: bold, italic: true, strike: strike, link: link)
                 case .strikethrough(let nested):
-                    piece = inlineText(
-                        nested, font: font, bold: bold, italic: italic, strike: true, link: link,
-                        linkWeight: linkWeight)
+                    piece = inlineText(nested, font: font, bold: bold, italic: italic, strike: true, link: link)
                 case .link(let destination, let nested):
                     piece = inlineText(
-                        nested, font: font, bold: bold, italic: italic, strike: strike,
-                        // The prose link is 500.
-                        link: URL(string: destination), linkWeight: .medium)
+                        nested, font: font, bold: bold, italic: italic, strike: strike, link: URL(string: destination))
                 default:
                     var value = attributed([child], font: font, bold: bold, italic: italic, strike: strike)
                     if let link {
@@ -669,15 +653,12 @@
                         value.foregroundColor = theme.link
                         value.underlineStyle = .single
                     }
+                    // A link keeps the run's base face: underline and link colour only, as before
+                    // (its `.weight(.medium)` was a no-op on the static serif).
                     if case .code = child {
                         // Inline code keeps the mono face: no strong, no emphasis (as before).
                         piece = Text(value).customAttribute(InlineCodeAttribute())
                     } else {
-                        if link != nil, !bold, !italic {
-                            // The prose link is 500. A real face only where the face table has one;
-                            // an unstyled face keeps the modifier exactly as it was.
-                            value.font = theme.face(for: font, weight: linkWeight)
-                        }
                         piece = Text(value)
                     }
                 }
