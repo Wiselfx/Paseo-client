@@ -24,6 +24,31 @@
 #   get <path>    write one artifact (path as printed by uitest/ls) to stdout
 #   simreset      erase the test simulator (a clean install on the next run)
 #
+# v3: drive the app in the simulator and read what happened (all simulator-only, never a device):
+#   test <ref> <scheme> <Target[/Class[/method]]>
+#                 like uitest for any allowed scheme (PaseoUITests, PaseoClient, PaseoUI, PaseoCore)
+#   analyze <ref> Xcode static analyzer over the app scheme; prints the findings
+#   regen <ref>   run xcodegen on App/project.yml; writes the resulting diff of App/ as a patch
+#                 artifact (the repo checkout is reset; apply the patch and commit it yourself)
+#   install <ref> build the Debug app for the simulator and install it on the test simulator
+#   launch <args|-> start the installed app with launch arguments (comma-separated, or "-" for
+#                 none); prints its pid
+#   terminate     stop the app
+#   shot [name]   screenshot of the simulator into the artifacts (fetch with `get`)
+#   openurl <url> open a paseo:// URL in the simulator (nothing else is accepted)
+#   appearance light|dark
+#   textsize <category>   Dynamic Type: xs s m l xl xxl xxxl ax1 ax2 ax3 ax4 ax5
+#   statusbar on|off      fixed 9:41 status bar for comparable screenshots
+#   privacy <grant|revoke|reset> <service>   photos camera microphone location contacts calendar
+#   crashes [n]   newest n (max 3) Paseo crash reports from this Mac, trimmed
+#   status        disk, simulator state, installed app, lock holder, last gate log lines
+#   clean         delete derived data and artifacts under the claude home (nothing else)
+#
+# Safety model: forced command, fixed verbs, every argument matched against a strict pattern,
+# no argument ever reaches a shell, one job at a time (lock), hard time limits, simulator only
+# (no device, no signing identity, no keychain access), reads limited to the artifacts folder,
+# the repo checkout and this user's own Paseo crash reports.
+#
 # Optional ~/paseo-sim.env on the Mac (never in the repo), `KEY=value` lines:
 #   PASEO_*=...       passed to the tests as environment (e.g. PASEO_TEST_HOST=host:port)
 #   SIM_NAME=...      simulator device name (default: the first available iPhone)
@@ -35,21 +60,63 @@ DERIVED="$HOME/build-derived-data"
 LOG="$HOME/build-gate.log"
 # Hard cap on one build so a hang never ties up the Mac.
 MAX_SECONDS=1500
-GATE_VERSION=2
+GATE_VERSION=3
 ART="$HOME/sim-artifacts"
 SIM_ENV="$HOME/paseo-sim.env"
 UITEST_MAX_SECONDS=2700
 
-read -r verb ref arg2 extra <<<"${SSH_ORIGINAL_COMMAND:-}"
+read -r verb ref arg2 arg3 extra <<<"${SSH_ORIGINAL_COMMAND:-}"
 
-if [[ -n "${extra:-}" ]]; then
+nargs=0
+for a in "${ref:-}" "${arg2:-}" "${arg3:-}" "${extra:-}"; do [[ -n "$a" ]] && nargs=$((nargs + 1)); done
+case "${verb:-}" in
+    ping|sims|simreset|terminate|status|clean) maxargs=0 ;;
+    build|ipa|analyze|regen|install|launch|ls|get|shot|openurl|appearance|textsize|statusbar|crashes) maxargs=1 ;;
+    uitest|privacy) maxargs=2 ;;
+    test) maxargs=3 ;;
+    *) maxargs=0 ;;
+esac
+if (( nargs > maxargs )); then
     echo "refused: too many arguments" >&2
     exit 2
 fi
-if [[ -n "${arg2:-}" && "${verb:-}" != "uitest" ]]; then
-    echo "refused: too many arguments" >&2
-    exit 2
-fi
+BUNDLE_ID="com.wiselfx.paseoclient"
+
+# One job at a time. A lock directory holds the pid; a dead pid's lock is taken over.
+LOCKDIR="$HOME/.gate.lock"
+acquire_lock() {
+    local tries=0
+    while ! mkdir "$LOCKDIR" 2>/dev/null; do
+        local holder
+        holder="$(cat "$LOCKDIR/pid" 2>/dev/null || true)"
+        if [[ -n "$holder" ]] && ! kill -0 "$holder" 2>/dev/null; then
+            rm -rf "$LOCKDIR"
+            continue
+        fi
+        tries=$((tries + 1))
+        if (( tries > 60 )); then
+            echo "refused: another job is running (pid ${holder:-?}); try again in a few minutes" >&2
+            exit 3
+        fi
+        sleep 5
+    done
+    echo $$ >"$LOCKDIR/pid"
+    trap 'rm -rf "$LOCKDIR"' EXIT
+}
+case "${verb:-}" in
+    build|ipa|uitest|test|analyze|regen|install) acquire_lock ;;
+esac
+
+# The booted test simulator or a clear refusal.
+require_sim() {
+    udid="$(pick_sim || true)"
+    if [[ -z "$udid" ]]; then
+        echo "refused: no iPhone simulator available" >&2
+        exit 2
+    fi
+    xcrun simctl boot "$udid" >/dev/null 2>&1 || true
+    xcrun simctl bootstatus "$udid" >/dev/null 2>&1 || true
+}
 
 # One value from ~/paseo-sim.env (empty when absent). Values are taken literally, never evaluated.
 sim_env() {
@@ -203,8 +270,21 @@ simreset)
     xcrun simctl erase "$udid"
     echo "erased $udid"
     ;;
-uitest)
-    if [[ -n "${arg2:-}" ]] && [[ ! "$arg2" =~ ^[A-Za-z0-9_]{1,80}(/[A-Za-z0-9_]{1,80})?$ ]]; then
+uitest|test)
+    if [[ "$verb" == "uitest" ]]; then
+        scheme="PaseoUITests"
+        filter="${arg2:-}"
+        if [[ -n "$filter" ]]; then only_arg="PaseoUITests/$filter"; else only_arg=""; fi
+    else
+        scheme="${arg2:-}"
+        filter="${arg3:-}"
+        case "$scheme" in
+            PaseoUITests|PaseoClient|PaseoUI|PaseoCore) ;;
+            *) echo "refused: scheme must be PaseoUITests, PaseoClient, PaseoUI or PaseoCore" >&2; exit 2 ;;
+        esac
+        only_arg="$filter"
+    fi
+    if [[ -n "$only_arg" ]] && [[ ! "$only_arg" =~ ^[A-Za-z0-9_]{1,80}(/[A-Za-z0-9_]{1,80}){0,2}$ ]]; then
         echo "refused: bad filter" >&2
         exit 2
     fi
@@ -239,12 +319,12 @@ uitest)
         sign=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=)
     fi
     only=()
-    if [[ -n "${arg2:-}" ]]; then only=("-only-testing:PaseoUITests/$arg2"); fi
+    if [[ -n "$only_arg" ]]; then only=("-only-testing:$only_arg"); fi
 
     started="$(date +%s)"
     set +e
     perl -e 'alarm shift; exec @ARGV' "$UITEST_MAX_SECONDS" \
-        xcodebuild -project App/PaseoClient.xcodeproj -scheme PaseoUITests \
+        xcodebuild -project App/PaseoClient.xcodeproj -scheme "$scheme" \
         -configuration Debug -destination "platform=iOS Simulator,id=$udid" \
         -derivedDataPath "$DERIVED" -resultBundlePath "$ART/$run/result.xcresult" \
         -skipPackagePluginValidation -skipMacroValidation \
@@ -253,7 +333,7 @@ uitest)
         test >"$out" 2>&1
     status=$?
     set -e
-    echo "$(date -u +%FT%TZ) uitest $ref ${arg2:-} status=$status" >>"$LOG"
+    echo "$(date -u +%FT%TZ) $verb $ref ${arg2:-} ${arg3:-} status=$status" >>"$LOG"
 
     # The app's own log for the length of the run.
     minutes=$(( ( $(date +%s) - started ) / 60 + 1 ))
@@ -289,6 +369,150 @@ uitest)
     ls -1t "$ART" | tail -n +6 | while IFS= read -r old; do rm -rf "${ART:?}/$old"; done
     exit "$status"
     ;;
+analyze)
+    checkout_ref "${ref:-}"
+    out="$(mktemp)"
+    trap 'rm -f "$out"; rm -rf "$LOCKDIR"' EXIT
+    set +e
+    perl -e 'alarm shift; exec @ARGV' "$MAX_SECONDS" \
+        xcodebuild -project App/PaseoClient.xcodeproj -scheme PaseoClient \
+        -configuration Debug -destination 'generic/platform=iOS Simulator' \
+        -derivedDataPath "$HOME/build-derived-data-analyze" \
+        -skipPackagePluginValidation -skipMacroValidation \
+        CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+        analyze >"$out" 2>&1
+    status=$?
+    set -e
+    echo "$(date -u +%FT%TZ) analyze $ref status=$status" >>"$LOG"
+    grep -E '(error|warning): ' "$out" | grep -E 'Paseo|analyzer|Logic error|Dead|leak|nil' | sed "s#$REPO/##g" | sort -u | head -200 || true
+    grep -E '\*\* (ANALYZE|BUILD) (SUCCEEDED|FAILED) \*\*' "$out" || echo "ANALYZE exit $status"
+    exit "$status"
+    ;;
+regen)
+    checkout_ref "${ref:-}"
+    command -v xcodegen >/dev/null || { echo "refused: xcodegen is not installed for this user (brew install xcodegen)" >&2; exit 2; }
+    (cd App && xcodegen generate --quiet) 2>&1 | tail -20
+    mkdir -p "$ART/regen"
+    patch="$ART/regen/regen-$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD).patch"
+    git add -N App >/dev/null 2>&1 || true
+    git diff --binary -- App >"$patch"
+    git checkout --quiet --force -- . && git clean -fdq
+    if [[ -s "$patch" ]]; then
+        echo "project.yml changes the Xcode project: patch is ${patch#$ART/}"
+        grep -c '^diff --git' "$patch" | sed 's/^/files changed: /'
+    else
+        rm -f "$patch"
+        echo "the committed Xcode project already matches project.yml"
+    fi
+    ;;
+install)
+    checkout_ref "${ref:-}"
+    require_sim
+    out="$(mktemp)"
+    trap 'rm -f "$out"; rm -rf "$LOCKDIR"' EXIT
+    set +e
+    perl -e 'alarm shift; exec @ARGV' "$MAX_SECONDS" \
+        xcodebuild -project App/PaseoClient.xcodeproj -scheme PaseoClient \
+        -configuration Debug -destination "platform=iOS Simulator,id=$udid" \
+        -derivedDataPath "$DERIVED" -skipPackagePluginValidation -skipMacroValidation \
+        CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build >"$out" 2>&1
+    status=$?
+    set -e
+    if [[ $status -ne 0 ]]; then
+        grep -E 'error: ' "$out" | sed "s#$REPO/##g" | sort -u | head -100 || true
+        echo "INSTALL FAILED (build exit $status)"
+        exit "$status"
+    fi
+    app="$(find "$DERIVED/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name '*.app' | head -1)"
+    xcrun simctl install "$udid" "$app"
+    echo "installed $(git rev-parse --short HEAD) on $udid"
+    ;;
+launch)
+    require_sim
+    args=()
+    if [[ -n "${ref:-}" && "$ref" != "-" ]]; then
+        if [[ ! "$ref" =~ ^[A-Za-z0-9_.,=:/-]{1,300}$ ]]; then echo "refused: bad launch arguments" >&2; exit 2; fi
+        IFS=',' read -r -a args <<<"$ref"
+    fi
+    xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
+    xcrun simctl launch "$udid" "$BUNDLE_ID" ${args[@]+"${args[@]}"}
+    ;;
+terminate)
+    require_sim
+    xcrun simctl terminate "$udid" "$BUNDLE_ID" || true
+    ;;
+shot)
+    require_sim
+    name="${ref:-shot}"
+    if [[ ! "$name" =~ ^[A-Za-z0-9_-]{1,60}$ ]]; then echo "refused: bad name" >&2; exit 2; fi
+    mkdir -p "$ART/shots"
+    f="shots/$(date +%Y%m%d-%H%M%S)-$name.png"
+    xcrun simctl io "$udid" screenshot --type=png "$ART/$f" >/dev/null 2>&1 || { require_sim; xcrun simctl io "$udid" screenshot --type=png "$ART/$f" >/dev/null; }
+    ls -1t "$ART/shots" | tail -n +31 | while IFS= read -r old; do rm -f "${ART:?}/shots/$old"; done
+    echo "$f"
+    ;;
+openurl)
+    require_sim
+    if [[ ! "${ref:-}" =~ ^paseo://[A-Za-z0-9._~:/?#@!$\&\'*+,\;=%-]{0,500}$ ]]; then
+        echo "refused: only paseo:// URLs" >&2
+        exit 2
+    fi
+    xcrun simctl openurl "$udid" "$ref"
+    ;;
+appearance)
+    require_sim
+    case "${ref:-}" in light|dark) xcrun simctl ui "$udid" appearance "$ref" ;; *) echo "refused: light or dark" >&2; exit 2 ;; esac
+    ;;
+textsize)
+    require_sim
+    case "${ref:-}" in
+        xs) c=extra-small ;; s) c=small ;; m) c=medium ;; l) c=large ;; xl) c=extra-large ;;
+        xxl) c=extra-extra-large ;; xxxl) c=extra-extra-extra-large ;;
+        ax1) c=accessibility-medium ;; ax2) c=accessibility-large ;; ax3) c=accessibility-extra-large ;;
+        ax4) c=accessibility-extra-extra-large ;; ax5) c=accessibility-extra-extra-extra-large ;;
+        *) echo "refused: xs s m l xl xxl xxxl ax1..ax5" >&2; exit 2 ;;
+    esac
+    xcrun simctl ui "$udid" content_size "$c"
+    ;;
+statusbar)
+    require_sim
+    case "${ref:-}" in
+        on) xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 ;;
+        off) xcrun simctl status_bar "$udid" clear ;;
+        *) echo "refused: on or off" >&2; exit 2 ;;
+    esac
+    ;;
+privacy)
+    require_sim
+    case "${ref:-}" in grant|revoke|reset) ;; *) echo "refused: grant, revoke or reset" >&2; exit 2 ;; esac
+    case "${arg2:-}" in photos|camera|microphone|location|contacts|calendar) ;; *) echo "refused: photos camera microphone location contacts calendar" >&2; exit 2 ;; esac
+    xcrun simctl privacy "$udid" "$ref" "$arg2" "$BUNDLE_ID"
+    ;;
+crashes)
+    n="${ref:-1}"
+    if [[ ! "$n" =~ ^[1-3]$ ]]; then echo "refused: 1 to 3" >&2; exit 2; fi
+    dir="$HOME/Library/Logs/DiagnosticReports"
+    ls -1t "$dir"/Paseo*.ips "$dir"/Paseo*.crash 2>/dev/null | head -n "$n" | while IFS= read -r f; do
+        echo "== $(basename "$f")"
+        head -c 40000 "$f" | head -400
+    done
+    ;;
+status)
+    echo "gate v$GATE_VERSION"
+    df -h "$HOME" | tail -1
+    echo "lock: $(cat "$LOCKDIR/pid" 2>/dev/null || echo free)"
+    udid="$(pick_sim || true)"
+    echo "simulator: ${udid:-none} $(xcrun simctl list devices | grep -F "$udid" | head -1 | grep -oE '\((Booted|Shutdown)\)' || true)"
+    if [[ -n "$udid" ]]; then
+        xcrun simctl get_app_container "$udid" "$BUNDLE_ID" >/dev/null 2>&1 && echo "app: installed" || echo "app: not installed"
+    fi
+    echo "recent gate log:"; tail -8 "$LOG" 2>/dev/null || true
+    du -sh "$DERIVED" "$ART" 2>/dev/null || true
+    ;;
+clean)
+    rm -rf "${HOME:?}/build-derived-data" "${HOME:?}/build-derived-data-device" "${HOME:?}/build-derived-data-analyze" "${ART:?}"
+    echo "cleaned derived data and artifacts"
+    ;;
 ls)
     mkdir -p "$ART"
     if [[ -z "${ref:-}" ]]; then
@@ -312,7 +536,7 @@ get)
     cat "$ART/$ref"
     ;;
 *)
-    echo "refused: allowed verbs are build, ipa, ping, sims, uitest, ls, get, simreset" >&2
+    echo "refused: unknown verb (see the header of build-gate for the list)" >&2
     exit 2
     ;;
 esac
