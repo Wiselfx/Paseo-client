@@ -182,6 +182,13 @@ enum Palette {
     /// reads on light and dark photos alike; the text is always white.
     static let mediaBadge = Color.black.opacity(0.6)
     static let onMediaBadge = Color.white
+    /// A thumbnail's wash while its bytes go up (J3 §1): black at 35 % in both themes, so the
+    /// composer's progress ring reads on any image, exactly as the composer has always drawn it.
+    static let mediaDim = Color.black.opacity(0.35)
+    /// The stronger wash over a tile whose action failed (J3 §1): black at 45 %.
+    static let mediaScrim = Color.black.opacity(0.45)
+    /// The wash under a white glyph on a tile's corner (J3 §1): the attachment pill's remove "x".
+    static let mediaControl = Color.black.opacity(0.6)
 
     // MARK: DSH tokens
 

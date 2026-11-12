@@ -177,9 +177,12 @@ struct TranscriptJump: Equatable {
     // Follow and anchor.
     var isFollowing = true
     var anchoringToAnswer = false
-    /// "Back to the end" is on screen. Set by the transcript from its distance from the end: it
-    /// flips only when that distance crosses a real screen, never per scroll frame (D1 §3, H2 §2).
-    var showsBackToEnd = false
+    /// "Back to the end" is on screen. Set by the transcript from the reader's distance from the
+    /// end of the content: it flips only when that distance crosses a real screen, never per
+    /// scroll frame and never because the keyboard moved (D1 §3, H2 §2, J3 §3).
+    var backToEnd = BackToEndState()
+    /// Whether the button is offered. Read by the button alone.
+    var showsBackToEnd: Bool { backToEnd.isShowing }
     /// The header is out of the way while you read forward. The transcript owns the rule (its
     /// scroll distance accumulates in a non-observed box) and writes this one `Bool` only when
     /// the bar flips; only the top chrome reads it (H2 §3).
@@ -1382,7 +1385,7 @@ struct TranscriptJump: Equatable {
     func returnToEnd() {
         anchoringToAnswer = false
         isFollowing = true
-        showsBackToEnd = false
+        backToEnd.returnedToEnd()
         jumpToEndRequest += 1
     }
 
