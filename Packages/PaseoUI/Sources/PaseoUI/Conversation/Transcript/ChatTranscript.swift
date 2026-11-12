@@ -215,14 +215,6 @@ struct TranscriptView: View {
                     @unknown default:
                         reportReadingPosition()
                     }
-                    // J3 §3: a programmatic glide that reaches the end ("Back to the end", or the
-                    // tap-to-end wish) does not always land on the scroll view's own end: an
-                    // animated `ScrollPosition.scrollTo(edge: .bottom)` can stop at the edge of
-                    // the readable area, and a glide that grows nothing produces no geometry
-                    // change, so no `.idle` settle ever re-ran the decision and the button stayed
-                    // up over the last message. `.animating` is the programmatic glide leaving:
-                    // decide once here, with every frame of that glide already in the metrics.
-                    if previous == .animating { decideBackToEnd() }
                 }
                 .onScrollGeometryChange(for: ScrollFollowMetrics.self) { geometry in
                     ScrollFollowMetrics(
@@ -230,14 +222,13 @@ struct TranscriptView: View {
                         // content you can actually see, so 0 is the end and negative is past it.
                         distanceFromBottom: geometry.contentSize.height - geometry.contentOffset.y
                             - geometry.bounds.height + geometry.contentInsets.bottom,
-                        // J3 §3: the reader's own distance — the end of the content to the bottom
-                        // of the content area. `contentInsets.bottom` and the content height
-                        // cancel, so this value does not move when the keyboard or a tall composer
-                        // only takes room from the view: `contentOffset.y + bounds.height` is the
-                        // same number before and after.
+                        // J3 §3: the end of the content to the scroll view's own bottom edge, with
+                        // no inset term. The keyboard and a growing composer only change
+                        // `contentInsets.bottom`, so this does not move when they come and go
+                        // (lead fix: the first cut kept `+ contentInsets.bottom`, i.e. the old
+                        // distance). At the end it is minus the bar's inset, which reads as the end.
                         distanceFromContentBottom: geometry.contentSize.height
-                            - geometry.contentOffset.y - geometry.bounds.height
-                            + geometry.contentInsets.bottom,
+                            - geometry.contentOffset.y - geometry.bounds.height,
                         distanceFromTop: geometry.contentOffset.y,
                         contentHeight: geometry.contentSize.height,
                         offsetY: geometry.contentOffset.y,
@@ -486,9 +477,9 @@ struct TranscriptView: View {
     /// real screen the transcript glides there and the last line keeps resting on the composer;
     /// further up the reader's place wins and the button offers the way back.
     private func endScrollRequested() {
-        guard scrollTrack.distanceFromContentBottom > Self.followSlack else { return }
+        guard scrollTrack.distanceFromBottom > Self.followSlack else { return }
         let screen = stableViewportHeight > 0 ? stableViewportHeight : scrollTrack.visibleHeight
-        guard scrollTrack.distanceFromContentBottom <= screen else {
+        guard scrollTrack.distanceFromBottom <= screen else {
             if controller.isFollowing { controller.isFollowing = false }
             decideBackToEnd()
             return

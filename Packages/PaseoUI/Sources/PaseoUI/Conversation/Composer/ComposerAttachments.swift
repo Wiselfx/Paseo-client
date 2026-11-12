@@ -300,10 +300,7 @@ struct ComposerAttachmentPill: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            // A fixed frame on the pill, so the remove button's overhang can never resize the
-            // tray row either.
             pill
-                .frame(width: Self.tileSize, height: Self.tileSize, alignment: .leading)
                 // The pill is one element; the remove button stays a separate action, so
                 // VoiceOver can remove an attachment without opening it.
                 .accessibilityElement(children: .combine)
@@ -315,8 +312,8 @@ struct ComposerAttachmentPill: View {
     @ViewBuilder private var pill: some View {
         if case .attached(let attachment) = item.phase {
             forgePill(attachment)
-        } else if case .decoding = item.phase, !item.isImage {
-            filePill
+        } else if case .decoding = item.phase {
+            decodingTile
         } else if item.isImage, let thumbnail = item.thumbnail {
             Button {
                 if case .failed = item.phase {
@@ -455,6 +452,17 @@ struct ComposerAttachmentPill: View {
         case .forgeIssue(let forge): "Remove issue \(forge.number)"
         default: "Remove attachment"
         }
+    }
+
+    /// The placeholder while the bytes are read: a framed tile with the app's inline spinner.
+    private var decodingTile: some View {
+        ZStack {
+            Palette.chip
+            InlineProgress()
+        }
+        .frame(width: Self.tileSize, height: Self.tileSize)
+        .clipShape(.rect(cornerRadius: Radius.md))
+        .accessibilityLabel("Preparing \(item.fileName)")
     }
 
     /// A forge issue/change-request pill: kind icon, "#42" and the kind word.
