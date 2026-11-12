@@ -40,9 +40,9 @@ final class NotificationCoordinator {
     private let proxy: NotificationDelegateProxy
 
     private static let promptedKey = "paseo.notifications.prompted"
-    static let permissionCategoryID = "paseo.permission"
-    static let allowActionID = "paseo.permission.allow"
-    static let denyActionID = "paseo.permission.deny"
+    nonisolated static let permissionCategoryID = "paseo.permission"
+    nonisolated static let allowActionID = "paseo.permission.allow"
+    nonisolated static let denyActionID = "paseo.permission.deny"
 
     init() {
         let proxy = NotificationDelegateProxy()
@@ -182,7 +182,7 @@ final class NotificationCoordinator {
             if let thumbnail,
                 let fileURL = await Task.detached(priority: .utility, operation: { () -> URL? in
                     guard
-                        let data = MediaPipeline.cachedNotificationThumbnail(
+                        let data = NotificationThumbnails.cachedData(
                             remoteURL: thumbnail.remoteURL, daemonPath: thumbnail.daemonPath,
                             workspaceID: thumbnail.workspaceID),
                         !data.isEmpty
@@ -232,11 +232,11 @@ final class NotificationCoordinator {
         }
     }
 
-    static let requestIdKey = "paseo.permission.requestId"
-    static let agentIdKey = "paseo.permission.agentId"
-    static let hostKey = "paseo.permission.hostServerID"
-    static let allowIdKey = "paseo.permission.allowActionId"
-    static let denyIdKey = "paseo.permission.denyActionId"
+    nonisolated static let requestIdKey = "paseo.permission.requestId"
+    nonisolated static let agentIdKey = "paseo.permission.agentId"
+    nonisolated static let hostKey = "paseo.permission.hostServerID"
+    nonisolated static let allowIdKey = "paseo.permission.allowActionId"
+    nonisolated static let denyIdKey = "paseo.permission.denyActionId"
 
     /// The "Open" fallback (G19): when a notification answer cannot be sent
     /// (nothing pending, reconnect failed), deep-link the agent so the reader
@@ -326,19 +326,11 @@ private final class NotificationDelegateProxy: NSObject, UNUserNotificationCente
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let content = response.notification.request.content
-        var info: [String: String] = [:]
-        for (key, value) in content.userInfo {
-            guard let key = key as? String, let value = value as? String else { continue }
-            info[key] = value
-        }
         // The coordinator answers (possibly after async work) and completes
         // exactly once; without a handler this falls through to the tap path.
+        // The coordinator installs `onResponse` in its init, before any callback.
         guard let onResponse else {
-            let target = AttentionTarget(userInfo: info)
             completionHandler()
-            guard let target else { return }
-            onTap?(target)
             return
         }
         onResponse(response, completionHandler)

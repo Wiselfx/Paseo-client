@@ -392,7 +392,7 @@ actor MediaPipeline {
     /// memory cache first, then the daemon disk cache. Never fetches — the
     /// caller copies the bytes to a temp file for `UNNotificationAttachment`.
     /// Nil when nothing is cached: the notification posts without an image.
-    public static func cachedNotificationThumbnail(
+    static func cachedNotificationThumbnail(
         remoteURL: String? = nil, daemonPath: String? = nil, workspaceID: String? = nil
     ) -> Data? {
         if let remoteURL, let target = MediaPipeline.target(for: remoteURL),
