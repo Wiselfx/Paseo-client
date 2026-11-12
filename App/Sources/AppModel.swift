@@ -468,7 +468,7 @@ final class AppModel {
             _ = session.agents.map { ($0.id, $0.title) }
             _ = session.attention.pending.map(\.id)
         } onChange: { [weak self] in
-            Task { [weak self] in
+            Task { @MainActor [weak self] in
                 await self?.publishAgentDirectory(session: session)
                 self?.watchAgentDirectory(session: session)
             }
