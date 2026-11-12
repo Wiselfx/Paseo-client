@@ -15,6 +15,9 @@ import UIKit
 /// turn's instance: the summary rides on `Turn`, so unchanged turns compare equal.
 struct TurnChangesCard: View, Equatable {
     let summary: TurnChangeSummary
+    /// The turn the summary describes: the diff opens this turn's calls for the
+    /// file, never a later turn's edit to the same path.
+    let turnID: String
 
     @Environment(\.richActions) private var richActions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -23,7 +26,7 @@ struct TurnChangesCard: View, Equatable {
     /// Compared for `==`; interaction state is not part of identity (the TurnRow
     /// pattern: the row's inputs decide re-renders, not its disclosure).
     nonisolated static func == (lhs: TurnChangesCard, rhs: TurnChangesCard) -> Bool {
-        lhs.summary == rhs.summary
+        lhs.summary == rhs.summary && lhs.turnID == rhs.turnID
     }
 
     private var fileCountLabel: String {
@@ -86,7 +89,7 @@ struct TurnChangesCard: View, Equatable {
                         Divider().background(Palette.divider)
                         ForEach(summary.files, id: \.path) { file in
                             Button {
-                                richActions?.openDiff(file.path)
+                                richActions?.openDiff(turnID, file.path)
                             } label: {
                                 HStack(spacing: Space.sm) {
                                     Text(file.path)

@@ -173,7 +173,9 @@ private struct TurnDraft {
         }
 
         var finished = Turn(id: id, turnId: turnId, userMessage: userMessage, segments: segments, phase: phase, startedAt: startedAt, endedAt: endedAt)
-        finished.changeSummary = TurnChangeSummary.summarize(turn: finished)
+        // The card only shows at turn end: a running tail is rebuilt on every stream
+        // event, so parsing its diffs here would cost O(diff size) per token on main.
+        finished.changeSummary = isRunning ? nil : TurnChangeSummary.summarize(turn: finished)
         return finished
     }
 }

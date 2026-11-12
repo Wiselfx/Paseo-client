@@ -22,6 +22,25 @@ struct TurnChangeSummaryTests {
         return turns[0]
     }
 
+    /// A running turn computes nothing: the tail is rebuilt on every stream event, so
+    /// parsing its diffs there would cost O(diff size) per token on the main actor.
+    @Test("a running turn with a large diff has no summary")
+    func runningTurnSkipsSummary() {
+        let bigDiff = (0..<1000).map { "-old line \($0)\n+new line \($0)" }.joined(
+            separator: "\n")
+        let rows = [
+            row(
+                id: "c1",
+                detail: .edit(
+                    filePath: "Big.swift", oldString: nil, newString: nil,
+                    unifiedDiff: bigDiff))
+        ]
+        let turns = TurnBuilder.turns(from: rows, activeTurnId: "t1")
+        #expect(turns.count == 1)
+        #expect(turns[0].phase == .running)
+        #expect(turns[0].changeSummary == nil)
+    }
+
     /// Counts match `git diff --stat`: `+` lines (not `+++`), `-` lines (not `---`).
     @Test("unified diff counts match git diff --stat")
     func unifiedDiffCounts() throws {

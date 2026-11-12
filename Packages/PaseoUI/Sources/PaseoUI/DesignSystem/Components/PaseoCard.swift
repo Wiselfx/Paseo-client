@@ -43,9 +43,10 @@ final class RichActions {
     /// Lists a daemon directory without touching the Files page's state (G10 C10).
     /// Nil outside a conversation; nil entries keep the card honest about unknowns.
     var listDaemonDirectory: ((String, String) async -> [FileExplorerEntry]?)?
-    /// Opens a file's diff (G6 C11): the tool call's own diff when this conversation
-    /// has one, else the file viewer. No-op until the host sets it.
-    var openDiff: (String) -> Void = { _ in }
+    /// Opens a file's diff (G6 C11): this turn's edit/write calls for the path, in
+    /// order — the concatenated unified diffs, or the combined old-to-new — else the
+    /// file viewer. No-op until the host sets it.
+    var openDiff: (String, String) -> Void = { _, _ in }
     /// Jumps the transcript to a media-sheet item's turn (G12 C15). No-op until set.
     var openMediaItem: (ConversationMediaItem) -> Void = { _ in }
     /// The checkout's PR status (G9 C13), mirrored by the conversation controller.

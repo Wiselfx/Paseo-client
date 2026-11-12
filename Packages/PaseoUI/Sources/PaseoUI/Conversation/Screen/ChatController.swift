@@ -315,8 +315,8 @@ struct TranscriptJump: Equatable {
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
         }
-        richActions.openDiff = { [weak self] path in
-            self?.openDiff(at: path)
+        richActions.openDiff = { [weak self] turnID, path in
+            self?.openDiff(turnID: turnID, path: path)
         }
         richActions.openMediaItem = { [weak self] item in
             self?.openMediaItem(item)
@@ -663,26 +663,44 @@ struct TranscriptJump: Equatable {
         openFilePath = path
     }
 
-    /// The latest edit/write detail for `path` in this conversation, for the turn
-    /// changes card (G6 C11). O(rows) on tap — never per frame. Falls back to the file
-    /// viewer when no call touched the path (e.g. a write-only change).
-    func openDiff(at path: String) {
-        for row in store.timeline.rows.reversed() {
-            guard case .toolCall(let call) = row.item else { continue }
-            switch call.detail {
-            case .edit(let edited, let old, let new, let diff) where edited == path:
-                diffDocument = ClaudeDiffDocument(
-                    path: edited, unifiedDiff: diff, old: old, new: new)
-                return
-            case .write(let written, let content) where written == path:
-                diffDocument = ClaudeDiffDocument(
-                    path: written, unifiedDiff: nil, old: nil, new: content)
-                return
-            default:
-                break
+    /// This turn's edit/write calls for `path`, in order, for the turn changes card
+    /// (G6 C11): the concatenated unified diffs, or the combined old-to-new when the
+    /// calls carry old/new. O(turn rows) on tap — never per frame. Falls back to the
+    /// file viewer when the turn never touched the path.
+    func openDiff(turnID: String, path: String) {
+        guard let turn = store.turns.first(where: { $0.id == turnID }) else {
+            openFileViewer(at: path)
+            return
+        }
+        var diffs: [String] = []
+        var firstOld: String?
+        var lastNew: String?
+        for segment in turn.segments {
+            guard case .work(let group) = segment else { continue }
+            for row in group.rows {
+                guard case .toolCall(let call) = row.item else { continue }
+                switch call.detail {
+                case .edit(let edited, let old, let new, let diff) where edited == path:
+                    if let diff, !diff.isEmpty { diffs.append(diff) }
+                    if firstOld == nil { firstOld = old }
+                    if new != nil { lastNew = new }
+                case .write(let written, let content) where written == path:
+                    lastNew = content
+                default:
+                    break
+                }
             }
         }
-        openFileViewer(at: path)
+        guard !diffs.isEmpty || firstOld != nil || lastNew != nil else {
+            openFileViewer(at: path)
+            return
+        }
+        let concatenated = diffs.joined(separator: "\n")
+        diffDocument = ClaudeDiffDocument(
+            path: path,
+            unifiedDiff: concatenated.isEmpty ? nil : concatenated,
+            old: firstOld,
+            new: lastNew)
     }
 
     /// Jumps the transcript to a media-sheet item's turn (G12 C15): the sheet closes,
