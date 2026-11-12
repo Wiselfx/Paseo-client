@@ -170,9 +170,10 @@ func richPieces(_ source: String) -> [RichPiece] {
             return image
         }()
         let soleLocal: RichImage? = {
-            guard soleRemote == nil,
-                RichContentCache.detect(unit).count == 1,
-                case .localImage(let path, let alt, _) = RichContentCache.detect(unit).first!,
+            guard soleRemote == nil else { return nil }
+            let detected = RichContentCache.detect(unit)
+            guard detected.count == 1,
+                case .localImage(let path, let alt, _) = detected[0],
                 unit.trimmingCharacters(in: .whitespacesAndNewlines) == path
             else { return nil }
             return RichImage(source: .local(path: path), alt: alt)

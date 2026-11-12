@@ -24,7 +24,7 @@ public struct RichImage: Sendable, Equatable, Hashable {
 
     /// The single-image blocks that may join a gallery, with their identity. SVG
     /// sources stay out: they keep their own vector card instead of a tile.
-    static func of(block: RichContentBlock) -> RichImage? {
+    public static func of(block: RichContentBlock) -> RichImage? {
         switch block {
         case .bareImageURL(let url, _):
             guard !url.lowercased().contains(".svg") else { return nil }

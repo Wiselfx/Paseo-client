@@ -26,6 +26,10 @@ struct RichGalleryCard: View {
     @State private var showViewer = false
     @State private var tappedLoad = false
     @State private var shareImage: UIImage?
+    /// The card's measured width, for decoding tiles at the size they draw at.
+    @State private var width: CGFloat = 0
+    /// Tiles that failed after an explicit fetch: a small glyph, and a tap retries.
+    @State private var failedTiles: Set<String> = []
 
     private var tileIDs: [String] {
         images.map { image in
@@ -55,9 +59,36 @@ struct RichGalleryCard: View {
             kind: kind, condition: richActions?.linkCondition ?? .assumed)
     }
 
-    /// One load per count + tap state: geometry never re-runs loads.
+    /// The tile slot in points: two columns whatever the geometry, so the decode
+    /// matches the draw. Falls back to the old constant before layout lands.
+    private var slotPoints: CGFloat {
+        guard width > 1 else { return 180 }
+        return max((width - Metrics.galleryTileSpacing) / 2, 1)
+    }
+
+    /// One load per count + tap state + width bucket: geometry never re-runs loads,
+    /// and tiles skipped as cached never refetch on the re-run.
     private var loadKey: String {
-        "\(images.count)|\(tappedLoad)"
+        "\(images.count)|\(tappedLoad)|\(MediaSizing.pixelWidth(points: slotPoints, scale: displayScale))"
+    }
+
+    /// The card's inner width, measured on the frame it is actually drawn in.
+    private var widthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { width = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
+        }
+    }
+
+    /// The tile reads the decoded cache on the first pass: scrolling back draws
+    /// instantly with no flash or jump, and `.task` only fetches what is missing.
+    private func resolvedThumb(id: String, image: RichImage) -> UIImage? {
+        if let thumb = thumbnails[id] { return thumb }
+        guard let identity = cacheIdentity(for: image),
+            let cached = MediaPipeline.cached(for: identity)
+        else { return nil }
+        return cached.image
     }
 
     private var viewerItems: [MediaViewerItem] {
@@ -97,6 +128,7 @@ struct RichGalleryCard: View {
         Group {
             if images.count >= 2 {
                 PaseoMediaCard(media: grid)
+                    .background { widthReader }
                     .overlay {
                         if showsTapBox {
                             tapOverlay
@@ -118,8 +150,10 @@ struct RichGalleryCard: View {
                     ActivityView(items: [shareImage])
                 }
             }
-            .paseoCardAccessibility(
-                kind: "Images", title: "\(images.count) images", isButton: false)
+            // Contain, not combine: every tile stays its own VoiceOver button so the
+            // reader can open image 2 of 5. The container carries the count.
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("\(images.count) images")
     }
 
     private var clampedSelection: Int {
@@ -212,16 +246,29 @@ struct RichGalleryCard: View {
         let id = tileIDs[index]
         let image = images[index]
         Button {
-            selection = index
-            showViewer = true
+            if failedTiles.contains(id) {
+                // A failed tile retries on tap: the reader's explicit fetch.
+                failedTiles.remove(id)
+                Task { @MainActor in
+                    await loadTile(image: image, id: id, fetch: true)
+                }
+            } else {
+                selection = index
+                showViewer = true
+            }
         } label: {
             ZStack {
                 Rectangle().fill(Palette.codeSurface)
-                if let uiImage = thumbnails[id] {
+                if let uiImage = resolvedThumb(id: id, image: image) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .transition(.opacity)
+                } else if failedTiles.contains(id) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.glyph(.regular, weight: .light))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .accessibilityLabel("Couldn't load image")
                 }
             }
             .aspectRatio(aspect, contentMode: .fit)
@@ -295,7 +342,10 @@ struct RichGalleryCard: View {
         let allowFetch = tappedLoad || policy == .automatic
         for (index, image) in images.enumerated() {
             let id = tileIDs[index]
-            if thumbnails[id] != nil { continue }
+            if let cached = resolvedThumb(id: id, image: image) {
+                thumbnails[id] = cached
+                continue
+            }
             await loadTile(image: image, id: id, fetch: allowFetch)
             guard !Task.isCancelled else { return }
         }
@@ -320,8 +370,8 @@ struct RichGalleryCard: View {
             }
         }()
         guard let source else { return }
-        // Tiles crop: decode at the slot pixel width.
-        let pixelWidth = MediaSizing.pixelWidth(points: 180, scale: displayScale)
+        // Tiles crop: decode at the measured slot pixel width.
+        let pixelWidth = MediaSizing.pixelWidth(points: slotPoints, scale: displayScale)
         for await event in await MediaPipeline.shared.events(
             source: source, pixelWidth: pixelWidth, capBytes: capBytes, ignoreFailureCache: false)
         {
@@ -330,8 +380,10 @@ struct RichGalleryCard: View {
                 switch outcome {
                 case .image(let payload):
                     thumbnails[id] = payload.image
-                case .svg, .failure:
+                case .svg:
                     break
+                case .failure:
+                    failedTiles.insert(id)
                 }
             }
         }
