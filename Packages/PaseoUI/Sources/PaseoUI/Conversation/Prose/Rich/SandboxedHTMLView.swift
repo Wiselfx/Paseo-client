@@ -60,6 +60,12 @@ struct SandboxedHTMLView: UIViewRepresentable {
     /// have no access to workspace files. The scheme handler is built with the web view, so no
     /// object is allocated per `body` pass.
     var previewFiles: PreviewFileSource? = nil
+    /// The compiled offline rule list for chat documents (`OfflineContentRules`). Nil
+    /// renders as today (Files previews keep their CDN access).
+    var contentRuleList: WKContentRuleList? = nil
+    /// When true the first load waits for the rule list: a chat document must never
+    /// paint unprotected, even for the milliseconds the first compile takes.
+    var awaitContentRules = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onHeightChange: onHeightChange, floor: heightFloor, ceiling: heightCeiling)
@@ -101,7 +107,15 @@ struct SandboxedHTMLView: UIViewRepresentable {
         context.coordinator.allowsExternalNavigation = onExternalNavigation != nil
         webView.scrollView.isScrollEnabled = fillsFrame
         webView.scrollView.bounces = fillsFrame
-        if context.coordinator.loadedHTML != html {
+        if context.coordinator.appliedRuleList !== contentRuleList {
+            context.coordinator.appliedRuleList = contentRuleList
+            webView.configuration.userContentController.removeAllContentRuleLists()
+            if let contentRuleList {
+                webView.configuration.userContentController.addContentRuleList(contentRuleList)
+            }
+        }
+        let rulesReady = !awaitContentRules || contentRuleList != nil
+        if rulesReady, context.coordinator.loadedHTML != html {
             context.coordinator.loadedHTML = html
             webView.loadHTMLString(html, baseURL: nil)
         }
@@ -121,6 +135,9 @@ struct SandboxedHTMLView: UIViewRepresentable {
         var floor: CGFloat
         var ceiling: CGFloat
         var loadedHTML: String?
+        /// The rule list currently installed on the web view; nil after a removal.
+        /// Compared by identity: a new compile is a new object.
+        var appliedRuleList: WKContentRuleList?
 
         /// The last height handed to `onHeightChange`; reports closer than 2 pt are ignored.
         private var lastHeight: CGFloat?
@@ -264,7 +281,7 @@ enum RichHTMLDocument {
     /// like the visualize stage, but the CSP keeps the network closed). The export shares
     /// this same build, so what exports is what the page showed.
     static func artifactHTML(source: String, dark: Bool) -> String {
-        if source.lowercased().contains("<html") { return source }
+        if source.lowercased().contains("<html") { return OfflineCSP.inject(into: source) }
         let scheme = dark ? "dark" : "light"
         return """
         <!DOCTYPE html>

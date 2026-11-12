@@ -276,7 +276,7 @@
                                 onAction(.previewCode(language: language, content: content))
                             } label: {
                                 Image(systemName: "eye")
-                                    .frame(width: 28, height: 28)
+                                    .frame(width: Metrics.codeIconSize, height: Metrics.codeIconSize)
                                     .frame(width: 44, height: 44)
                                     .contentShape(.rect)
                             }.accessibilityLabel("Preview").accessibilityIdentifier(

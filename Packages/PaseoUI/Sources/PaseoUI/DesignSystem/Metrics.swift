@@ -57,6 +57,19 @@ enum Metrics {
     /// (dampingRatio 1, velocity-matched) drive the curve; these bound its length.
     static let dismissDuration: Double = 0.25
     static let springHomeDuration: Double = 0.32
+    /// The card header capsule insets (G4 C9): 10 pt horizontal, 6 pt vertical.
+    static let cardHeaderHPadding: CGFloat = 10
+    static let cardHeaderVPadding: CGFloat = 6
+    /// The source preview's scroll cap (G4/G5): code boxes never push the turn away.
+    static let sourcePreviewMaxHeight: CGFloat = 260
+    /// Compact placeholder height before layout (G4 C9): small, for one frame only.
+    static let placeholderCompactHeight: CGFloat = 120
+    /// The offscreen snapshot clamp (G4 §4.1): snapshots never exceed ~4 MP.
+    static let offscreenSnapshotMaxWidth: CGFloat = 1365
+    /// The mermaid render timeout (G4 §4.1): WebKit answers in ms; 20 s is failure.
+    static let mermaidRenderTimeout: Double = 20
+    /// The inline code icon buttons (G5 C8 Preview): 28 pt glyph in a 44 pt hit area.
+    static let codeIconSize: CGFloat = 28
 }
 
 /// The sidebar's rows.

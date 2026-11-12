@@ -145,6 +145,9 @@ struct ArtifactPage: View {
     let document: ArtifactDocument
     let sourceID: String
     let namespace: Namespace.ID
+    /// File previews read workspace files through this; nil for chat artifacts, which
+    /// never leave their offline sandbox.
+    var previewFiles: PreviewFileSource? = nil
     let onClose: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -156,8 +159,14 @@ struct ArtifactPage: View {
     @State private var safariURL: URL?
     @State private var reloadToken = 0
     @State private var holdsSlot = false
+    /// The compiled offline rules for chat documents; file previews skip them and keep
+    /// the Files panel's CDN access.
+    @State private var contentRules: WKContentRuleList?
 
     private var dark: Bool { colorScheme == .dark }
+
+    /// File previews render without the rule list; chat documents wait for it.
+    private var contentRulesReady: Bool { previewFiles != nil || contentRules != nil }
 
     /// The loaded document: the live build plus the reload token, which forces
     /// `SandboxedHTMLView` to reload (its `loadedHTML` compare drives the load).
@@ -172,13 +181,15 @@ struct ArtifactPage: View {
             topBar
             if showSource {
                 sourceView
-            } else if let html = liveDocument, holdsSlot {
+            } else if let html = liveDocument, holdsSlot, contentRulesReady {
                 SandboxedHTMLView(
                     html: html, heightFloor: 0, heightCeiling: .greatestFiniteMagnitude,
                     onHeightChange: { _ in }, fillsFrame: true,
                     allowsScripts: allowsScripts,
                     onExternalNavigation: previewFiles == nil ? nil : { safariURL = $0 },
-                    previewFiles: previewFiles)
+                    previewFiles: previewFiles,
+                    contentRuleList: contentRules,
+                    awaitContentRules: previewFiles == nil)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let fallback = document.shareImage {
                 Image(uiImage: fallback)
@@ -195,6 +206,11 @@ struct ArtifactPage: View {
         .modifier(MediaViewerTransition(
             sourceID: sourceID, namespace: namespace, reduceMotion: reduceMotion))
         .accessibilityAction(.escape) { onClose() }
+        .task {
+            if previewFiles == nil {
+                contentRules = await OfflineContentRules.list()
+            }
+        }
         .onAppear { claimSlot() }
         .onDisappear { releaseSlot() }
         .sheet(isPresented: Binding(get: { shareImage != nil }, set: { if !$0 { shareImage = nil } })) {
@@ -241,7 +257,7 @@ struct ArtifactPage: View {
                 .lineLimit(1)
             Spacer(minLength: 8)
             Menu {
-                Button(showSource ? "View diagram" : "View source") {
+                Button(showSource ? sourceToggleHideTitle : "View source") {
                     showSource.toggle()
                 }
                 Button("Copy source", systemImage: "doc.on.doc") {
@@ -277,6 +293,15 @@ struct ArtifactPage: View {
         }
         .padding(.horizontal, Space.md)
         .padding(.top, Space.md)
+    }
+
+    /// The toggle-back title: upstream's "View diagram" for mermaid; the page for the
+    /// rest, matching the cards ("View source" there toggles back to the content).
+    private var sourceToggleHideTitle: String {
+        switch document.kind {
+        case .mermaid: "View diagram"
+        default: "View page"
+        }
     }
 
     private var sourceView: some View {

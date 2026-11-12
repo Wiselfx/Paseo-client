@@ -1437,6 +1437,10 @@ struct MermaidCard: View {
     /// the shape (one settle per source, forever) does not.
     private var shapeKey: String { "mermaid:\(code.hashValue)" }
 
+    /// The vector for the live view, keyed independently of layout width: one vector
+    /// per source and scheme, whatever the card width.
+    private var svgKey: String { shapeKey + "|" + (dark ? "d" : "l") }
+
     private var renderKey: String? {
         guard width > 1 else { return nil }
         return "\(shapeKey)|\(Int(width.rounded()))|\(dark ? "d" : "l")"
@@ -1446,6 +1450,25 @@ struct MermaidCard: View {
     private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
+
+    /// What the card's box is doing, as one value: the one animated settle is the
+    /// placeholder → true ratio, once, and failures keep their box (§0).
+    private struct Layout: Equatable {
+        let aspectRatio: CGFloat
+        let stage: Int
+    }
+
+    private var layout: Layout {
+        var stage = 0
+        if image != nil {
+            stage = 2
+        } else if errorMessage != nil {
+            stage = 3
+        } else if showSource {
+            stage = 4
+        }
+        return Layout(aspectRatio: reservedAspect, stage: stage)
+    }
 
     private var viewerSourceID: String { shapeKey }
 
@@ -1468,7 +1491,7 @@ struct MermaidCard: View {
                 }
             })
         .background { widthReader }
-        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: aspectRatio)
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: layout)
         .task(id: renderKey) { await render() }
     }
 
@@ -1485,8 +1508,8 @@ struct MermaidCard: View {
                 Text(showSource ? "View diagram" : "View source")
                     .font(.paseo(.codeCaption))
                     .foregroundStyle(Palette.secondaryInk)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
+                    .padding(.vertical, Metrics.cardHeaderVPadding)
+                    .padding(.horizontal, Metrics.cardHeaderHPadding)
                     .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
             }
             .buttonStyle(.plain)
@@ -1521,10 +1544,11 @@ struct MermaidCard: View {
     }
 
     /// The size the drawing will take, from its own ratio, so the card does not jump when
-    /// the snapshot arrives. Before layout, assume a phone-width card.
+    /// the snapshot arrives. Before the first layout the width is unknown and the render
+    /// has not started: the placeholder stays tiny for that one frame.
     private var placeholderHeight: CGFloat {
-        let assumedWidth = width > 1 ? width : 350
-        return min(assumedWidth / reservedAspect, heightCap)
+        guard width > 1 else { return min(Metrics.placeholderCompactHeight, heightCap) }
+        return min(width / reservedAspect, heightCap)
     }
 
     /// The card's inner width, for rendering at the real size instead of a guess.
@@ -1560,7 +1584,7 @@ struct MermaidCard: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 260)
+            .frame(maxHeight: Metrics.sourcePreviewMaxHeight)
             HStack {
                 Spacer(minLength: 0)
                 Button {
@@ -1592,6 +1616,7 @@ struct MermaidCard: View {
         guard let key = renderKey else { return }
         if let cached = RichSnapshotCache.image(for: key) {
             image = cached
+            svg = MermaidSVGCache.string(for: svgKey)
             return
         }
         if aspectRatio == nil,
@@ -1599,12 +1624,13 @@ struct MermaidCard: View {
         {
             aspectRatio = aspect
         }
-        let outcome = await MermaidRenderQueue.shared.render(
+        let outcome = await RichSnapshotQueue.shared.mermaid(
             source: code, dark: dark, slotWidth: width)
         guard !Task.isCancelled else { return }
         switch outcome {
         case .diagram(let rendered, let aspect, let renderedSVG):
             RichSnapshotCache.store(rendered, for: key)
+            MermaidSVGCache.store(renderedSVG, for: svgKey)
             MediaMetadataCache.remember(aspect, for: shapeKey)
             image = rendered
             aspectRatio = aspect
@@ -1612,7 +1638,7 @@ struct MermaidCard: View {
         case .error(let message):
             errorMessage = message
         case .unavailable:
-            errorMessage = "The diagram renderer is unavailable."
+            errorMessage = "Couldn't render diagram"
         }
     }
 }
@@ -1657,7 +1683,9 @@ struct RichWebCard: View {
     /// The artifact page outranks transcript slots (G4/G5): while it is open the card
     /// shows its snapshot, never a live view.
     private var pageOpen: Bool { richActions?.artifactPageOpen ?? false }
-    private var showsLive: Bool { isVisible && holdsSlot && !pageOpen }
+    /// Live only with a slot, without the page, and with the compiled rules: a chat
+    /// document must never paint unprotected.
+    private var showsLive: Bool { isVisible && holdsSlot && !pageOpen && contentRules != nil }
 
     var body: some View {
         PaseoCard(content:
@@ -1673,6 +1701,7 @@ struct RichWebCard: View {
                 }
             })
         .background { widthReader }
+        .task { contentRules = await OfflineContentRules.list() }
         .onAppear { setVisible(true) }
         .onDisappear { setVisible(false) }
         .onScrollVisibilityChange(threshold: 0.1) { visible in setVisible(visible) }
@@ -1718,8 +1747,9 @@ struct RichWebCard: View {
                 onHeightChange: { newHeight in
                     contentHeight = newHeight
                 },
-                onOverflowChange: { overflows = $0 }
-            )
+                onOverflowChange: { overflows = $0 },
+                contentRuleList: contentRules,
+                awaitContentRules: true)
             .frame(height: contentHeight)
             .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: contentHeight)
         } else if let snapshot {
@@ -1792,6 +1822,10 @@ struct RichWebCard: View {
         guard width > 1, !showsLive else { return nil }
         return RichSnapshotCache.key(html: document, width: width, dark: colorScheme == .dark)
     }
+
+    /// The compiled offline rules, awaited before the first live load: a chat document
+    /// must never paint unprotected. Snapshots and the offline CSP cover the gap.
+    @State private var contentRules: WKContentRuleList?
 
     /// Takes the slot when one is free; on the way out it snapshots first, so the card has
     /// something to show if it comes back — or stays off screen — without a live web view.

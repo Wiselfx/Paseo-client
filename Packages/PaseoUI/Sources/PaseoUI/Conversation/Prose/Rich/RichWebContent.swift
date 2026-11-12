@@ -3,17 +3,23 @@ import SwiftUI
 import UIKit
 import WebKit
 
-/// One shared, offscreen `WKWebView` that renders SVG to an image (R9 §2).
+/// The one offscreen `WKWebView` for the whole transcript (G4 §4.1, §0 web-view budget:
+/// 2 live pooled slots + this 1 offscreen renderer, in the single parked window).
 ///
 /// SVG blocks used to mount a live `WKWebView` each. A static drawing does not need one: it is
 /// rendered once at display width, cached by content, and drawn as an image; the full-screen
 /// viewer zooms that image (E3 §3.1). Rasterising beats a live view because the result is a
 /// plain `UIImage`: no web process per card, no per-scroll work, and crisp at
-/// `displayScale` because WebKit snapshots at the screen scale.
+/// `displayScale` because WebKit snapshots at the screen scale. Mermaid diagrams render
+/// through the same view and the same serial queue: the pinned runtime stays loaded in
+/// its host document and is reloaded only after an SVG job replaced it (rare once the
+/// transcript's snapshots are warm, since every diagram renders once per scheme).
 ///
 /// The web view lives in a 1 pt window parked off screen — `takeSnapshot(with:)` only renders
-/// views that are in a window hierarchy. JavaScript is off and the document's CSP allows no
-/// network, so nothing here can run or fetch.
+/// views that are in a window hierarchy. JavaScript is on (mermaid needs it) but the SVG
+/// documents' CSP has no `script-src`, so nothing there can run; the mermaid host runs
+/// only the pinned runtime with `connect-src 'none'`, and chat pages get the compiled
+/// content-rule list on top (`OfflineContentRules`).
 @MainActor
 final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
     static let shared = RichWebSnapshotRenderer()
@@ -21,6 +27,21 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
     private var window: UIWindow?
     private var webView: WKWebView?
     private var loadContinuation: CheckedContinuation<Void, Never>?
+    /// Which document the shared view currently hosts. An SVG snapshot replaces the
+    /// mermaid host, so the next mermaid render reloads the runtime first.
+    private enum HostKind {
+        case empty
+        case svgDocument
+        case mermaidRuntime
+    }
+
+    private var hostKind: HostKind = .empty
+    /// The pinned runtime, read off main once and kept for the session.
+    private var runtimeScript: String?
+    private var runtimeLoad: Task<String?, Never>?
+    /// The mermaid render generation: a timed-out render's late completion must not
+    /// resize or snapshot the view under the next render. Checked after every await.
+    private var mermaidGeneration = 0
 
     /// The wait for `didFinish`; a document that fails or is replaced still resumes it, so a
     /// snapshot request can never hang the queue.
@@ -39,6 +60,7 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
     func snapshot(html: String, width: CGFloat, scale: CGFloat) async -> UIImage? {
         guard width > 1, let webView = ensureWebView(width: width) else { return nil }
         await load(html, in: webView, width: width)
+        hostKind = .svgDocument
         // One layout pass for the document's own measurement, then size the frame to the content
         // so the snapshot holds the whole drawing.
         try? await Task.sleep(for: .milliseconds(16))
@@ -50,6 +72,122 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         // Points: WebKit renders the image at the screen scale itself.
         configuration.snapshotWidth = NSNumber(value: Double(width))
         return try? await webView.takeSnapshot(configuration: configuration)
+    }
+
+    // MARK: Mermaid (G4 C9, D2)
+
+    /// Renders one diagram through the shared view: the pinned runtime stays loaded in
+    /// its host document, so per diagram there is one `callAsyncJavaScript` and one
+    /// snapshot — no 3.5 MB string build, no re-parse, no message-handler plumbing.
+    /// A 20 s timeout races the render; a timed-out render's late completion is
+    /// discarded by generation and never touches the view under the next render.
+    func renderMermaid(source: String, dark: Bool, slotWidth: CGFloat) async -> MermaidRenderOutcome {
+        guard slotWidth > 1, let webView = ensureWebView(width: slotWidth) else {
+            return .unavailable
+        }
+        mermaidGeneration += 1
+        let generation = mermaidGeneration
+        return await withTaskGroup(of: MermaidRenderOutcome.self) { group in
+            group.addTask {
+                await self.doMermaidRender(
+                    source: source, dark: dark, slotWidth: slotWidth, webView: webView,
+                    generation: generation)
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(Metrics.mermaidRenderTimeout))
+                return await self.mermaidTimeout(generation: generation)
+            }
+            let first = await group.next() ?? .unavailable
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// The timeout wins only for the render that is still current; a stale timer never
+    /// resolves — it waits to be cancelled with the group.
+    private func mermaidTimeout(generation: Int) async -> MermaidRenderOutcome {
+        guard generation == mermaidGeneration else {
+            await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+            return .unavailable
+        }
+        return .error("The diagram took too long to render.")
+    }
+
+    private func doMermaidRender(
+        source: String, dark: Bool, slotWidth: CGFloat, webView: WKWebView, generation: Int
+    ) async -> MermaidRenderOutcome {
+        guard generation == mermaidGeneration else { return .unavailable }
+        guard let script = await runtimeScript() else { return .unavailable }
+        guard generation == mermaidGeneration else { return .unavailable }
+        if hostKind != .mermaidRuntime {
+            await load(hostHTML(script: script), in: webView, width: slotWidth)
+            hostKind = .mermaidRuntime
+        }
+        guard generation == mermaidGeneration else { return .unavailable }
+        let theme = dark ? "dark" : "default"
+        let result: Any
+        do {
+            result = try await webView.callAsyncJavaScript(
+                "return await window.paseoRender(src, theme)",
+                arguments: ["src": source, "theme": theme], in: nil, contentWorld: .page)
+        } catch {
+            return .error((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+        guard generation == mermaidGeneration else { return .unavailable }
+        guard let dict = result as? [String: Any],
+            let svg = dict["svg"] as? String,
+            let width = (dict["width"] as? NSNumber)?.doubleValue,
+            let height = (dict["height"] as? NSNumber)?.doubleValue,
+            width > 0, height > 0
+        else { return .unavailable }
+        // Lay the frame out at the natural size, wait two frames (event-driven, not a
+        // sleep), then snapshot at screen scale like the SVG path does.
+        webView.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        _ = try? await webView.evaluateJavaScript(
+            "new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))")
+        guard generation == mermaidGeneration else { return .unavailable }
+        let configuration = WKSnapshotConfiguration()
+        configuration.rect = CGRect(x: 0, y: 0, width: width, height: height)
+        configuration.snapshotWidth = NSNumber(value: Double(min(width, Metrics.offscreenSnapshotMaxWidth)))
+        guard let image = try? await webView.takeSnapshot(configuration: configuration) else {
+            return .unavailable
+        }
+        return .diagram(
+            image: image, aspectRatio: width / height, svg: svg)
+    }
+
+    /// The pinned runtime, read off main once and kept for the session.
+    private func runtimeScript() async -> String? {
+        if let runtimeScript { return runtimeScript }
+        if let runtimeLoad { return await runtimeLoad.value }
+        let task = Task.detached(priority: .utility) { () -> String? in
+            guard
+                let url = Bundle.module.url(
+                    forResource: "mermaid.min", withExtension: "js", subdirectory: "mermaid"),
+                let script = try? String(contentsOf: url, encoding: .utf8), !script.isEmpty
+            else { return nil }
+            return script
+        }
+        runtimeLoad = task
+        let script = await task.value
+        runtimeLoad = nil
+        if let script { runtimeScript = script }
+        return script
+    }
+
+    /// The single host document: the runtime inline once, then one
+    /// `window.paseoRender(src, theme)` call per diagram. Re-initializing mermaid per
+    /// call picks up scheme changes without reloading the runtime.
+    private func hostHTML(script: String) -> String {
+        """
+        <!DOCTYPE html><html><head>
+        <meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+        <style>html,body{margin:0;padding:0;background:transparent}</style>
+        <script>\(script)</script>
+        <script>window.paseoRender=function(src,theme){mermaid.initialize({startOnLoad:false,securityLevel:'strict',suppressErrorRendering:true,theme:theme,flowchart:{htmlLabels:false}});return mermaid.render('paseo-diagram',src).then(function(r){document.getElementById('stage').innerHTML=r.svg;var svg=document.querySelector('#stage svg');var w=0,h=0;try{var vb=svg.viewBox.baseVal;if(vb&&vb.width>0&&vb.height>0){w=vb.width;h=vb.height;}}catch(e){}if(!(w>0&&h>0)){var b=svg.getBoundingClientRect();w=b.width;h=b.height;}return{svg:r.svg,width:w,height:h};});};</script>
+        </head><body><div id="stage"></div></body></html>
+        """
     }
 
     private func contentHeight(_ webView: WKWebView) async -> CGFloat? {
@@ -67,7 +205,16 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         else { return nil }
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        // On for mermaid; the SVG documents' CSP still blocks their scripts, and the
+        // artifact pages add the compiled content rules on top.
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        Task {
+            // Defense in depth on the shared view, applied when the first compile
+            // lands; every document here already carries an offline CSP.
+            if let rules = await OfflineContentRules.list() {
+                configuration.userContentController.addContentRuleList(rules)
+            }
+        }
         let view = WKWebView(frame: CGRect(x: 0, y: 0, width: width, height: 1), configuration: configuration)
         view.navigationDelegate = self
         view.isOpaque = false
@@ -119,7 +266,8 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
     }
 }
 
-/// Serializes snapshot requests: one offscreen render at a time, in the order they were asked for.
+/// Serializes offscreen renders: one at a time, in the order asked for — SVG snapshots
+/// and mermaid renders share the tail because they share the one offscreen view.
 /// It is main-actor rather than an `actor` because its resource (`WKWebView`) is main-actor bound;
 /// the queueing guarantee is the same.
 @MainActor
@@ -135,6 +283,20 @@ final class RichSnapshotQueue {
                 let image = await RichWebSnapshotRenderer.shared.snapshot(
                     html: html, width: width, scale: scale)
                 continuation.resume(returning: image)
+            }
+            tail = task
+        }
+        return result
+    }
+
+    func mermaid(source: String, dark: Bool, slotWidth: CGFloat) async -> MermaidRenderOutcome {
+        let previous = tail
+        let result: MermaidRenderOutcome = await withCheckedContinuation { continuation in
+            let task = Task { @MainActor in
+                _ = await previous?.value
+                let outcome = await RichWebSnapshotRenderer.shared.renderMermaid(
+                    source: source, dark: dark, slotWidth: slotWidth)
+                continuation.resume(returning: outcome)
             }
             tail = task
         }
