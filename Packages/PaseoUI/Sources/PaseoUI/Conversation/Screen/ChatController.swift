@@ -230,6 +230,8 @@ struct TranscriptJump: Equatable {
 
     /// An inline prose image the reader tapped, for the full-screen viewer (`ChatSheets`).
     var inlineImage: InlineProseImage?
+    /// A tool call's own diff, opened from the turn changes card (G6 C11).
+    var diffDocument: ClaudeDiffDocument?
     /// The artifact on the full-screen page (`ChatSheets`). Setting it raises
     /// `artifactPageOpen`, which yields the transcript's pooled web views to the page.
     var artifactDocument: ArtifactDocument? {
@@ -312,6 +314,9 @@ struct TranscriptJump: Equatable {
         richActions.daemonWorkspaceID = store.agent?.workspaceId
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
+        }
+        richActions.openDiff = { [weak self] path in
+            self?.openDiff(at: path)
         }
         richActions.openArtifact = { [weak self] document in
             self?.artifactDocument = document
@@ -581,6 +586,28 @@ struct TranscriptJump: Equatable {
 
     func openFileViewer(at path: String) {
         openFilePath = path
+    }
+
+    /// The latest edit/write detail for `path` in this conversation, for the turn
+    /// changes card (G6 C11). O(rows) on tap — never per frame. Falls back to the file
+    /// viewer when no call touched the path (e.g. a write-only change).
+    func openDiff(at path: String) {
+        for row in store.timeline.rows.reversed() {
+            guard case .toolCall(let call) = row.item else { continue }
+            switch call.detail {
+            case .edit(let edited, let old, let new, let diff) where edited == path:
+                diffDocument = ClaudeDiffDocument(
+                    path: edited, unifiedDiff: diff, old: old, new: new)
+                return
+            case .write(let written, let content) where written == path:
+                diffDocument = ClaudeDiffDocument(
+                    path: written, unifiedDiff: nil, old: nil, new: content)
+                return
+            default:
+                break
+            }
+        }
+        openFileViewer(at: path)
     }
 
     // MARK: Find

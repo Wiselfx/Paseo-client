@@ -40,6 +40,9 @@ final class RichActions {
         UIPasteboard.general.image = image
         Haptics.light()
     }
+    /// Opens a file's diff (G6 C11): the tool call's own diff when this conversation
+    /// has one, else the file viewer. No-op until the host sets it.
+    var openDiff: (String) -> Void = { _ in }
     /// Opens an artifact full screen (G4/G5). No-op until the host sets it.
     var openArtifact: (ArtifactDocument) -> Void = { _ in }
     /// True while the artifact page covers the transcript (G4/G5): web cards yield
