@@ -14,14 +14,18 @@
 		7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */; };
 		8EA2C4203BFC6D5F3E4D36FB /* SavedHosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */; };
 		A171A48B81A851AF22D95177 /* PaseoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 63BF84ADEB1A8868F43ED3F6 /* PaseoUI */; };
+		BD7EE413467BC9F20E8C33C3 /* AgentDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB7D7187DB3305BFFBE378E /* AgentDirectory.swift */; };
 		C3820ADA9A162AE49F3CCFF0 /* WindowAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905593B3877EF01FF916BC8D /* WindowAppearance.swift */; };
+		C747E80867BDD9BD71FC8B6B /* AgentIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49AFF0D471630BA44685EC6B /* AgentIntents.swift */; };
 		CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64108FA9FC10EE10BE16975 /* Keychain.swift */; };
 		FE9768F7EBE6971D19A0BABA /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedHosts.swift; sourceTree = "<group>"; };
+		0EB7D7187DB3305BFFBE378E /* AgentDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDirectory.swift; sourceTree = "<group>"; };
 		3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationCoordinator.swift; sourceTree = "<group>"; };
+		49AFF0D471630BA44685EC6B /* AgentIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIntents.swift; sourceTree = "<group>"; };
 		67A6CDB060911D3A7AA1CF59 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		905593B3877EF01FF916BC8D /* WindowAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAppearance.swift; sourceTree = "<group>"; };
 		9088EF8AC3E2485FA76459E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -59,6 +63,8 @@
 		A2D0FF96299ED473709B96E0 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				0EB7D7187DB3305BFFBE378E /* AgentDirectory.swift */,
+				49AFF0D471630BA44685EC6B /* AgentIntents.swift */,
 				67A6CDB060911D3A7AA1CF59 /* AppModel.swift */,
 				B64108FA9FC10EE10BE16975 /* Keychain.swift */,
 				3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */,
@@ -175,6 +181,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BD7EE413467BC9F20E8C33C3 /* AgentDirectory.swift in Sources */,
+				C747E80867BDD9BD71FC8B6B /* AgentIntents.swift in Sources */,
 				021D7A4965E87D4DB3C858D1 /* AppModel.swift in Sources */,
 				CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */,
 				FE9768F7EBE6971D19A0BABA /* NotificationCoordinator.swift in Sources */,

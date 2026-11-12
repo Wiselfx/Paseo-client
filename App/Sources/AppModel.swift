@@ -270,6 +270,7 @@ final class AppModel {
             defaults.set(true, forKey: Keys.welcomeCompleted)
             let session = HostSession(client: connection)
             phase = .connected(session)
+            watchAgentDirectory(session: session)
             await session.start()
             return nil
         } catch let error as ConnectionError {
@@ -407,5 +408,43 @@ final class AppModel {
         case .protocolViolation(let message): "Unexpected reply from the host: \(message)"
         case .disconnected: "Disconnected."
         }
+    }
+
+    // MARK: Agent directory (Phase D G16)
+
+    /// The last published projection: the write happens only when ids, titles or
+    /// attention change — never per stream event, never per snapshot fetch.
+    private var lastDirectoryProjection: [AgentDirectoryEntry] = []
+    private var lastDirectoryAttention: [String] = []
+
+    /// Keeps the intents/Spotlight snapshot with the agent list: one write per
+    /// change, off main, through `AgentDirectory` (which diffs Spotlight by id).
+    private func watchAgentDirectory(session: HostSession) {
+        withObservationTracking {
+            _ = session.agents.map { ($0.id, $0.title) }
+            _ = session.attention.pending.map(\.id)
+        } onChange: { [weak self] in
+            Task { [weak self] in
+                await self?.publishAgentDirectory(session: session)
+                self?.watchAgentDirectory(session: session)
+            }
+        }
+        Task { [weak self] in await self?.publishAgentDirectory(session: session) }
+    }
+
+    private func publishAgentDirectory(session: HostSession) async {
+        let serverID = currentHostID.flatMap { savedHosts.host($0)?.serverID }
+        let entries = session.agents.compactMap { agent -> AgentDirectoryEntry? in
+            guard let serverID, !serverID.isEmpty else { return nil }
+            return AgentDirectoryEntry(
+                id: agent.id, title: agent.title ?? "Agent", hostServerID: serverID)
+        }
+        let attention = session.attention.pending.compactMap(\.agentId)
+        guard entries != lastDirectoryProjection || attention != lastDirectoryAttention else {
+            return
+        }
+        lastDirectoryProjection = entries
+        lastDirectoryAttention = attention
+        await AgentDirectory.publish(agents: entries, attentionIds: attention)
     }
 }

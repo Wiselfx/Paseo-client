@@ -334,6 +334,14 @@ public struct ShellView: View {
         case .openProject:
             addProjectRequested = true
             drawer.open(.sidebar)
+        case .newAgent(_, let workspaceID):
+            // The intent's draft: create it in the workspace (or the most recent
+            // one) and focus its composer through the existing focus request —
+            // the draft's `ComposerView` consumes and resets it. Creation stays
+            // user-driven: the intent never sends.
+            drawer.close()
+            openNewSession(workspaceId: workspaceID)
+            composerFocusRequested = true
         case .offer, .unsupported:
             // Offers go through RootView's pairing sheet; unsupported routes get a message there.
             break

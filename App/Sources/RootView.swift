@@ -1,3 +1,4 @@
+import CoreSpotlight
 import PaseoStore
 import PaseoUI
 import SwiftUI
@@ -183,6 +184,18 @@ struct RootView: View {
         .task { await model.start() }
         .onOpenURL { url in
             handleDeepLink(url)
+        }
+        // A Spotlight agent result routes through the same deep-link path (G16):
+        // the id carries no host, so the persisted directory resolves it.
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            guard
+                let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                id.hasPrefix("paseo-agent:"),
+                let entry = AgentDirectory.load().agents.first(where: {
+                    AgentDirectory.spotlightID(for: $0.id) == id
+                })
+            else { return }
+            routeDeepLink(.agent(serverID: entry.hostServerID, agentID: entry.id))
         }
         .alert(
             deepLinkMessage ?? "",
