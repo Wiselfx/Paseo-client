@@ -126,6 +126,12 @@ struct RootView: View {
                     AttentionDelivery(
                         session: session, scenePhase: scenePhase,
                         notifications: notifications))
+                // Glance snapshot on backgrounding (G14): the widgets show what
+                // the app last saw, honestly timestamped.
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .background else { return }
+                    Task { await model.publishGlanceSnapshot(session: session, force: true) }
+                }
 
             }
         }

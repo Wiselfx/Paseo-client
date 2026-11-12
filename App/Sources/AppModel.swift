@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PaseoStore
 import PaseoUI
+import WidgetKit
 
 /// App-level state: which daemon, how to log in, and the live session once connected.
 /// The only place that creates a `DaemonConnection`.
@@ -469,11 +470,69 @@ final class AppModel {
             _ = session.attention.pending.map(\.id)
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
-                await self?.publishAgentDirectory(session: session)
-                self?.watchAgentDirectory(session: session)
+                guard let self else { return }
+                await self.publishAgentDirectory(session: session)
+                await self.publishGlanceSnapshot(session: session)
+                self.watchAgentDirectory(session: session)
             }
         }
-        Task { [weak self] in await self?.publishAgentDirectory(session: session) }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.publishAgentDirectory(session: session)
+            await self.publishGlanceSnapshot(session: session)
+        }
+    }
+
+    /// The last glance write: at most one per 10 s unless attention changed or
+    /// the app backgrounded (G14).
+    private var lastGlanceWrite = Date.distantPast
+    private var lastGlanceAttention: [String] = []
+
+    /// Writes the widget snapshot (G14): throttled to one write per 10 s, plus
+    /// immediate writes on attention changes and on backgrounding. Driven by the
+    /// same observation as the directory — never per stream event. Off main, and
+    /// a no-op when the App Group container is unavailable (no entitlement).
+    func publishGlanceSnapshot(session: HostSession, force: Bool = false) async {
+        let attentionIds = session.attention.pending.compactMap(\.agentId)
+        let attentionChanged = attentionIds != lastGlanceAttention
+        guard force || attentionChanged
+            || Date().timeIntervalSince(lastGlanceWrite) >= 10
+        else { return }
+        lastGlanceWrite = Date()
+        lastGlanceAttention = attentionIds
+        let showNames = defaults.bool(forKey: PaseoSettingsKeys.showAgentNames)
+        let agents = GlanceSnapshot.sortAgents(session.agents.map { agent in
+            GlanceSnapshot.Agent(
+                id: agent.id,
+                title: GlanceSnapshot.redactedTitle(agent.title, showAgentNames: showNames),
+                hostServerID: serverID,
+                project: agent.workspaceId.flatMap {
+                    session.workspaceDirectory.workspace(id: $0)?.projectDisplayName
+                },
+                provider: agent.provider,
+                status: String(describing: agent.status),
+                requiresAttention: agent.requiresAttention ?? false,
+                attentionReason: agent.attentionReason,
+                activeTurnStartedAt: agent.activeTurn?.startedAt.flatMap(PaseoDate.parse),
+                pendingPermissionCount: agent.pendingPermissions.count,
+                updatedAt: PaseoDate.parse(agent.updatedAt))
+        })
+        let snapshot = GlanceSnapshot(
+            agents: agents, runningCount: session.runningAgentCount, capturedAt: Date(),
+            hostDisplayName: showNames
+                ? savedHosts.host(currentHostID)?.label : nil)
+        await Task.detached(priority: .utility) {
+            guard
+                let container = FileManager.default.containerURL(
+                    forSecurityApplicationGroupIdentifier: GlanceSnapshot.appGroupID),
+                let url = GlanceSnapshot.fileURL(containerURL: container),
+                let data = try? JSONEncoder().encode(snapshot)
+            else { return }
+            try? FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: url, options: .atomic)
+            WidgetCenter.shared.reloadTimelines(ofKind: "PaseoAgentsWidget")
+        }.value
     }
 
     /// Merges by host: only the connected host's entries are replaced, other
