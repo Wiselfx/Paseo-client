@@ -79,9 +79,24 @@ struct VideoCard: View {
             condition: richActions?.linkCondition ?? .assumed)
     }
 
+    /// The size reads the directory cache on the first pass: a remount shows it
+    /// on frame one instead of flashing the bare title until the listing lands.
+    private var resolvedBytes: Int64? {
+        if let knownBytes { return knownBytes }
+        guard case .daemon(let ref) = source,
+            let cached = DaemonDirectoryCache.shared.cached(
+                workspaceID: ref.workspaceID, dir: parentDirectory(of: ref.path)),
+            let entry = cached.first(where: { entry in
+                (entry.path as NSString).lastPathComponent
+                    == (ref.path as NSString).lastPathComponent
+            })
+        else { return nil }
+        return Int64(entry.size)
+    }
+
     private var metaText: String? {
         var parts: [String] = []
-        if let knownBytes { parts.append(Self.byteCount(knownBytes)) }
+        if let resolvedBytes { parts.append(Self.byteCount(resolvedBytes)) }
         if let duration { parts.append(Self.timestamp(duration)) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -167,12 +182,12 @@ struct VideoCard: View {
                     .frame(maxWidth: .infinity, maxHeight: heightCap)
                     .clipped()
                 Circle()
-                    .fill(.black.opacity(0.55))
-                    .frame(width: 44, height: 44)
+                    .fill(Palette.mediaBadge)
+                    .frame(width: Metrics.hitSize, height: Metrics.hitSize)
                     .overlay {
                         Image(systemName: "play.fill")
                             .font(.paseo(.body, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Palette.onMediaBadge)
                             .offset(x: 1)
                             .accessibilityHidden(true)
                     }
@@ -180,10 +195,10 @@ struct VideoCard: View {
                     Text(Self.timestamp(duration))
                         .font(.paseo(.caption, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Palette.onMediaBadge)
                         .padding(.horizontal, Space.sm)
-                        .padding(.vertical, 3)
-                        .background(.black.opacity(0.6), in: .capsule)
+                        .padding(.vertical, Metrics.overlayVPadding)
+                        .background(Palette.mediaBadge, in: .capsule)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .padding(Space.sm)
                 }
@@ -198,6 +213,8 @@ struct VideoCard: View {
             .accessibilityLabel("Play video")
         } else if showsTapBox {
             tapBox
+        } else if loadFailed {
+            failureBox
         } else {
             Rectangle()
                 .fill(Palette.codeSurface)
@@ -292,14 +309,22 @@ struct VideoCard: View {
         .accessibilityHint("Downloads the video")
     }
 
+    /// The poster stays local-only knowledge: after a failure the box owns the
+    /// error with Retry instead of spinning forever.
+    @State private var loadFailed = false
+
     private var showsTapBox: Bool {
-        guard !tappedLoad, !isPlaying, poster == nil, !overLimit else { return false }
+        guard !tappedLoad, !isPlaying, poster == nil, !overLimit, !loadFailed else { return false }
         return policy == .tapToDownload || posterPolicy == .tap
     }
 
-    /// The poster rule (§12 discussion): remote posters stream (no download), so they
-    /// ride along wherever metadata does; local posters need the whole file, so they
-    /// follow the size gates. `.full` = inline player now; `.tap` = wait for the tap.
+    /// The poster rule (§12): remote posters stream (no download), so they ride
+    /// along wherever metadata does — but `AVAssetImageGenerator` on a remote URL
+    /// can pull megabytes (moov at the end of the file), so auto-fetch runs on
+    /// cheap links only (Wi-Fi/wired, direct); cellular, relay and constrained
+    /// links wait for the tap. Local posters need the whole file, so they follow
+    /// the `.daemonImage` cap, not a private threshold. `.full` = inline player
+    /// now; `.tap` = wait for the tap.
     private enum PosterPolicy { case full, tap }
 
     private var posterPolicy: PosterPolicy {
@@ -309,13 +334,55 @@ struct VideoCard: View {
         guard let source else { return .tap }
         switch source {
         case .remote:
-            return .full
+            switch condition.interface {
+            case .wifi, .wired where !condition.isRelay:
+                return .full
+            case .wifi, .wired, .cellular, .other:
+                return .tap
+            }
         case .daemon:
+            guard
+                let cap = mediaDownloadCap(
+                    kind: .daemonImage, condition: condition)
+            else { return .tap }
             guard let knownBytes else { return .tap }
-            if knownBytes <= 1 * 1024 * 1024 { return .full }
-            if condition.isRelay { return .tap }
-            return knownBytes <= 20 * 1024 * 1024 ? .full : .tap
+            return knownBytes <= cap ? .full : .tap
+        case .data:
+            // This card's source never yields inline bytes (inputs are remote or
+            // daemon only): nothing to poster from, wait for the tap.
+            return .tap
         }
+    }
+
+    /// The honest failure: the reserved box, one line, and Retry in place.
+    private var failureBox: some View {
+        Button {
+            loadFailed = false
+            startTappedPlayback()
+        } label: {
+            Rectangle()
+                .fill(Palette.codeSurface)
+                .aspectRatio(reservedAspect, contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .overlay {
+                    VStack(spacing: Space.sm) {
+                        Image(systemName: "film")
+                            .font(.glyph(.large, weight: .light))
+                            .foregroundStyle(Palette.secondaryInk)
+                        Text("Couldn't load video")
+                            .font(.paseo(.caption, weight: .medium))
+                            .foregroundStyle(Palette.ink)
+                        Text("Retry")
+                            .font(.paseo(.caption, weight: .medium))
+                            .foregroundStyle(Palette.accentInk)
+                    }
+                    .padding(.horizontal, Space.md)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Couldn't load video \(fileName)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Retries loading the video")
     }
 
     // MARK: Loading
@@ -353,13 +420,19 @@ struct VideoCard: View {
             await loadRemotePoster(url: url)
         case .daemon(let ref):
             await loadLocalPoster(ref: ref)
+        case .data:
+            // Unreachable (see `posterPolicy`): leave the reserved box alone.
+            return
         }
     }
 
     @MainActor
     private func loadRemotePoster(url: URL) async {
         let asset = AVURLAsset(url: url)
-        guard let (image, duration) = await posterFrame(for: asset) else { return }
+        guard let (image, duration) = await posterFrame(for: asset) else {
+            loadFailed = true
+            return
+        }
         guard !Task.isCancelled else { return }
         poster = image
         if duration > 0 { self.duration = duration }
@@ -379,24 +452,24 @@ struct VideoCard: View {
         }
         let result = await MediaPipeline.shared.fetchDaemonFile(
             ref: ref, maxBytes: Int(MediaPipeline.maxDaemonBytes))
-        let bytes: Data
         switch result {
         case .bytes(let fetched):
-            bytes = fetched.data
+            // The file lands in the cache off main; the card only holds the URL.
+            guard
+                let fileURL = await MediaPipeline.cacheDaemonFile(
+                    data: fetched.data, ref: ref)
+            else {
+                loadFailed = true
+                return
+            }
+            localFileURL = fileURL
         case .tooLarge:
             overLimit = true
             return
         case .unavailable:
+            loadFailed = true
             return
         }
-        let fileURL = FileManager.default.temporaryDirectory
-            .appending(path: "paseo-video-\(abs(ref.path.hashValue))", directoryHint: .notDirectory)
-        do {
-            try bytes.write(to: fileURL, options: .atomic)
-        } catch {
-            return
-        }
-        localFileURL = fileURL
         let asset = AVURLAsset(url: fileURL)
         guard let (image, duration) = await posterFrame(for: asset) else { return }
         guard !Task.isCancelled else { return }
@@ -409,12 +482,16 @@ struct VideoCard: View {
         }
     }
 
+    /// The size reads the directory cache on the first pass (body's `resolvedBytes`)
+    /// and fills it in here, coalesced with every other card in the directory.
     private func daemonFileSize(ref: DaemonFileRef) async -> Int64? {
-        guard let list = await richActions?.listDaemonDirectory(
-            ref.workspaceID, parentDirectory(of: ref.path))
+        guard let list = richActions?.listDaemonDirectory else { return nil }
+        guard
+            let fetched = await DaemonDirectoryCache.shared.entries(
+                workspaceID: ref.workspaceID, dir: parentDirectory(of: ref.path), fetch: list)
         else { return nil }
         let base = (ref.path as NSString).lastPathComponent
-        return list.first(where: { ($0.path as NSString).lastPathComponent == base })
+        return fetched.first(where: { ($0.path as NSString).lastPathComponent == base })
             .map { Int64($0.size) }
     }
 
@@ -435,7 +512,7 @@ struct VideoCard: View {
             do {
                 let duration = try? await asset.load(.duration).seconds
                 let time = CMTime(seconds: min(1, (duration ?? 2) / 2), preferredTimescale: 600)
-                let cgImage = try generator.copyCGImage(at: time, actualTime: nil)
+                let (cgImage, _) = try await generator.image(at: time)
                 return (UIImage(cgImage: cgImage), duration ?? 0)
             } catch {
                 return nil
@@ -451,6 +528,9 @@ struct VideoCard: View {
         switch source {
         case .remote(let remoteURL): url = remoteURL
         case .daemon: url = localFileURL
+        case .data:
+            // Unreachable (see `posterPolicy`): nothing staged to play.
+            url = nil
         case nil: url = nil
         }
         guard let url else { return }
@@ -470,6 +550,11 @@ struct VideoCard: View {
         MediaPlaybackCoordinator.shared.remember(
             position: player.currentTime().seconds, for: cardID)
         player.pause()
+        // The session goes back to ambient with playback, so later UI sounds
+        // respect the silent switch again (H1 restores the same after voice).
+        Task { @MainActor in
+            await MediaAudioSession.deactivateAfterPlayback()
+        }
     }
 
     @MainActor

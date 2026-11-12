@@ -73,10 +73,13 @@ enum MediaAudioSession {
     }
 
     /// Undoes our own activation, and only that: never when voice capture is live.
+    /// The category goes back to `.ambient` with it, so later UI sounds respect
+    /// the silent switch again (H1 restores the same after voice sessions).
     static func deactivateAfterPlayback() async {
         guard configuredForPlayback, !MicrophoneSessionOwner.voiceCaptureActive else { return }
         let deactivated = await Task.detached(priority: .userInitiated) {
             do {
+                try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
                 try AVAudioSession.sharedInstance().setActive(
                     false, options: .notifyOthersOnDeactivation)
                 return true

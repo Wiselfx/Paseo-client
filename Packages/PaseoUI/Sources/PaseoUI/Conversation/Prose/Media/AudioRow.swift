@@ -1,6 +1,5 @@
 #if canImport(UIKit)
 import AVFoundation
-import MediaPlayer
 import PaseoStore
 import SwiftUI
 import UIKit
@@ -28,8 +27,11 @@ struct AudioRow: View {
     @State private var duration: Double = 0
     @State private var elapsed: Double = 0
     @State private var playing = false
-    @State private var player: AVAudioPlayer?
-    @State private var scrubbing = false
+    /// Local files play their cached bytes (`AVAudioPlayer(contentsOf:)` on main,
+    /// fast once the file exists); remote audio streams (`AVPlayer`) and never
+    /// downloads the whole file. One row, one player: the coordinator stops the other.
+    @State private var localPlayer: AVAudioPlayer?
+    @State private var streamPlayer: AVPlayer?
 
     private var isPlaying: Bool { playing }
 
@@ -115,9 +117,20 @@ struct AudioRow: View {
                 guard isPlaying else { return }
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(1))
-                    guard let player, player.isPlaying else { break }
-                    elapsed = player.currentTime
-                    setNowPlaying()
+                    if let localPlayer, localPlayer.isPlaying {
+                        elapsed = localPlayer.currentTime
+                    } else if let streamPlayer, streamPlayer.rate > 0 {
+                        elapsed = streamPlayer.currentTime().seconds
+                        // The stream's duration arrives after playback starts.
+                        if duration <= 0,
+                            let total = streamPlayer.currentItem?.duration.seconds,
+                            total.isFinite, total > 0
+                        {
+                            duration = total
+                        }
+                    } else {
+                        break
+                    }
                 }
             }
     }
@@ -125,6 +138,8 @@ struct AudioRow: View {
     // MARK: Waveform
 
     /// 48 RMS buckets across the whole file, computed off main once per card.
+    /// Tap seeks (a tap never steals the transcript's vertical scroll; a drag would —
+    /// R-3), and VoiceOver adjusts in 10 s steps.
     private var waveform: some View {
         GeometryReader { proxy in
             let count = max(bars.count, 1)
@@ -141,7 +156,11 @@ struct AudioRow: View {
                         with: .color(playedBar ? Palette.ink : Palette.tertiaryInk))
                 }
             }
-            .gesture(scrubGesture(width: proxy.size.width))
+            .gesture(SpatialTapGesture().onEnded { value in
+                guard duration > 0, proxy.size.width > 0 else { return }
+                seek(to: Double(min(max(value.location.x / proxy.size.width, 0), 1))
+                    * duration)
+            })
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Audio waveform")
             .accessibilityAdjustableAction { direction in
@@ -151,23 +170,6 @@ struct AudioRow: View {
         }
         .frame(height: Metrics.audioWaveformHeight)
         .frame(maxWidth: .infinity)
-    }
-
-    /// Drag to scrub: the playhead follows the finger; haptics bracket the gesture.
-    private func scrubGesture(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 2)
-            .onChanged { value in
-                if !scrubbing {
-                    scrubbing = true
-                    Haptics.selection()
-                }
-                guard duration > 0, width > 0 else { return }
-                seek(to: Double(min(max(value.location.x / width, 0), 1)) * duration)
-            }
-            .onEnded { _ in
-                scrubbing = false
-                Haptics.selection()
-            }
     }
 
     private func scrubBy(seconds: Double) {
@@ -184,25 +186,33 @@ struct AudioRow: View {
         } else {
             Task { @MainActor in
                 await ensurePlayer()
-                guard player != nil else { return }
+                guard localPlayer != nil || streamPlayer != nil else { return }
                 MediaPlaybackCoordinator.shared.play(cardID)
                 await MediaAudioSession.activateForPlayback()
-                player?.volume = 1
-                player?.play()
+                localPlayer?.volume = 1
+                localPlayer?.play()
+                streamPlayer?.play()
                 playing = true
-                setNowPlaying()
             }
         }
     }
 
+    /// No Now Playing entry: without `MPRemoteCommandCenter` handlers the Lock
+    /// Screen controls would do nothing, and there is no background audio.
     @MainActor
     private func pause() {
-        guard let player, player.isPlaying else {
-            playing = false
-            return
+        if let localPlayer {
+            MediaPlaybackCoordinator.shared.remember(
+                position: localPlayer.currentTime, for: cardID)
+            localPlayer.pause()
         }
-        MediaPlaybackCoordinator.shared.remember(position: player.currentTime, for: cardID)
-        player.pause()
+        if let streamPlayer {
+            let position = streamPlayer.currentTime().seconds
+            if position.isFinite {
+                MediaPlaybackCoordinator.shared.remember(position: position, for: cardID)
+            }
+            streamPlayer.pause()
+        }
         playing = false
         if MediaPlaybackCoordinator.shared.activeID == cardID {
             MediaPlaybackCoordinator.shared.stop(cardID)
@@ -210,63 +220,76 @@ struct AudioRow: View {
         Task { @MainActor in
             await MediaAudioSession.deactivateAfterPlayback()
         }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     private func seek(to seconds: Double) {
-        guard let player, duration > 0 else { return }
-        player.currentTime = min(max(seconds, 0), duration)
-        elapsed = player.currentTime
-        setNowPlaying()
+        let clamped = min(max(seconds, 0), max(duration, 0))
+        if let localPlayer {
+            localPlayer.currentTime = clamped
+            elapsed = localPlayer.currentTime
+        } else if let streamPlayer {
+            streamPlayer.seek(to: CMTime(seconds: clamped, preferredTimescale: 600))
+            elapsed = clamped
+        }
     }
 
-    /// Downloads (whole file; audio files rarely approach the cap), decodes the
-    /// waveform off main, and builds the player. Nothing starts until the tap.
+    /// Nothing starts until the tap: local files decode their waveform off main and
+    /// play their cached bytes; remote audio streams (never a whole-file download,
+    /// which would skip the UA, the policy and the caps).
     @MainActor
     private func ensurePlayer() async {
-        if player != nil { return }
-        let bytes: Data?
         switch input {
-        case .remote(let urlString):
-            guard let url = URL(string: urlString) else { return }
-            bytes = try? await URLSession.shared.data(from: url).0
-        case .local(let path):
-            guard let workspaceID = richActions?.daemonWorkspaceID else { return }
-            let ref = DaemonFileRef(workspaceID: workspaceID, path: path, revision: nil)
-            switch await MediaPipeline.shared.fetchDaemonFile(
-                ref: ref, maxBytes: Int(MediaPipeline.maxDaemonBytes))
-            {
-            case .bytes(let fetched): bytes = fetched.data
-            case .tooLarge, .unavailable: return
-            }
+        case .local: await ensureLocalPlayer()
+        case .remote: ensureStreamPlayer()
         }
-        guard let bytes, !Task.isCancelled else { return }
-        let decoded = await Task.detached(priority: .userInitiated) { () -> (waveform: [CGFloat], duration: Double, player: AVAudioPlayer?)? in
-            let fileURL = FileManager.default.temporaryDirectory
-                .appending(path: "paseo-audio-\(UUID().uuidString)", directoryHint: .notDirectory)
-            do {
-                try bytes.write(to: fileURL, options: .atomic)
-                defer { try? FileManager.default.removeItem(at: fileURL) }
-                guard let player = try? AVAudioPlayer(data: bytes) else { return nil }
-                player.prepareToPlay()
-                let bars = Self.waveformBuckets(fileURL: fileURL)
-                return (bars, player.duration, player)
-            } catch {
-                return nil
-            }
+    }
+
+    @MainActor
+    private func ensureLocalPlayer() async {
+        if localPlayer != nil { return }
+        guard case .local(let path) = input,
+            let workspaceID = richActions?.daemonWorkspaceID
+        else { return }
+        let ref = DaemonFileRef(workspaceID: workspaceID, path: path, revision: nil)
+        guard
+            case .bytes(let fetched) = await MediaPipeline.shared.fetchDaemonFile(
+                ref: ref, maxBytes: Int(MediaPipeline.maxDaemonBytes))
+        else { return }
+        guard !Task.isCancelled else { return }
+        // The bytes land in the cache file off main; the player opens it on main
+        // (fast once the file exists), so no player ever crosses isolation.
+        guard let fileURL = await MediaPipeline.cacheDaemonFile(data: fetched.data, ref: ref)
+        else { return }
+        guard !Task.isCancelled else { return }
+        // Detached work returns values only: the bars. The file stays in the cache.
+        bars = await Task.detached(priority: .userInitiated) {
+            Self.waveformBuckets(fileURL: fileURL)
         }.value
-        guard let decoded, let decodedPlayer = decoded.player, !Task.isCancelled else { return }
-        bars = decoded.waveform
-        duration = decoded.duration
-        player = decodedPlayer
+        guard !Task.isCancelled else { return }
+        guard let player = try? AVAudioPlayer(contentsOf: fileURL) else { return }
+        player.prepareToPlay()
+        duration = player.duration
+        localPlayer = player
         elapsed = 0
     }
 
-    /// 48 RMS buckets over the whole file, read in chunks off main. A missing or
-    /// unreadable file gets a flat line instead of an error state.
+    @MainActor
+    private func ensureStreamPlayer() {
+        if streamPlayer != nil { return }
+        guard case .remote(let urlString) = input,
+            let url = URL(string: urlString)
+        else { return }
+        // The waveform would need the full bytes: a flat placeholder instead.
+        bars = Array(repeating: 0.05, count: Metrics.audioBarCount)
+        streamPlayer = AVPlayer(url: url)
+        elapsed = 0
+    }
+
+    /// `audioBarCount` RMS buckets over the whole file, read in chunks off main.
+    /// A missing or unreadable file gets a flat line instead of an error state.
     private nonisolated static func waveformBuckets(fileURL: URL) -> [CGFloat] {
-        let bucketCount = 48
-        let flat = Array(repeating: CGFloat(0.05), count: bucketCount)
+        let barCount = Metrics.audioBarCount
+        let flat = Array(repeating: CGFloat(0.05), count: barCount)
         guard let file = try? AVAudioFile(forReading: fileURL) else { return flat }
         let totalFrames = file.length
         guard totalFrames > 0 else { return flat }
@@ -275,12 +298,14 @@ struct AudioRow: View {
                 commonFormat: .pcmFormatFloat32, sampleRate: file.fileFormat.sampleRate,
                 channels: min(file.fileFormat.channelCount, 2), interleaved: false)
         else { return flat }
-        let chunkFrames = max(AVAudioFrameCount(4096), totalFrames / AVAudioFrameCount(bucketCount * 4))
+        // `AVAudioFramePosition` is `Int64`, `AVAudioFrameCount` is `UInt32`:
+        // convert explicitly, clamped, never trapping on the last partial chunk.
+        let chunkFrames = AVAudioFrameCount(max(Int64(4096), totalFrames / max(Int64(barCount * 4), 1)))
         var buckets: [Float] = []
-        buckets.reserveCapacity(bucketCount * 4)
+        buckets.reserveCapacity(barCount * 4)
         var remaining = totalFrames
         while remaining > 0 {
-            let frames = min(chunkFrames, AVAudioFrameCount(remaining))
+            let frames = AVAudioFrameCount(min(remaining, Int64(chunkFrames)))
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { break }
             do {
                 try file.read(into: buffer, frameCount: frames)
@@ -294,27 +319,15 @@ struct AudioRow: View {
                 sum += sample * sample
             }
             buckets.append(sqrt(sum / Float(buffer.frameLength)))
-            remaining -= AVAudioFrameCount(buffer.frameLength)
+            remaining -= AVAudioFramePosition(buffer.frameLength)
         }
         guard !buckets.isEmpty else { return flat }
-        let perBar = max(1, buckets.count / bucketCount)
-        return (0..<bucketCount).map { index in
+        let perBar = max(1, buckets.count / barCount)
+        return (0..<barCount).map { index in
             let upper = min((index + 1) * perBar, buckets.count)
             let peak = buckets[(index * perBar)..<upper].max() ?? 0
             return CGFloat(min(max(peak * 1.6, 0.05), 1.0))
         }
-    }
-
-    private func setNowPlaying() {
-        var info: [String: Any] = [
-            MPMediaItemPropertyTitle: fileName,
-            MPMediaItemPropertyPlaybackDuration: duration,
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
-        ]
-        if isPlaying {
-            info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
-        }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }
 
