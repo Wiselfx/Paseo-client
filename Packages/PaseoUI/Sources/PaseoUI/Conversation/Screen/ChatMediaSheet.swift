@@ -22,7 +22,8 @@ struct ChatMediaSheet: View {
     @State private var tab = MediaSheetTab.media
 
     var body: some View {
-        let items = store.mediaIndex.items
+        // Newest first (C15): what just arrived is what the reader is looking for.
+        let items = store.mediaIndex.newestFirst
         VStack(spacing: 0) {
             SheetHeader(title: "Media in this chat", close: { dismiss() })
             Picker("Sections", selection: $tab) {

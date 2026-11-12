@@ -6,7 +6,7 @@ import Testing
 
 // G12 C15: the conversation media index, maintained incrementally per turn.
 struct ConversationMediaIndexTests {
-    private func turn(id: String, text: String) -> Turn {
+    private func turn(id: String, text: String, running: Bool = false) -> Turn {
         let row = TimelineRow(
             id: "row:\(id)", turnId: id,
             item: .assistantMessage(TimelineItem.AssistantMessage(text: text, messageId: id)),
@@ -17,7 +17,7 @@ struct ConversationMediaIndexTests {
                 item: .userMessage(TimelineItem.UserMessage(text: "go")),
                 timestamp: "2026-01-01T00:00:00Z", seqStart: 0, seqEnd: 0),
             row,
-        ], activeTurnId: nil)
+        ], activeTurnId: running ? id : nil)
         #expect(turns.count == 1)
         return turns[0]
     }
@@ -69,6 +69,30 @@ struct ConversationMediaIndexTests {
         full.update(turns: turns)
         #expect(incremental == full)
         #expect(full.items.count == 3)
+    }
+
+    @Test("a streaming turn is indexed when it completes")
+    func streamingTurnIndexedOnCompletion() {
+        let done = turn(id: "t1", text: "https://example.com/a.png")
+        let running = turn(id: "t2", text: "https://example.com/b.png", running: true)
+        #expect(running.phase == .running)
+        var index = ConversationMediaIndex()
+        index.update(turns: [done, running])
+        // The running tail is covered by nothing: no per-token scan, no stale entry.
+        #expect(index.items.count == 1)
+        let completed = turn(id: "t2", text: "https://example.com/b.png")
+        index.update(turns: [done, completed])
+        #expect(index.items.count == 2)
+    }
+
+    @Test("a same-count replacement rebuilds")
+    func sameCountReplacementRebuilds() {
+        var index = ConversationMediaIndex()
+        index.update(turns: [turn(id: "t1", text: "https://example.com/a.png")])
+        #expect(index.items.count == 1)
+        index.update(turns: [turn(id: "t9", text: "https://example.com/b.png")])
+        #expect(index.items.count == 1)
+        #expect(index.items[0].ref == "https://example.com/b.png")
     }
 
     @Test("a rewind rebuilds from scratch")

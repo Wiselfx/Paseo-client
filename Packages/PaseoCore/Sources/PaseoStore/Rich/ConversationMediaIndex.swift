@@ -47,24 +47,37 @@ public struct ConversationMediaItem: Sendable, Equatable, Hashable, Identifiable
 
 /// The conversation's media, maintained incrementally as turns complete: only turns
 /// the index has not seen are scanned, so a streamed token never re-walks the chat.
+///
+/// Only the leading prefix of finished turns is covered: the running tail is scanned
+/// when it completes (its text changes on every stream event, so covering it early
+/// would scan it once per token and then never again). The id of the last covered
+/// turn detects a same-count replacement (rewind, refresh) and rebuilds.
 public struct ConversationMediaIndex: Sendable, Equatable {
     public private(set) var items: [ConversationMediaItem] = []
-    /// How many turns `items` already covers (a prefix of the timeline's turns).
+    /// How many leading turns `items` already covers.
     private var coveredTurnCount = 0
+    /// The id of the last covered turn, for the same-count replacement check.
+    private var lastCoveredTurnID: String?
 
     public init() {}
 
-    /// Brings the index up to `turns`, scanning only the tail it has not seen.
-    /// A shorter turn list (rewind, refresh) rebuilds from scratch.
+    /// Brings the index up to `turns`, scanning only the unseen finished tail.
+    /// A shorter turn list, or a replaced one, rebuilds from scratch.
     public mutating func update(turns: [Turn]) {
-        if turns.count < coveredTurnCount {
+        let finished = turns.prefix(while: { $0.phase != .running })
+        let replaced = coveredTurnCount > 0
+            && (finished.count < coveredTurnCount
+                || finished.prefix(coveredTurnCount).last?.id != lastCoveredTurnID)
+        if replaced {
             items = []
             coveredTurnCount = 0
+            lastCoveredTurnID = nil
         }
-        for turn in turns.dropFirst(coveredTurnCount) {
+        for turn in finished.dropFirst(coveredTurnCount) {
             items.append(contentsOf: Self.entries(for: turn))
         }
-        coveredTurnCount = turns.count
+        coveredTurnCount = finished.count
+        lastCoveredTurnID = finished.last?.id
     }
 
     /// Newest first: the sheet shows what just arrived at the top.
