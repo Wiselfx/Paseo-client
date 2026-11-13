@@ -20,18 +20,10 @@ import UniformTypeIdentifiers
     var markdown: (MarkdownAction) -> Void = { _ in }
     /// Asks for the can't-undo confirmation of a rewind (scope + message id).
     var rewind: (RewindScope, String) -> Void = { _, _ in }
-    /// Edit: confirm, rewind, put the text back in the composer.
-    var edit: (String, String) -> Void = { _, _ in }
-    /// Rerun: confirm, rewind, resend the text.
-    var rerun: (String, String) -> Void = { _, _ in }
     /// Fork at the row above `row` (nil for the in-flight fork of the whole timeline).
     var fork: ((ClaudeForkTarget, TimelineRow) async -> Void)?
     /// The running turn's fork: no boundary.
     var forkInFlight: ((ClaudeForkTarget) async -> Void)?
-    /// DSH "Delete this turn".
-    var deleteTurn: ((TimelineRow) -> Void)?
-    /// DSH "Retract this message".
-    var retract: ((TimelineRow) -> Void)?
     /// Reads a workspace image for prose. Decoded off main and cached by (workspace, path).
     var loadImage: (String) async -> UIImage? = { _ in nil }
 
@@ -44,16 +36,6 @@ import UniformTypeIdentifiers
 
     init(store: ConversationStore) {
         self.store = store
-    }
-
-    /// The projected row directly above `userRow` — the cut boundary for Retract and Delete this
-    /// turn. O(1): the timeline's seqEnd index answers with one dictionary lookup (R3 §1).
-    func cutRow(for userRow: TimelineRow) -> TimelineRow? {
-        let rows = store.timeline.rows
-        guard let index = store.timeline.rowIndex(forSeqEnd: userRow.seqEnd), index > 0 else {
-            return nil
-        }
-        return rows[index - 1]
     }
 }
 
@@ -86,19 +68,20 @@ extension EnvironmentValues {
 ///   (`turn-boundary.ts:9-24`), which needs `features.agentForkContextCursor` — the only
 ///   boundary this client sends (`ForkContextRequest.boundaryCursor`). The running turn forks
 ///   with no boundary and needs neither.
-/// - **Retract this message / Delete this turn** are forks at a cut row (DSH
-///   `message-actions.ts:195-260`): the same boundary fork as a completed turn, *not* rewind.
+/// Upstream has no Retract or Delete-turn gesture; both were forks that spawned a new agent and
+/// were removed (L1, LEDGER D-012). Rewind is the in-place path.
 struct TurnActionAvailability: Sendable, Equatable {
     /// Scopes the provider offers on your bubbles, in menu order; empty hides rewind.
     var rewindChoices: [RewindScope] = []
-    /// Edit/Rerun exist: the conversation can be rewound.
-    var canRewrite = false
     /// Fork with no boundary: the running turn's footer (`turn-footer.tsx:38-46`).
     var canForkInFlight = false
-    /// Fork pinned to a boundary: the completed turn's footer, retract, delete this turn.
+    /// Fork pinned to a boundary: the completed turn's footer.
     var canForkAtBoundary = false
     /// The workspace target is offered beside the tab target: the host can create one.
     var canForkWorkspace = false
+    /// A rewind is in flight: the rewind items are locked until it settles (upstream
+    /// `rewind-menu.tsx` `isLocked`).
+    var rewindInFlight = false
 }
 
 // MARK: - Find state
@@ -190,10 +173,9 @@ struct TranscriptJump: Equatable {
     /// A jump the transcript still owes (`jumpToPrompt` records it here).
     var pendingJump: TranscriptJump?
 
-    // Rewind, message actions, rename, archive.
+    // Rewind, rename, archive.
     var pendingRewind: PendingRewind?
     var rewindInFlight = false
-    var pendingMessageAction: PendingMessageAction?
     var renamingAgent = false
     var renameText = ""
     var archiveConfirm = false
@@ -297,25 +279,11 @@ struct TranscriptJump: Equatable {
         actions.rewind = { [weak self] scope, messageId in
             self?.pendingRewind = PendingRewind(messageId: messageId, scope: scope)
         }
-        actions.edit = { [weak self] messageId, text in
-            self?.pendingMessageAction = PendingMessageAction(
-                messageId: messageId, text: text, kind: .edit)
-        }
-        actions.rerun = { [weak self] messageId, text in
-            self?.pendingMessageAction = PendingMessageAction(
-                messageId: messageId, text: text, kind: .rerun)
-        }
         actions.fork = { [weak self] target, row in
             await self?.forkInto(target, boundary: row.seqEnd)
         }
         actions.forkInFlight = { [weak self] target in
             await self?.forkInto(target, boundary: nil)
-        }
-        actions.deleteTurn = { [weak self] row in
-            self?.deleteTurn(userRow: row)
-        }
-        actions.retract = { [weak self] row in
-            self?.retractMessage(userRow: row)
         }
         richActions.daemonWorkspaceID = store.agent?.workspaceId
         startHomeDirectoryMirror()
@@ -590,12 +558,12 @@ struct TranscriptJump: Equatable {
         let canFork = session.isForkContextSupportedByHost && onForkAgent != nil
         return TurnActionAvailability(
             rewindChoices: choices,
-            canRewrite: canRewrite,
             canForkInFlight: canFork,
             // Our fork only pins a cursor boundary, which needs the host's cursor feature.
             canForkAtBoundary: canFork
                 && session.serverInfo?.hasFeature("agentForkContextCursor") == true,
-            canForkWorkspace: canFork && session.workspaceDirectory.supportsWorkspaceCreate)
+            canForkWorkspace: canFork && session.workspaceDirectory.supportsWorkspaceCreate,
+            rewindInFlight: rewindInFlight)
     }
 
     /// Publishes the value and re-arms observation of the three inputs that can change it: the
@@ -654,14 +622,6 @@ struct TranscriptJump: Equatable {
         guard session.isRewindSupportedByHost else { return [] }
         return store.rewindCapabilities.menu
     }
-
-    /// Scope used by Edit/Rerun: prefer conversation-only; fall back to both. Nil hides them.
-    var rewriteScope: RewindScope? {
-        let scopes = rewindMenuScopes
-        return scopes.contains(.conversation) ? .conversation : (scopes.contains(.both) ? .both : nil)
-    }
-
-    var canRewrite: Bool { rewriteScope != nil }
 
     // MARK: Header
 
@@ -842,56 +802,45 @@ struct TranscriptJump: Equatable {
         }
     }
 
-    // MARK: Rewind and message actions
+    // MARK: Rewind
 
-    var messageActionTitle: String {
-        pendingMessageAction?.kind == .edit ? "Rewind and edit?" : "Rewind and rerun?"
-    }
-
-    func messageActionDescription(for action: PendingMessageAction) -> String {
-        let scopeName = rewriteScope == .both ? "the conversation and files" : "the conversation"
-        switch action.kind {
-        case .edit:
-            return "Rewinds \(scopeName) to before this message, and puts its text back in your draft. This action cannot be undone."
-        case .rerun:
-            return "Rewinds \(scopeName) to before this message, and runs the same prompt again. This action cannot be undone."
-        }
-    }
-
-    /// Runs the confirmed Edit/Rerun.
-    func performMessageAction(_ action: PendingMessageAction) async {
-        guard let scope = rewriteScope else { return }
-        let failure = await store.rewind(toMessageId: action.messageId, scope: scope)
-        if let failure {
-            showToast(failure)
-            return
-        }
-        switch action.kind {
-        case .edit:
-            store.draft = action.text
-            showToast("Rewound — the text is back in your draft.")
-        case .rerun:
-            await store.send(action.text)
-        }
-    }
-
-    /// Runs the confirmed rewind and toasts the outcome. One confirm in flight at a time.
+    /// Runs the confirmed rewind. One confirm in flight at a time; the rewind items stay locked
+    /// until it settles (upstream `use-rewind-agent-mutation.ts`, `rewind-menu.tsx`).
     func performPendingRewind(_ rewind: PendingRewind) {
         guard !rewindInFlight else { return }
         rewindInFlight = true
+        refreshAvailability()
+        // Read before the rewind truncates the timeline (upstream passes the message text).
+        let rewoundText = userMessageText(messageId: rewind.messageId)
         Task { [weak self] in
             guard let self else { return }
             let failure = await self.store.rewind(toMessageId: rewind.messageId, scope: rewind.scope)
             self.rewindInFlight = false
+            self.refreshAvailability()
             if let failure {
                 self.showToast(failure)
             } else {
+                // Upstream composer-restore.tsx:17-25 and use-rewind-agent-mutation.ts:52-55:
+                // a conversation rewind puts the rewound text back into an empty composer.
+                let rewritesConversation = rewind.scope == .conversation || rewind.scope == .both
+                if rewritesConversation, self.store.draft.isEmpty, let rewoundText {
+                    self.store.draft = rewoundText
+                }
                 // The timeline is truncated away from the rewound point; resume tail-follow.
                 self.anchoringToAnswer = false
                 self.isFollowing = true
-                self.showToast("Rewound")
             }
         }
+    }
+
+    /// The text of the user message `messageId`, from the timeline as it stands.
+    private func userMessageText(messageId: String) -> String? {
+        for row in store.timeline.rows {
+            if case .userMessage(let message) = row.item, message.messageId == messageId {
+                return message.text
+            }
+        }
+        return nil
     }
 
     // MARK: Fork
@@ -907,30 +856,6 @@ struct TranscriptJump: Equatable {
             await openForkedAgent(
                 await store.forkConversation(fromBoundarySeq: boundary, into: workspaceId),
                 toast: "Forked")
-        }
-    }
-
-    /// Retract: fork before the message, then hand the text back in the new session's composer.
-    func retractMessage(userRow: TimelineRow) {
-        guard let boundary = actions.cutRow(for: userRow),
-            case .userMessage(let message) = userRow.item
-        else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            await self.openForkedAgent(
-                await self.store.forkConversation(fromBoundarySeq: boundary.seqEnd),
-                toast: "The message is back in the composer", draft: message.text)
-        }
-    }
-
-    /// Delete this turn: fork before the turn's prompt and keep the prefix only.
-    func deleteTurn(userRow: TimelineRow) {
-        guard let boundary = actions.cutRow(for: userRow) else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            await self.openForkedAgent(
-                await self.store.forkConversation(fromBoundarySeq: boundary.seqEnd),
-                toast: "The turn is absent from the new session")
         }
     }
 
@@ -1028,7 +953,7 @@ struct TranscriptJump: Equatable {
         }
     }
 
-    /// Sends text the reader chose to queue or retracted from the timeline.
+    /// Sends text the reader chose to queue from the timeline.
     func sendText(_ text: String) {
         anchoringToAnswer = true
         isFollowing = false
