@@ -16,7 +16,7 @@ There is no Xcode here. `Packages/PaseoUI` and `App/` cannot be compiled on this
 
 ## UI rules
 
-These rules (PLAN §1, R-1…R-6) govern every line of UI code. Reviews check them.
+These rules (PLAN §1, R-1…R-7) govern every line of UI code. Reviews check them.
 
 - **R-1. Observation is narrow.** A view reads only what it draws. Stores reach a leaf view as
   values or as a narrow `@Observable` child, never as "the whole session". Derived state that costs
@@ -39,6 +39,13 @@ These rules (PLAN §1, R-1…R-6) govern every line of UI code. Reviews check th
   `DesignSystem/Components/`.
 - **R-6. No new features in this round.** Behaviour changes only where a plan or ticket says so.
   Upstream copy stays verbatim.
+- **R-7. Upstream first.** Paseo upstream (`/home/paseo/dev/paseo-upstream-ref`: `docs/`, `public-docs/`,
+  `packages/protocol|server|client|app`) is the specification. Before implementing or changing any
+  function, feature, behaviour or performance measure, find how upstream does it and match it (message,
+  fields, ordering, capability gating, user-facing words from `i18n/resources/en.ts`); cite
+  `Upstream: path:line` in the change. If upstream does not have it, we do not build it. If the daemon
+  already answers something, ask it; do not derive it client-side. Do not invent, and do not rebuild what a
+  path already provides.
 - **Copy.** Sentence case for our own labels; "host" is the user-facing noun ("daemon" only in
   troubleshooting or a command name); never invent copy — keep the existing string or port
   upstream's `en.ts` verbatim.
