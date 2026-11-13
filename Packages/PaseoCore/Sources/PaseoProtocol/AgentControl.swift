@@ -99,6 +99,15 @@ public struct CreateAgentRequest: PaseoRequest {
     /// Structured attachments, e.g. the `chat_history` fork seed (M7h). Encoded flat next to
     /// `initialPrompt`, omitting the key when nil.
     public var attachments: [AgentAttachment]?
+    /// Identifies one creation operation (1-512 chars). A retry of the same operation must reuse it so
+    /// the daemon joins the in-flight creation instead of making a second agent. Omitted when nil.
+    /// Upstream: packages/protocol/src/messages.ts:1865 (`CreateAgentRequestMessageSchema.idempotencyKey`).
+    /// Upstream sends it on this legacy request only when there is no prompt: see
+    /// packages/client/src/creation/index.ts:99-108 (`legacyAgent`).
+    public var idempotencyKey: String?
+    /// Id of the first message, reused across retries of the same attempt. Omitted when nil.
+    /// Upstream: packages/protocol/src/messages.ts:1874 (`clientMessageId`).
+    public var clientMessageId: String?
 
     public init(
         config: AgentSessionConfig, initialPrompt: String? = nil, workspaceId: String? = nil,

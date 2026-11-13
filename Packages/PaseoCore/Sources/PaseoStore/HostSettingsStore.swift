@@ -50,6 +50,8 @@ public final class HostSettingsStore {
     // Presence state. The app drives this from focus and visibility changes.
     public private(set) var isPresenting = false
     public private(set) var focusedAgentId: String?
+    /// The terminal the user is looking at. Never set together with `focusedAgentId`.
+    public private(set) var focusedTerminalId: String?
     public private(set) var appVisible = true
     public private(set) var lastPresenceSentAt: Date?
     /// Number of heartbeats written to the socket, including the immediate ones on changes.
@@ -343,7 +345,7 @@ public final class HostSettingsStore {
             return
         }
         self.deviceType = deviceType
-        self.focusedAgentId = focusedAgentId
+        focusAgent(focusedAgentId)
         self.appVisible = appVisible
         self.appVisibilityChangedAt = nil
         isPresenting = true
@@ -365,7 +367,20 @@ public final class HostSettingsStore {
 
     /// The user focused an agent (or closed the conversation when nil). Sends immediately.
     public func updateFocus(_ agentId: String?) {
-        focusedAgentId = agentId
+        focusAgent(agentId)
+        guard isPresenting else { return }
+        sendHeartbeat()
+    }
+
+    /// The user focused a terminal (or left it when nil). Sends immediately on a real change.
+    /// Upstream: packages/app/src/hooks/client-activity-tracker.ts:84-89 (`setFocusedTerminalId`
+    /// sends only when the id changes). A focused terminal clears the focused agent, as upstream's
+    /// pane focus does: both ids come from the pane's active tab (workspace-screen.tsx:1503-1508).
+    public func updateTerminalFocus(_ terminalId: String?) {
+        let clearsAgent = terminalId != nil && focusedAgentId != nil
+        guard focusedTerminalId != terminalId || clearsAgent else { return }
+        if terminalId != nil { focusedAgentId = nil }
+        focusedTerminalId = terminalId
         guard isPresenting else { return }
         sendHeartbeat()
     }
@@ -382,7 +397,7 @@ public final class HostSettingsStore {
     /// One call for focus and visibility changes together, e.g. from a scene-phase handler.
     public func updatePresence(focusedAgentId: String?, appVisible: Bool) {
         let visibilityChanged = self.appVisible != appVisible
-        self.focusedAgentId = focusedAgentId
+        focusAgent(focusedAgentId)
         self.appVisible = appVisible
         if visibilityChanged { appVisibilityChangedAt = Self.timestamp() }
         guard isPresenting else { return }
@@ -523,6 +538,12 @@ public final class HostSettingsStore {
 
     // MARK: Internals
 
+    /// A focused agent clears the focused terminal; a nil agent leaves the terminal alone.
+    private func focusAgent(_ agentId: String?) {
+        focusedAgentId = agentId
+        if agentId != nil { focusedTerminalId = nil }
+    }
+
     private func sendHeartbeat() {
         let now = Date()
         lastPresenceSentAt = now
@@ -530,6 +551,7 @@ public final class HostSettingsStore {
         let message = ClientHeartbeat(
             deviceType: deviceType,
             focusedAgentId: focusedAgentId,
+            focusedTerminalId: focusedTerminalId,
             lastActivityAt: Self.timestamp(now),
             appVisible: appVisible,
             appVisibilityChangedAt: appVisibilityChangedAt)
