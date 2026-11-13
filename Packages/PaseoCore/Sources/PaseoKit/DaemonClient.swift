@@ -79,7 +79,7 @@ public enum ConnectionState: Sendable, Equatable {
     case failed(ConnectionError)
 }
 
-public enum ConnectionError: Error, Sendable, Equatable {
+public enum ConnectionError: Error, Sendable, Equatable, LocalizedError {
     /// The daemon answered the hello with `hello.rejected` or close code 4401.
     /// `reason` is the wire reason, e.g. `password_required`, `incorrect_password`.
     case rejected(reason: String)
@@ -90,6 +90,52 @@ public enum ConnectionError: Error, Sendable, Equatable {
     case protocolViolation(String)
     /// The connection went away while a request was in flight.
     case disconnected
+}
+
+extension ConnectionError {
+    /// True when a request may have been applied although its answer never arrived, so a mutation
+    /// must be inspected before it is retried. Upstream: public-docs/sdk/reference.md:259-262
+    /// (`DAEMON_CONNECTION_LOST`, `outcome: "unknown"`: "Inspect before retrying a mutation.").
+    /// `.disconnected` can also mean nothing was written (`DaemonConnection.send` guard), so this
+    /// over-reports there; the enum cannot tell the two apart.
+    public var outcomeUnknown: Bool {
+        switch self {
+        case .disconnected, .timeout, .closed, .transport: true
+        case .rejected, .protocolViolation: false
+        }
+    }
+
+    /// One plain sentence per case. Wording is copied from the app's `AppModel.describe(_:)`
+    /// (App/Sources/AppModel.swift:388-405) so the sheet and the banner say the same thing.
+    public var errorDescription: String? {
+        switch self {
+        case .rejected(let reason):
+            switch reason {
+            case "password_required": return "This host needs a password."
+            case "incorrect_password": return "Wrong password."
+            case "incompatible_protocol": return "This host's version isn't compatible. Update Paseo."
+            default: return "The host refused the connection (\(reason))."
+            }
+        case .timeout:
+            return "The host didn't answer. Check the address and that it's running."
+        case .transport(let message):
+            return "Couldn't reach the host: \(message)"
+        case .closed(let code, let reason):
+            switch code {
+            case 4002:
+                // Terminal (R17): protected handshake failed — relinking the same way will fail again.
+                return "The pairing link didn't work. Ask the host to show a new pairing code."
+            case 4003:
+                return "The encrypted connection failed. Check the pairing link and try again."
+            default:
+                return "Connection closed (\(code)) \(reason)"
+            }
+        case .protocolViolation(let message):
+            return "Unexpected reply from the host: \(message)"
+        case .disconnected:
+            return "Disconnected."
+        }
+    }
 }
 
 /// Things the daemon tells us without being asked.
