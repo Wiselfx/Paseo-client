@@ -16,7 +16,13 @@ and repo-wide with `--all` produced the list in §3.
 Legend: **S/M/L** = effort. Confidence: high = I read the code and the cost follows; medium = code is
 clear but the per-frame magnitude is a guess; low = speculation.
 
+Status column (L4, checked against the code on 2026-11-13): each finding below carries a **Status**
+line naming the commit or file that fixed it, or `open`. Line numbers in the bodies below are as of
+the original audit and are stale; the **Status** lines cite current locations. Findings not listed in
+the L4 pass (6, 7, 9–17, 19–26, 28) were not re-checked.
+
 ### 1. Every streamed token is decoded, merged and published on the main actor with no coalescing or backpressure
+**Status: open (half fixed).** Fixed: the 16 ms commit coalescer, `TimelineCommitCoalescer` (`Packages/PaseoCore/Sources/PaseoStore/HostSession.swift:1203-1221`, used at `:362-369`; commit `077cab0`). Open: both streams are still `.unbounded` (`Packages/PaseoCore/Sources/PaseoKit/DaemonConnection.swift:76,81`).
 **Impact: highest. This is the streaming jank and a chunk of the idle jank.**
 - `PaseoKit/DaemonConnection.swift:76,81` — both `AsyncStream`s are `.unbounded`.
 - `PaseoStore/HostSession.swift:119-124` — `eventTask = Task { for await event in client.events { await self.handle(event:) } }`.
@@ -38,6 +44,7 @@ commits once per display frame (leading flush, trailing timer as a ceiling). Cha
 `.bufferingNewest(64)` or add real backpressure. **M**. Confidence: high on the structure, medium on the ms.
 
 ### 2. Per token, the whole visible message is re-parsed three ways (Markdown, rich detection, file-link linkify)
+**Status: open (partly fixed).** (a) Fixed: the three `NSRegularExpression`s are `static let` (`Packages/PaseoUI/Sources/PaseoUI/Conversation/Prose/FilePathLinks.swift:58-63`, used by `protectedRanges` at `:117`; commit `1df64e1`). (b) Open as far as checked: `linkifiedForProse` is no longer called from `Conversation/Transcript/ChatTurns.swift`; prose is linkified per unit at `Packages/PaseoUI/Sources/PaseoUI/Conversation/Prose/Rich/ClaudeRichSplice.swift:196`. Whether a streamed token re-parses only the tail was not verified, so (b) stays open.
 **Impact: highest while a turn is running; the single biggest per-token main-thread cost.**
 - `Conversation/ChatTurns.swift:225` and `:355` — `FilePathLinks.linkifiedForProse(message.text)` in `body`.
 - `Chat/ClaudeRevealProse.swift:80-95,100-110` — `pieceRefs(markdown)` → `richPieces(source)`.
@@ -57,6 +64,7 @@ into paragraph/block pieces and memoize each piece (upstream's shape), or key th
 `(prefix source, tail)` so only the new tail is parsed (**L**). Confidence: high on the code, medium on the ms.
 
 ### 3. The sidebar mounts every row and re-derives O(workspaces × agents) with date parsing on every store change
+**Status: fixed (commit `91ffeab`, P5-C).** The directory is a `LazyVStack` (`Packages/PaseoUI/Sources/PaseoUI/Sidebar/PaseoSidebar.swift:74-75`); a collapsed roll builds no rows (`Sidebar/SidebarRoll.swift:28`); agents are grouped and activity dates computed in one pass per evaluation (`Sidebar/SidebarDirectory.swift:8-11`, `:35`, `:444`), and rows read them from `SidebarDerivations` (`Sidebar/SidebarWorkspaceRow.swift:10`) instead of re-scanning.
 **Impact: high — sidebar scroll/update cost, and a stall if an agent update lands mid-drag.**
 - `Sidebar/PaseoSidebar.swift:79-84` — `ScrollView { VStack { navigation; directory } }` (non-lazy).
 - `Sidebar/SidebarRoll.swift:15-23` — `content().background { GeometryReader … }` builds the content **even when
@@ -78,6 +86,7 @@ re-evaluates `PaseoSidebar.body` mid-gesture. Upstream `a743a2249` ("Keep large 
 skip building content when collapsed (cache the measured height). **M**. Confidence: high.
 
 ### 4. Diff views mount every line in a non-lazy VStack, and rebuild the diff model in `body`
+**Status: fixed (commit `1165c54`, R7; ClaudeToolDetail part not attributed to a commit).** The workspace diff builds its render off the body and stores it (`Packages/PaseoUI/Sources/PaseoUI/Workspace/WorkspaceChangesDiffView.swift:318-331`, built on a detached task above 500 lines) and lays rows out in a `LazyVStack` (`:543`). `ClaudeDiffView` parses once into `@State` (`Conversation/Turn/ClaudeToolDetail.swift:107-162`) and its lines are a `LazyVStack` (`:138`).
 **Impact: high when opening/reviewing a large diff; freezes the UI for large changes.**
 - `Workspace/WorkspaceChangesDiffView.swift:47-49` — `private var model: DiffModel { DiffModel(file:…) }` and
   `sideModel` are computed properties; `DiffModel.init` (`:798-860`) flattens every hunk and measures the
@@ -98,6 +107,7 @@ diffs open quickly and scroll as one surface"), `3998ea11d` ("Keep large diffs r
 gutter. **M/L**. Confidence: high.
 
 ### 5. The workspace panel is always mounted and keeps live subscriptions/work running while closed
+**Status: fixed (commit `6e53ffa`, P5-D).** The panel's `.task` is keyed on `isPanelVisible`; when closed it drops the setup watch, checkout and git extras (`Packages/PaseoUI/Sources/PaseoUI/Workspace/WorkspacePanel.swift:134-160`). Page content is mounted only while open (`WorkspacePanel.swift:287`), so the terminal and changes pages, with their subscriptions, unmount when the drawer closes (`releaseWorkspaceWork`, `:312`).
 **Impact: high — background work and memory that never stops, plus off-screen re-renders during drags.**
 - `Chat/PaseoShellView.swift:193-220` — `panelSurface` is always in the `ZStack`; `WorkspacePanel` is always
   in the tree.
@@ -150,6 +160,7 @@ replies stream") are the React equivalent.
 body; pass the selected agent/workspace as value inputs. **M**. Confidence: medium-high.
 
 ### 8. `IncrementalTurnBuilder` memcmps the whole rows array and copies the turns prefix per token
+**Status: fixed.** Per token, `firstChangedRow` walks back over the changed run by row version and stops early (`Packages/PaseoCore/Sources/PaseoStore/IncrementalTurnBuilder.swift:105-125`; commit `b545088`). The stale turns tail is removed in place, not copied (`IncrementalTurnBuilder.swift:66-68`). `latestPromptSeq` is cached on the timeline and updated on append (`Packages/PaseoCore/Sources/PaseoStore/TimelineState.swift:41,162,443`; commit `077cab0`). A middle edit still takes a full forward `==` walk by design (the comment above `firstChangedRow`).
 **Impact: medium — scales with chat length.**
 - `PaseoStore/IncrementalTurnBuilder.swift:91-115` — `firstChangedRow` memcmps every row's bytes.
 - `IncrementalTurnBuilder.swift:58` — `Array(turns[0..<reusedCount])` allocates a new turns array per update.
@@ -268,6 +279,7 @@ Confidence: high.
 **Fix:** decorate-sort-undecorate; debounce the query; memoize the result. **S/M**. Confidence: high.
 
 ### 18. Transcript scroll readout is O(turns) per frame and recreates a `Task` per frame
+**Status: open (per-frame parts fixed, commit `15a85a7`; `outlineItems` open).** Fixed: `reportReadingPosition` reads an anchor kept on the track and reports only when it changes (`Packages/PaseoUI/Sources/PaseoUI/Conversation/Transcript/ChatTranscript.swift:776-784`); `revealTurnRail` keeps one task per reveal cycle and moves a deadline instead of restarting it (`:787` on). Open: `ChatController.outlineItems` (`Packages/PaseoUI/Sources/PaseoUI/Conversation/Screen/ChatController.swift:1354`) is still an uncached computed property over the prompts or turns. It is read by the outline sheet (`Conversation/Screen/ChatSheets.swift:117`) and at `ChatTranscript.swift:816`; whether the latter runs per frame was not checked.
 **Impact: low-medium — long-transcript scrolling (the reported "not perfect").**
 - `Conversation/ChatTranscript.swift:245-266` — `onScrollGeometryChange` → `reportReadingPosition()`,
   `revealTurnRail()`, `loadOlderIfNeeded()`.
@@ -338,6 +350,7 @@ message's parse is lost. This is a deliberate P3 trade-off, but 64 is small for 
 prose. **S**. Confidence: medium.
 
 ### 27. Launch: `AppModel.init` connects immediately; the panel loads checkout/diff at shell creation
+**Status: fixed (commits `f380f3f` R11 for launch, `6e53ffa` P5-D for the panel).** `AppModel.init` only reads defaults and wires the host context (`App/Sources/AppModel.swift:71`). The Keychain read, legacy migration and first connect run in `start()` (`AppModel.swift:100`), called from `RootView`'s `.task` (`App/Sources/RootView.swift:191`). The panel loads only while open (`Packages/PaseoUI/Sources/PaseoUI/Workspace/WorkspacePanel.swift:134`).
 **Impact: low-medium — cold-launch first paint.**
 - `App/Sources/AppModel.swift:70-78` — `init` starts `connectToSaved`/`connect`.
 - `Workspace/WorkspacePanel.swift:123-140` — the panel's `.task` runs at shell creation.
