@@ -32,6 +32,10 @@ public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
     /// Relay only: relay `host:port`.
     public var relayEndpoint: String?
     public var relayUseTLS: Bool?
+    /// Relay only: the alternate direct endpoint (`ws(s)://host:port/ws`) this daemon was also
+    /// added with on the same device. TLS is carried by the scheme. Nil until a direct row for
+    /// the same daemon is merged in (`SavedHostMerge`).
+    public var directURL: String? = nil
 
     public init(
         id: UUID = UUID(), label: String, url: String, lastConnectedAt: Date? = nil,
@@ -53,10 +57,8 @@ public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
     public var isRelay: Bool { serverID != nil }
 
     /// The dedupe identity: relay hosts collapse onto their daemon identity, direct hosts
-    /// onto their endpoint URL. A known `directServerID` deliberately does not join this key:
-    /// collapsing a direct row onto a relay row needs a UX decision (which row wins, which
-    /// Keychain account keeps the password), so the list only detects it
-    /// (`SavedHostDuplicates`).
+    /// onto their endpoint URL. A known `directServerID` does not join this key: a direct row
+    /// folds into the relay row of the same daemon by `SavedHostMerge` (L2), not by key.
     public var identityKey: String { serverID.map { "relay:\($0)" } ?? url }
 
     /// The daemon's `serverId` when this row knows it, for relay and direct hosts alike.
@@ -85,9 +87,45 @@ public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
         return .replaced(previous: existing, current: trimmed)
     }
 
+    /// The connections this row can be reached through, with upstream's connection ids
+    /// (packages/app/src/types/host-connection.ts:430-435, :441-453). A relay row has its relay
+    /// route and, once merged, its direct route; a direct row has only its direct route.
+    /// Computed, never stored.
+    public var connections: [SavedHostConnection] {
+        var out: [SavedHostConnection] = []
+        if isRelay, let relayEndpoint = relayEndpoint?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !relayEndpoint.isEmpty
+        {
+            // Upstream: `relay:wss:<endpoint>` when TLS is on, else `relay:<endpoint>`.
+            let id = relayUseTLS == true ? "relay:wss:\(relayEndpoint)" : "relay:\(relayEndpoint)"
+            out.append(SavedHostConnection(id: id, kind: .relay, endpoint: relayEndpoint))
+        }
+        if let directEndpoint = SavedHost.directEndpoint(isRelay ? directURL : url) {
+            out.append(
+                SavedHostConnection(
+                    id: "direct:\(directEndpoint)", kind: .direct, endpoint: directEndpoint))
+        }
+        return out
+    }
+
+    /// The upstream `host:port` of a direct `ws(s)` URL, loopback folded to `localhost` as upstream
+    /// does for stored direct connections (host-connection.ts:537). Nil when the URL names no
+    /// host or no explicit port (upstream `normalizeHostPort` requires one).
+    static func directEndpoint(_ urlString: String?) -> String? {
+        guard let urlString, let url = URL(string: urlString),
+            let rawHost = url.host, !rawHost.isEmpty, let port = url.port
+        else { return nil }
+        let bareHost = rawHost.hasPrefix("[") && rawHost.hasSuffix("]")
+            ? String(rawHost.dropFirst().dropLast()) : rawHost
+        if bareHost == "127.0.0.1" || bareHost == "0.0.0.0" || bareHost == "::1" || bareHost == "::" {
+            return "localhost:\(port)"
+        }
+        return bareHost.contains(":") ? "[\(bareHost)]:\(port)" : "\(bareHost):\(port)"
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, label, url, lastConnectedAt, serverID, daemonPublicKeyB64, relayEndpoint
-        case relayUseTLS, directServerID
+        case relayUseTLS, directServerID, directURL
     }
 
     /// Tolerant: pre-relay blobs (no relay keys at all) decode with nil relay fields.
@@ -102,6 +140,26 @@ public struct SavedHost: Codable, Sendable, Equatable, Identifiable {
         relayEndpoint = try c.decodeIfPresent(String.self, forKey: .relayEndpoint)
         relayUseTLS = try c.decodeIfPresent(Bool.self, forKey: .relayUseTLS)
         directServerID = try c.decodeIfPresent(String.self, forKey: .directServerID)
+        directURL = try c.decodeIfPresent(String.self, forKey: .directURL)
+    }
+}
+
+/// One way to reach a saved host. `id` is upstream's connection id; `endpoint` is the relay
+/// endpoint (relay) or the normalized `host:port` (direct).
+public struct SavedHostConnection: Sendable, Equatable, Identifiable {
+    public enum Kind: Sendable, Equatable {
+        case relay
+        case direct
+    }
+
+    public let id: String
+    public let kind: Kind
+    public let endpoint: String
+
+    public init(id: String, kind: Kind, endpoint: String) {
+        self.id = id
+        self.kind = kind
+        self.endpoint = endpoint
     }
 }
 
@@ -117,8 +175,7 @@ public enum SavedHostServerIDChange: Sendable, Equatable {
 }
 
 /// Saved rows that name the same daemon more than once — usually a direct row and a relay
-/// row for one machine. Detection only: merging needs a UX decision (which row wins, which
-/// Keychain account keeps the password), so the saved-host list keeps showing both.
+/// row for one machine. Detection here; `mergePlan` (SavedHostMerge.swift) says which pairs fold.
 public enum SavedHostDuplicates {
     /// Groups of two or more rows sharing a daemon id, ordered by id; input order inside a
     /// group. Rows with no known daemon id are never grouped.

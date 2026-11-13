@@ -256,14 +256,25 @@ final class AppModel {
                 if case .daemonKeyChanged = change {
                     relaySecrets.savePassword("", serverID: relayOffer.serverID)
                 }
+                // Saved before the upsert: a direct row for this daemon merges into the relay
+                // row there and moves its password only into an account that has none, so the
+                // typed password must already be in place and nothing may erase it afterwards.
+                relaySecrets.savePassword(passwordToSave ?? "", serverID: relayOffer.serverID)
                 savedID = try savedHosts.markConnected(
                     offer: relayOffer, preferredLabel: defaultLabel, id: existingSavedID)
-                relaySecrets.savePassword(passwordToSave ?? "", serverID: relayOffer.serverID)
             } else {
                 savedID = savedHosts.markConnected(
                     url: endpoint.url, preferredLabel: defaultLabel, id: existingSavedID,
                     daemonServerID: serverInfo.serverId)
-                SavedHosts.savePassword(password, for: savedID)
+                if let merged = savedHosts.host(savedID), let relayServerID = merged.serverID {
+                    // The direct row merged into a relay row (L2): a relay host reads its password
+                    // from the relay account, and an existing one is never overwritten.
+                    if !password.isEmpty, relaySecrets.password(serverID: relayServerID) == nil {
+                        relaySecrets.savePassword(password, serverID: relayServerID)
+                    }
+                } else {
+                    SavedHosts.savePassword(password, for: savedID)
+                }
             }
             currentHostID = savedID
             refreshHostContext()
