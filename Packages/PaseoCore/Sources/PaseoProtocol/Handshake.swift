@@ -29,6 +29,52 @@ public enum ClientCapabilities {
     /// "Please upgrade the Paseo app to view this subagent conversation."
     /// (`server/src/server/session.ts:8583-8615`, `CLIENT_CAPS.projectedSubagentTimeline`).
     public static let projectedSubagentTimeline = "projected_subagent_timeline"
+    // L3 Part A: capability audit. Upstream: packages/protocol/src/client-capabilities.ts (`CLIENT_CAPS`,
+    // 23 names; the ledger's 22 missed `binary_chunking_v1` because its grep pattern has no digits) plus
+    // `voice` in the hello schema (packages/protocol/src/messages.ts:8118).
+    // Each row: daemon effect (server/src/server/session.ts unless noted) -> our decoder -> decision.
+    //   ADV = advertised below.  OK = verified safe, NOT advertised yet (see BLOCKED).
+    //   NO  = not advertised: our client would mis-handle what the daemon then sends.
+    //   terminal_chunked_replay  ADV  replayBegin/Data/End opcodes 0x06-0x08 decoded (Terminals.swift:467-474).
+    //   hello_rejection          ADV  daemon sends hello.rejected (websocket-server.ts:1925); HelloRejected.
+    //   owned_subscriptions      ADV  (OwnedSubscriptions.isEnabled) delivery.attach (session.ts:1372).
+    //   provider_subagents       ADV  (already advertised; session.ts:2096).
+    //   projected_subagent_timeline ADV (already advertised; session.ts:2044).
+    //   workspace_setup_observation ADV (conditional on owned_subscriptions; session.ts:2545).
+    //   voice                    ADV  (VoiceMode.isEnabled; messages.ts:8118, not in CLIENT_CAPS).
+    //   binary_chunking_v1       NO   daemon chunks every outbound binary frame (websocket-server.ts:1305);
+    //                                 no chunk reassembly exists in PaseoKit.
+    //   terminal_reflowable_snapshot NO  daemon adds gridWrapped/scrollbackWrapped; we do not reflow (ticket).
+    //   compact_provider_snapshots NO  daemon sends `entries: []` + snapshotHash (provider-catalog-session.ts,
+    //                                 `identified`); our snapshot decoder reads entries only -> empty catalog.
+    //   provider_snapshot_references NO only read inside the compact branch; meaningless without it.
+    //   plugin_timeline_items    NO   daemon stops filtering `plugin` rows (session.ts:1485). They decode to
+    //                                 `.unknown` (Timeline.swift:119) and release renders nothing (D-020):
+    //                                 advertising now would leave silent holes. Advertise after D-020.
+    //   plugin_binary_payloads   NO   daemon sends plugin RPC output as binary 0x21, no JSON follows
+    //                                 (binary-frames/plugin.ts:11, session.ts:2832); no consumer here.
+    //   background_agents        NO   daemon includes agent-level background agents (session.ts:5939);
+    //                                 AgentSnapshot has no background field, so they would appear as ordinary
+    //                                 agents. Needs a UI decision.
+    //   browser_host             NO   needs a browser automation host we do not run.
+    //   BLOCKED (verified OK, but advertising them changes the pinned set asserted by
+    //   OwnedSubscriptionsCapabilityTests:14-27, which this ticket may not edit):
+    //   explicit_event_subscriptions  legacyWantsEvent gates non-modern sources only (session.ts:9168, 9461).
+    //   all_providers            daemon gate already open: appVersion floor 0.1.45 (session.ts:321, 2316);
+    //                                 provider ids are open Strings (Agents.swift:31).
+    //   selective_agent_timeline modern path already applies it (session.ts:1516-1529).
+    //   reasoning_merge_enum     daemon keeps `reasoning_merge` in `collapsed` (session.ts:8450); no decoder
+    //                                 reads `collapsed` here or upstream (messages.ts:5034).
+    //   custom_mode_icons        daemon downgrades icons to ShieldCheck without it (provider-catalog-session.ts);
+    //                                 AgentMode.icon is an open String (Agents.swift:21-26), nothing renders it.
+    //   project_updates          legacy gate only (session.ts:9465); ProjectUpdate decodes upsert/remove/unknown
+    //                                 (Workspaces.swift:300).
+    //   timeline_replacement_invalidation  DaemonConnection.swift:600 decodes agent.timeline.replacement and
+    //                                 HostSession.swift:376 reloads; the ledger's "0 hits" is stale.
+    //   timeline_notifications   daemon filter (session.ts:1484); notification decodes (Timeline.swift:17,108)
+    //                                 and renders (ClaudeToolDetail.swift:383).
+    //   workspace_setup_blocked  daemon sends blockedSource (session.ts:9280); decodes
+    //                                 (WorkspaceSetup.swift:87, 155).
     /// Every behavior this client actually implements. No `binary_chunking_v1` sends (we never
     /// chunk). `owned_subscriptions` and its `workspace_setup_observation` companion are
     /// advertised only while `OwnedSubscriptions.isEnabled`; every subscription path in the
