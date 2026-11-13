@@ -19,23 +19,9 @@ struct PendingRewind: Identifiable {
     var id: String { "\(messageId)/\(scope)" }
 }
 
-/// What kind of rewind-based action is pending confirmation (M7h).
-enum MessageActionKind: String {
-    case edit
-    case rerun
-}
-
-/// A message action awaiting the can't-undo confirmation (M7h).
-struct PendingMessageAction: Identifiable {
-    let messageId: String
-    let text: String
-    let kind: MessageActionKind
-    var id: String { "\(kind.rawValue)/\(messageId)" }
-}
-
 /// Every modal the conversation presents: the agent-controls sheet, the subagents and background
-/// work sheets, the prompt index, context usage, the file viewer, and the two confirmations that
-/// belong to the timeline (message actions and rewinds). R4 owns the sheet bodies; this only
+/// work sheets, the prompt index, context usage, the file viewer, and the rewind confirmation
+/// that belongs to the timeline. R4 owns the sheet bodies; this only
 /// routes to them.
 ///
 /// **Reads:** `store.subagents`, `store.backgroundWork`, `store.agent` (the file viewer's
@@ -80,20 +66,6 @@ struct ChatSheets: ViewModifier {
                     namespace: artifactZoom,
                     onClose: { controller.artifactDocument = nil })
             }
-            .confirmationDialog(
-                controller.messageActionTitle,
-                isPresented: messageActionBinding,
-                titleVisibility: .visible,
-                presenting: controller.pendingMessageAction
-            ) { action in
-                Button(action.kind == .edit ? "Rewind and edit" : "Rewind and rerun", role: .destructive) {
-                    controller.pendingMessageAction = nil
-                    Task { await controller.performMessageAction(action) }
-                }
-                Button("Cancel", role: .cancel) { controller.pendingMessageAction = nil }
-            } message: { action in
-                Text(controller.messageActionDescription(for: action))
-            }
     }
 
     @ViewBuilder private func sheet(_ item: ClaudeChatSheet) -> some View {
@@ -127,12 +99,6 @@ struct ChatSheets: ViewModifier {
         Binding(
             get: { controller.openFilePath != nil },
             set: { if !$0 { controller.openFilePath = nil } })
-    }
-
-    private var messageActionBinding: Binding<Bool> {
-        Binding(
-            get: { controller.pendingMessageAction != nil },
-            set: { if !$0 { controller.pendingMessageAction = nil } })
     }
 
     @ViewBuilder private var fileSheetContent: some View {

@@ -173,10 +173,9 @@ struct TranscriptJump: Equatable {
     /// A jump the transcript still owes (`jumpToPrompt` records it here).
     var pendingJump: TranscriptJump?
 
-    // Rewind, message actions, rename, archive.
+    // Rewind, rename, archive.
     var pendingRewind: PendingRewind?
     var rewindInFlight = false
-    var pendingMessageAction: PendingMessageAction?
     var renamingAgent = false
     var renameText = ""
     var archiveConfirm = false
@@ -624,12 +623,6 @@ struct TranscriptJump: Equatable {
         return store.rewindCapabilities.menu
     }
 
-    /// Scope used by Edit/Rerun: prefer conversation-only; fall back to both. Nil hides them.
-    var rewriteScope: RewindScope? {
-        let scopes = rewindMenuScopes
-        return scopes.contains(.conversation) ? .conversation : (scopes.contains(.both) ? .both : nil)
-    }
-
     // MARK: Header
 
     func beginRename() {
@@ -809,38 +802,7 @@ struct TranscriptJump: Equatable {
         }
     }
 
-    // MARK: Rewind and message actions
-
-    var messageActionTitle: String {
-        pendingMessageAction?.kind == .edit ? "Rewind and edit?" : "Rewind and rerun?"
-    }
-
-    func messageActionDescription(for action: PendingMessageAction) -> String {
-        let scopeName = rewriteScope == .both ? "the conversation and files" : "the conversation"
-        switch action.kind {
-        case .edit:
-            return "Rewinds \(scopeName) to before this message, and puts its text back in your draft. This action cannot be undone."
-        case .rerun:
-            return "Rewinds \(scopeName) to before this message, and runs the same prompt again. This action cannot be undone."
-        }
-    }
-
-    /// Runs the confirmed Edit/Rerun.
-    func performMessageAction(_ action: PendingMessageAction) async {
-        guard let scope = rewriteScope else { return }
-        let failure = await store.rewind(toMessageId: action.messageId, scope: scope)
-        if let failure {
-            showToast(failure)
-            return
-        }
-        switch action.kind {
-        case .edit:
-            // Upstream composer-restore.tsx:17-25: the rewound text only fills an empty draft.
-            if store.draft.isEmpty { store.draft = action.text }
-        case .rerun:
-            await store.send(action.text)
-        }
-    }
+    // MARK: Rewind
 
     /// Runs the confirmed rewind. One confirm in flight at a time; the rewind items stay locked
     /// until it settles (upstream `use-rewind-agent-mutation.ts`, `rewind-menu.tsx`).
