@@ -18,7 +18,7 @@ When in doubt, do what the iOS Claude app or the system apps (Notes, Mail) do.
 ### 0.1 Color
 
 - The UI is monochrome: ink on canvas, with `secondaryInk` and `tertiaryInk` for hierarchy.
-- The clay accent (`ClaudePalette.orange`, #d97757) is allowed only for:
+- The clay accent (`Palette.orange`, #d97757; `Packages/PaseoUI/Sources/PaseoUI/DesignSystem/Palette.swift:145`) is allowed only for:
   - the brand mark (§3.1);
   - the crab;
   - the "agent is running" activity glyph, if it already uses it;

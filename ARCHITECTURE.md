@@ -9,7 +9,7 @@ messaging app. The daemon is the backend and we never change it. Everything here
 ```
 App/                  Composition root: app entry, navigation, settings storage, Keychain.
                       Thin. Owns no logic a test would want.
-Packages/PaseoUI      (Apple platforms only)
+Packages/PaseoUI      (Apple platforms only; one module, including the former ClaudeUI parts bin)
   Conversation/       The chat: Screen (header + controller), Transcript, Turn, Composer,
                       Sheets, Mascot, and Prose (Markdown + rich content).
   Workspace/          The panel: Agents, Files, Changes (diff, PR), Terminals.
@@ -30,8 +30,6 @@ Packages/PaseoCore    (Foundation only: builds and tests on Linux)
                       TimelineState (merging deltas), TurnBuilder (grouping into turns).
   PaseoKit            One WebSocket to one daemon: hello, requests, events, reconnect.
   PaseoProtocol       Wire types. Mirrors packages/protocol/src/messages.ts upstream.
-Packages/ClaudeUI     Parts bin: the claude-ios-ui package this repo was forked from.
-                      Frozen. Copy pieces into DesignSystem; never depend on it from Core.
 ```
 
 Dependencies point down only. SwiftPM targets enforce this: a wrong import fails to compile.
@@ -46,8 +44,12 @@ the store.
 
 ## Talking to the daemon
 
-- One `DaemonConnection` per host. The app uses LAN or Tailscale with the daemon password first;
-  the relay (E2E encrypted, QR pairing) comes later behind the same `DaemonClient` protocol.
+- One `DaemonConnection` per host, behind the `DaemonClient` protocol (`PaseoKit/DaemonClient.swift`).
+  The app reaches the daemon over LAN or Tailscale with the daemon password, or over the relay: an
+  E2E-encrypted (Noise NK) channel with key pinning, paired by QR code or pasted link
+  (`PaseoKit/Relay/`, `PaseoUI/Pairing/PairingFlow.swift`, `PaseoKit/SavedHost.swift`). The endpoint
+  picks the path: `DaemonConnection.swift` wraps the base transport in the relay transport when the
+  endpoint carries a relay link.
 - Every frame is first decoded as an `InboundHeader` (outer type, message type, requestId). Responses
   go to the waiting request; everything else becomes a `DaemonEvent`. The full decode happens only
   where the type is known.
@@ -90,6 +92,13 @@ of rich content means adding one entry there, never a special case inside a view
 Haptics, motion and the "alive" status lines (the playful words while the agent works) live in
 DesignSystem and are triggered by store state changes, not by individual views. That keeps the
 feel consistent and lets one place tune it.
+
+## Upstream first
+
+Paseo upstream (getpaseo/paseo) is the specification. Before changing any function, feature,
+behaviour or performance measure, find how upstream does it, match it, and cite it as
+`Upstream: path:line`. If upstream does not have it, we do not build it. The rule is R-7 in
+`AGENTS.md`; the full procedure is in `docs/tickets/_L-common.md`.
 
 ## Repo rules
 
