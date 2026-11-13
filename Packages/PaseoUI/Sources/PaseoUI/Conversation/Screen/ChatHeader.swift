@@ -115,8 +115,10 @@ struct ChatHeaderBar: View {
                     ? "This agent is still running. Archiving it will stop the agent."
                     : "The agent will disappear from your list.")
         }
+        // Upstream rewind.tooltip, en.ts:2011. A context menu cannot show upstream's warning header,
+        // so the dialog carries rewind.warning (en.ts:2012) as its message.
         .confirmationDialog(
-            "Rewind to this message?",
+            "Rewind to this message",
             isPresented: Binding(
                 get: { controller.pendingRewind != nil },
                 set: { if !$0 { controller.pendingRewind = nil } }),
@@ -129,7 +131,7 @@ struct ChatHeaderBar: View {
             }
             Button("Cancel", role: .cancel) { controller.pendingRewind = nil }
         } message: { _ in
-            Text("This action cannot be undone.")
+            Text("This action cannot be undone")
         }
     }
 

@@ -92,13 +92,18 @@ extension ConversationStore {
         guard rewindCapabilities.menu.contains(scope) else {
             return "This provider does not support rewinding that scope."
         }
-        guard let client else { return "Not connected." }
+        // Upstream common.errors.daemonClientUnavailable, packages/app/src/i18n/resources/en.ts:68.
+        guard let client else { return "Daemon client unavailable" }
         do {
             let response = try await client.send(
                 RewindAgentRequest(agentId: agentId, messageId: messageId, mode: scope.mode))
+            // Upstream rewind.errors.failed, en.ts:2019, when the daemon gives no reason.
             guard response.ok else {
-                return response.error ?? "The daemon refused to rewind."
+                return response.error ?? "Failed to rewind agent"
             }
+            // Upstream use-rewind-agent-mutation.ts:38-49: a rewind that changes the conversation
+            // fetches the timeline again; files-only rewinds do not.
+            if scope != .files { await catchUp() }
             return nil
         } catch {
             return paseoStoreErrorText(error)

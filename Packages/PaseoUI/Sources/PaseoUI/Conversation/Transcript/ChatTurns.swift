@@ -21,13 +21,6 @@ struct ClaudeTurnView: View {
     var rewindChoices: [RewindScope] = []
     /// Called with (scope, messageId); the transcript presents the confirmation dialog.
     var onRewind: ((RewindScope, String) -> Void)? = nil
-    /// M7h rewind-based message actions: true only where the provider can rewind the conversation.
-    var canRewrite: Bool = false
-    /// Called with (messageId, text) when Edit is chosen; the transcript puts the text back in
-    /// the composer and rewinds to before the message on confirm.
-    var onEdit: ((String, String) -> Void)? = nil
-    /// Called with (messageId, text) when Rerun is chosen; the transcript rewinds and resends.
-    var onRerun: ((String, String) -> Void)? = nil
     /// Fork, with the target menu (V1): called with the chosen target and the row to pin the
     /// boundary at. Nil hides the menu — no host support, or nothing to fork from.
     var onFork: ((ClaudeForkTarget, TimelineRow) async -> Void)? = nil
@@ -143,9 +136,6 @@ struct ClaudeTurnView: View {
                     rewindChoices: rewindable ? rewindChoices : [],
                     onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
                     attributed: bubbleAttributed(message.text),
-                    canRewrite: canRewrite,
-                    onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
-                    onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
                     rewindInFlight: rewindInFlight,
                     clientMessageId: message.clientMessageId
                 )
@@ -205,9 +195,6 @@ struct ClaudeTurnView: View {
                     rewindChoices: rewindable ? rewindChoices : [],
                     onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
                     attributed: bubbleAttributed(message.text),
-                    canRewrite: canRewrite,
-                    onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
-                    onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
                     rewindInFlight: rewindInFlight,
                     clientMessageId: message.clientMessageId
                 )
@@ -493,9 +480,6 @@ struct TurnRow: View, Equatable {
             onOpenFile: actions.openFile,
             rewindChoices: availability.rewindChoices,
             onRewind: availability.rewindChoices.isEmpty ? nil : actions.rewind,
-            canRewrite: availability.canRewrite,
-            onEdit: actions.edit,
-            onRerun: actions.rerun,
             onFork: availability.canForkAtBoundary ? actions.fork : nil,
             onForkInFlight: availability.canForkInFlight ? actions.forkInFlight : nil,
             rewindInFlight: availability.rewindInFlight,

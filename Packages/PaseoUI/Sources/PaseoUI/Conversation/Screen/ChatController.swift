@@ -20,10 +20,6 @@ import UniformTypeIdentifiers
     var markdown: (MarkdownAction) -> Void = { _ in }
     /// Asks for the can't-undo confirmation of a rewind (scope + message id).
     var rewind: (RewindScope, String) -> Void = { _, _ in }
-    /// Edit: confirm, rewind, put the text back in the composer.
-    var edit: (String, String) -> Void = { _, _ in }
-    /// Rerun: confirm, rewind, resend the text.
-    var rerun: (String, String) -> Void = { _, _ in }
     /// Fork at the row above `row` (nil for the in-flight fork of the whole timeline).
     var fork: ((ClaudeForkTarget, TimelineRow) async -> Void)?
     /// The running turn's fork: no boundary.
@@ -77,8 +73,6 @@ extension EnvironmentValues {
 struct TurnActionAvailability: Sendable, Equatable {
     /// Scopes the provider offers on your bubbles, in menu order; empty hides rewind.
     var rewindChoices: [RewindScope] = []
-    /// Edit/Rerun exist: the conversation can be rewound.
-    var canRewrite = false
     /// Fork with no boundary: the running turn's footer (`turn-footer.tsx:38-46`).
     var canForkInFlight = false
     /// Fork pinned to a boundary: the completed turn's footer.
@@ -285,14 +279,6 @@ struct TranscriptJump: Equatable {
         }
         actions.rewind = { [weak self] scope, messageId in
             self?.pendingRewind = PendingRewind(messageId: messageId, scope: scope)
-        }
-        actions.edit = { [weak self] messageId, text in
-            self?.pendingMessageAction = PendingMessageAction(
-                messageId: messageId, text: text, kind: .edit)
-        }
-        actions.rerun = { [weak self] messageId, text in
-            self?.pendingMessageAction = PendingMessageAction(
-                messageId: messageId, text: text, kind: .rerun)
         }
         actions.fork = { [weak self] target, row in
             await self?.forkInto(target, boundary: row.seqEnd)
@@ -573,7 +559,6 @@ struct TranscriptJump: Equatable {
         let canFork = session.isForkContextSupportedByHost && onForkAgent != nil
         return TurnActionAvailability(
             rewindChoices: choices,
-            canRewrite: canRewrite,
             canForkInFlight: canFork,
             // Our fork only pins a cursor boundary, which needs the host's cursor feature.
             canForkAtBoundary: canFork
@@ -644,8 +629,6 @@ struct TranscriptJump: Equatable {
         let scopes = rewindMenuScopes
         return scopes.contains(.conversation) ? .conversation : (scopes.contains(.both) ? .both : nil)
     }
-
-    var canRewrite: Bool { rewriteScope != nil }
 
     // MARK: Header
 

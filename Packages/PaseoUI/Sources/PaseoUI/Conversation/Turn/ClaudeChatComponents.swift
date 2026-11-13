@@ -357,11 +357,6 @@ struct ClaudeUserBubble: View {
     /// M7g file mentions: a pre-formatted body with tappable `paseo-file:` links. Nil (the
     /// default) renders the plain `text` unchanged.
     var attributed: AttributedString? = nil
-    /// M7h message actions (rewind-based): Edit puts this text back in the composer and rewinds
-    /// to before this message; Rerun does the same and resends it.
-    var canRewrite: Bool = false
-    var onEdit: (() -> Void)? = nil
-    var onRerun: (() -> Void)? = nil
     /// A rewind is in flight: the rewind items are disabled until it settles (upstream
     /// `rewind-menu.tsx` `isLocked`).
     var rewindInFlight: Bool = false
@@ -383,7 +378,6 @@ struct ClaudeUserBubble: View {
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
         onRewind: ((RewindScope) -> Void)? = nil, attributed: AttributedString? = nil,
-        canRewrite: Bool = false, onEdit: (() -> Void)? = nil, onRerun: (() -> Void)? = nil,
         rewindInFlight: Bool = false, clientMessageId: String? = nil
     ) {
         self.text = text
@@ -391,9 +385,6 @@ struct ClaudeUserBubble: View {
         self.rewindChoices = rewindChoices
         self.onRewind = onRewind
         self.attributed = attributed
-        self.canRewrite = canRewrite
-        self.onEdit = onEdit
-        self.onRerun = onRerun
         self.rewindInFlight = rewindInFlight
         self.clientMessageId = clientMessageId
         self._entered = State(initialValue: !isPending)
@@ -506,13 +497,6 @@ struct ClaudeUserBubble: View {
                 }
                 .disabled(rewindInFlight)
             }
-        }
-        if let onEdit, let onRerun, canRewrite {
-            Divider()
-            Button("Edit", systemImage: "pencil") { onEdit() }
-                .disabled(rewindInFlight)
-            Button("Rerun", systemImage: "arrow.clockwise") { onRerun() }
-                .disabled(rewindInFlight)
         }
     }
 
