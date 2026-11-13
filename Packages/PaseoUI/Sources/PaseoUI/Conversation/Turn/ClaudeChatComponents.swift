@@ -305,7 +305,7 @@ func rewindScopeTitle(_ scope: RewindScope) -> String {
     case .conversation: "Rewind conversation"
     case .files: "Rewind files"
     case .both: "Rewind conversation and files"
-    case .unknown: "Rewind to here"
+    case .unknown: "Rewind to this message"
     }
 }
 
@@ -341,7 +341,7 @@ struct ClaudeCopyButton: View {
 /// A message sent this session grows into place (scale 0.96 + fade, DSH chat-send);
 /// Reduce Motion fades. History bubbles never animate.
 ///
-/// Long-press → "Rewind to here" appears only once the provider acknowledged the message
+/// Long-press → "Rewind to this message" appears only once the provider acknowledged the message
 /// (`rewindChoices` non-empty). The actual rewind confirm lives in the transcript.
 ///
 /// The long-press preview is the bubble itself, clipped to its rounded shape (UX spec §4.3),
@@ -362,10 +362,9 @@ struct ClaudeUserBubble: View {
     var canRewrite: Bool = false
     var onEdit: (() -> Void)? = nil
     var onRerun: (() -> Void)? = nil
-    /// DSH "Retract this message": forks before this message and puts the text back in the new
-    /// session's composer (`message-actions.ts:197-207`). Nil hides the item — no host support, no
-    /// settled turn, or nothing above the message to fork from.
-    var onRetract: (() -> Void)? = nil
+    /// A rewind is in flight: the rewind items are disabled until it settles (upstream
+    /// `rewind-menu.tsx` `isLocked`).
+    var rewindInFlight: Bool = false
     /// This device's sent images, looked up by the send's `clientMessageId` (§9.5).
     /// Nil (another device, an evicted entry) draws nothing: no placeholder, no fetch.
     var clientMessageId: String? = nil
@@ -385,7 +384,7 @@ struct ClaudeUserBubble: View {
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
         onRewind: ((RewindScope) -> Void)? = nil, attributed: AttributedString? = nil,
         canRewrite: Bool = false, onEdit: (() -> Void)? = nil, onRerun: (() -> Void)? = nil,
-        onRetract: (() -> Void)? = nil, clientMessageId: String? = nil
+        rewindInFlight: Bool = false, clientMessageId: String? = nil
     ) {
         self.text = text
         self.isPending = isPending
@@ -395,7 +394,7 @@ struct ClaudeUserBubble: View {
         self.canRewrite = canRewrite
         self.onEdit = onEdit
         self.onRerun = onRerun
-        self.onRetract = onRetract
+        self.rewindInFlight = rewindInFlight
         self.clientMessageId = clientMessageId
         self._entered = State(initialValue: !isPending)
     }
@@ -495,23 +494,25 @@ struct ClaudeUserBubble: View {
         }
         if let onRewind, !rewindChoices.isEmpty {
             Divider()
+            // Upstream: rewind.tooltip, packages/app/src/i18n/resources/en.ts:2011.
             if rewindChoices.count == 1, let scope = rewindChoices.first {
-                Button("Rewind to here", systemImage: "arrow.uturn.left") { onRewind(scope) }
+                Button(rewindScopeTitle(scope), systemImage: "arrow.uturn.left") { onRewind(scope) }
+                    .disabled(rewindInFlight)
             } else {
-                Menu("Rewind to here", systemImage: "arrow.uturn.left") {
+                Menu("Rewind to this message", systemImage: "arrow.uturn.left") {
                     ForEach(rewindChoices, id: \.self) { scope in
                         Button(rewindScopeTitle(scope)) { onRewind(scope) }
                     }
                 }
+                .disabled(rewindInFlight)
             }
         }
         if let onEdit, let onRerun, canRewrite {
             Divider()
             Button("Edit", systemImage: "pencil") { onEdit() }
+                .disabled(rewindInFlight)
             Button("Rerun", systemImage: "arrow.clockwise") { onRerun() }
-        }
-        if let onRetract {
-            Button("Retract this message", systemImage: "arrow.uturn.backward") { onRetract() }
+                .disabled(rewindInFlight)
         }
     }
 

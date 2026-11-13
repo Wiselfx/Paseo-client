@@ -34,14 +34,9 @@ struct ClaudeTurnView: View {
     /// The running turn's fork. No boundary: the whole timeline as it stands, partially streamed
     /// answer included (upstream `turn-footer.tsx:38-46`). Nil hides it.
     var onForkInFlight: ((ClaudeForkTarget) async -> Void)? = nil
-    /// DSH "Delete this turn": called with the turn's own prompt row; the transcript forks at the
-    /// row before it. Nil hides the control.
-    var onDeleteTurn: ((TimelineRow) -> Void)? = nil
-    /// DSH "Retract this message": called with the turn's prompt row (same cut as Delete) — the
-    /// transcript puts the text back in the new session's composer.
-    var onRetract: ((TimelineRow) -> Void)? = nil
-    /// Retract needs the same boundary fork as Delete, not rewind (E3 §2).
-    var canRetract: Bool = false
+    /// A rewind is in flight: the rewind items on your bubbles are locked (upstream
+    /// `rewind-menu.tsx` `isLocked`, fed by `use-rewind-agent-mutation.ts` `isPending`).
+    var rewindInFlight: Bool = false
     /// The fork menu offers "Fork in a new workspace" beside the tab target.
     var canForkWorkspace: Bool = false
     /// False for every turn except the most recent one; only that turn never collapses.
@@ -139,11 +134,10 @@ struct ClaudeTurnView: View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
                 if let sender = message.sender { sentByLine(sender) }
-                let rewindable = message.messageId != nil && !rewindChoices.isEmpty
-                // Retract forks at the cut row, so it needs a boundary fork — not rewind — plus a
-                // message the daemon acknowledged, and never while the turn still produces (DSH).
-                let retractible = canRetract && message.messageId != nil && !row.isPending
-                    && !isRunning
+                // Upstream shows the rewind control only on an acknowledged message with text
+                // (message.tsx:422 showTrailingRow, :514 hasText, :530 messageId).
+                let rewindable = message.messageId != nil && !message.text.isEmpty
+                    && !row.isPending && !rewindChoices.isEmpty
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
@@ -152,7 +146,7 @@ struct ClaudeTurnView: View {
                     canRewrite: canRewrite,
                     onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
                     onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
-                    onRetract: retractible ? { onRetract?(row) } : nil,
+                    rewindInFlight: rewindInFlight,
                     clientMessageId: message.clientMessageId
                 )
                 .id("row:\(row.seqEnd)")
@@ -202,11 +196,10 @@ struct ClaudeTurnView: View {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
                 // The provider has to acknowledge the prompt before it can be rewound to.
                 if let sender = message.sender { sentByLine(sender) }
-                let rewindable = message.messageId != nil && !rewindChoices.isEmpty
-                // Retract forks at the cut row, so it needs a boundary fork — not rewind — plus a
-                // message the daemon acknowledged, and never while the turn still produces (DSH).
-                let retractible = canRetract && message.messageId != nil && !row.isPending
-                    && !isRunning
+                // Upstream shows the rewind control only on an acknowledged message with text
+                // (message.tsx:422 showTrailingRow, :514 hasText, :530 messageId).
+                let rewindable = message.messageId != nil && !message.text.isEmpty
+                    && !row.isPending && !rewindChoices.isEmpty
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
@@ -215,7 +208,7 @@ struct ClaudeTurnView: View {
                     canRewrite: canRewrite,
                     onEdit: rewindable ? { onEdit?(message.messageId ?? "", message.text) } : nil,
                     onRerun: rewindable ? { onRerun?(message.messageId ?? "", message.text) } : nil,
-                    onRetract: retractible ? { onRetract?(row) } : nil,
+                    rewindInFlight: rewindInFlight,
                     clientMessageId: message.clientMessageId
                 )
                 .id("row:\(row.seqEnd)")
@@ -256,11 +249,6 @@ struct ClaudeTurnView: View {
                         ClaudeForkMenu(allowsWorkspace: canForkWorkspace) { target in
                             await onFork(target, forkTarget)
                         }
-                    }
-                    if let onDeleteTurn, let userRow = turn.userMessage {
-                        ClaudeTurnActionButton(
-                            systemImage: "trash", accessibilityLabel: "Delete this turn"
-                        ) { onDeleteTurn(userRow) }
                     }
                 }
                 .padding(.top, 2)
@@ -341,10 +329,10 @@ struct ClaudeTurnView: View {
         }
     }
 
-    /// True when the answer footer has anything to show: copy, the fork menu (needs a boundary
-    /// row), or the turn's Delete control.
+    /// True when the answer footer has anything to show: copy or the fork menu (needs a boundary
+    /// row).
     var showsAnswerFooter: Bool {
-        !copyText.isEmpty || (onFork != nil && finalProse != nil) || onDeleteTurn != nil
+        !copyText.isEmpty || (onFork != nil && finalProse != nil)
     }
 
     func toggleWork() {
@@ -460,25 +448,6 @@ struct ClaudeTurnActionGlyph: View {
     }
 }
 
-/// A plain 28 pt footer action (no menu), e.g. "Delete this turn".
-struct ClaudeTurnActionButton: View {
-    var systemImage: String
-    var accessibilityLabel: String
-    var action: () -> Void
-
-    var body: some View {
-        Button {
-            Haptics.light()
-            action()
-        } label: {
-            ClaudeTurnActionGlyph(systemImage: systemImage, busy: false)
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-    }
-}
-
 /// "2 thoughts, 1 tool call": the counted header, then a transparent card of rows, each opening on
 /// its own. The card is capped at `min(400 pt, 50% of height)` and scrolls inside.
 
@@ -529,9 +498,7 @@ struct TurnRow: View, Equatable {
             onRerun: actions.rerun,
             onFork: availability.canForkAtBoundary ? actions.fork : nil,
             onForkInFlight: availability.canForkInFlight ? actions.forkInFlight : nil,
-            onDeleteTurn: availability.canForkAtBoundary ? actions.deleteTurn : nil,
-            onRetract: availability.canForkAtBoundary ? actions.retract : nil,
-            canRetract: availability.canForkAtBoundary,
+            rewindInFlight: availability.rewindInFlight,
             canForkWorkspace: availability.canForkWorkspace,
             isLatestTurn: isLatest
         )
