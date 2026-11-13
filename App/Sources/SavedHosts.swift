@@ -33,17 +33,19 @@ final class SavedHosts {
         hosts.first { $0.id == id }
     }
 
+    /// A merged relay row also answers to its direct URL: the direct connection belongs to the
+    /// same host (`SavedHost.directURL`, upstream connectivity.md:127).
     func host(matchingURL url: String) -> SavedHost? {
-        hosts.first { $0.url == url }
+        hosts.first { $0.url == url || $0.directURL == url }
     }
 
     func host(serverID: String) -> SavedHost? {
         hosts.first { $0.daemonServerID == serverID }
     }
 
-    /// Daemon ids that currently have more than one saved row (typically the same machine as
-    /// a direct entry and a relay entry). Detection only: merging needs a UX decision (which
-    /// row wins, which Keychain account keeps the password), so both rows still render.
+    /// Daemon ids that still have more than one saved row. A direct row and a relay row for one
+    /// daemon merge as they connect (`mergeDuplicates`); two direct rows or two relay rows for one
+    /// daemon stay as they are and render.
     var duplicateDaemonServerIDs: [String] {
         SavedHostDuplicates.serverIDs(hosts)
     }
@@ -71,8 +73,9 @@ final class SavedHosts {
 
     /// A successful direct connection: upsert by URL (or `id`, when re-connecting a saved
     /// host), mark it connected now, and learn the daemon's `serverId` from `server_info`
-    /// (M20b) so deep links can find this host before it is the live one. Returns the saved
-    /// host's id.
+    /// (M20b) so deep links can find this host before it is the live one. A direct row for a
+    /// daemon that is already paired through the relay merges into that relay row. Returns the
+    /// id of the row that now stands for the connection: select this one, not the id passed in.
     @discardableResult
     func markConnected(
         url: URL, preferredLabel: String, id: UUID? = nil, daemonServerID: String? = nil
@@ -87,20 +90,20 @@ final class SavedHosts {
             hosts[index].lastConnectedAt = now
             learn(index)
             persist()
-            return id
+            return mergeDuplicates(of: id)
         }
-        if let index = hosts.firstIndex(where: { $0.url == urlString }) {
+        if let index = hosts.firstIndex(where: { $0.url == urlString || $0.directURL == urlString }) {
             hosts[index].lastConnectedAt = now
             learn(index)
             persist()
-            return hosts[index].id
+            return mergeDuplicates(of: hosts[index].id)
         }
         var saved = SavedHost(
             id: UUID(), label: preferredLabel, url: urlString, lastConnectedAt: now)
         saved.learnDirectServerID(daemonServerID)
         hosts.append(saved)
         persist()
-        return saved.id
+        return mergeDuplicates(of: saved.id)
     }
 
     /// A successful relay connection: upsert by daemon identity (`identityKey`), never by
@@ -122,19 +125,56 @@ final class SavedHosts {
             guard let index = hosts.firstIndex(where: { $0.id == id }) else { return id }
             fill(&hosts[index])
             persist()
-            return id
+            return mergeDuplicates(of: id)
         }
         if let index = hosts.firstIndex(where: { $0.identityKey == "relay:\(offer.serverID)" }) {
             fill(&hosts[index])
             persist()
-            return hosts[index].id
+            return mergeDuplicates(of: hosts[index].id)
         }
         var saved = SavedHost(
             id: UUID(), label: preferredLabel, url: relayURLString, lastConnectedAt: now)
         fill(&saved)
         hosts.append(saved)
         persist()
-        return saved.id
+        return mergeDuplicates(of: saved.id)
+    }
+
+    /// Upstream keeps one host per daemon id (host-connection.ts `upsertHostConnectionInProfiles`).
+    /// Once the row `id` has learned or claimed its daemon id, a direct row and a relay row for
+    /// that daemon fold into the relay row (`SavedHostDuplicates.mergePlan`). Returns the id of
+    /// the row that now stands for the daemon.
+    private func mergeDuplicates(of id: UUID) -> UUID {
+        guard let daemonServerID = host(id)?.daemonServerID else { return id }
+        var survivor = id
+        for step in SavedHostDuplicates.mergePlan(hosts)
+        where step.keep.daemonServerID == daemonServerID {
+            if step.absorb.id == id { survivor = step.keep.id }
+            absorb(direct: step.absorb.id, into: step.keep.id)
+        }
+        return survivor
+    }
+
+    /// Folds the direct row `directID` into the relay row `relayID`. The relay row keeps its
+    /// identity (`SavedHostMerge.merge`). The direct password moves to the relay account only
+    /// when that account has none, and the direct row's Keychain item is removed with the row.
+    private func absorb(direct directID: UUID, into relayID: UUID) {
+        guard let direct = host(directID), let relay = host(relayID), let serverID = relay.serverID,
+            let relayIndex = hosts.firstIndex(where: { $0.id == relayID })
+        else { return }
+        let relaySecrets = SavedHostRelaySecrets()
+        let directPassword = Self.readPassword(direct.id)
+        let relayPassword = relaySecrets.password(serverID: serverID)
+        let move = SavedHostMerge.passwordMove(
+            relayHasPassword: relayPassword != nil, directHasPassword: !directPassword.isEmpty)
+        if move == .moveDirectToRelay {
+            relaySecrets.savePassword(directPassword, serverID: serverID)
+        }
+        // `Keychain.save("")` removes the item.
+        Self.savePassword("", for: direct.id)
+        hosts[relayIndex] = SavedHostMerge.merge(direct: direct, into: relay)
+        hosts.removeAll { $0.id == directID }
+        persist()
     }
 
     /// Adopts an already-known URL into a new entry (legacy migration). Returns the new id.
