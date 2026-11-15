@@ -169,6 +169,7 @@ import Testing
             case .localFileLink: kind = "localFileLink"
             case .rawSVG: kind = "rawSVG"
             case .visualize: kind = "visualize"
+            case .htmlArtifact: kind = "htmlArtifact"
             case .mermaid: kind = "mermaid"
             case .imageGroup: kind = "imageGroup"
             case .localMedia: kind = "localMedia"

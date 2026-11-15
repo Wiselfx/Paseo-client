@@ -48,6 +48,7 @@ extension RichContentBlock {
         case .localFileLink: "file"
         case .rawSVG: "svg"
         case .visualize: "visualize"
+        case .htmlArtifact: "html"
         case .mermaid: "mermaid"
         case .imageGroup: "gallery"
         case .localMedia(_, let kind, _): kind == .video ? "video" : "audio"
