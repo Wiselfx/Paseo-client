@@ -24,6 +24,8 @@ final class RewindComposerTests: XCTestCase {
 
         composer.tap()
         composer.typeText("rewind test two")
+        // While the agent still runs the button reads "Send and steer", so wait for "Send message".
+        XCTAssertTrue(app.buttons["Send message"].waitForExistence(timeout: 40))
         app.buttons["Send message"].tap()
         XCTAssertTrue(app.staticTexts["rewind test two"].waitForExistence(timeout: 40))
 
@@ -35,7 +37,7 @@ final class RewindComposerTests: XCTestCase {
 
         // Confirm the rewind. The confirmation repeats the label, so take the last match.
         Thread.sleep(forTimeInterval: 3)
-        let confirmations = app.buttons.matching(identifier: "Rewind conversation")
+        let confirmations = app.buttons.matching(NSPredicate(format: "label == %@", "Rewind conversation"))
         let count = confirmations.count
         XCTAssertGreaterThan(count, 0, "Rewind confirmation not found")
         confirmations.element(boundBy: max(count - 1, 0)).tap()
@@ -44,6 +46,7 @@ final class RewindComposerTests: XCTestCase {
         XCTAssertTrue(waitForComposerValue(composer, "rewind test one"))
 
         // Send the restored text.
+        XCTAssertTrue(app.buttons["Send message"].waitForExistence(timeout: 10))
         app.buttons["Send message"].tap()
         XCTAssertTrue(app.staticTexts["rewind test one"].waitForExistence(timeout: 40))
 
