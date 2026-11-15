@@ -435,7 +435,7 @@ launch)
     require_sim
     args=()
     if [[ -n "${ref:-}" && "$ref" != "-" ]]; then
-        if [[ ! "$ref" =~ ^[A-Za-z0-9_.,=:/-]{1,300}$ ]]; then echo "refused: bad launch arguments" >&2; exit 2; fi
+        if [[ ! "$ref" =~ ^[A-Za-z0-9_.,=:/-]{1,200}$ ]]; then echo "refused: bad launch arguments" >&2; exit 2; fi
         IFS=',' read -r -a args <<<"$ref"
     fi
     xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
@@ -572,7 +572,7 @@ ls)
     fi
     ;;
 get)
-    if [[ ! "${ref:-}" =~ ^[A-Za-z0-9._/-]{1,300}$ ]] || [[ "$ref" == *..* ]] || [[ "$ref" == /* ]] || [[ "$ref" == -* ]]; then
+    if [[ ! "${ref:-}" =~ ^[A-Za-z0-9._/-]{1,200}$ ]] || [[ "$ref" == *..* ]] || [[ "$ref" == /* ]] || [[ "$ref" == -* ]]; then
         echo "refused: bad path" >&2
         exit 2
     fi
