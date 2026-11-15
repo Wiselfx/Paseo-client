@@ -750,6 +750,18 @@ public final class ConversationStore: Identifiable {
 
     internal let client: (any DaemonClient)?
     private var isCatchingUp = false
+    /// Retries already spent on the current gap. Reset as soon as a catch-up page lands.
+    @ObservationIgnored private var catchUpAttempts = 0
+    /// The pending retry for a failed catch-up, cancelled by the next explicit one.
+    @ObservationIgnored private var catchUpRetry: Task<Void, Never>?
+    /// Delays before re-asking for the pages a failed catch-up missed: three attempts, doubling
+    /// from one second. Upstream leaves gap recovery to the consumer and its data layer retries a
+    /// failed read three times with that backoff (TanStack Query defaults; no `retry` override in
+    /// `packages/app/src/data/query-client.ts:3-10`), so a lost page is re-asked rather than left
+    /// open until the daemon next speaks.
+    @ObservationIgnored private static let catchUpRetryDelays: [Duration] = [
+        .seconds(1), .seconds(2), .seconds(4),
+    ]
     /// Incremental `TurnBuilder`: keeps the last built turns so streaming a token rebuilds only the
     /// newest turn instead of the whole transcript. See `IncrementalTurnBuilder`.
     private let turnBuilder = IncrementalTurnBuilder()
@@ -1106,6 +1118,8 @@ public final class ConversationStore: Identifiable {
 
     /// Fetches everything after the last known seq. Repeats while the daemon reports newer rows.
     internal func catchUp() async {
+        catchUpRetry?.cancel()
+        catchUpRetry = nil
         guard !isCatchingUp, let client else { return }
         isCatchingUp = true
         defer { isCatchingUp = false }
@@ -1123,13 +1137,29 @@ public final class ConversationStore: Identifiable {
                 if let snapshot = page.agent { applyAgent(snapshot) }
                 updateTurns()
                 backgroundError = nil
+                catchUpAttempts = 0
                 guard page.hasNewer else { return }
                 guard let next = timeline.endCursor, next != cursor else { return }
                 cursor = next
             } catch {
                 backgroundError = errorText(error)
+                scheduleCatchUpRetry()
                 return
             }
+        }
+    }
+
+    /// Re-asks for the missed pages after a failure. A live delta that opens the gap again, a
+    /// reconnect or a reload starts the sequence over.
+    private func scheduleCatchUpRetry() {
+        guard catchUpAttempts < Self.catchUpRetryDelays.count else { return }
+        let delay = Self.catchUpRetryDelays[catchUpAttempts]
+        catchUpAttempts += 1
+        catchUpRetry = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.catchUpRetry = nil
+            await self.catchUp()
         }
     }
 
