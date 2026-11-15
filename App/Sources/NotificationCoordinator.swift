@@ -304,13 +304,16 @@ private final class NotificationDelegateProxy: NSObject, UNUserNotificationCente
     var onResponse:
         (@Sendable (String, [String: String], @escaping @Sendable () -> Void) -> Void)?
 
-    /// Foreground notifications are the point of this ticket (the agent is rarely on screen);
-    /// `AttentionCenter` already suppressed the conversation the user is reading.
+    /// Foreground notifications stay in Notification Center: no banner, no sound. Upstream keeps
+    /// them for stale presence information — the push was queued before this app reattached, so
+    /// the thing it announces is often over by the time it arrives (docs/notifications.md:53-54,
+    /// `packages/app/src/notification-open/source.native.ts:12-20`: `shouldShowBanner: false`,
+    /// `shouldShowList: true`, `shouldPlaySound: false`).
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .list, .sound])
+        completionHandler([.list])
     }
 
     nonisolated func userNotificationCenter(
