@@ -8,7 +8,7 @@ private struct SurfaceObscuredKey: EnvironmentKey {
 
 extension EnvironmentValues {
     var isSurfaceObscured: Bool {
-        get { self[SurfaceObscuredKey.self] }
+        get { surfaceFlags?.obscured ?? self[SurfaceObscuredKey.self] }
         set { self[SurfaceObscuredKey.self] = newValue }
     }
 }

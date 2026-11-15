@@ -50,10 +50,11 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
     private var sidebarObscured = true
     private var panelVisible = false
     private var panelObscured = true
-    private var appliedMainObscured: Bool?
-    private var appliedSidebarObscured: Bool?
-    private var appliedPanelVisible: Bool?
-    private var appliedPanelObscured: Bool?
+    /// One observable flag set per root (W1, `SurfaceFlags`): a motion's first and last frame flip
+    /// these instead of re-assigning every hosting controller's `rootView`.
+    private let sidebarFlags = SurfaceFlags()
+    private let mainFlags = SurfaceFlags()
+    private let panelFlags = SurfaceFlags()
 
     /// Model progress, 0…1. Written per frame while tracking, animated once per settle.
     private var sidebarProgress: CGFloat = 0
@@ -272,26 +273,17 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
     }
 
     private func applyRoots() {
-        let flagsChanged =
-            appliedMainObscured != mainObscured
-            || appliedSidebarObscured != sidebarObscured
-            || appliedPanelVisible != panelVisible
-            || appliedPanelObscured != panelObscured
-        guard flagsChanged || rootsChanged else { return }
+        // Each write only when the value changed, so an unchanged flag notifies nobody.
+        if sidebarFlags.obscured != sidebarObscured { sidebarFlags.obscured = sidebarObscured }
+        if mainFlags.obscured != mainObscured { mainFlags.obscured = mainObscured }
+        if panelFlags.obscured != panelObscured { panelFlags.obscured = panelObscured }
+        if panelFlags.panelVisible != panelVisible { panelFlags.panelVisible = panelVisible }
+        guard rootsChanged else { return }
         rootsChanged = false
-        appliedMainObscured = mainObscured
-        appliedSidebarObscured = sidebarObscured
-        appliedPanelVisible = panelVisible
-        appliedPanelObscured = panelObscured
 
-        sidebarHost.rootView = AnyView(
-            sidebarRoot.environment(\.isSurfaceObscured, sidebarObscured))
-        conversationHost.rootView = AnyView(
-            mainRoot.environment(\.isSurfaceObscured, mainObscured))
-        panelHost.rootView = AnyView(
-            panelRoot
-                .environment(\.isSurfaceObscured, panelObscured)
-                .environment(\.isPanelVisible, panelVisible))
+        sidebarHost.rootView = AnyView(sidebarRoot.environment(\.surfaceFlags, sidebarFlags))
+        conversationHost.rootView = AnyView(mainRoot.environment(\.surfaceFlags, mainFlags))
+        panelHost.rootView = AnyView(panelRoot.environment(\.surfaceFlags, panelFlags))
     }
 
     func setRoots(sidebar: AnyView, main: AnyView, panel: AnyView) {
