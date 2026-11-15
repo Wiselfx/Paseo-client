@@ -6,7 +6,7 @@
     /// blocks, mono code. Sizes are measured at Claude's 17 pt body (V5); headings and code are
     /// ratios of `bodySize`, so the whole ladder follows the size setting and Dynamic Type.
     /// Claude's uncaptured rich-block metrics remain provisional.
-    public struct ClaudeMarkdownTheme: Equatable {
+    public struct ClaudeMarkdownTheme: Equatable, Sendable {
         public var bodyFont: Font
         public var headingFonts: [Font]
         public var codeFont: Font
@@ -105,7 +105,7 @@
         }
 
         public let document: MarkdownDocumentModel
-        public var theme: ClaudeMarkdownTheme
+        public let theme: ClaudeMarkdownTheme
         @State private var tableViewport: CGFloat = 0
         @State private var expandedCode: ExpandedCode?
         /// Per-table content widths, by block index: the overflow signal. Written
