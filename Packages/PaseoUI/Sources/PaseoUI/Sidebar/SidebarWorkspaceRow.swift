@@ -46,7 +46,7 @@ extension PaseoSidebar {
             }
             if session.workspaceDirectory.supportsWorkspacePinning {
                 Button(
-                    workspace.isPinned ? "Unpin" : "Pin",
+                    workspace.isPinned ? "Unpin" : "Pin to top",
                     systemImage: workspace.isPinned ? "pin.slash" : "pin"
                 ) {
                     Task {

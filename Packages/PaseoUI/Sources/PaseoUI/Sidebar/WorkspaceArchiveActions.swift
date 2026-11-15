@@ -17,6 +17,9 @@ final class WorkspaceArchiveActions {
     var pendingConfirmation: WorkspaceDescriptor?
     /// Set when a worktree-kind workspace has uncommitted or unpushed changes.
     var pendingWarning: WorktreeArchiveWarning?
+    /// Called after a successful archive. The workspace panel closes itself through it; the
+    /// sidebar leaves it unset.
+    var onArchived: ((WorkspaceDescriptor) -> Void)?
 
     /// Entry point for the sidebar's "Archive workspace".
     func request(_ workspace: WorkspaceDescriptor, session: HostSession, toast: ToastCenter?) {
@@ -76,6 +79,7 @@ final class WorkspaceArchiveActions {
                 toast?.show(directory.actionError ?? "Couldn't archive the workspace.")
                 return
             }
+            onArchived?(workspace)
             guard supportsUndo else {
                 toast?.show("Archived \(name)")
                 return
@@ -151,3 +155,52 @@ final class WorkspaceArchiveActions {
     }
 }
 #endif
+
+/// The archive flow's two destructive confirmations, attached by every surface that offers
+/// "Archive workspace" (the sidebar row menu and the workspace panel's actions menu), so the
+/// copy and the order can't drift.
+struct WorkspaceArchiveDialogs: ViewModifier {
+    let archive: WorkspaceArchiveActions
+    let session: HostSession
+    @Environment(\.toast) private var toast
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                "Archive worktree?",
+                isPresented: Binding(
+                    get: { archive.pendingWarning != nil },
+                    set: { if !$0 { archive.pendingWarning = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Archive", role: .destructive) {
+                    archive.confirmWarning(session: session, toast: toast)
+                }
+                Button("Cancel", role: .cancel) { archive.pendingWarning = nil }
+            } message: {
+                Text(archive.pendingWarning?.message ?? "")
+            }
+            .confirmationDialog(
+                "Archive workspace?",
+                isPresented: Binding(
+                    get: { archive.pendingConfirmation != nil },
+                    set: { if !$0 { archive.pendingConfirmation = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Archive", role: .destructive) {
+                    archive.confirmPending(session: session, toast: toast)
+                }
+                Button("Cancel", role: .cancel) { archive.pendingConfirmation = nil }
+            } message: {
+                Text("Its agents and terminals stop. This host can't undo an archive.")
+            }
+    }
+}
+
+extension View {
+    func workspaceArchiveDialogs(
+        _ archive: WorkspaceArchiveActions, session: HostSession
+    ) -> some View {
+        modifier(WorkspaceArchiveDialogs(archive: archive, session: session))
+    }
+}
