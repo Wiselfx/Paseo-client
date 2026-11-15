@@ -38,16 +38,19 @@ struct PaseoLogoShimmer: View {
     private static let duration: Double = 1.8
 
     var body: some View {
+        // The mark rests dim and a full-strength band sweeps across it. A white highlight on the
+        // mark's own near-white ink (dark mode) would be invisible, so the contrast comes from the
+        // dimmed base instead (upstream's web splash does the same: the mark dips and the peak
+        // returns it to full colour, `startup-splash-screen.tsx:94-116`).
         PaseoLogo(size: size)
+            .opacity(reduceMotion ? 1 : Self.restingOpacity)
             .overlay {
                 if !reduceMotion {
-                    band
+                    PaseoLogo(size: size)
+                        .mask {
+                            ZStack { band }.frame(width: size, height: size)
+                        }
                 }
-            }
-            // The band is drawn across the whole square; the mark's own alpha clips it, exactly
-            // as upstream masks the peak with the logo.
-            .mask {
-                PaseoLogo(size: size)
             }
             .onAppear {
                 guard !reduceMotion else { return }
@@ -57,20 +60,22 @@ struct PaseoLogoShimmer: View {
             }
     }
 
-    /// The sweep's peak, centred in the mark's square and offset from out-of-frame to
-    /// out-of-frame on both sides.
+    /// Upstream's web gradient dips to `88` (53 %) around the peak.
+    private static let restingOpacity: Double = 0.5
+
+    /// The peak: transparent, full, transparent, from out of frame on the left to out of frame on
+    /// the right.
     private var band: some View {
         LinearGradient(
             stops: [
-                .init(color: .white.opacity(0), location: 0),
-                .init(color: .white.opacity(0.4), location: 0.5),
-                .init(color: .white.opacity(0), location: 1),
+                .init(color: .black.opacity(0), location: 0),
+                .init(color: .black, location: 0.5),
+                .init(color: .black.opacity(0), location: 1),
             ],
             startPoint: .leading, endPoint: .trailing
         )
         .frame(width: Self.peakWidth, height: size)
-        .offset(x: sweep ? (size + Self.peakWidth) / 2 : -(Self.peakWidth / 2))
-        .allowsHitTesting(false)
+        .offset(x: sweep ? (size + Self.peakWidth) / 2 : -(size + Self.peakWidth) / 2)
     }
 }
 #endif
