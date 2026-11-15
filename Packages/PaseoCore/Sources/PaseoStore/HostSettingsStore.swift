@@ -52,6 +52,13 @@ public final class HostSettingsStore {
     public private(set) var focusedAgentId: String?
     /// The terminal the user is looking at. Never set together with `focusedAgentId`.
     public private(set) var focusedTerminalId: String?
+    /// The agent that held focus when a terminal took it, restored when the terminal goes away.
+    /// Upstream keeps one focus pair from the focused pane's active tab and recomputes both on
+    /// every tab change (`packages/app/src/screens/workspace/workspace-screen.tsx:1500-1526`);
+    /// restoring the agent when the panel's terminal page closes gives the daemon the same end
+    /// state. `focusAgent` keeps it current, so a chat closed or switched while the panel was open
+    /// is never resurrected.
+    private var agentBeforeTerminal: String?
     public private(set) var appVisible = true
     public private(set) var lastPresenceSentAt: Date?
     /// Number of heartbeats written to the socket, including the immediate ones on changes.
@@ -378,8 +385,14 @@ public final class HostSettingsStore {
     /// pane focus does: both ids come from the pane's active tab (workspace-screen.tsx:1503-1508).
     public func updateTerminalFocus(_ terminalId: String?) {
         let clearsAgent = terminalId != nil && focusedAgentId != nil
+        let restoresAgent = terminalId == nil && focusedTerminalId != nil
         guard focusedTerminalId != terminalId || clearsAgent else { return }
-        if terminalId != nil { focusedAgentId = nil }
+        if terminalId != nil {
+            if let focusedAgentId { agentBeforeTerminal = focusedAgentId }
+            focusedAgentId = nil
+        } else if restoresAgent {
+            focusedAgentId = agentBeforeTerminal
+        }
         focusedTerminalId = terminalId
         guard isPresenting else { return }
         sendHeartbeat()
@@ -541,6 +554,7 @@ public final class HostSettingsStore {
     /// A focused agent clears the focused terminal; a nil agent leaves the terminal alone.
     private func focusAgent(_ agentId: String?) {
         focusedAgentId = agentId
+        agentBeforeTerminal = agentId
         if agentId != nil { focusedTerminalId = nil }
     }
 
