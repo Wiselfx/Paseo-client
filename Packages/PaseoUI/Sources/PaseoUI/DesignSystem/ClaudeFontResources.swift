@@ -2,18 +2,29 @@
     import CoreText
     import Foundation
 
-    /// Registers the bundled Anthropic faces and the Newsreader serif fallback for this process.
+    /// Registers the bundled open faces (Inter, Newsreader, JetBrains Mono) and the Anthropic
+    /// files kept for the terminal and diff views for this process.
     /// Public so Paseo's DesignSystem can use it.
     public enum ClaudeFontResources {
         /// PostScript names read from the bundled files with `fc-scan`, not guessed.
         public static let anthropicSans = "AnthropicSansWebVariable-TextRegular"
         public static let anthropicSerif = "AnthropicSerifWebVariable-TextRegular"
         public static let anthropicMono = "AnthropicMonoWebWeb-Regular"
+        /// Inter 4.1, SIL OFL 1.1: the default sans.
+        public static let inter = "InterVariable"
+        public static let interItalic = "InterVariableItalic"
+        /// Newsreader, SIL OFL 1.1: the default serif.
         public static let newsreader = "Newsreader16pt-Regular"
+        public static let newsreaderItalic = "Newsreader16pt-Italic"
+        /// JetBrains Mono, SIL OFL 1.1: the default mono.
+        public static let jetBrainsMono = "JetBrainsMono-Regular"
+        public static let jetBrainsMonoItalic = "JetBrainsMono-Italic"
 
         private static let registration: Void = {
             for name in [
+                "InterVariable", "InterVariable-Italic",
                 "Newsreader", "Newsreader-Italic",
+                "JetBrainsMonoVariable", "JetBrainsMonoItalicVariable",
                 "AnthropicSansWebText", "AnthropicSerifWebText", "AnthropicMonoWeb",
             ] {
                 if let url = Bundle.module.url(forResource: name, withExtension: "ttf") {
