@@ -20,7 +20,10 @@ public final class HostUsageStore {
     }
 
     public private(set) var phase: Phase = .idle
-    /// The host's usage reports, in arrival order; replaced atomically on each load.
+    /// The host's usage reports. Each `usage.list_reports.update` is merged in as it arrives
+    /// (`UsageModel.upsertReport`), and the correlated response settles the list
+    /// (`UsageModel.settleReports`), so display order is stable and a newer copy of a report is
+    /// never replaced by an older one.
     public private(set) var reports: [UsageReportEntry] = []
     /// What went wrong with the last load, if anything. Cleared on the next load.
     public private(set) var error: String?
@@ -37,8 +40,13 @@ public final class HostUsageStore {
     public private(set) var lastLoadedAt: Date?
 
     /// The shortest gap between two automatic loads. One value for every caller: a drawer open is
-    /// a cheap question, but a host's plan quotas move in minutes, not seconds.
+    /// a cheap question, but a host's plan quotas move in minutes, not seconds. Upstream's
+    /// `staleTime` (queries.ts:38).
     public static let automaticRefreshInterval: TimeInterval = 60
+
+    /// How often the summary re-asks while it is on screen and the app is visible. Upstream's
+    /// `refetchInterval` while the sidebar item polls (queries.ts:39, 182-197).
+    public static let automaticPollInterval: TimeInterval = 300
 
     /// The line the sidebar footer shows when the host advertises no usage support at all. One
     /// copy of the string: `load()` refuses with the same words.
@@ -106,6 +114,9 @@ public final class HostUsageStore {
     private var isUsageSourcesModern = false
 
     /// One `usage.list_reports.update` from the daemon; only events for the in-flight request count.
+    /// The report replaces its previous copy on screen immediately, in arrival order, so a slow
+    /// source never holds back the others (Upstream: packages/app/src/usage/queries.ts:73-93,
+    /// model.ts:68-78 `upsertReport`).
     internal func handle(messageType: String, raw: Data) {
         guard messageType == "usage.list_reports.update" else { return }
         guard let pending = pendingReports,
@@ -113,7 +124,13 @@ public final class HostUsageStore {
                 SessionPayloadEnvelope<UsageListReportsUpdate>.self, from: raw).payload,
             update.requestId == pending.requestId
         else { return }
+        // The streamed list is what the response settles against; the display is updated as it
+        // arrives so a slow source never holds back the others.
         pendingReports?.reports.append(update.report)
+        reports = UsageModel.upsertReport(reports, update.report)
+        // Upstream's view is ready as soon as it has data, while the request keeps streaming
+        // (model.ts:131-133).
+        if phase == .loading { phase = .ready }
     }
 
     internal func update(serverInfo info: ServerInfo?) {
@@ -133,13 +150,17 @@ public final class HostUsageStore {
 
         do {
             let response = try await client.send(request)
-            let collected = pendingReports?.reports ?? []
+            let finished = pendingReports?.reports ?? []
+            // The finished list is in fetch-completion order, which can change on every refresh;
+            // settle keeps what is on screen in place, drops what the host no longer has, and
+            // keeps whichever copy of a report was fetched later (model.ts:80-99).
+            reports = UsageModel.settleReports(shown: reports, finished: finished)
             if let error = response.error {
                 self.error = error
-                phase = .failed(error)
+                // Data on screen wins over a failed request (model.ts:131-140).
+                phase = reports.isEmpty ? .failed(error) : .ready
                 return
             }
-            reports = collected
             phase = .ready
         } catch {
             fail(error)
@@ -193,7 +214,9 @@ public final class HostUsageStore {
         }
         let message = hostUsageErrorText(error)
         self.error = message
-        phase = .failed(message)
+        // A report that already streamed in stays on screen: data on screen wins over a failed
+        // request, as upstream's `resolveUsageView` orders them (model.ts:131-140).
+        phase = reports.isEmpty ? .failed(message) : .ready
     }
 
     private func hostUsageErrorText(_ error: Error) -> String {

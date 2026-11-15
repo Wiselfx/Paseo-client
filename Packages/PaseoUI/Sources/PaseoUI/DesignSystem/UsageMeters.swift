@@ -50,39 +50,25 @@ struct ClaudeMeterRing: View {
 }
 
 /// A thin progress bar for the sidebar's usage lines and the reports sheet's window rows:
-/// track in `tertiaryInk`, fill in ink, rounded ends.
+/// track in `tertiaryInk`, fill in ink, rounded ends. One height everywhere and the width is the
+/// caller's business, so two rows of the same surface can never draw different bars.
 struct ClaudeUsageBar: View {
     let percent: Double
-    var width: CGFloat = 56
+    var width: CGFloat = SidebarMetrics.usageMeterWidth
+    var height: CGFloat = SidebarMetrics.usageMeterHeight
 
     private var clamped: Double { min(max(percent, 0), 100) }
 
     var body: some View {
         Capsule()
             .fill(Palette.tertiaryInk.opacity(0.35))
-            .frame(width: width, height: 3)
+            .frame(width: width, height: height)
             .overlay(alignment: .leading) {
                 Capsule()
                     .fill(ClaudeMeterRing.meterColor)
-                    .frame(width: width * CGFloat(clamped / 100), height: 3)
+                    .frame(width: width * CGFloat(clamped / 100), height: height)
             }
             .accessibilityHidden(true)
-    }
-}
-
-/// Human wording for a window reset: "resets 3h" / "resets 2d" / "resets now".
-enum ClaudeUsageResets {
-    static func short(afterISO date: String?, now: Date = Date()) -> String? {
-        guard let date else { return nil }
-        guard let target = PaseoDate.parse(date) else { return nil }
-        let seconds = Int(target.timeIntervalSince(now))
-        if seconds <= 0 { return "resets now" }
-        if seconds < 60 { return "resets <1m" }
-        let minutes = seconds / 60
-        if minutes < 60 { return "resets \(minutes)m" }
-        let hours = minutes / 60
-        if hours < 48 { return "resets \(hours)h" }
-        return "resets \(hours / 24)d"
     }
 }
 #endif

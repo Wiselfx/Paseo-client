@@ -59,18 +59,21 @@ struct ClaudeUsageReportsSheet: View {
     @ViewBuilder private var emptyState: some View {
         switch session.hostUsage.phase {
         case .loading, .idle:
-            LoadingState("Loading usage…")
+            // Upstream `providerUsage.loading` (en.ts:2248).
+            LoadingState("Loading usage...")
         case .failed(let message):
             EmptyState(
-                title: "Usage isn't available right now.",
+                // Upstream `providerUsage.errorTitle` and `retry` (en.ts:2250-2253).
+                title: "Unable to load usage",
                 message: message,
-                // Upstream `providerUsage.retry` (en.ts:2253). The list — and its pull to
-                // refresh — is not drawn in this state, so this is the only way back.
+                // The list — and its pull to refresh — is not drawn in this state, so this is the
+                // only way back.
                 action: (title: "Try again", run: { Task { await refresh() } })
             )
             .padding(24)
         case .ready:
-            EmptyState(title: "The host reports no usage sources for this device.")
+            // Upstream `providerUsage.empty` (en.ts:2251).
+            EmptyState(title: "No usage data")
         }
     }
 
@@ -163,37 +166,43 @@ struct ClaudeUsageReportsSheet: View {
 
     // MARK: A report
 
+    /// One account's card. Every figure and sentence comes from `UsageModel.resolve` — the
+    /// current outcome owns the messages, the last successful fetch owns the values and the
+    /// freshness (Upstream: `packages/app/src/usage/card.tsx:37-169`, `model.ts:208-239`).
     private func usageCard(_ report: UsageReportEntry) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            usageCardHeader(report)
-            switch report.report {
-            case .available(let available):
-                ForEach(available.windows) { window in
-                    windowRow(window)
-                }
-                ForEach(available.balances ?? []) { balance in
-                    infoRow(balance.label, value: balanceValue(balance))
-                }
-                ForEach(available.details ?? []) { detail in
-                    infoRow(detail.label, value: detail.value)
-                }
-            case .unavailable(let problem):
-                Text(problemText(problem))
+        // One clock and one read per card: the header, the rows and their balances all come from
+        // the same values, so nothing is recomputed a second later in the same body.
+        let now = Date()
+        let content = UsageModel.resolve(report, now: now)
+        let balances = content.balances.map {
+            UsageModel.display($0, retained: content.retained, now: now)
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            usageCardHeader(report, content: content, now: now)
+            if !content.messages.isEmpty {
+                // Upstream's problem sentences, verbatim (copy.ts:8-19).
+                Text(content.messages.joined(separator: "\n"))
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
-            case .failure(let message):
-                Text(message)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(content.windows) { window in
+                windowRow(window, retained: content.retained, now: now)
+            }
+            ForEach(balances) { balance in
+                infoRow(balance.label, value: balance.amountText)
+            }
+            ForEach(content.details) { detail in
+                infoRow(detail.label, value: detail.value)
             }
         }
         .padding(16)
         .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
     }
 
-    private func usageCardHeader(_ report: UsageReportEntry) -> some View {
+    private func usageCardHeader(_ report: UsageReportEntry, content: UsageReportContent, now: Date)
+        -> some View
+    {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 8) {
                 Text(report.sourceLabel)
@@ -206,7 +215,7 @@ struct ClaudeUsageReportsSheet: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
-                if case .available(let available) = report.report, let plan = available.planLabel {
+                if let plan = content.planLabel {
                     Text(plan)
                         .font(.paseo(.caption2, weight: .semibold))
                         .foregroundStyle(Palette.secondaryInk)
@@ -215,7 +224,9 @@ struct ClaudeUsageReportsSheet: View {
                         .background(Palette.chip, in: .capsule)
                 }
             }
-            Text("Updated \(Self.relative(report.fetchedAt))")
+            // Upstream `timing.updated` / `lastUpdated` / `noSuccessfulUpdate`
+            // (en.ts:2282-2284, card.tsx:255-280): the last successful fetch, never a failed one.
+            Text(UsageFormat.freshness(content.successfulAt, retained: content.retained, now: now))
                 .font(.paseo(.caption2))
                 .foregroundStyle(Palette.captionInk)
         }
@@ -223,22 +234,30 @@ struct ClaudeUsageReportsSheet: View {
 
     // MARK: Window row
 
-    private func windowRow(_ window: ProviderUsageWindow) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+    /// One window: upstream's label, the share the preference shows, upstream's countdown and the
+    /// exact reset time, with the same meter size as every other usage surface
+    /// (Upstream: `packages/app/src/usage/window-bar.tsx:44-136`, `reset-line.tsx:8-31`).
+    private func windowRow(_ window: ProviderUsageWindow, retained: Bool, now: Date) -> some View {
+        let display = UsageModel.display(window, as: .used, retained: retained, now: now)
+        let reset = [display.countdown, display.exactTime].compactMap { $0 }
+            .joined(separator: " · ")
+        return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
-                Text(window.label)
+                Text(display.label)
                     .font(.paseo(.footnote, weight: .medium))
                     .foregroundStyle(Palette.ink)
                 Spacer(minLength: 8)
-                Text(Self.percent(window.usedPct))
+                Text(display.value)
                     .monospacedDigit()
                     .font(.paseo(.footnote, weight: .medium))
-                    .foregroundStyle(window.usedPct == nil ? Palette.secondaryInk : Palette.ink)
-                Text(ClaudeUsageResets.short(afterISO: window.resetsAt) ?? "")
+                    .foregroundStyle(display.percent == nil ? Palette.secondaryInk : Palette.ink)
+                Text(reset)
                     .font(.paseo(.caption2))
-                    .foregroundStyle(Palette.secondaryInk)
+                    .foregroundStyle(display.isAtRisk ? Palette.warning : Palette.secondaryInk)
+                    .lineLimit(1)
             }
-            ClaudeUsageBar(percent: window.usedPct ?? 0, width: 240)
+            ClaudeUsageBar(
+                percent: display.percent ?? 0, width: SidebarMetrics.usageDetailMeterWidth)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -258,54 +277,8 @@ struct ClaudeUsageReportsSheet: View {
         }
     }
 
-    private func balanceValue(_ balance: ProviderUsageBalance) -> String {
-        let amount: (Double) -> String = { value in
-            switch balance.unit {
-            case .usd: "$\(Self.compact(value))"
-            case .credits: Self.compact(value) + " credits"
-            case .requests: Self.compact(value) + " requests"
-            case .tokens: Self.compact(value) + " tokens"
-            case .unknown: Self.compact(value)
-            }
-        }
-        switch (balance.used, balance.remaining, balance.limit) {
-        case (let used?, let remaining?, _): return "\(amount(used)) used · \(amount(remaining)) left"
-        case (let used?, nil, let limit?): return "\(amount(used)) of \(amount(limit))"
-        case (nil, let remaining?, _): return "\(amount(remaining)) left"
-        case (_, _, let limit?): return "of \(amount(limit))"
-        default: return "—"
-        }
-    }
-
-    private func problemText(_ problem: UsageProblem) -> String {
-        switch problem {
-        case .expired(let expiresAt, _):
-            "The host's credentials expired (as of \(Self.relative(expiresAt)))."
-        case .rejected(let status, _):
-            "The host rejected the credentials (status \(status))."
-        case .noQuota(let detail):
-            "Not available: \(detail)"
-        case .unknown:
-            "Usage is temporarily unavailable for this source."
-        }
-    }
-
     private func refresh() async {
         _ = await session.hostUsage.load(forceRefresh: true)
-    }
-
-    static func relative(_ iso: String) -> String {
-        guard let date = PaseoDate.parse(iso) else { return "unknown time" }
-        let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 60 { return "just now" }
-        if seconds < 3600 { return "\(seconds / 60)m ago" }
-        if seconds < 86400 { return "\(seconds / 3600)h ago" }
-        return "\(seconds / 86400)d ago"
-    }
-
-    static func percent(_ value: Double?) -> String {
-        guard let value else { return "—" }
-        return "\(PaseoFormat.percent(value)) used"
     }
 
     static func compact(_ value: Double) -> String {
