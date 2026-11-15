@@ -333,18 +333,49 @@ enum RichSnapshotCache {
         return cache
     }()
 
+    /// The last snapshot per (content, scheme), whatever width it was rendered at. A card
+    /// recreated by the transcript asks for this in its first `body` pass (O(1), R-1) and
+    /// draws the page instead of a placeholder: a second visit never flashes.
+    private static let recent: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 40
+        cache.totalCostLimit = 8_000_000
+        return cache
+    }()
+
     static func image(for key: String) -> UIImage? {
         table.object(forKey: key as NSString)
     }
 
     static func store(_ image: UIImage, for key: String) {
-        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
-        table.setObject(image, forKey: key as NSString, cost: cost)
+        table.setObject(image, forKey: key as NSString, cost: cost(of: image))
     }
 
-    /// Content identity, not the string: the hash keeps the key small for a 100 KB drawing.
-    static func key(html: String, width: CGFloat, dark: Bool) -> String {
-        "\(html.hashValue)/\(Int(width.rounded()))/\(dark ? "d" : "l")"
+    /// The latest snapshot for a card's content in a scheme, from any layout width.
+    static func lastImage(for content: String, dark: Bool) -> UIImage? {
+        recent.object(forKey: recentKey(for: content, dark: dark) as NSString)
+    }
+
+    /// The width-keyed layout entry: one render per (content, width, scheme).
+    /// Content identity, not the string: the caller's hash keeps the key small for a
+    /// 100 KB drawing.
+    static func key(content: String, width: CGFloat, dark: Bool) -> String {
+        "\(content)/\(Int(width.rounded()))/\(dark ? "d" : "l")"
+    }
+
+    /// Stores the render for its layout key and remembers it as the content's latest, so
+    /// the next visit draws it before it knows its width.
+    static func store(_ image: UIImage, for key: String, content: String, dark: Bool) {
+        store(image, for: key)
+        recent.setObject(image, forKey: recentKey(for: content, dark: dark) as NSString, cost: cost(of: image))
+    }
+
+    private static func recentKey(for content: String, dark: Bool) -> String {
+        "\(content)|\(dark ? "d" : "l")"
+    }
+
+    private static func cost(of image: UIImage) -> Int {
+        Int(image.size.width * image.size.height * image.scale * image.scale * 4)
     }
 }
 
@@ -381,8 +412,13 @@ final class WebViewSlotPool {
 }
 
 /// A raw `<svg>` block (E3 §3.1): a snapshot of the drawing at the transcript width, its
-/// intrinsic aspect ratio reserved before the render lands, capped at 60 % of the screen height,
-/// and a full-screen pinch-zoom viewer on tap. No inner scrolling, no live web view per card.
+/// intrinsic aspect ratio reserved before the render lands, capped at 60 % of the screen
+/// height, and a full-screen pinch-zoom viewer on tap. A drawing taller than the cap also
+/// offers "Open" for the artifact page, where it is whole and vector. No inner scrolling,
+/// no live web view per card.
+///
+/// The snapshot is keyed by (content, width, scheme); the latest one is also remembered per
+/// content, so a card recreated by the transcript draws the drawing on its first frame.
 struct RichSVGCard: View {
     let code: String
 
@@ -393,11 +429,19 @@ struct RichSVGCard: View {
     @Namespace private var zoom
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.richActions) private var richActions
 
     private var dark: Bool { colorScheme == .dark }
 
-    /// Built once per (content, scheme): the document is a string, not a `body` computation.
-    private var document: String { RichHTMLDocument.rawSVG(source: code, dark: dark) }
+    /// Document identity (source + scheme) — never the document string: building a 100 KB
+    /// document in `body` is work per layout pass (R-1).
+    private var contentKey: String { "svg:\(code.hashValue)" }
+
+    /// The drawing at the current width, or the latest one from another width: a revisit's
+    /// first frame draws the cached drawing instead of a placeholder.
+    private var resolvedImage: UIImage? {
+        image ?? RichSnapshotCache.lastImage(for: contentKey, dark: dark)
+    }
 
     /// From `viewBox`, else `width`/`height`; nil when the drawing carries neither.
     private var intrinsicAspectRatio: CGFloat? { RichSVGIntrinsic.aspectRatio(of: code) }
@@ -408,6 +452,12 @@ struct RichSVGCard: View {
     /// A tall drawing shrinks to fit instead of pushing the turn away.
     private var heightCap: CGFloat { viewportHeight * 0.6 }
 
+    /// True when the drawing at this width is clipped by the cap: the card offers the page.
+    private var isTall: Bool {
+        guard let ratio = intrinsicAspectRatio, ratio > 0, width > 1 else { return false }
+        return width / ratio > heightCap + 0.5
+    }
+
     var body: some View {
         PaseoCard(content:
             VStack(alignment: .leading, spacing: 10) {
@@ -416,23 +466,26 @@ struct RichSVGCard: View {
                     source
                 } else {
                     drawing
+                    if isTall {
+                        openFullScreenButton
+                    }
                 }
             })
         .background { widthReader }
         .task(id: renderKey) { await render() }
         .fullScreenCover(isPresented: $showViewer) {
-            if let image {
+            if let drawing = resolvedImage {
                 MediaViewerView(
                     items: [
                         MediaViewerItem(
-                            id: "svg:\(code.hashValue)",
-                            thumbnail: image,
+                            id: contentKey,
+                            thumbnail: drawing,
                             fullSource: nil,
                             fileName: "drawing.svg",
                             alt: "SVG drawing",
                             filePath: nil)
                     ],
-                    sourceID: "svg:\(code.hashValue)",
+                    sourceID: contentKey,
                     namespace: zoom,
                     onClose: { showViewer = false },
                     selection: .constant(0))
@@ -463,13 +516,13 @@ struct RichSVGCard: View {
     }
 
     @ViewBuilder private var drawing: some View {
-        if let image {
-            Image(uiImage: image)
+        if let drawing = resolvedImage {
+            Image(uiImage: drawing)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: heightCap)
                 .contentShape(.rect)
-                .matchedTransitionSource(id: "svg:\(code.hashValue)", in: zoom)
+                .matchedTransitionSource(id: contentKey, in: zoom)
                 .onTapGesture {
                     showViewer = true
                 }
@@ -485,9 +538,9 @@ struct RichSVGCard: View {
     }
 
     /// The size the drawing will take, from its own ratio, so the card does not jump when the
-    /// snapshot arrives. Falls back to the old 120 pt strip for a drawing with no size hints.
+    /// snapshot arrives. Falls back to a 120 pt strip for a drawing with no size hints.
     private var placeholderHeight: CGFloat {
-        guard let ratio = intrinsicAspectRatio else { return min(120, heightCap) }
+        guard let ratio = intrinsicAspectRatio, ratio > 0 else { return min(120, heightCap) }
         // Before layout the width is unknown; assume a phone-width card.
         let assumedWidth = width > 1 ? width : 350
         return min(assumedWidth / ratio, heightCap)
@@ -505,7 +558,7 @@ struct RichSVGCard: View {
     /// Nil until the width is known: a render at a guessed width would only be thrown away.
     private var renderKey: String? {
         guard width > 1 else { return nil }
-        return RichSnapshotCache.key(html: document, width: width, dark: dark)
+        return RichSnapshotCache.key(content: contentKey, width: width, dark: dark)
     }
 
     @MainActor
@@ -515,10 +568,11 @@ struct RichSVGCard: View {
             image = cached
             return
         }
+        let html = RichHTMLDocument.rawSVG(source: code, dark: dark)
         let rendered = await RichSnapshotQueue.shared.snapshot(
-            html: document, width: width, scale: displayScale)
-        guard let rendered else { return }
-        RichSnapshotCache.store(rendered, for: key)
+            html: html, width: width, scale: displayScale)
+        guard !Task.isCancelled, let rendered else { return }
+        RichSnapshotCache.store(rendered, for: key, content: contentKey, dark: dark)
         image = rendered
     }
 
@@ -535,8 +589,12 @@ struct RichSVGCard: View {
             HStack {
                 Spacer(minLength: 0)
                 Button {
-                    UIPasteboard.general.string = code
-                    Haptics.light()
+                    if let richActions {
+                        richActions.copyText(code)
+                    } else {
+                        UIPasteboard.general.string = code
+                        Haptics.light()
+                    }
                 } label: {
                     Label("Copy source", systemImage: "doc.on.doc")
                         .font(ProseFonts.sans(size: 12, weight: .medium))
@@ -545,6 +603,24 @@ struct RichSVGCard: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    /// The tall drawing's home: the artifact page shows the whole vector, at any width.
+    private var openFullScreenButton: some View {
+        Button {
+            if let richActions {
+                richActions.openArtifact(
+                    ArtifactDocument(kind: .svg(source: code), shareImage: resolvedImage))
+            }
+        } label: {
+            Label("Open", systemImage: "arrow.up.left.and.arrow.down.right")
+                .font(ProseFonts.sans(size: 12, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open SVG full screen")
     }
 }
 

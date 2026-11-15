@@ -37,7 +37,9 @@ struct ActivityView: UIViewControllerRepresentable {
 ///
 /// The HTML document is built by the caller (`RichHTMLDocument`); it reports its content
 /// height through the `vizHeight` script message handler, which debounces, clamps and
-/// forwards to `onHeightChange`, plus whether the content still exceeds the ceiling. Navigation
+/// forwards to `onHeightChange`, plus whether the content still exceeds the ceiling. The
+/// height is published **once**, from the layout the document has after its first load:
+/// later growth never re-flows the row that hosts the view (V2). Navigation
 /// policy allows only non-link loads: taps on links are cancelled, and the documents carry a
 /// no-network CSP, so rich cards never make a request a reader didn't ask for.
 struct SandboxedHTMLView: UIViewRepresentable {
@@ -139,9 +141,12 @@ struct SandboxedHTMLView: UIViewRepresentable {
         /// Compared by identity: a new compile is a new object.
         var appliedRuleList: WKContentRuleList?
 
-        /// The last height handed to `onHeightChange`; reports closer than 2 pt are ignored.
-        private var lastHeight: CGFloat?
         private var reportedOverflow = false
+        /// The document completed its first load (or failed to): only from then on is a
+        /// reported height the page's real layout. Parse-time reports are noise.
+        private var finishedFirstLoad = false
+        /// One height per document. Later growth must not re-flow a transcript row.
+        private var publishedHeight = false
         /// Debounces the height reporter: scripts lay out in bursts, and one animated height
         /// change when they settle beats a jump per burst.
         private var pendingReport: Task<Void, Never>?
@@ -177,10 +182,29 @@ struct SandboxedHTMLView: UIViewRepresentable {
                 reportedOverflow = overflows
                 onOverflowChange?(overflows)
             }
-            // Sub-2-pt moves are layout noise; ignore them so the card never jitters.
-            if let lastHeight, abs(lastHeight - height) < 2 { return }
-            lastHeight = height
+            // V2: the card reserves the page's size once, from the layout it has after its
+            // load. Every later report (a script adding rows, a font settling) is ignored:
+            // content arriving must never move the row or the scroll position.
+            guard finishedFirstLoad, !publishedHeight else { return }
+            publishedHeight = true
             onHeightChange(height)
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            finishedFirstLoad = true
+        }
+
+        func webView(
+            _ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error
+        ) {
+            finishedFirstLoad = true
+        }
+
+        func webView(
+            _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            finishedFirstLoad = true
         }
 
         /// The first main-frame load is the document itself and is allowed; every later one (a
