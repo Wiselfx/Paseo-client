@@ -101,6 +101,10 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
 schemes:
+  PaseoClient:
+    build:
+      targets:
+        PaseoClient: all
   PaseoWidgets:
     build:
       targets:
