@@ -31,6 +31,8 @@ struct ComposerTextView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> ComposerUITextView {
         let view = ComposerUITextView(frame: .zero)
+        FocusDiag.registry.add(view)
+        FocusDiag.note("makeUIView")
         view.delegate = context.coordinator
         view.text = text
         view.accessibilityIdentifier = "composer.draft"
