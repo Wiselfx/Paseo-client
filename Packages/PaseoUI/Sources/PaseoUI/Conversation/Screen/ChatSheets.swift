@@ -31,6 +31,7 @@ struct ChatSheets: ViewModifier {
     let session: HostSession
     @Bindable var controller: ChatController
     @Namespace private var artifactZoom
+    @Environment(\.scenePhase) private var scenePhase
 
     func body(content: Content) -> some View {
         content
@@ -66,7 +67,37 @@ struct ChatSheets: ViewModifier {
                     namespace: artifactZoom,
                     onClose: { controller.artifactDocument = nil })
             }
+            // A managed subagent this chat is showing is marked open so archiving its parent
+            // detaches it instead of cascade-archiving the agent the user is looking at. Set when
+            // the tab opens (once the snapshot names a parent), cleared when it closes or the app
+            // leaves the foreground. Upstream: docs/agent-lifecycle.md:130-134,
+            // packages/app/src/subagents/use-open-agent-tab-labels.ts:40-80,
+            // packages/app/src/screens/workspace/workspace-screen.tsx:2028-2034.
+            .task(id: openAgentTabKey) {
+                guard openAgentTabKey != nil, scenePhase == .active else { return }
+                await session.agentLifecycle.setOpenAgentTab(agentId: store.agentId, open: true)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard isManagedSubagent else { return }
+                Task {
+                    await session.agentLifecycle.setOpenAgentTab(
+                        agentId: store.agentId, open: phase == .active)
+                }
+            }
+            .onDisappear {
+                guard isManagedSubagent else { return }
+                Task { await session.agentLifecycle.setOpenAgentTab(agentId: store.agentId, open: false) }
+            }
     }
+
+    /// True while this conversation is a managed subagent (it names a parent). Provider-managed
+    /// children have no agent row or labels and are never marked.
+    private var isManagedSubagent: Bool {
+        AgentParentLabel.parent(of: store.agent?.labels) != nil
+    }
+
+    /// Re-runs the marking task when the snapshot first says this agent is a managed subagent.
+    private var openAgentTabKey: String? { isManagedSubagent ? store.agentId : nil }
 
     @ViewBuilder private func sheet(_ item: ClaudeChatSheet) -> some View {
         switch item {
