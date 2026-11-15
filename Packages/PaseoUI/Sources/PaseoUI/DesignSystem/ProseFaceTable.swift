@@ -5,47 +5,91 @@ import Synchronization
 
 /// The single source of truth for "which PostScript face draws this weight/italic" (J1 §1).
 ///
-/// The bundled Anthropic serif (`AnthropicSerifWebText.ttf`) is one static Regular face, so
-/// `Font.custom(anthropicSerif, size:)` + `.weight(_:)` / `.italic()` are no-ops: SwiftUI has no
-/// heavier or slanted face to switch to. The Newsreader files do carry real faces (read from the
-/// bundled files with `fc-scan`, never guessed), so prose asks for a face name instead.
+/// Each bundled family is one variable file per slant, and a weight is a named instance inside it
+/// (read from the files with `fc-scan`, never guessed). SwiftUI's `.weight(_:)` and `.italic()` do
+/// not reliably select a variable instance — the original bug was the single-weight Anthropic
+/// serif drawing Regular for both — so the app asks for the instance by name instead.
 ///
-/// The Regular roman is never taken from the table: regular body prose keeps exactly the face it
-/// drew before J1 (`Typography.resolvedSerifName`), so no paragraph changes family or metrics.
+/// The plain Roman of each family is never taken from the weight tables: regular body prose keeps
+/// exactly the face `Typography` resolved the family to, so no paragraph changes family or metrics.
 ///
 /// Pure and UI-free: it decides *names*, `ProseFonts` builds fonts from them.
 enum ProseFaceTable {
-    /// The bundled serif files, and the real faces declared in each.
+    /// One family's file for one slant, and the real faces it declares.
     enum FaceFile: CaseIterable, Sendable {
-        case roman
-        case italic
+        case sansRoman
+        case sansItalic
+        case serifRoman
+        case serifItalic
+        case monoRoman
+        case monoItalic
 
-        /// Ascending weight. Only the weight-bearing faces are listed: UltraLight/Thin/Light and
-        /// Regular are not real steps prose asks for — anything at or below Regular takes the
-        /// regular-roman path, and an italic below Medium still lands on the Regular italic.
+        var isItalic: Bool {
+            switch self {
+            case .sansItalic, .serifItalic, .monoItalic: true
+            case .sansRoman, .serifRoman, .monoRoman: false
+            }
+        }
+
+        /// Ascending weight. Only the weights the app asks for are listed, so a roman table starts
+        /// at Medium (Regular is the file's own default face, `baseFace`) and an italic table
+        /// starts at Regular (where the italic file's default instance sits). UltraLight, Thin and
+        /// Light are never requested; anything heavier than SemiBold takes SemiBold.
         var declaredFaces: [(weight: Font.Weight, name: String)] {
             switch self {
-            case .roman:
+            case .sansRoman:
+                [
+                    (.medium, "InterVariable-Medium"),
+                    (.semibold, "InterVariable-SemiBold"),
+                ]
+            case .sansItalic:
+                [
+                    (.regular, ClaudeFontResources.interItalic),
+                    (.medium, "InterVariableItalic-Medium"),
+                    (.semibold, "InterVariableItalic-SemiBold"),
+                ]
+            case .serifRoman:
                 [
                     (.medium, "NewsreaderRoman-Medium"),
                     (.semibold, "NewsreaderRoman-SemiBold"),
                     (.bold, "NewsreaderRoman-Bold"),
                     (.heavy, "NewsreaderRoman-ExtraBold"),
                 ]
-            case .italic:
+            case .serifItalic:
                 [
-                    (.regular, "Newsreader16pt-Italic"),
+                    (.regular, ClaudeFontResources.newsreaderItalic),
                     (.medium, "NewsreaderItalic-Medium"),
                     (.semibold, "NewsreaderItalic-SemiBold"),
                     (.bold, "NewsreaderItalic-Bold"),
                     (.heavy, "NewsreaderItalic-ExtraBold"),
                 ]
+            case .monoRoman:
+                [
+                    (.medium, "JetBrainsMono-Medium"),
+                    (.semibold, "JetBrainsMono-SemiBold"),
+                ]
+            case .monoItalic:
+                [
+                    (.regular, ClaudeFontResources.jetBrainsMonoItalic),
+                    (.medium, "JetBrainsMonoItalic-MediumItalic"),
+                    (.semibold, "JetBrainsMonoItalic-SemiBoldItalic"),
+                ]
             }
         }
 
-        /// One face of this file, enough for `ClaudeFontResources.isAvailable` to say whether the
-        /// file is registered at all. A bundled-but-unregistered file is not usable.
-        var probeFace: String { declaredFaces[0].name }
+        /// The file's own default PostScript name. `Typography` resolves the family to it, and
+        /// `ClaudeFontResources.isAvailable` asks about it to learn whether the file is registered
+        /// at all: a bundled-but-unregistered file is not usable.
+        var baseFace: String {
+            switch self {
+            case .sansRoman: ClaudeFontResources.inter
+            case .sansItalic: ClaudeFontResources.interItalic
+            case .serifRoman: ClaudeFontResources.newsreader
+            case .serifItalic: ClaudeFontResources.newsreaderItalic
+            case .monoRoman: ClaudeFontResources.jetBrainsMono
+            case .monoItalic: ClaudeFontResources.jetBrainsMonoItalic
+            }
+        }
     }
 
     /// One rung of the table: the PostScript name, the file that declares it, and the weight and
@@ -57,31 +101,44 @@ enum ProseFaceTable {
         let isItalic: Bool
 
         /// The unstyled Regular roman: every fallback returns exactly this.
-        var isRegularRoman: Bool { file == .roman && weight == .regular && !isItalic }
+        var isRegularRoman: Bool { !file.isItalic && weight == .regular && !isItalic }
     }
 
-    // MARK: (weight, italic) → face
+    // MARK: (family, weight, italic) → face
 
-    /// The face for prose asked at `weight` with or without a slant.
+    /// The face for `family` asked at `weight` with or without a slant.
     ///
-    /// - `weight <= .regular` with no slant returns `regularRoman` before the table is read: the
-    ///   body paragraph keeps the face it has always had.
-    /// - Anything else returns a real Newsreader face from the bundled files; a missing file falls
-    ///   back to the regular roman, which is what prose drew before J1.
-    static func face(weight: Font.Weight, italic: Bool) -> Face {
+    /// - `weight <= .regular` with no slant returns the regular roman before the table is read:
+    ///   the body paragraph keeps the face it has always had.
+    /// - Anything else returns a real face from the bundled files. A missing file, or a named
+    ///   instance CoreText does not expose, falls back to the regular roman, which then keeps the
+    ///   requested weight as a modifier exactly as it did before.
+    static func face(_ family: TextRole.Face, weight: Font.Weight, italic: Bool) -> Face {
+        let roman = file(family, italic: false)
+        let regularRoman = Face(
+            postScriptName: Typography.baseName(family) ?? roman.baseFace, file: roman,
+            weight: .regular, isItalic: false)
         if !italic, weight.rank <= Font.Weight.regular.rank { return regularRoman }
-        if italic {
-            guard let name = declaredName(in: .italic, weight: weight), fileShips(.italic) else {
-                return regularRoman
-            }
-            return Face(
-                postScriptName: name, file: .italic, weight: declaredWeight(name), isItalic: true)
-        }
-        guard let name = declaredName(in: .roman, weight: weight), fileShips(.roman) else {
+        let target = file(family, italic: italic)
+        guard let name = declaredName(in: target, weight: weight), fileShips(target),
+            ClaudeFontResources.isAvailable(name)
+        else {
             return regularRoman
         }
         return Face(
-            postScriptName: name, file: .roman, weight: declaredWeight(name), isItalic: false)
+            postScriptName: name, file: target, weight: declaredWeight(name), isItalic: italic)
+    }
+
+    /// The file that declares `family`'s faces for one slant.
+    static func file(_ family: TextRole.Face, italic: Bool) -> FaceFile {
+        switch (family, italic) {
+        case (.sans, false): .sansRoman
+        case (.sans, true): .sansItalic
+        case (.serif, false): .serifRoman
+        case (.serif, true): .serifItalic
+        case (.mono, false): .monoRoman
+        case (.mono, true): .monoItalic
+        }
     }
 
     /// The lightest declared face in `file` at or above `weight`'s step, else the heaviest declared.
@@ -90,10 +147,6 @@ enum ProseFaceTable {
         let faces = file.declaredFaces
         return (faces.first { $0.weight.rank >= weight.rank } ?? faces.last)?.name
     }
-
-    /// The face prose drew before J1: the resolved serif, Regular roman, no real weight.
-    private static let regularRoman = Face(
-        postScriptName: Typography.resolvedSerifName, file: .roman, weight: .regular, isItalic: false)
 
     /// The weight a declared name draws, looked up in its own file's table.
     private static func declaredWeight(_ name: String) -> Font.Weight {
@@ -106,13 +159,13 @@ enum ProseFaceTable {
     }
 
     /// The weight to put on `face` with `.weight(_:)`: none for a real face, the request for the
-    /// regular roman (where the modifier is a no-op, exactly as before J1).
+    /// regular roman (where the modifier is a no-op on a static file and a variable axis elsewhere).
     static func visibleWeight(_ face: Face, requested: Font.Weight) -> Font.Weight? {
         face.isRegularRoman ? requested : nil
     }
 
     /// The slant to put on `face` with `.italic()`: none for a real italic face, the request
-    /// otherwise (a no-op on the roman, exactly as before J1).
+    /// otherwise (a no-op on a static roman, a variable axis elsewhere).
     static func visibleItalic(_ face: Face, requested: Bool) -> Bool {
         requested && !face.isItalic
     }
@@ -127,7 +180,7 @@ enum ProseFaceTable {
     static func fileShips(_ file: FaceFile) -> Bool {
         ships.withLock { cache in
             if let hit = cache[file] { return hit }
-            let present = ClaudeFontResources.isAvailable(file.probeFace)
+            let present = ClaudeFontResources.isAvailable(file.baseFace)
             cache[file] = present
             return present
         }

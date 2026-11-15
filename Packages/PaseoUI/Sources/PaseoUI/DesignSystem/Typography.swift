@@ -132,26 +132,34 @@ enum Typography {
     static let chatBodySize: CGFloat = 17
 
     /// The registered face for each family, resolved once after `register()`.
+    ///
+    /// Sans is Inter, serif is Newsreader, mono is JetBrains Mono: the open set, each with real
+    /// weights and real italics. The system face is the only fallback (`scaledSystem`).
+    /// `Upstream: dsh-claude-style-reference/README.en.md "Fonts"`.
     static let serifName: String? = {
         ClaudeFontResources.register()
-        if ClaudeFontResources.isAvailable(ClaudeFontResources.anthropicSerif) {
-            return ClaudeFontResources.anthropicSerif
-        }
-        if ClaudeFontResources.isAvailable(ClaudeFontResources.newsreader) {
-            return ClaudeFontResources.newsreader
-        }
-        return nil
+        return ClaudeFontResources.isAvailable(ClaudeFontResources.newsreader)
+            ? ClaudeFontResources.newsreader : nil
     }()
     static let sansName: String? = {
         ClaudeFontResources.register()
-        return ClaudeFontResources.isAvailable(ClaudeFontResources.anthropicSans)
-            ? ClaudeFontResources.anthropicSans : nil
+        return ClaudeFontResources.isAvailable(ClaudeFontResources.inter)
+            ? ClaudeFontResources.inter : nil
     }()
     static let monoName: String? = {
         ClaudeFontResources.register()
-        return ClaudeFontResources.isAvailable(ClaudeFontResources.anthropicMono)
-            ? ClaudeFontResources.anthropicMono : nil
+        return ClaudeFontResources.isAvailable(ClaudeFontResources.jetBrainsMono)
+            ? ClaudeFontResources.jetBrainsMono : nil
     }()
+
+    /// The registered base face of `family`, or `nil` when only the system face is available.
+    static func baseName(_ family: TextRole.Face) -> String? {
+        switch family {
+        case .serif: serifName
+        case .sans: sansName
+        case .mono: monoName
+        }
+    }
 
     /// The serif face name the Markdown theme wants, resolved once.
     static let resolvedSerifName: String = serifName ?? ClaudeFontResources.newsreader
@@ -173,27 +181,10 @@ enum Typography {
         }
     }
 
+    /// A role's font: the family's real face at the role's size, from the one builder prose uses.
     private static func make(role: TextRole, weight: Font.Weight) -> Font {
-        switch role.face {
-        case .serif:
-            if let serifName {
-                return Font.custom(serifName, size: role.size, relativeTo: role.relativeTo)
-                    .weight(weight)
-            }
-            return scaledSystem(size: role.size, relativeTo: role.relativeTo, design: .serif, weight: weight)
-        case .sans:
-            if let sansName {
-                return Font.custom(sansName, size: role.size, relativeTo: role.relativeTo)
-                    .weight(weight)
-            }
-            return scaledSystem(size: role.size, relativeTo: role.relativeTo, design: .default, weight: weight)
-        case .mono:
-            if let monoName {
-                return Font.custom(monoName, size: role.size, relativeTo: role.relativeTo)
-                    .weight(weight)
-            }
-            return scaledSystem(size: role.size, relativeTo: role.relativeTo, design: .monospaced, weight: weight)
-        }
+        ProseFonts.font(
+            role.face, size: role.size, relativeTo: role.relativeTo, weight: weight, italic: false)
     }
 
     private struct GlyphKey: Hashable {
@@ -229,17 +220,17 @@ enum Typography {
     /// for the role's text style, so `adjustsFontForContentSizeCategory` keeps working.
     static func uiFont(_ role: TextRole, weight: Font.Weight = .regular) -> UIFont {
         let resolvedWeight = role.bakedWeight ?? weight
+        let face = ProseFaceTable.face(role.face, weight: resolvedWeight, italic: false)
         let base: UIFont
-        switch role.face {
-        case .sans:
-            base = sansName.flatMap { UIFont(name: $0, size: role.size) }
-                ?? UIFont.systemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
-        case .serif:
-            base = serifName.flatMap { UIFont(name: $0, size: role.size) }
-                ?? UIFont.systemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
-        case .mono:
-            base = monoName.flatMap { UIFont(name: $0, size: role.size) }
-                ?? UIFont.monospacedSystemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
+        if let named = UIFont(name: face.postScriptName, size: role.size) {
+            base = named
+        } else {
+            switch role.face {
+            case .sans, .serif:
+                base = UIFont.systemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
+            case .mono:
+                base = UIFont.monospacedSystemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
+            }
         }
         return UIFontMetrics(forTextStyle: role.relativeTo.uiTextStyle).scaledFont(for: base)
     }
@@ -295,8 +286,9 @@ enum ProseFonts {
 
     private static let fonts = Mutex<[Key: Font]>([:])
 
-    /// Real faces, not modifiers: the bundled serif has no bold or italic face, so `.weight(_:)`
-    /// and `.italic()` on it draw Regular. `ProseFaceTable` picks the face name; this builds it.
+    /// Real faces, not modifiers: each bundled family declares a named instance per weight and
+    /// slant, and `.weight(_:)`/`.italic()` do not reliably select one. `ProseFaceTable` picks the
+    /// face name; this builds it.
     static func serif(
         size: CGFloat, relativeTo: Font.TextStyle = .body, weight: Font.Weight = .regular,
         italic: Bool = false
@@ -312,40 +304,26 @@ enum ProseFonts {
         font(.mono, size: size, relativeTo: relativeTo, weight: weight)
     }
 
-    private static func font(
+    /// The one place a family, size, weight and slant become a `Font`, cached by all four.
+    static func font(
         _ face: TextRole.Face, size: CGFloat, relativeTo style: Font.TextStyle, weight: Font.Weight,
         italic: Bool = false
     ) -> Font {
         let key = Key(face: face, size: size, relativeTo: style, weight: weight, italic: italic)
         return fonts.withLock { cache in
             if let hit = cache[key] { return hit }
-            var name: String?
-            switch face {
-            case .serif: name = Typography.serifName
-            case .sans: name = Typography.sansName
-            case .mono: name = Typography.monoName
-            }
-            // The serif asks ProseFaceTable for the face that draws this weight and slant. A real
-            // face gets no `.weight()`/`.italic()` (the file has no such face, which was the bug);
-            // the Regular roman keeps exactly the modifiers it had before J1.
-            var serifFace: ProseFaceTable.Face?
-            if face == .serif {
-                let resolved = ProseFaceTable.face(weight: weight, italic: italic)
-                name = resolved.postScriptName
-                serifFace = resolved
-            }
             let font: Font
-            if let name {
-                var built = Font.custom(name, size: size, relativeTo: style)
-                if let serifFace {
-                    if let visible = ProseFaceTable.visibleWeight(serifFace, requested: weight) {
-                        built = built.weight(visible)
-                    }
-                    if ProseFaceTable.visibleItalic(serifFace, requested: italic) {
-                        built = built.italic()
-                    }
-                } else {
-                    built = built.weight(weight)
+            if Typography.baseName(face) != nil {
+                // A real face gets no `.weight()`/`.italic()`: the file declares the instance, and
+                // the modifier was the bug. A named instance CoreText does not expose falls back
+                // to the family's regular roman, which keeps the modifiers it had before.
+                let resolved = ProseFaceTable.face(face, weight: weight, italic: italic)
+                var built = Font.custom(resolved.postScriptName, size: size, relativeTo: style)
+                if let visible = ProseFaceTable.visibleWeight(resolved, requested: weight) {
+                    built = built.weight(visible)
+                }
+                if ProseFaceTable.visibleItalic(resolved, requested: italic) {
+                    built = built.italic()
                 }
                 font = built
             } else {
@@ -436,7 +414,7 @@ public struct ClaudeTypography: Sendable {
         ProseFonts.mono(size: size, relativeTo: style, weight: weight)
     }
 
-    /// The name the Markdown theme needs; Anthropic Serif with Newsreader as the fallback.
+    /// The name the Markdown theme needs: the bundled serif (Newsreader).
     public var resolvedSerifName: String { Typography.resolvedSerifName }
 }
 #endif
