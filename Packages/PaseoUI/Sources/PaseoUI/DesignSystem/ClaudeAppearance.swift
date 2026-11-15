@@ -20,7 +20,7 @@ public enum ClaudeAppearance: String, CaseIterable, Sendable {
     public var isPureBlack: Bool { self == .pureBlack }
 }
 
-/// The accent choice: the Claude clay (default) or Paseo green. It changes only the accent
+/// The accent choice: Paseo green (default) or the Claude clay. It changes only the accent
 /// tokens, never the theme; `RootView` publishes it through the `\.accent` trait, so a switch
 /// redraws live.
 public enum ClaudeAccent: String, CaseIterable, Sendable {

@@ -12,7 +12,7 @@ struct RootView: View {
     /// The system text size; Content size shifts it and Code size shifts code containers.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(ClaudeAppearance.storageKey) private var appearance = ClaudeAppearance.system.rawValue
-    @AppStorage(ClaudeAccent.storageKey) private var accent = ClaudeAccent.claude.rawValue
+    @AppStorage(ClaudeAccent.storageKey) private var accent = ClaudeAccent.paseo.rawValue
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize = ClaudeTextScale.Content.medium.rawValue
     @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize = ClaudeTextScale.Code.medium.rawValue
     /// First-run welcome: shown before the first successful host connection, and only while
@@ -142,7 +142,7 @@ struct RootView: View {
         .dynamicTypeSize(dynamicTypeSize.shifted(by: contentStep))
         .environment(\.codeSizeStep, codeStep)
         .environment(\.pureBlack, pureBlack)
-        .environment(\.accent, ClaudeAccent(rawValue: accent) ?? .claude)
+        .environment(\.accent, ClaudeAccent(rawValue: accent) ?? .paseo)
         // Light / Dark / Pure black / System is a window trait, not a SwiftUI preference: the
         // Settings sheet is its own hosting controller and has to follow while it is open (H4 §3).
         // No `.preferredColorScheme` here: it cannot reach a presented sheet, and it cannot return

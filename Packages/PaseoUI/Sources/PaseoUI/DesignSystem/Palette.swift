@@ -41,7 +41,7 @@ extension PureBlackKey: UITraitBridgedEnvironmentKey {
 /// dynamic `UIColor` providers that read it, so a switch redraws in place — no rebuild and no
 /// `@AppStorage` read in any leaf body.
 struct AccentTrait: UITraitDefinition {
-    static let defaultValue = ClaudeAccent.claude
+    static let defaultValue = ClaudeAccent.paseo
     static let identifier = "com.wiselfx.paseoclient.accent"
 }
 
@@ -52,7 +52,7 @@ extension UITraitCollection {
 /// The SwiftUI side of the trait: `RootView` sets `\.accent`, and SwiftUI bridges it into the
 /// UIKit trait collections its hosting views see.
 struct AccentKey: EnvironmentKey {
-    static let defaultValue = ClaudeAccent.claude
+    static let defaultValue = ClaudeAccent.paseo
 }
 
 extension EnvironmentValues {
