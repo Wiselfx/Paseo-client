@@ -132,6 +132,129 @@ struct DraftPersistenceTests {
         #expect(UserDefaults.standard.string(forKey: legacyKey) == nil)
     }
 
+    // MARK: New-session drafts (R1.B)
+
+    /// Two providers: `claude` ready with one model, `codex` ready with two models, one carrying
+    /// thinking levels, plus two modes and a default mode.
+    nonisolated private static let snapshot = #"""
+        {"requestId":"r","entries":[
+          {"provider":"claude","status":"ready","enabled":true,
+           "models":[{"provider":"claude","id":"sonnet","label":"Sonnet","isDefault":true}]},
+          {"provider":"codex","status":"ready","enabled":true,"defaultModeId":"plan",
+           "models":[
+             {"provider":"codex","id":"fast","label":"Fast","isDefault":true},
+             {"provider":"codex","id":"deep","label":"Deep","defaultThinkingOptionId":"medium",
+              "thinkingOptions":[
+                {"id":"low","label":"Low"},
+                {"id":"medium","label":"Medium"},
+                {"id":"high","label":"High"}]}],
+           "modes":[{"id":"plan","label":"Plan"},{"id":"write","label":"Write"}]}
+        ]}
+        """#
+
+    private func catalogue() async throws -> AgentControlStore {
+        let client = FakeDaemonClient()
+        client.onSend(GetProvidersSnapshotRequest.self) { _ in
+            try JSONDecoder().decode(
+                GetProvidersSnapshotRequest.Response.self,
+                from: Data(DraftPersistenceTests.snapshot.utf8))
+        }
+        let catalog = AgentControlStore(client: client)
+        await catalog.loadCatalog(cwd: "/tmp/draft")
+        return catalog
+    }
+
+    @Test func aNewSessionDraftReopensWithItsUnsentText() {
+        let store = DraftStore(fileURL: nil)
+        let first = DraftSession(
+            workspaceId: "ws-1", cwd: "/tmp/draft", draftId: "d1", drafts: store)
+        first.text = "unsent prompt"
+
+        let reopened = DraftSession(
+            workspaceId: "ws-1", cwd: "/tmp/draft", draftId: "d1", drafts: store)
+
+        #expect(reopened.text == "unsent prompt")
+        #expect(reopened.key == DraftKey.draft("d1"))
+    }
+
+    @Test func twoNewSessionDraftsDoNotOverwriteEachOther() {
+        let store = DraftStore(fileURL: nil)
+        let one = DraftSession(workspaceId: "ws-1", cwd: "/tmp", draftId: "d1", drafts: store)
+        let two = DraftSession(workspaceId: "ws-1", cwd: "/tmp", draftId: "d2", drafts: store)
+
+        one.text = "about the first thing"
+        two.text = "about something else"
+
+        #expect(store.input(for: DraftKey.draft("d1"))?.text == "about the first thing")
+        #expect(store.input(for: DraftKey.draft("d2"))?.text == "about something else")
+        #expect(DraftSession.makeDraftId() != DraftSession.makeDraftId())
+    }
+
+    @Test func aSentDraftLeavesNothingBehind() {
+        let store = DraftStore(fileURL: nil)
+        let draft = DraftSession(workspaceId: "ws-1", cwd: "/tmp", draftId: "d1", drafts: store)
+        draft.text = "send me"
+
+        draft.markSent()
+
+        #expect(store.input(for: DraftKey.draft("d1")) == nil)
+        #expect(store.record(for: DraftKey.draft("d1"))?.lifecycle == .sent)
+    }
+
+    @Test func picksAreRememberedPerProviderAndTheNextDraftStartsWithThem() async throws {
+        let catalog = try await catalogue()
+        let store = DraftStore(fileURL: nil)
+        let draft = DraftSession(workspaceId: "ws-1", cwd: "/tmp", draftId: "d1", drafts: store)
+        draft.seed(catalog: catalog)
+        draft.selectProvider("codex", catalog: catalog)
+        draft.selectModel("deep", catalog: catalog)
+        draft.selectThinking("high")
+        draft.selectMode("write")
+
+        let next = DraftSession(
+            workspaceId: "ws-1", cwd: "/tmp",
+            preferences: store.formPreferences.draftPreferences, draftId: "d2", drafts: store)
+        next.seed(catalog: catalog)
+
+        #expect(next.providerId == "codex")
+        #expect(next.modelId == "deep")
+        #expect(next.thinkingOptionId == "high")
+        #expect(next.modeId == "write")
+    }
+
+    @Test func switchingProviderBackRestoresThatProvidersPicks() async throws {
+        let catalog = try await catalogue()
+        let store = DraftStore(fileURL: nil)
+        let draft = DraftSession(workspaceId: "ws-1", cwd: "/tmp", draftId: "d1", drafts: store)
+        draft.seed(catalog: catalog)
+        draft.selectProvider("codex", catalog: catalog)
+        draft.selectModel("deep", catalog: catalog)
+        draft.selectThinking("high")
+
+        draft.selectProvider("claude", catalog: catalog)
+        #expect(draft.modelId == "sonnet", "claude's own default")
+
+        draft.selectProvider("codex", catalog: catalog)
+        #expect(draft.modelId == "deep", "codex remembers the model it was left on")
+        #expect(draft.thinkingOptionId == "high")
+    }
+
+    @Test func formPreferencesSurviveAReload() async throws {
+        let url = scratchURL()
+        let catalog = try await catalogue()
+        let store = DraftStore(fileURL: url)
+        let draft = DraftSession(workspaceId: "ws-1", cwd: "/tmp", draftId: "d1", drafts: store)
+        draft.seed(catalog: catalog)
+        draft.selectProvider("codex", catalog: catalog)
+        draft.selectMode("write")
+        store.flush()
+
+        let reloaded = DraftStore(fileURL: url)
+
+        #expect(reloaded.formPreferences.draftPreferences.providerId == "codex")
+        #expect(reloaded.formPreferences.draftPreferences.modeId == "write")
+    }
+
     @Test func aCorruptFileStartsEmptyInsteadOfCrashing() throws {
         let url = scratchURL()
         try FileManager.default.createDirectory(

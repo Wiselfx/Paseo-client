@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import PaseoProtocol
 
 /// One attachment kept beside a draft's text. The record shape mirrors upstream's
 /// `DraftInput.attachments` (`Upstream: packages/app/src/stores/draft-store/state.ts:15-18`);
@@ -71,6 +72,56 @@ public enum DraftKey {
     public static func draft(_ draftId: String) -> String { "draft:\(draftId)" }
 }
 
+/// The choices a new-session draft opens with, remembered per provider so the next draft starts
+/// where the last one left off. `Upstream: packages/app/src/create-agent-preferences/preferences.ts:8-24`.
+public struct FormPreferences: Codable, Hashable, Sendable {
+    /// One provider's last picks. `Upstream: preferences.ts:5-13`.
+    public struct Provider: Codable, Hashable, Sendable {
+        public var model: String?
+        public var mode: String?
+        /// The thinking level last picked for each model (`thinkingByModel`).
+        public var thinkingByModel: [String: String]?
+        /// The provider's option controls as last set (`options`, formerly `featureValues`).
+        public var options: [String: JSONValue]?
+
+        public init(
+            model: String? = nil, mode: String? = nil,
+            thinkingByModel: [String: String]? = nil, options: [String: JSONValue]? = nil
+        ) {
+            self.model = model
+            self.mode = mode
+            self.thinkingByModel = thinkingByModel
+            self.options = options
+        }
+
+        /// The thinking level this provider remembers for `model`.
+        public func thinking(for model: String?) -> String? {
+            guard let model else { return nil }
+            return thinkingByModel?[model]
+        }
+    }
+
+    /// The provider the last draft used.
+    public var provider: String?
+    public var providerPreferences: [String: Provider]
+
+    public init(provider: String? = nil, providerPreferences: [String: Provider] = [:]) {
+        self.provider = provider
+        self.providerPreferences = providerPreferences
+    }
+
+    /// The flat picks `DraftSession.seed` starts from. `Upstream: preferences.ts:196-227`.
+    public var draftPreferences: DraftPreferences {
+        guard let provider, let picks = providerPreferences[provider] else {
+            return DraftPreferences()
+        }
+        let model = picks.model
+        return DraftPreferences(
+            providerId: provider, modelId: model,
+            thinkingOptionId: picks.thinking(for: model), modeId: picks.mode)
+    }
+}
+
 /// Unsent composer text, kept as you type.
 ///
 /// One record per key, written to Application Support/Paseo/drafts.json (the app's file-draft
@@ -98,6 +149,9 @@ public final class DraftStore {
     /// Every record, keyed by `DraftKey`. Read it through `input(for:)` unless you need the
     /// lifecycle.
     public private(set) var records: [String: DraftRecord] = [:]
+    /// The last choices made in a new-session draft.
+    /// `Upstream: packages/app/src/create-agent-preferences/preferences.ts:16-24`.
+    public private(set) var formPreferences = FormPreferences()
 
     private let fileURL: URL?
     private var pendingWrite: Task<Void, Never>?
@@ -110,6 +164,9 @@ public final class DraftStore {
             let stored = try? JSONDecoder().decode(StoredFile.self, from: data)
         {
             records = stored.drafts
+            if let storedPreferences = stored.formPreferences {
+                formPreferences = storedPreferences
+            }
         }
         pruneFinalized()
     }
@@ -200,6 +257,27 @@ public final class DraftStore {
         schedulePersist()
     }
 
+    // MARK: Form preferences
+
+    /// Remembers a pick from the draft's controls. The provider's other models keep the level
+    /// they were given.
+    /// `Upstream: packages/app/src/create-agent-preferences/preferences.ts:196-227`.
+    public func recordSelection(
+        provider: String, model: String?, mode: String?, thinking: String?
+    ) {
+        var picks = formPreferences.providerPreferences[provider] ?? FormPreferences.Provider()
+        picks.model = model
+        picks.mode = mode
+        if let model, let thinking {
+            var byModel = picks.thinkingByModel ?? [:]
+            byModel[model] = thinking
+            picks.thinkingByModel = byModel
+        }
+        formPreferences.provider = provider
+        formPreferences.providerPreferences[provider] = picks
+        schedulePersist()
+    }
+
     // MARK: Persistence
 
     /// Drops finished records whose TTL has run out. Returns true when something was dropped.
@@ -246,7 +324,9 @@ public final class DraftStore {
         lastWriteAt = .now
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(StoredFile(drafts: records)) else { return }
+        guard let data = try? encoder.encode(
+            StoredFile(drafts: records, formPreferences: formPreferences))
+        else { return }
         do {
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -286,9 +366,11 @@ public final class DraftStore {
     private struct StoredFile: Codable {
         var version = 1
         var drafts: [String: DraftRecord]
+        var formPreferences: FormPreferences?
 
-        init(drafts: [String: DraftRecord]) {
+        init(drafts: [String: DraftRecord], formPreferences: FormPreferences) {
             self.drafts = drafts
+            self.formPreferences = formPreferences
         }
     }
 }

@@ -48,8 +48,19 @@ public final class DraftSession {
     /// The workspace the session will live in; nil when the host has no workspaces at all.
     public private(set) var workspaceId: String?
     public private(set) var cwd: String
-    /// What the composer holds.
-    public var text = ""
+    /// What the composer holds. Every change lands in the draft store as it is typed; the store
+    /// coalesces its writes and flushes when the app goes to the background (R1.B).
+    public var text = "" {
+        didSet {
+            guard text != oldValue else { return }
+            drafts?.editText(text, for: key)
+        }
+    }
+    /// This draft's own record key, one per draft tab, so two unsent drafts never overwrite each
+    /// other (`Upstream: packages/app/src/stores/draft-keys.ts:1-12,36-45`).
+    public let draftId: String
+    /// Where the text and the picks are kept; nil for a draft that must stay in memory (tests).
+    private let drafts: DraftStore?
     public private(set) var providerId: String?
     public private(set) var modelId: String?
     public private(set) var thinkingOptionId: String?
@@ -67,13 +78,30 @@ public final class DraftSession {
 
     public init(
         workspaceId: String?, cwd: String, preferences: DraftPreferences = DraftPreferences(),
-        featureValues: [String: JSONValue]? = nil
+        featureValues: [String: JSONValue]? = nil, draftId: String? = nil,
+        drafts: DraftStore? = nil
     ) {
         self.workspaceId = workspaceId
         self.cwd = cwd
         self.preferences = preferences
         self.featureValues = featureValues
+        self.draftId = draftId ?? Self.makeDraftId()
+        self.drafts = drafts
+        // Reading happens here, before the composer is built: the field starts with the saved
+        // text instead of filling in under the user's first keystroke.
+        // `Upstream: packages/app/src/composer/draft/input-draft.ts:240-255`.
+        if let saved = drafts?.input(for: key) { text = saved.text }
     }
+
+    /// A fresh draft tab's key. `Upstream: packages/app/src/stores/draft-keys.ts:7-9`.
+    public static func makeDraftId() -> String { "draft_\(UUID().uuidString)" }
+
+    /// The draft's record key in the store.
+    public var key: String { DraftKey.draft(draftId) }
+
+    /// The agent exists now: the draft is spent, and its record is finished on disk.
+    /// `Upstream: packages/app/src/composer/draft/workspace-tab.tsx:466`.
+    public func markSent() { drafts?.markSent(key) }
 
     // MARK: Seeding
 
@@ -124,13 +152,28 @@ public final class DraftSession {
 
     // MARK: Picks
 
-    /// Switching provider drops the old provider's model, thinking and mode for that provider's
-    /// defaults: the models are not shared.
+    /// Switching provider restores that provider's last picks when the catalogue still offers
+    /// them, else its defaults: the models are not shared between providers.
+    /// `Upstream: packages/app/src/create-agent-preferences/preferences.ts:5-24,196-227`.
     public func selectProvider(_ id: String, catalog: AgentControlStore) {
         providerId = id
-        modelId = catalog.defaultModel(forProvider: id)?.id
-        thinkingOptionId = defaultThinking(catalog: catalog, provider: id, modelId: modelId)
-        modeId = catalog.provider(id)?.defaultModeId ?? catalog.modes(forProvider: id).first?.id
+        let remembered = drafts?.formPreferences.providerPreferences[id]
+        let models = catalog.models(forProvider: id)
+        modelId =
+            remembered?.model.flatMap { rememberedModel in
+                models.first { $0.id == rememberedModel }?.id
+            } ?? catalog.defaultModel(forProvider: id)?.id
+        let options = modelId.map {
+            catalog.thinkingOptions(forProvider: id, modelId: $0)
+        } ?? []
+        thinkingOptionId =
+            remembered?.thinking(for: modelId).flatMap { rememberedThinking in
+                options.first { $0.id == rememberedThinking }?.id
+            } ?? defaultThinking(catalog: catalog, provider: id, modelId: modelId)
+        modeId =
+            remembered?.mode.flatMap { rememberedMode in
+                catalog.modes(forProvider: id).first { $0.id == rememberedMode }?.id
+            } ?? catalog.provider(id)?.defaultModeId ?? catalog.modes(forProvider: id).first?.id
         recordPreferences()
     }
 
@@ -166,6 +209,12 @@ public final class DraftSession {
         preferences = DraftPreferences(
             providerId: providerId, modelId: modelId, thinkingOptionId: thinkingOptionId,
             modeId: modeId)
+        // The next new-session draft on this host opens with these picks.
+        // `Upstream: packages/app/src/create-agent-preferences/preferences.ts:196-227`.
+        if let providerId {
+            drafts?.recordSelection(
+                provider: providerId, model: modelId, mode: modeId, thinking: thinkingOptionId)
+        }
     }
 
     // MARK: Creation

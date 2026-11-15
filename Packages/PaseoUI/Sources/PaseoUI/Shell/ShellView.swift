@@ -38,8 +38,6 @@ public struct ShellView: View {
     /// Rebuilds the draft's view when the slot is filled with a different draft, so its focus and
     /// attachment tray never leak from one workspace to another.
     @State private var draftId = UUID()
-    /// The last settings picked in a draft, for the next one on this host (§3.1).
-    @State private var lastDraftPreferences = DraftPreferences()
     /// True when the draft was opened from an entry point rather than by the idle shell, so a
     /// late agent list never yanks it away from someone who is typing.
     @State private var draftOpenedByUser = false
@@ -393,12 +391,13 @@ public struct ShellView: View {
         {
             return
         }
-        let preferences = draft?.preferences ?? lastDraftPreferences
-        if let current = draft { lastDraftPreferences = current.preferences }
+        let preferences =
+            draft?.preferences ?? DraftStore.shared.formPreferences.draftPreferences
         // No workspace at all: the draft's hero offers "Add project" instead of a composer
         // (§2.2), so there is still somewhere to go.
         draft = DraftSession(
-            workspaceId: resolved?.id, cwd: resolved?.cwd ?? "", preferences: preferences)
+            workspaceId: resolved?.id, cwd: resolved?.cwd ?? "", preferences: preferences,
+            drafts: .shared)
         draftId = UUID()
     }
 
@@ -456,6 +455,7 @@ public struct ShellView: View {
         // The user may have opened something else while the create was in flight; their screen
         // wins over this draft's.
         guard self.draft === draft else { return }
+        draft.markSent()
         withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) {
             select(agentId)
         }
@@ -479,7 +479,6 @@ public struct ShellView: View {
     }
 
     private func dropDraft() {
-        if let draft { lastDraftPreferences = draft.preferences }
         draft = nil
         draftOpenedByUser = false
     }
