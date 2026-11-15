@@ -314,6 +314,11 @@ struct ClaudeTurnView: View {
                     case .running:
                         ClaudeLiveStatusLine(turn: turn)
                     case .completed:
+                        // A clock before the duration, as the reasoning line has one (user directive).
+                        Image(systemName: "clock")
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .accessibilityHidden(true)
                         Text(turn.duration.map(DurationText.completed) ?? "Completed")
                             .font(.paseo(.callout))
                             .foregroundStyle(Palette.secondaryInk)
