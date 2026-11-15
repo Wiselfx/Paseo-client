@@ -36,7 +36,7 @@ struct SidebarUsageFooter: View {
                     statusLine
                 } else {
                     ForEach(lines) { line in
-                        meterLine(line)
+                        meterLine(line, among: lines)
                     }
                 }
             }
@@ -86,15 +86,22 @@ struct SidebarUsageFooter: View {
         return Array(flagged.prefix(2))
     }
 
-    private func meterLine(_ line: Line) -> some View {
+    private func meterLine(_ line: Line, among lines: [Line]) -> some View {
         Button {
             onOpenUsage()
         } label: {
             HStack(spacing: 8) {
-                Text("\(line.source) · \(line.display.label)")
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
+                // The label column is as wide as the widest label of the block, so every bar
+                // starts at the same x: "Session" and "Weekly" no longer move their bars.
+                ZStack(alignment: .leading) {
+                    ForEach(lines) { other in
+                        Text(labelText(other)).hidden()
+                    }
+                    Text(labelText(line))
+                }
+                .font(.paseo(.caption))
+                .foregroundStyle(Palette.secondaryInk)
+                .lineLimit(1)
                 // One size for every row of every surface: a bar is never wider or taller here
                 // than on the row above.
                 ClaudeUsageBar(percent: line.display.percent ?? 0)
@@ -116,6 +123,8 @@ struct SidebarUsageFooter: View {
         .accessibilityLabel(accessibilityLabel(line))
         .accessibilityIdentifier("sidebar.usage.\(line.id)")
     }
+
+    private func labelText(_ line: Line) -> String { "\(line.source) · \(line.display.label)" }
 
     /// The compact visible text, "21% · resets 3h": the sidebar line is one short row, so it
     /// drops "used" and "in" and keeps the countdown's first unit. The numbers are the same ones
