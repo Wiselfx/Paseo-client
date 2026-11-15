@@ -546,7 +546,7 @@ do)
     ;;
 openurl)
     require_sim
-    if [[ ! "${ref:-}" =~ ^paseo://[A-Za-z0-9._~:/?#@!$\&\'*+,\;=%-]{0,500}$ ]]; then
+    if [[ ! "${ref:-}" =~ ^paseo://[A-Za-z0-9._~:/?#@!$\&\'*+,\;=%-]{0,255}$ ]]; then
         echo "refused: only paseo:// URLs" >&2
         exit 2
     fi

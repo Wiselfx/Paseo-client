@@ -58,7 +58,7 @@ public struct ChatScreen: View {
             }
             .safeAreaBar(edge: .top) { topChrome }
             .safeAreaBar(edge: .bottom) { bottomChrome }
-            .scrollEdgeEffectStyle(.hard, for: .top)
+            .scrollEdgeEffectHidden(true, for: .top)
             .scrollEdgeEffectStyle(.hard, for: .bottom)
             // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so
             // the corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).

@@ -25,9 +25,6 @@ struct ChatTopChrome: View {
                 ChatFindBarView(store: store, controller: controller)
             }
         }
-        // The backdrop belongs to the bar, not to the header: it stays solid when the header hides,
-        // so nothing scrolled shows through the status bar area (N3 A).
-        .background { backdrop }
     }
 
     /// Everything that keeps the bar on screen whatever the transcript did: find, a sheet or a
@@ -45,16 +42,6 @@ struct ChatTopChrome: View {
     private var header: some View {
         ChatHeaderBar(store: store, controller: controller, titleHidden: hidden)
             .animation(hideAnimation, value: hidden)
-    }
-
-    /// The bar's backdrop (N1 C): a solid `Palette.background` fill that extends under the status
-    /// bar, so scrolled content is cut off cleanly at the top of the screen. No blur and no fade.
-    /// It goes with the header when the header hides (H2 §3).
-    private var backdrop: some View {
-        Palette.background
-            .ignoresSafeArea(edges: .top)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 
     /// Reduce Motion keeps the fade (opacity is allowed) and drops the slide.
