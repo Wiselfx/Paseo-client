@@ -82,35 +82,19 @@ public func mediaFetchPolicy(
 ) -> MediaFetchPolicy {
     if condition.offline { return .cacheOnly }
     if kind == .thumbnail { return .automatic }
-    if condition.constrained {
-        // Low Data Mode: thumbnails are free; everything else waits for an explicit tap,
-        // including the metadata calls (the card renders its text-only row).
+    if condition.constrained, kind == .youTube || kind == .linkPreview {
+        // Low Data Mode: the metadata calls wait for a tap (the card renders its text-only row).
         return .tapToDownload
     }
     switch kind {
-    case .thumbnail:
-        return .automatic
-    case .daemonImage:
-        if condition.isRelay {
-            // Relay traffic is metered twice over: ≤ 1 MB rides along, the rest waits.
-            // Unknown counts as over: it cannot prove it fits.
-            if let knownBytes, knownBytes <= 1 * 1024 * 1024 { return .automatic }
-            return .tapToDownload
-        }
-        // Wi-Fi, cellular, wired: ≤ 5 MB auto; unknown proceeds (the cap enforces it
-        // mid-stream and flips the card to tap-to-download with the learned size).
-        if let knownBytes, knownBytes > 5 * 1024 * 1024 { return .tapToDownload }
-        return .automatic
-    case .remoteImage:
-        // Never touches the relay: the host link is irrelevant. Otherwise the same
-        // 5 MB rule as daemon images on a direct link.
-        if let knownBytes, knownBytes > 5 * 1024 * 1024 { return .tapToDownload }
+    case .thumbnail, .daemonImage, .remoteImage:
+        // Images load by themselves on every link, whatever its size (user directive; upstream
+        // has no tap-to-load rule).
         return .automatic
     case .video, .audio:
         // Full media always waits (G11 owns the poster nuance); the box shows the size.
         return .tapToDownload
     case .youTube, .linkPreview:
-        // Third-party metadata that never touches the relay or the daemon.
         return .automatic
     }
 }
@@ -119,17 +103,5 @@ public func mediaFetchPolicy(
 /// and the card flips to tap-to-download with the learned size. Nil means uncapped (the kind
 /// never auto-downloads, or is cheap by construction).
 public func mediaDownloadCap(kind: MediaKind, condition: MediaLinkCondition) -> Int64? {
-    switch kind {
-    case .thumbnail, .youTube, .linkPreview:
-        return nil
-    case .remoteImage:
-        if condition.offline || condition.constrained { return nil }
-        return 5 * 1024 * 1024
-    case .daemonImage:
-        if condition.offline || condition.constrained { return nil }
-        return condition.isRelay ? 1 * 1024 * 1024 : 5 * 1024 * 1024
-    case .video, .audio:
-        // Never automatic: there is no stream to cap. G11 sets the poster bound.
-        return nil
-    }
+    nil
 }

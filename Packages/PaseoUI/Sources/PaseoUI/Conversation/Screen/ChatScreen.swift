@@ -56,9 +56,13 @@ public struct ChatScreen: View {
                 TranscriptBackToEndButton(controller: controller)
                     .padding(.bottom, Space.sm)
             }
+            // Maximum chat area: no bar anywhere. A short fade keeps the status bar readable, and a
+            // blur strip sits under the composer card only (user directive; upstream: none).
+            .overlay(alignment: .top) { statusBarFade }
+            .overlay(alignment: .bottom) { composerUnderBlur }
             .safeAreaBar(edge: .top) { topChrome }
             .safeAreaBar(edge: .bottom) { bottomChrome }
-            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectHidden(true, for: .top)
             .scrollEdgeEffectHidden(true, for: .bottom)
             // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so
             // the corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).
@@ -89,6 +93,42 @@ public struct ChatScreen: View {
     }
 
     // MARK: Chrome
+
+    /// A short fade from the page colour to clear over the status bar, so the clock never sits on
+    /// running text. It ends just above the header buttons: the chat keeps the rest of the screen.
+    private var statusBarFade: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Palette.background, location: 0),
+                .init(color: Palette.background, location: 0.55),
+                .init(color: Palette.background.opacity(0), location: 1),
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        .frame(height: 72)
+        .ignoresSafeArea(edges: .top)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// Text scrolling under the composer card, and under the home-indicator strip below it, is
+    /// blurred, never sharp. Sits behind the card and does not reach above it.
+    private var composerUnderBlur: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .frame(height: 56)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black, location: 0.5),
+                    ],
+                    startPoint: .top, endPoint: .bottom)
+            )
+            .ignoresSafeArea(.container, edges: .bottom)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
 
     /// The top bar: two glass buttons and the centred title. No band, and the find bar joins it
     /// when find is open; content dissolves under them through the scroll edge effect (D1 §1).
