@@ -328,8 +328,7 @@ struct TranscriptJump: Equatable {
         // reads the live agent at call time and runs off main inside the driver. Registered
         // per workspace (last registration wins) and unregistered in `deinit`, so a stale
         // controller never answers — or blocks — another conversation's images.
-        richActions.linkCondition = MediaLinkCondition(
-            isRelay: session.isRelayConnection, offline: false)
+        richActions.linkCondition = MediaLinkCondition(offline: false)
         if let workspaceID = store.agent?.workspaceId {
             daemonFetchRegistration.retain(workspaceID: workspaceID)
             Task { @MainActor [weak self] in
@@ -546,8 +545,7 @@ struct TranscriptJump: Equatable {
         case .other: linkInterface = .other
         }
         richActions.linkCondition = MediaLinkCondition(
-            interface: linkInterface, constrained: constrained,
-            isRelay: session.isRelayConnection, offline: offline)
+            interface: linkInterface, offline: offline)
     }
 
     // MARK: Turn actions

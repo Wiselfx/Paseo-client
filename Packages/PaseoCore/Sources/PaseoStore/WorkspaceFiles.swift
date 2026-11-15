@@ -103,7 +103,7 @@ public final class WorkspaceFiles {
     public func fetch(_ path: String, maxBytes: Int? = nil) async throws -> FileExplorerFile {
         let response = try await client.send(
             FileExplorerRequest(
-                cwd: cwd,
+                cwd: readCwd(for: path),
                 mode: .file,
                 path: path,
                 maxBytes: max(maxBytes ?? maxReadBytes, 1)))
@@ -111,6 +111,18 @@ public final class WorkspaceFiles {
             throw PaseoStoreError.missingFile(path: path, message: response.error)
         }
         return file
+    }
+
+    /// The directory a read is rooted in. A path inside the workspace reads from the workspace; `~/`
+    /// reads from home; any other absolute path (a screenshot in `/tmp`) reads from the filesystem
+    /// root. Upstream: `packages/app/src/file-explorer/preview-target.ts:60-107`.
+    nonisolated func readCwd(for path: String) -> String {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed == "~" || trimmed.hasPrefix("~/") { return "~" }
+        guard trimmed.hasPrefix("/") else { return cwd }
+        let root = cwd.count > 1 && cwd.hasSuffix("/") ? String(cwd.dropLast()) : cwd
+        if root == "/" || trimmed == root || trimmed.hasPrefix(root + "/") { return cwd }
+        return "/"
     }
 
     /// A parent listing without touching the Files page's state (`read`/`list` reset
