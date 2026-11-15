@@ -94,6 +94,7 @@ struct RootView: View {
     }
 
     var body: some View {
+        let _ = PaseoPerf.body("Root")
         Group {
             switch model.phase {
             case .setup(let status):

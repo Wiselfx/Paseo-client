@@ -6,7 +6,7 @@
     /// blocks, mono code. Sizes are measured at Claude's 17 pt body (V5); headings and code are
     /// ratios of `bodySize`, so the whole ladder follows the size setting and Dynamic Type.
     /// Claude's uncaptured rich-block metrics remain provisional.
-    public struct ClaudeMarkdownTheme {
+    public struct ClaudeMarkdownTheme: Equatable, Sendable {
         public var bodyFont: Font
         public var headingFonts: [Font]
         public var codeFont: Font
@@ -48,6 +48,17 @@
             // the code container (`codeTypeScale()`), not baked into the face.
             codeFont = ProseFonts.mono(size: 15)
         }
+        /// What decides how a piece lays out: the size ladder, spacing and the two faces. Colours are
+        /// Palette tokens that resolve per trait when drawn, and the theme builder makes fresh
+        /// colour values on every call (`Palette.adaptive`), so comparing them would make every pair
+        /// unequal and defeat `ClaudeMarkdownView`'s Equatable (W1).
+        nonisolated public static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.bodySize == rhs.bodySize && lhs.blockSpacing == rhs.blockSpacing
+                && lhs.lineSpacing == rhs.lineSpacing && lhs.listSpacing == rhs.listSpacing
+                && lhs.tableColumnWidth == rhs.tableColumnWidth && lhs.bodyFont == rhs.bodyFont
+                && lhs.codeFont == rhs.codeFont && lhs.headingFonts == rhs.headingFonts
+        }
+
         public static var artifact: Self {
             var theme = Self()
             theme.bodyFont = .system(size: 17)
@@ -80,9 +91,21 @@
         }
     }
 
-    public struct ClaudeMarkdownView: View {
+    public struct ClaudeMarkdownView: View, Equatable {
+        /// R-2 (W1): equal inputs skip `body`. A streamed message is many of these in one stack, and
+        /// every token re-ran every one of them (closures in the initialiser are never equal, so
+        /// SwiftUI could not skip them): the settled pieces now draw once. The closures are not
+        /// part of equality on purpose; they are stable objects' methods (`ChatActions`).
+        nonisolated public static func == (lhs: ClaudeMarkdownView, rhs: ClaudeMarkdownView) -> Bool {
+            // Statements, not one `&&` chain: `theme` is main-actor isolated and an autoclosure is not.
+            guard lhs.isStreaming == rhs.isStreaming else { return false }
+            guard lhs.theme == rhs.theme else { return false }
+            guard lhs.document.source == rhs.document.source else { return false }
+            return lhs.document.blocks == rhs.document.blocks
+        }
+
         public let document: MarkdownDocumentModel
-        public var theme: ClaudeMarkdownTheme
+        public let theme: ClaudeMarkdownTheme
         @State private var tableViewport: CGFloat = 0
         @State private var expandedCode: ExpandedCode?
         /// Per-table content widths, by block index: the overflow signal. Written
@@ -121,6 +144,7 @@
                 onAction: onAction)
         }
         public var body: some View {
+            let _ = PaseoPerf.body("Markdown")
             blocks(document.blocks).foregroundStyle(theme.foreground)
                 .onGeometryChange(for: CGFloat.self) {
                     $0.size.width
@@ -601,6 +625,7 @@
                     content: content, font: font ?? theme.bodyFont, theme: theme,
                     alignment: alignment == .right ? .right : alignment == .center ? .center : .left, onAction: onAction
                 )
+                .equatable()
             } else {
                 inlineText(content, font: font ?? theme.bodyFont)
                     .textRenderer(InlineCodeRenderer(background: Palette.inlineCodeFill))

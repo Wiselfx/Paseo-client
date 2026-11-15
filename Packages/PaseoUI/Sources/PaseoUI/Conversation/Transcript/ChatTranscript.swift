@@ -75,6 +75,7 @@ struct TranscriptView: View {
     @Environment(\.shellDrawer) private var shellDrawer
 
     var body: some View {
+        let _ = PaseoPerf.body("Transcript")
         content
             // A turn arrived. If you just sent it, the runway opens and it glides to the top.
             .onChange(of: store.turns.last?.id) { _, id in beginRunway(for: id) }

@@ -101,6 +101,7 @@ struct ComposerView: View {
     }
 
     var body: some View {
+        let _ = PaseoPerf.body("Composer")
         VStack(alignment: .leading, spacing: 6) {
             if !isDraft {
                 slashMenu
@@ -233,7 +234,10 @@ struct ComposerView: View {
         return localAttachmentError ?? draftSession?.error
     }
 
-    private var cameraAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
+    /// Asked once: the answer cannot change while the app runs, and the call costs 1 to 2 ms, which
+    /// the composer's body paid on every evaluation (W1).
+    private static let cameraIsAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
+    private var cameraAvailable: Bool { Self.cameraIsAvailable }
 
     private var composerFieldLineLimit: Int {
         ComposerFieldLimit.lines(availableHeight: surfaceHeight)

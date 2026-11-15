@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import Observation
 import PaseoStore
 import SwiftUI
 import UIKit
@@ -18,7 +19,14 @@ public struct ChatScreen: View {
 
     /// Everything that is not a SwiftUI handle. Created once per open agent (the shell applies
     /// `.id(agentId)`, so a switch builds a fresh screen and a fresh controller).
-    @State private var controller: ChatController
+    ///
+    /// W1: held behind a lazy holder. `State(initialValue:)` evaluates its argument every time the
+    /// screen's `init` runs, which is every time the shell's body runs, and the controller's init
+    /// registers observers, starts a path monitor and writes into the checkout store. Built eagerly,
+    /// the shell constructed and threw away a controller per body evaluation (82 to 112 a second at
+    /// idle in the first measurement, a feedback loop that held the main thread at 100 %).
+    @State private var holder: ChatControllerHolder
+    private var controller: ChatController { holder.controller }
     /// The composer's focus (E1 §1): a plain flag, because the composer's field is a
     /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
     @State private var composerFocused = false
@@ -34,14 +42,17 @@ public struct ChatScreen: View {
     ) {
         self.session = session
         self.store = store
-        _controller = State(
-            initialValue: ChatController(
-                session: session, store: store, onOpenSidebar: onOpenSidebar,
-                onOpenPanel: onOpenPanel, onBack: onBack, onNewAgent: onNewAgent,
-                onForkAgent: onForkAgent, onOpenAgent: onOpenAgent))
+        _holder = State(
+            initialValue: ChatControllerHolder {
+                ChatController(
+                    session: session, store: store, onOpenSidebar: onOpenSidebar,
+                    onOpenPanel: onOpenPanel, onBack: onBack, onNewAgent: onNewAgent,
+                    onForkAgent: onForkAgent, onOpenAgent: onOpenAgent)
+            })
     }
 
     public var body: some View {
+        let _ = PaseoPerf.body("ChatScreen")
         // D1 §1: the transcript is the screen's base layer; the chrome floats over it in
         // safe-area bars and the system's scroll edge effect is the only background.
         TranscriptView(store: store, controller: controller)
@@ -130,6 +141,27 @@ public struct ChatScreen: View {
                 mode: .conversation, store: store, controller: controller,
                 focused: $composerFocused)
         }
+    }
+}
+
+/// Builds the screen's `ChatController` on first use, once. A throwaway holder (one per `init`)
+/// costs a closure; only the holder `@State` keeps is ever asked. The build runs inside an
+/// observation scope of its own, so the reads the controller's setup makes (agent, workspace,
+/// checkout) never become dependencies of the view body that happened to ask first.
+@MainActor
+final class ChatControllerHolder {
+    private let make: () -> ChatController
+    private var built: ChatController?
+
+    init(make: @escaping () -> ChatController) {
+        self.make = make
+    }
+
+    var controller: ChatController {
+        if let built { return built }
+        let controller = withObservationTracking({ make() }, onChange: {})
+        built = controller
+        return controller
     }
 }
 

@@ -44,6 +44,9 @@ actor CodeHighlighter {
             touch(key)
             return hit
         }
+        PaseoPerf.count("hl.miss")
+        let span = PaseoPerf.begin("code.highlight")
+        defer { PaseoPerf.end(span) }
         guard let engine = engine(for: theme),
             engine.supportedLanguages().contains(canonical),
             let colored = CodeHighlightCore.colorized(

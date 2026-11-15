@@ -88,7 +88,10 @@ enum MarkdownDocumentCache {
     static func document(for source: String, home: String? = nil) -> MarkdownDocumentModel {
         let key = Key(source: source, home: home?.isEmpty == true ? nil : home)
         if let cached = table.value(for: key) { return cached }
-        let document = MarkdownDocumentModel(source: source, home: key.home)
+        PaseoPerf.count("md.miss")
+        let document = PaseoPerf.measure("md.parse") {
+            MarkdownDocumentModel(source: source, home: key.home)
+        }
         table.setValue(document, for: key)
         return document
     }

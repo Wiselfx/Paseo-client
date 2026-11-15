@@ -54,8 +54,20 @@ struct ClaudeTurnView: View {
         return row
     }
 
+    /// The answer slot's prose: the last segment when it is prose, shown while the turn runs (work
+    /// shown) and after it completes. It is one slot for both states on purpose (W1): while the
+    /// turn ran the streaming message lived inside the work stack and, on completion, moved out to
+    /// the answer position, which is a different place in the view tree, so every markdown piece,
+    /// text view and code block of the answer was destroyed and rebuilt at the one moment the user
+    /// looks at it (345 ms in the first measurement). Running with the work folded keeps the old
+    /// behaviour: the streaming prose stays hidden.
+    var answerProse: TimelineRow? {
+        guard case .prose(let row)? = turn.segments.last else { return nil }
+        return !isRunning || isExpanded ? row : nil
+    }
+
     var bodySegments: [Turn.Segment] {
-        finalProse == nil ? turn.segments : Array(turn.segments.dropLast())
+        answerProse == nil ? turn.segments : Array(turn.segments.dropLast())
     }
 
     var showsHeader: Bool { isRunning || !bodySegments.isEmpty }
@@ -127,6 +139,7 @@ struct ClaudeTurnView: View {
     }
 
     var body: some View {
+        let _ = PaseoPerf.body("TurnView")
         if showsCollapsedTurn {
             collapsedTurn
         } else {
@@ -153,7 +166,7 @@ struct ClaudeTurnView: View {
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
                 )
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background(findHighlight(row.seqEnd))
             }
             // Upstream TurnSummaryLine sits under the user message, above the final reply, and
@@ -218,11 +231,11 @@ struct ClaudeTurnView: View {
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
                 )
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background(findHighlight(row.seqEnd))
             }
             if showsHeader { header }
-            if isExpanded {
+            if isExpanded, !bodySegments.isEmpty {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(bodySegments) { segment in
                         ClaudeSegmentView(
@@ -241,10 +254,10 @@ struct ClaudeTurnView: View {
                         row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
                 }
             }
-            if let finalProse, case .assistantMessage(let message) = finalProse.item {
+            if let answerProse, case .assistantMessage(let message) = answerProse.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: isRunning)
-                    .id("row:\(finalProse.seqEnd)")
-                    .background(findHighlight(finalProse.seqEnd))
+                    .rowAnchor(answerProse.seqEnd)
+                    .background(findHighlight(answerProse.seqEnd))
             }
             if let todoState = turn.todoState {
                 // One card per turn for its todos and plan (live while running).
@@ -388,7 +401,7 @@ struct ClaudeSegmentView: View {
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: turnIsRunning)
-                    .id("row:\(row.seqEnd)")
+                    .rowAnchor(row.seqEnd)
                     .background {
                         RoundedRectangle(cornerRadius: Radius.md)
                             .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
@@ -434,7 +447,7 @@ struct ClaudeMidTurnBubble: View {
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
                 )
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background {
                     RoundedRectangle(cornerRadius: Radius.md)
                         .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
@@ -457,7 +470,7 @@ struct ClaudeVisibleRow: View {
     var body: some View {
         if case .compaction(let status, let trigger, let preTokens) = row.item {
             ClaudeCompactionMarker(status: status, trigger: trigger, preTokens: preTokens)
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background {
                     RoundedRectangle(cornerRadius: Radius.md)
                         .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
@@ -577,6 +590,19 @@ struct ClaudeTurnActionGlyph: View {
 /// The verbs come from `@Environment(\.chatActions)`-adjacent input — the same `ChatActions`
 /// instance for the screen's life, so it is not part of `==`. `ClaudeTurnView` carries the layout
 /// and its subviews; this row only decides what the row is told.
+extension View {
+    /// The scroll and find anchor of one timeline row (`row:<seqEnd>`), drawn as an invisible overlay
+    /// of the row's own size so `scrollTo(_, anchor: .center)` still centres the whole row.
+    ///
+    /// W1: `.id` on the content itself makes the id part of the content's identity, and a streaming
+    /// row's `seqEnd` moves with every delta, so the whole prose subtree (every markdown piece, text
+    /// view and code block) was destroyed and rebuilt per token: 12 to 25 markdown views per update,
+    /// each one re-measured and re-highlighted. The anchor now changes identity; the content does not.
+    func rowAnchor(_ seqEnd: Int) -> some View {
+        overlay { Color.clear.allowsHitTesting(false).accessibilityHidden(true).id("row:\(seqEnd)") }
+    }
+}
+
 struct TurnRow: View, Equatable {
     let turn: Turn
     /// The agent/host capability value rows draw; part of `==` so a capability change re-renders
@@ -605,6 +631,7 @@ struct TurnRow: View, Equatable {
     }
 
     var body: some View {
+        let _ = PaseoPerf.body("TurnRow")
         ClaudeTurnView(
             turn: turn,
             onMarkdown: actions.markdown,
