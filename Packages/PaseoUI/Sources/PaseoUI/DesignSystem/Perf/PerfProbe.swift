@@ -27,6 +27,34 @@
     }
 
     extension PaseoPerf {
+        /// A poor man's `_printChanges` that reaches the gate's log (W1): call it from a body with the
+        /// view's inputs as strings; each input that differs from the previous call counts
+        /// `diff.<prefix>.<key>`, and a call where none differ counts `diff.<prefix>.none` (the body
+        /// ran because an observed store changed, not because an input did). Free when off: the
+        /// values are an autoclosure.
+        @inline(__always)
+        static func diff(
+            _ prefix: StaticString, _ values: @autoclosure () -> [(StaticString, String)]
+        ) {
+            guard enabled else { return }
+            record(diff: prefix.description, values())
+        }
+
+        private static func record(diff prefix: String, _ values: [(StaticString, String)]) {
+            store.withLock { state in
+                var anyChanged = false
+                for (key, value) in values {
+                    let slot = prefix + "." + key.description
+                    if let previous = state.lastValues[slot], previous != value {
+                        state.counts["diff." + slot, default: 0] += 1
+                        anyChanged = true
+                    }
+                    state.lastValues[slot] = value
+                }
+                if !anyChanged { state.counts["diff." + prefix + ".none", default: 0] += 1 }
+            }
+        }
+
         @inline(__always)
         static func countRead(_ name: StaticString) {
             guard enabled else { return }

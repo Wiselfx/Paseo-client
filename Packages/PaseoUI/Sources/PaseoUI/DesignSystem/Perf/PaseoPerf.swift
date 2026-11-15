@@ -137,6 +137,7 @@
             var spans: [String: SpanStat] = [:]
             var marks: [String] = []
             var recent: [RecentSpan] = []
+            var lastValues: [String: String] = [:]
         }
 
         static let store = OSAllocatedUnfairLock(initialState: State())
