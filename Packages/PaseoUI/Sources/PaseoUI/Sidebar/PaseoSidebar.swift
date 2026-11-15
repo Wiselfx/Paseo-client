@@ -62,6 +62,7 @@ struct PaseoSidebar: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
+        let _ = PaseoPerf.body("Sidebar")
         // Derived once per evaluation and shared by the directory and every row (P5 #3).
         let derivations = sidebarDerivations()
         let chrome = VStack(alignment: .leading, spacing: 0) {

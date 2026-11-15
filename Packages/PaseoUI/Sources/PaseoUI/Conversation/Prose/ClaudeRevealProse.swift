@@ -74,7 +74,9 @@ struct ClaudeRevealProse: View {
     }
 
     private func pieceRefs(_ source: String) -> [PieceRef] {
-        let raw = richPieces(source, home: richActions?.homeDirectory)
+        let raw = PaseoPerf.measure("rich.pieces") {
+            richPieces(source, home: richActions?.homeDirectory)
+        }
         var refs: [PieceRef] = []
         var offset = 0
         for (index, piece) in raw.enumerated() {
@@ -101,6 +103,7 @@ struct ClaudeRevealProse: View {
     }
 
     var body: some View {
+        let _ = PaseoPerf.body("RevealProse")
         let refs = pieceRefs(markdown)
         VStack(alignment: .leading, spacing: theme.blockSpacing) {
             ForEach(refs, id: \.stableIdentity) { ref in

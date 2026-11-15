@@ -9,6 +9,8 @@ struct PaseoClientApp: App {
     init() {
         // Once, synchronously, before the first frame (R11 §1).
         ClaudeFontResources.register()
+        // Off unless launched with `-paseo-perf` (W1; docs/perf/PERFORMANCE-RULES.md).
+        PaseoPerf.startIfRequested()
         // Notification answers never depend on a view: the handlers are set once
         // at launch (G19 review). With `.authenticationRequired` and no
         // `.foreground` option the system answers without opening the app, so a

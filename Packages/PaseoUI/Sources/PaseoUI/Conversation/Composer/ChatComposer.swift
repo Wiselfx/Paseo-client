@@ -101,6 +101,7 @@ struct ComposerView: View {
     }
 
     var body: some View {
+        let _ = PaseoPerf.body("Composer")
         VStack(alignment: .leading, spacing: 6) {
             if !isDraft {
                 slashMenu

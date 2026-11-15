@@ -540,6 +540,7 @@ struct ClaudeProse: View {
     var isStreaming: Bool = false
 
     var body: some View {
+        let _ = PaseoPerf.body("Prose")
         ClaudeRevealProse(
             markdown: markdown, theme: Self.theme(), onAction: onAction,
             isStreaming: isStreaming,

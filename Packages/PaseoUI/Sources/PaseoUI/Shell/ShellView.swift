@@ -73,6 +73,7 @@ public struct ShellView: View {
     }
 
     public var body: some View {
+        let _ = PaseoPerf.body("Shell")
         ShellContainer(drawer: drawer, sidebar: sidebar, main: main, panel: panel)
             .ignoresSafeArea()
             .toastHost(toastCenter)

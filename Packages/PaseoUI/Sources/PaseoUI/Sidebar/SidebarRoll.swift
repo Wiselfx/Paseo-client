@@ -12,6 +12,7 @@ struct SidebarRoll<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let _ = PaseoPerf.body("SidebarRoll")
         contentOrEmpty
             .frame(height: expanded ? contentHeight : 0, alignment: .top)
             .clipped()
