@@ -69,8 +69,9 @@ public struct WelcomeView<DirectForm: View>: View {
         ScrollView {
             VStack(spacing: 24) {
                 Spacer(minLength: 48)
-                Text("Paseo")
-                    .font(.paseo(.hero))
+                // Upstream's welcome screen leads with the butterfly at 96 pt
+                // (`packages/app/src/components/welcome-screen.tsx:266`).
+                PaseoLogo(size: 96)
                 VStack(spacing: 8) {
                     Text("Welcome to Paseo")
                         .font(.paseo(.largeTitle))
