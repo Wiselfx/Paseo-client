@@ -248,11 +248,8 @@ private struct MediaSheetTile: View, Equatable {
     private func loadThumb() async {
         if let url = remoteURL {
             let pixelWidth = MediaSizing.pixelWidth(points: 120, scale: displayScale)
-            let cap = mediaDownloadCap(
-                kind: .remoteImage,
-                condition: richActions?.linkCondition ?? .assumed)
             for await event in await MediaPipeline.shared.events(
-                source: .remote(url), pixelWidth: pixelWidth, capBytes: cap)
+                source: .remote(url), pixelWidth: pixelWidth)
             {
                 guard !Task.isCancelled else { return }
                 if case .final(let outcome) = event,

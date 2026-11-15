@@ -6,9 +6,8 @@ import UIKit
 // MARK: - RichGalleryCard (G7 C2)
 
 // NOTE: RemoteImagePipeline/G7: adjacent screenshots post as one grid card instead of a
-// tall stack. Tiles crop (`scaledToFill`); the viewer always shows the full frame. One
-// tap box covers the whole grid on metered links (§12); cache-only links show cached
-// tiles or the reserved box, never a fetch.
+// tall stack. Tiles crop (`scaledToFill`); the viewer always shows the full frame.
+// Images always load on live links (user directive); cache-only links show cached tiles, never a fetch.
 
 /// A grid of 2+ adjacent images: 2 side by side (1:1), 3 with a large left tile (2:3),
 /// 4 in a square, 5+ as 2×2 with a "+N" last tile. Fixed geometry from the count —
@@ -19,12 +18,10 @@ struct RichGalleryCard: View {
 
     @Environment(\.richActions) private var richActions
     @Environment(\.displayScale) private var displayScale
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var zoom
     @State private var thumbnails: [String: UIImage] = [:]
     @State private var selection = 0
     @State private var showViewer = false
-    @State private var tappedLoad = false
     @State private var shareImage: UIImage?
     /// The card's measured width, for decoding tiles at the size they draw at.
     @State private var width: CGFloat = 0
@@ -50,15 +47,6 @@ struct RichGalleryCard: View {
             condition: richActions?.linkCondition ?? .assumed)
     }
 
-    private var capBytes: Int64? {
-        guard !tappedLoad else { return nil }
-        let kind: MediaKind = images.contains {
-            if case .local = $0.source { true } else { false }
-        } ? .daemonImage : .remoteImage
-        return mediaDownloadCap(
-            kind: kind, condition: richActions?.linkCondition ?? .assumed)
-    }
-
     /// The tile slot in points: two columns whatever the geometry, so the decode
     /// matches the draw. Falls back to the old constant before layout lands.
     private var slotPoints: CGFloat {
@@ -66,10 +54,10 @@ struct RichGalleryCard: View {
         return max((width - Metrics.galleryTileSpacing) / 2, 1)
     }
 
-    /// One load per count + tap state + width bucket: geometry never re-runs loads,
+    /// One load per count + width bucket: geometry never re-runs loads,
     /// and tiles skipped as cached never refetch on the re-run.
     private var loadKey: String {
-        "\(images.count)|\(tappedLoad)|\(MediaSizing.pixelWidth(points: slotPoints, scale: displayScale))"
+        "\(images.count)|\(MediaSizing.pixelWidth(points: slotPoints, scale: displayScale))"
     }
 
     /// The card's inner width, measured on the frame it is actually drawn in.
@@ -129,11 +117,6 @@ struct RichGalleryCard: View {
             if images.count >= 2 {
                 PaseoMediaCard(media: grid)
                     .background { widthReader }
-                    .overlay {
-                        if showsTapBox {
-                            tapOverlay
-                        }
-                    }
             }
         }
             .task(id: loadKey) { await loadAll() }
@@ -158,39 +141,6 @@ struct RichGalleryCard: View {
 
     private var clampedSelection: Int {
         min(max(selection, 0), max(images.count - 1, 0))
-    }
-
-    /// The reserved grid with a download action instead of bytes (§12).
-    private var showsTapBox: Bool {
-        guard !tappedLoad else { return false }
-        return policy == .tapToDownload
-    }
-
-    private var tapOverlay: some View {
-        Button {
-            Haptics.light()
-            tappedLoad = true
-        } label: {
-            Rectangle()
-                .fill(Palette.codeSurface.opacity(0.92))
-                .overlay {
-                    VStack(spacing: Space.sm) {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.glyph(.large, weight: .light))
-                            .foregroundStyle(Palette.secondaryInk)
-                        Text("Tap to download")
-                            .font(.paseo(.caption, weight: .medium))
-                            .foregroundStyle(Palette.ink)
-                        Text("\(images.count) images")
-                            .font(.paseo(.codeCaption))
-                            .foregroundStyle(Palette.secondaryInk)
-                    }
-                }
-        }
-        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-        .accessibilityLabel("Download \(images.count) images")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Downloads the gallery images")
     }
 
     // MARK: Layout (fixed geometry from the count)
@@ -277,7 +227,6 @@ struct RichGalleryCard: View {
         }
         .buttonStyle(.plain)
         .matchedTransitionSource(id: id, in: zoom)
-        .accessibilityHidden(showsTapBox)
         .paseoCardMenu(
             onShare: thumbnails[id] == nil ? nil : {
                 shareImage = thumbnails[id]
@@ -328,18 +277,11 @@ struct RichGalleryCard: View {
 
     @MainActor
     private func loadAll() async {
-        if !tappedLoad {
-            switch policy {
-            case .tapToDownload: return
-            case .cacheOnly: break
-            case .automatic: break
-            }
-        }
-        // Offline (cacheOnly): no fetch. Cached tiles draw; the rest keep the box.
+        // Offline (cacheOnly): no fetch. Cached tiles draw; the rest stay empty.
         // Sequential, not concurrent: one task per card, tiles arrive in document
         // order (progressive fidelity), and the shape matches the gated `.task`
         // call sites elsewhere (no unstructured cross-actor captures).
-        let allowFetch = tappedLoad || policy == .automatic
+        let allowFetch = policy == .automatic
         for (index, image) in images.enumerated() {
             let id = tileIDs[index]
             if let cached = resolvedThumb(id: id, image: image) {
@@ -373,7 +315,7 @@ struct RichGalleryCard: View {
         // Tiles crop: decode at the measured slot pixel width.
         let pixelWidth = MediaSizing.pixelWidth(points: slotPoints, scale: displayScale)
         for await event in await MediaPipeline.shared.events(
-            source: source, pixelWidth: pixelWidth, capBytes: capBytes, ignoreFailureCache: false)
+            source: source, pixelWidth: pixelWidth, ignoreFailureCache: false)
         {
             guard !Task.isCancelled else { return }
             if case .final(let outcome) = event {
