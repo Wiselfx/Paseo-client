@@ -838,14 +838,16 @@ struct TranscriptView: View {
 
     /// A step in find: the row's own view id, centred.
     private func scrollToRow(_ seq: Int, animated: Bool, proxy: ScrollViewProxy) {
+        PaseoPerf.mark("find.scrollToRow")
         if growWindow(seq: seq) {
+            PaseoPerf.mark("find.grewWindow")
             // The match is in a turn that was held back: mount it, then scroll on the next pass.
             // The turn's own id is known to the lazy stack as soon as the turn is in the window; the
             // row anchor inside it only once the row is built. Land on the turn, then refine.
             let turnId = store.turns.first(where: { $0.containsRow(seqEnd: seq) })?.id
             afterWindowGrowth = {
                 if let turnId { proxy.scrollTo(turnId, anchor: .center) }
-                PaseoPerf.count("find.windowLanded")
+                PaseoPerf.mark("find.windowLanded")
                 afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
             }
             return
@@ -891,7 +893,7 @@ struct TranscriptView: View {
             : growWindow(toInclude: id)
         if grew {
             afterWindowGrowth = {
-                PaseoPerf.count("jump.windowLanded")
+                PaseoPerf.mark("jump.windowLanded")
                 jumpToTurn(id, proxy: proxy)
             }
             return
