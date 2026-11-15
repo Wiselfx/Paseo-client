@@ -35,6 +35,10 @@ public final class AgentControlStore {
     /// `providers_snapshot_update` frames for other workspaces share the socket; applying those
     /// would swap the pickers' models out from under the user.
     private var catalogCwd: String?
+    /// Plain capability flag, read once from `server_info.features.creationLifecycle`. With it the
+    /// caller's create is sent as `agent.create.request` (receipts, caller-owned key); without it
+    /// the legacy `create_agent_request` is the only path. Never branch on this in a view.
+    private var supportsCreationLifecycle = false
 
     public init(client: any DaemonClient) {
         self.client = client
@@ -108,6 +112,14 @@ public final class AgentControlStore {
     /// `cwd` places the runtime; `workspaceId` re-homes it into an existing workspace (omit to use
     /// the caller's). `prompt` is sent as the first turn. `attachments`, when given, ride the
     /// create request verbatim — e.g. the chat-history seed for a fork.
+    ///
+    /// `idempotencyKey` is the caller's operation key: the same key must come back on a retry of
+    /// the same create, so a request whose answer was lost joins the daemon's in-flight creation
+    /// instead of starting a second agent (`docs/hub.md`, "Creation"). The caller owns its
+    /// lifetime; a changed intent needs a new key (`creation/index.ts:120-130` rejects a reused key
+    /// with a different fingerprint). When the daemon advertises `creationLifecycle` and a key is
+    /// given, the create goes out as `agent.create.request`; otherwise the legacy request is used,
+    /// as upstream's fallback does (`creation/index.ts:183-199`).
     public func createAgent(
         cwd: String,
         workspaceId: String? = nil,
@@ -118,21 +130,54 @@ public final class AgentControlStore {
         featureValues: [String: JSONValue]? = nil,
         prompt: String? = nil,
         title: String? = nil,
-        attachments: [AgentAttachment]? = nil
+        attachments: [AgentAttachment]? = nil,
+        idempotencyKey: String? = nil
     ) async -> String? {
         actionError = nil
         lastCreatedAgent = nil
 
         let trimmedPrompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let request = CreateAgentRequest(
-            config: AgentSessionConfig(
-                provider: provider, cwd: cwd, modeId: modeId, model: model,
-                thinkingOptionId: thinkingOptionId,
-                featureValues: (featureValues?.isEmpty == false) ? featureValues : nil,
-                title: title),
-            initialPrompt: (trimmedPrompt?.isEmpty == false) ? trimmedPrompt : nil,
+        let config = AgentSessionConfig(
+            provider: provider, cwd: cwd, modeId: modeId, model: model,
+            thinkingOptionId: thinkingOptionId,
+            featureValues: (featureValues?.isEmpty == false) ? featureValues : nil,
+            title: title)
+        let firstPrompt = (trimmedPrompt?.isEmpty == false) ? trimmedPrompt : nil
+        let sentAttachments = (attachments?.isEmpty == false) ? attachments : nil
+
+        if let idempotencyKey, supportsCreationLifecycle {
+            let request = CreateAgentModernRequest(
+                idempotencyKey: idempotencyKey, config: config, initialPrompt: firstPrompt,
+                workspaceId: workspaceId, attachments: sentAttachments,
+                // The first message is the prompt; it shares the operation's identity so a retry
+                // cannot land it twice. Upstream keeps a separate message id for the same reason
+                // (`docs/hub.md`: "reuses the first message ID after failures").
+                clientMessageId: firstPrompt == nil ? nil : idempotencyKey)
+            do {
+                let response = try await client.send(request)
+                guard let agent = response.agent else {
+                    actionError = response.error ?? "The daemon could not create the agent."
+                    return nil
+                }
+                lastCreatedAgent = agent
+                return agent.id
+            } catch {
+                actionError = message(for: error)
+                return nil
+            }
+        }
+
+        var request = CreateAgentRequest(
+            config: config,
+            initialPrompt: firstPrompt,
             workspaceId: workspaceId,
-            attachments: (attachments?.isEmpty == false) ? attachments : nil)
+            attachments: sentAttachments)
+        // Upstream sends the key on the legacy request only without a prompt: the keyed legacy
+        // create cannot carry one (`creation/index.ts:183-199`).
+        if let idempotencyKey, firstPrompt == nil {
+            request.idempotencyKey = idempotencyKey
+            request.clientMessageId = idempotencyKey
+        }
 
         do {
             let response = try await client.send(request)
@@ -154,6 +199,7 @@ public final class AgentControlStore {
     internal func serverInfoChanged(_ info: ServerInfo?) {
         guard let info else { return }
         isSupported = info.hasFeature("providersSnapshot")
+        supportsCreationLifecycle = info.hasFeature("creationLifecycle")
     }
 
     /// Routes unsolicited catalogue and permission messages: the pickers' incremental snapshot
@@ -232,16 +278,6 @@ public final class AgentControlStore {
                     models: models?.models, modes: modes?.modes))
         }
         return entries
-    }
-}
-
-extension DaemonClient {
-    /// Sends a message whose outcome the daemon reports as an unsolicited event, not as a
-    /// correlated response. `agent_permission_response` is the only such message: its wire
-    /// `requestId` field is the permission id, so `send` can never match a reply and would wait
-    /// for its timeout. The frame still goes out immediately.
-    func sendExpectingEvent<R: PaseoRequest>(_ request: R, timeout: Duration = .seconds(2)) {
-        Task { _ = try? await send(request, timeout: timeout) }
     }
 }
 

@@ -145,6 +145,26 @@ public final class AgentLifecycleStore {
         }
     }
 
+    /// Marks this client's `paseo.open-agent-tab.<client-id>` label on a managed subagent while
+    /// its tab is open, or clears it when the tab closes or the app leaves the foreground.
+    ///
+    /// The daemon resolves a parent's archive by detaching children with any `true` open-tab
+    /// label and cascade-archiving the rest, so this label is what keeps an agent the user is
+    /// looking at alive. Upstream: docs/agent-lifecycle.md:130-134,
+    /// packages/protocol/src/agent-labels.ts:4-7,
+    /// packages/app/src/screens/workspace/workspace-screen.tsx:2028-2034, 2330-2336.
+    ///
+    /// The client id is the one this connection already sent in its hello, never a new one: the
+    /// daemon keys the label per client. A test double has none and writes nothing. A failed
+    /// marker is swallowed on purpose: it is background bookkeeping, not a user action, and a
+    /// banner about it would replace whatever the screen is actually saying.
+    public func setOpenAgentTab(agentId: String, open: Bool) async {
+        guard let clientId = (client as? DaemonConnection)?.clientId else { return }
+        let label = "paseo.open-agent-tab.\(clientId)"
+        _ = try? await client.send(
+            UpdateAgentRequest(agentId: agentId, labels: [label: open ? "true" : "false"]))
+    }
+
     /// Renames the agent (`update_agent_request`).
     @discardableResult
     public func rename(agentId: String, to name: String) async -> Bool {

@@ -75,6 +75,12 @@ public final class DraftSession {
     /// The prompt shown as a pending bubble while the agent is created.
     public private(set) var pendingPrompt: String?
     public private(set) var preferences: DraftPreferences
+    /// The operation key of a create that has not succeeded yet, with a fingerprint of the intent
+    /// it belongs to. A retry of the same draft send reuses the key, so a create whose answer was
+    /// lost joins the daemon's in-flight operation instead of making a second agent; a changed
+    /// prompt or picker starts a new operation, because the daemon (and upstream's client) reject
+    /// a reused key with a different intent (`packages/client/src/creation/index.ts:120-130`).
+    private var pendingCreation: (key: String, fingerprint: String)?
 
     public init(
         workspaceId: String?, cwd: String, preferences: DraftPreferences = DraftPreferences(),
@@ -249,6 +255,16 @@ public final class DraftSession {
 
         isCreating = true
         error = nil
+        // One operation key per intent: kept across a failed attempt, replaced when the draft
+        // changes so the retry is a retry and an edit is a new create.
+        let fingerprint = creationFingerprint(arguments, prompt: prompt, attachments: attachments)
+        let creationKey: String
+        if let pendingCreation, pendingCreation.fingerprint == fingerprint {
+            creationKey = pendingCreation.key
+        } else {
+            creationKey = UUID().uuidString
+            pendingCreation = (creationKey, fingerprint)
+        }
         // The prompt leaves the field at once: it is the pending bubble now (UX-SPEC §3.2).
         pendingPrompt = prompt.isEmpty ? nil : prompt
         text = ""
@@ -263,7 +279,8 @@ public final class DraftSession {
             thinkingOptionId: arguments.thinkingOptionId,
             featureValues: arguments.featureValues,
             prompt: prompt.isEmpty ? nil : prompt,
-            attachments: attachments)
+            attachments: attachments,
+            idempotencyKey: creationKey)
 
         guard let agentId else {
             // Back to the draft with the text intact, unless the user has started something new.
@@ -276,7 +293,20 @@ public final class DraftSession {
             error = catalog.actionError ?? "The daemon could not create the agent."
             return nil
         }
+        pendingCreation = nil
         pendingPrompt = nil
         return agentId
+    }
+
+    /// What the create request will say, so a retry with the same draft reuses its key and an edit
+    /// does not. Mirrors upstream's operation fingerprint (`creation/index.ts:120-130`).
+    private func creationFingerprint(
+        _ arguments: CreationArguments, prompt: String, attachments: [AgentAttachment]?
+    ) -> String {
+        [
+            arguments.workspaceId ?? "", arguments.cwd, arguments.providerId,
+            arguments.modelId ?? "", arguments.modeId ?? "", arguments.thinkingOptionId ?? "",
+            prompt, attachments.map { String($0.hashValue) } ?? "",
+        ].joined(separator: "\u{1F}")
     }
 }

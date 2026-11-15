@@ -54,6 +54,7 @@ struct WorkspaceTerminalsView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.toast) private var toast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Upstream keeps the four most recently used terminals' streams alive: "The retained-panel
     /// LRU bounds the number of live streams" (`terminal-performance.md`).
@@ -87,12 +88,25 @@ struct WorkspaceTerminalsView: View {
             await store.open(workspaceId: workspaceId, cwd: workspace.cwd)
             guard !Task.isCancelled else { return }
             markCurrentViewed()
+            syncFocusedTerminal()
         }
         .onAppear {
             if selectedTerminalId == nil || !terminalIds.contains(selectedTerminalId ?? "") {
                 select(preferredTerminalId(from: terminalIds))
             }
             markCurrentViewed()
+            syncFocusedTerminal()
+        }
+        // The focused terminal rides the presence heartbeat, so the daemon clears a terminal's
+        // `needs_input`/`finished` attention once a visible client is looking at it
+        // (docs/terminal-activity.md). Upstream sets it from the focused pane's active tab and
+        // clears it when that route loses focus
+        // (packages/app/src/screens/workspace/workspace-screen.tsx:1505-1526).
+        .onDisappear {
+            session.hostSettings.updateTerminalFocus(nil)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            session.hostSettings.updateTerminalFocus(phase == .active ? selectedTerminalId : nil)
         }
         .onChange(of: terminalIds) { _, ids in
             mountedTerminalIds.removeAll { !ids.contains($0) }
@@ -102,7 +116,10 @@ struct WorkspaceTerminalsView: View {
             select(preferredTerminalId(from: ids))
             markCurrentViewed()
         }
-        .onChange(of: selectedTerminalId) { _, _ in markCurrentViewed() }
+        .onChange(of: selectedTerminalId) { _, _ in
+            markCurrentViewed()
+            syncFocusedTerminal()
+        }
         .confirmationDialog(
             "Attach a file",
             isPresented: $showAttachMenu,
@@ -201,6 +218,13 @@ struct WorkspaceTerminalsView: View {
     private func markCurrentViewed() {
         guard let selectedTerminalId else { return }
         lastViewed[selectedTerminalId] = Date().timeIntervalSince1970 * 1000
+    }
+
+    /// Reports the terminal on screen (nil when there is none, or the app is not active) to the
+    /// host's presence heartbeat. Focus changes send one immediately; the 15 s heartbeat repeats it.
+    private func syncFocusedTerminal() {
+        guard scenePhase == .active else { return }
+        session.hostSettings.updateTerminalFocus(selectedTerminalId)
     }
 
     /// Live output arrived for a terminal. `lastViewed` is only written when the tab's dot would

@@ -325,6 +325,57 @@ public struct DaemonConfigChanged: Decodable, Sendable {
     public var config: DaemonConfig
 }
 
+// Source: messages.ts `DaemonConfigReloadRequestSchema` (:1538),
+// `DaemonConfigReloadResponseSchema` (:5552-5561)
+
+/// Re-reads `config.json` and reports what the running daemon applied. Gated by
+/// `features.daemonConfigReload` (`messages.ts:3956`). Upstream: `public-docs/configuration.md:59`
+/// ("Output distinguishes applied changes, restart requirements, and deployment overrides").
+public struct ReloadDaemonConfigRequest: PaseoRequest {
+    public static let type = "daemon.config.reload.request"
+    public static let responseType = "daemon.config.reload.response"
+    public var requestId = ""
+    public init() {}
+
+    public struct Response: Decodable, Sendable {
+        public var requestId: String
+        /// Changed settings the running daemon picked up.
+        public var appliedPaths: [String]
+        /// Changed settings the running daemon cannot pick up; they need a restart.
+        public var restartRequiredPaths: [String]
+        /// Settings a deployment override keeps from taking effect.
+        public var overrideControlledPaths: [String]
+    }
+}
+
+// Source: messages.ts `RestartServerRequestMessageSchema` (:2005-2011),
+// `RestartRequestedStatusPayloadSchema` (:4199-4204)
+
+/// Restarts the daemon process. Running agents keep going; the socket drops and the client
+/// reconnects on its own. Answered on the `status` stream with `restart_requested`, correlated by
+/// `requestId`. Upstream: `public-docs/troubleshooting.md` ("Restart daemon").
+public struct RestartServerRequest: PaseoRequest {
+    public static let type = "restart_server_request"
+    public static let responseType = "status"
+    public var requestId = ""
+    public var reason: String?
+    /// Restart keeps terminals unless this is true. Only sent when asked for; daemons without
+    /// `features.terminalsSurviveRestart` ignore it and close terminals anyway.
+    public var killTerminals: Bool?
+
+    public init(reason: String? = nil, killTerminals: Bool? = nil) {
+        self.reason = reason
+        self.killTerminals = (killTerminals == true) ? true : nil
+    }
+
+    public struct Response: Decodable, Sendable {
+        public var status: String
+        public var requestId: String
+        public var clientId: String?
+        public var reason: String?
+    }
+}
+
 // MARK: - Presence
 
 // Source: messages.ts `ClientHeartbeatMessageSchema`

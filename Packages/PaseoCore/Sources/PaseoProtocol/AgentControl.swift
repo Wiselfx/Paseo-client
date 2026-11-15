@@ -85,8 +85,8 @@ public struct AgentSessionConfig: Encodable, Sendable {
 /// Creates one agent, optionally with its first prompt, inside an existing workspace.
 ///
 /// The daemon answers on the `status` stream with `agent_created` or `agent_create_failed`, both
-/// correlated by `requestId`; `Response` decodes either. The modern `agent.create.request` path
-/// (receipts, caller-chosen ids) is not used here.
+/// correlated by `requestId`; `Response` decodes either. This is the fallback: when the daemon
+/// advertises `features.creationLifecycle`, `CreateAgentModernRequest` is used instead.
 public struct CreateAgentRequest: PaseoRequest {
     public static let type = "create_agent_request"
     public static let responseType = "status"
@@ -128,6 +128,59 @@ public struct CreateAgentRequest: PaseoRequest {
         public var agent: AgentSnapshot?
         public var error: String?
         public var errorCode: String?
+    }
+}
+
+// Source: messages.ts `AgentCreateRequestSchema` (messages.ts:1896-1903), `AgentCreateResponseSchema`
+// (messages.ts:5368-5378)
+
+/// The modern create path, used when the daemon advertises `features.creationLifecycle`
+/// (`docs/hub.md`, "Creation"): the caller owns the `idempotencyKey`, so a create whose answer was
+/// lost is replayed as the same operation instead of making a second agent. Upstream:
+/// packages/client/src/creation/index.ts:149-153 (modern vs legacy), :160-171 (`submit`), :183-199
+/// (the legacy request keeps its prompt and drops the key).
+///
+/// Creation milestones (`creation.subscribe`, `agent.create.update`) are not observed: the answer
+/// carries the agent, and a create that never answers is retried with the same key.
+public struct CreateAgentModernRequest: PaseoRequest {
+    public static let type = "agent.create.request"
+    public static let responseType = "agent.create.response"
+    public var requestId = ""
+    /// Identifies one creation operation (1-512 chars). Required here: reusing it on a retry is the
+    /// whole point of this path. Upstream: messages.ts:1865.
+    public var idempotencyKey: String
+    public var config: AgentSessionConfig
+    public var initialPrompt: String?
+    public var workspaceId: String?
+    public var labels: [String: String]?
+    public var attachments: [AgentAttachment]?
+    /// Id of the first message, reused across retries of the same attempt. Upstream: messages.ts:1874.
+    public var clientMessageId: String?
+    /// Ask the daemon to stream this socket an `agent.create.update` per milestone. Upstream sends
+    /// `true` on every create (`creation/index.ts:163-166`); the events are ignored here.
+    public var subscribe: Bool?
+
+    public init(
+        idempotencyKey: String, config: AgentSessionConfig, initialPrompt: String? = nil,
+        workspaceId: String? = nil, labels: [String: String]? = nil,
+        attachments: [AgentAttachment]? = nil, clientMessageId: String? = nil,
+        subscribe: Bool? = true
+    ) {
+        self.idempotencyKey = idempotencyKey
+        self.config = config
+        self.initialPrompt = initialPrompt
+        self.workspaceId = workspaceId
+        self.labels = labels
+        self.attachments = attachments
+        self.clientMessageId = clientMessageId
+        self.subscribe = subscribe
+    }
+
+    /// `agent` on success, `error` on failure; one of them is always set.
+    public struct Response: Decodable, Sendable {
+        public var requestId: String
+        public var agent: AgentSnapshot?
+        public var error: String?
     }
 }
 
