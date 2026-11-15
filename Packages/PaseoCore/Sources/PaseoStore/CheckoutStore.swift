@@ -62,12 +62,16 @@ public final class CheckoutStore: Identifiable {
     /// subscribe afterwards; the store is dropped and recreated on the next open.
     private var isClosed = false
 
-    internal init(workspace: WorkspaceDescriptor, client: any DaemonClient) {
+    internal init(
+        workspace: WorkspaceDescriptor, client: any DaemonClient,
+        binaryFileReads: BinaryFileReads? = nil
+    ) {
         self.workspace = workspace
         self.workspaceId = workspace.id
         self.cwd = workspace.cwd
         self.client = client
-        self.files = WorkspaceFiles(cwd: workspace.cwd, client: client)
+        self.files = WorkspaceFiles(
+            cwd: workspace.cwd, client: client, binaryFileReads: binaryFileReads)
     }
 
     // MARK: Read state

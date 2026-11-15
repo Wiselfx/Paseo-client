@@ -50,6 +50,9 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
     /// Test hook invoked right before a binary frame is recorded. Lets a test block the
     /// upload mid-stream (e.g. to cancel it deterministically).
     var onBinarySend: (@Sendable (Data) async throws -> Void)?
+    /// Whether this fake's socket can carry inbound binary frames. The fallback test turns it
+    /// off; every other test keeps the real transports' answer.
+    private var receiveBinaryFrames = true
     private var fetchAgentsHandler: FetchAgentsHandler?
     private var fetchTimelineHandler: FetchTimelineHandler?
     private var sendMessageHandler: SendMessageHandler?
@@ -178,6 +181,12 @@ final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
     }
 
     // MARK: DaemonClient
+
+    var canReceiveBinaryFrames: Bool { locked { receiveBinaryFrames } }
+
+    func setCanReceiveBinaryFrames(_ value: Bool) {
+        locked { receiveBinaryFrames = value }
+    }
 
     func initiate<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> InitiatedResponse<R> {
         let requestId = request.requestId.isEmpty ? UUID().uuidString : request.requestId

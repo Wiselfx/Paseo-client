@@ -68,6 +68,12 @@ public final class HostSession {
     /// Forge issue/PR search for the composer's attach picker (M12).
     public let forgeSearch: ForgeSearchStore
 
+    /// Assembles the daemon's streamed file reads (`FileBegin`/`FileChunk…`/`FileEnd`), keyed by
+    /// request id. One per connection: every checkout's file store registers its reads here, and
+    /// the event loop hands the binary frames over. Upstream:
+    /// `packages/client/src/daemon-client.ts:7581`.
+    internal let binaryFileReads: BinaryFileReads
+
     private let client: any DaemonClient
     /// Whether the daemon is reached through the relay (G2 §12): relay traffic is slow and
     /// metered, so large media waits for a tap. The same endpoint flag the upload chunking
@@ -97,6 +103,7 @@ public final class HostSession {
     /// so it can show login errors before this exists).
     public init(client: any DaemonClient) {
         self.client = client
+        self.binaryFileReads = BinaryFileReads()
         self.terminals = TerminalsStore(client: client)
         self.hostUsage = HostUsageStore(client: client)
         self.agentControl = AgentControlStore(client: client)
@@ -170,7 +177,8 @@ public final class HostSession {
             existing.update(workspace: workspace)
             return existing
         }
-        let store = CheckoutStore(workspace: workspace, client: client)
+        let store = CheckoutStore(
+            workspace: workspace, client: client, binaryFileReads: binaryFileReads)
         store.update(serverInfo: serverInfo)
         checkouts[workspace.id] = store
         Task { await store.load() }
@@ -386,6 +394,11 @@ public final class HostSession {
             await handleUnhandled(messageType: messageType, raw: raw)
 
         case .binaryFrame(let data):
+            // File reads: keyed by request id, assembled off the main actor. Only file-transfer
+            // frames (0x10…0x12) take the hop; terminal output keeps its synchronous route.
+            if let opcode = data.first, (0x10...0x12).contains(opcode) {
+                await binaryFileReads.handle(binaryFrame: data)
+            }
             terminals.handle(binaryFrame: data)
             gitExtras.handle(binaryFrame: data)
         }

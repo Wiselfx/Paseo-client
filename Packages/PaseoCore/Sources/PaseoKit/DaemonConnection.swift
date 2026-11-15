@@ -43,6 +43,11 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         var transportID = 0
         var hello: HelloWaiter?
         var pending: [String: RequestWaiter] = [:]
+        /// `file_explorer_request`s that asked for the binary road. The daemon answers those with
+        /// streamed frames and no JSON response, so the receive loop closes the waiter itself
+        /// when the `FileEnd` arrives. Upstream keeps the same record (`pendingBinaryFileReads`,
+        /// `daemon-client.ts:1474`).
+        var fileReadRequests: [String: FileReadRequest] = [:]
         var keepaliveTasks: [Task<Void, Never>] = []
         var reconnectTask: Task<Void, Never>?
         var attempt = 0
@@ -222,10 +227,19 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         let transport = mutex.withLock { core -> (any WebSocketTransport)? in
             guard case .connected = core.state, let transport = core.transport else { return nil }
             core.pending[requestId] = waiter
+            // A binary file read is answered by frames, never by a JSON response: remember its
+            // shape so the `FileEnd` can close the waiter with the answer the daemon omits.
+            if let fileRequest = request as? FileExplorerRequest, fileRequest.acceptBinary == true {
+                core.fileReadRequests[requestId] = FileReadRequest(
+                    cwd: fileRequest.cwd, path: fileRequest.path ?? "", mode: fileRequest.mode)
+            }
             return transport
         }
         guard let transport else {
-            _ = mutex.withLock { core in core.pending.removeValue(forKey: requestId) }
+            _ = mutex.withLock { core in
+                core.pending.removeValue(forKey: requestId)
+                core.fileReadRequests.removeValue(forKey: requestId)
+            }
             throw ConnectionError.disconnected
         }
 
@@ -445,6 +459,7 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         let waiters = mutex.withLock { core -> [RequestWaiter] in
             let waiters = Array(core.pending.values)
             core.pending.removeAll()
+            core.fileReadRequests.removeAll()
             return waiters
         }
         for waiter in waiters {
@@ -455,7 +470,8 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
     @discardableResult
     private func resolvePending(_ requestId: String, with result: Result<Data, ConnectionError>) -> Bool {
         let waiter = mutex.withLock { core -> RequestWaiter? in
-            core.pending.removeValue(forKey: requestId)
+            core.fileReadRequests.removeValue(forKey: requestId)
+            return core.pending.removeValue(forKey: requestId)
         }
         guard let waiter else { return false }
         waiter.resume(with: result)
@@ -525,6 +541,7 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         let data: Data
         switch frame {
         case .binary(let binary):
+            completeFileRead(binary)
             emitEvent(.binaryFrame(binary))
             return
         case .text(let text):
@@ -545,6 +562,38 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         default:
             return
         }
+    }
+
+    /// Closes a `file_explorer_request` that the daemon answered with streamed bytes.
+    ///
+    /// `workspace-files-session.ts:298-331`: with `acceptBinary` on a session with a binary
+    /// channel the daemon emits `FileBegin`/`FileChunk…`/`FileEnd` and then, unlike every other
+    /// file read, **no** JSON response. Upstream's client keeps the request's shape in
+    /// `pendingBinaryFileReads` and hands its own session a synthetic `file_explorer_response` at
+    /// `FileEnd` (`daemon-client.ts:7581-7675`); this is that same close. The reply carries no
+    /// file: the store assembled the bytes and decides what they mean (too large, short, whole).
+    private func completeFileRead(_ frame: Data) {
+        guard frame.first == FileTransferOpcode.fileEnd.rawValue,
+            case .end(let requestId)? = FileTransferFrameCodec.decode(frame)
+        else { return }
+        let request = mutex.withLock { core -> FileReadRequest? in
+            core.fileReadRequests.removeValue(forKey: requestId)
+        }
+        guard let request else { return }
+        guard let data = Self.fileReadReplyData(requestId: requestId, request: request) else {
+            resolvePending(requestId, with: .failure(.protocolViolation("file read reply")))
+            return
+        }
+        resolvePending(requestId, with: .success(data))
+    }
+
+    private static func fileReadReplyData(requestId: String, request: FileReadRequest) -> Data? {
+        let reply = FileReadReply(
+            message: FileReadReply.Message(
+                payload: .init(
+                    requestId: requestId, cwd: request.cwd, path: request.path,
+                    mode: request.mode)))
+        return try? JSONEncoder().encode(reply)
     }
 
     private func routeSession(
@@ -956,6 +1005,36 @@ private final class HelloWaiter: @unchecked Sendable {
         timeoutTask?.cancel()
         continuation?.resume(with: result)
     }
+}
+
+/// The shape of one `file_explorer_request` that asked for the binary road, kept so the client
+/// can answer it itself when the daemon's `FileEnd` arrives. Upstream:
+/// `PendingBinaryFileRead` (`daemon-client.ts:1032`).
+private struct FileReadRequest: Sendable, Equatable {
+    var cwd: String
+    var path: String
+    var mode: FileExplorerMode
+}
+
+/// The synthetic `file_explorer_response` the client sends itself for a streamed read
+/// (`daemon-client.ts:7660-7675`): no file, no error, because the bytes arrived as frames.
+private struct FileReadReply: Encodable {
+    struct Message: Encodable {
+        struct Payload: Encodable {
+            var requestId: String
+            var cwd: String
+            var path: String
+            var mode: FileExplorerMode
+            /// Always nil, encoded so the reply matches what the daemon would have sent.
+            var error: String?
+        }
+
+        var type = FileExplorerRequest.responseType
+        var payload: Payload
+    }
+
+    var type = "session"
+    var message: Message
 }
 
 /// One pending request. A late response finds no entry and is dropped.
