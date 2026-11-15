@@ -1660,9 +1660,13 @@ struct MermaidCard: View {
                 .font(.paseo(.caption, weight: .medium))
                 .foregroundStyle(Palette.failureInk)
             source
+            // V2.4 — the renderer's own message, already reduced to one line: never a bare
+            // "A JavaScript exception occurred".
             Text(message)
                 .font(.paseo(.codeCaption))
                 .foregroundStyle(Palette.secondaryInk)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Diagram could not be rendered. \(message)")

@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import OSLog
+import PaseoStore
 import SwiftUI
 import UIKit
 import WebKit
@@ -131,11 +132,20 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
                 "return await window.paseoRender(src, theme)",
                 arguments: ["src": source, "theme": theme], in: nil, contentWorld: .page)
         } catch {
-            return .error(message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            // WebKit reports every JavaScript throw as the same sentence ("A JavaScript
+            // exception occurred"). The host document catches mermaid's own rejection and
+            // returns its message, so a throw here is a harness failure — missing runtime,
+            // torn-down view — and the card says no more than that (J1 §2).
+            return .unavailable
         }
         guard generation == mermaidGeneration else { return .unavailable }
-        guard let dict = result as? [String: Any],
-            let svg = dict["svg"] as? String,
+        guard let dict = result as? [String: Any] else { return .unavailable }
+        if let raw = dict["error"] as? String {
+            // Mermaid's parse message, reduced to the one line the card can show.
+            guard let message = RichMermaidMessage.oneLine(raw) else { return .unavailable }
+            return .error(message: message)
+        }
+        guard let svg = dict["svg"] as? String,
             let width = (dict["width"] as? NSNumber)?.doubleValue,
             let height = (dict["height"] as? NSNumber)?.doubleValue,
             width > 0, height > 0
@@ -204,7 +214,8 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         <style>html,body{margin:0;padding:0;background:transparent}</style>
         <script>\(script)</script>
-        <script>window.paseoRender=function(src,theme){mermaid.initialize({startOnLoad:false,securityLevel:'strict',suppressErrorRendering:true,theme:theme,flowchart:{htmlLabels:false}});return mermaid.render('paseo-diagram',src).then(function(r){document.getElementById('stage').innerHTML=r.svg;var svg=document.querySelector('#stage svg');var w=0,h=0;try{var vb=svg.viewBox.baseVal;if(vb&&vb.width>0&&vb.height>0){w=vb.width;h=vb.height;}}catch(e){}if(!(w>0&&h>0)){var b=svg.getBoundingClientRect();w=b.width;h=b.height;}return{svg:r.svg,width:w,height:h};});};</script>
+        <script>function paseoErrorText(e){try{if(typeof e==='string')return e;var m=e&&(e.message||e.str);return(m===undefined||m===null)?'':String(m);}catch(x){return '';}}
+        window.paseoRender=function(src,theme){function fail(e){return Promise.resolve({error:paseoErrorText(e)});}try{mermaid.initialize({startOnLoad:false,securityLevel:'strict',suppressErrorRendering:true,theme:theme,flowchart:{htmlLabels:false}});return mermaid.render('paseo-diagram',src).then(function(r){document.getElementById('stage').innerHTML=r.svg;var svg=document.querySelector('#stage svg');var w=0,h=0;try{var vb=svg.viewBox.baseVal;if(vb&&vb.width>0&&vb.height>0){w=vb.width;h=vb.height;}}catch(e){}if(!(w>0&&h>0)){var b=svg.getBoundingClientRect();w=b.width;h=b.height;}return{svg:r.svg,width:w,height:h};},fail);}catch(e){return fail(e);}};</script>
         </head><body><div id="stage"></div></body></html>
         """
     }
