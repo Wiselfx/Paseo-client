@@ -449,7 +449,8 @@ struct TranscriptView: View {
     /// content bottom, so repeating it while the transcript is still opening converges: it stops at
     /// the first rest within `followSlack` of the end, and the moment a finger or flick owns the scroll.
     private func repinOpen(_ metrics: ScrollFollowMetrics) {
-        guard openPin else { return }
+        PaseoPerf.count("openpin.enter")
+        guard openPin else { PaseoPerf.count("openpin.disabled"); return }
         if scrollHeld || !controller.isFollowing || controller.anchoringToAnswer || openPinCount >= 16 {
             if PaseoPerf.enabled {
                 PaseoPerf.countNamed("openpin.off.held\(scrollHeld).follow\(controller.isFollowing).anchor\(controller.anchoringToAnswer).n\(openPinCount)")
@@ -459,6 +460,7 @@ struct TranscriptView: View {
         }
         guard metrics.contentHeight > metrics.visibleHeight else { return }
         if metrics.distanceFromBottom <= Self.followSlack {
+            PaseoPerf.count("openpin.atEnd")
             return
         }
         let key = metrics.contentHeight * 1000 + metrics.offsetY
