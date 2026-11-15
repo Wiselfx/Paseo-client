@@ -26,6 +26,8 @@ import UniformTypeIdentifiers
     var forkInFlight: ((ClaudeForkTarget) async -> Void)?
     /// Reads a workspace image for prose. Decoded off main and cached by (workspace, path).
     var loadImage: (String) async -> UIImage? = { _ in nil }
+    /// An agent's live title by id, for "Sent by" (upstream `user-message/index.tsx:95`).
+    var agentTitle: (String) -> String? = { _ in nil }
 
     /// What this agent and host can actually do with a turn, as one value the rows compare
     /// (R-2). Recomputed by `ChatController` when the agent snapshot, the host features or the
@@ -270,6 +272,9 @@ struct TranscriptJump: Equatable {
     /// The closures `TurnRow` and its children call. They read the store at fire time, never in a
     /// body, so wiring them here does not subscribe anything.
     private func configureActions() {
+        actions.agentTitle = { [weak self] id in
+            self?.session.agents.first(where: { $0.id == id })?.title
+        }
         actions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
         }

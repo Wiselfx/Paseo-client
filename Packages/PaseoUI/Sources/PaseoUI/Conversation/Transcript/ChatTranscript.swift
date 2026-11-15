@@ -301,8 +301,7 @@ struct TranscriptView: View {
                 flashSeq: flashSeq.flatMap { turn.containsRow(seqEnd: $0) ? $0 : nil },
                 isLanding: turn.id == landingTurnId,
                 actions: controller.actions,
-                isCanceled: turn.turnId.map { store.canceledTurnIds.contains($0) } ?? false,
-                agentTitle: { id in controller.session.agents.first(where: { $0.id == id })?.title }
+                isCanceled: turn.turnId.map { store.canceledTurnIds.contains($0) } ?? false
             )
             .equatable()
             .id(turn.id)
