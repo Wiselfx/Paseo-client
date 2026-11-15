@@ -74,14 +74,6 @@ struct ComposerContextMeterFace: View, Equatable {
                     lineWidth: ComposerMetrics.meterRingLineWidth,
                     tint: tint,
                     drawsArc: reading.percent != nil)
-                if let percent = reading.percent {
-                    Text(PaseoFormat.integer(percent))
-                        .font(.paseo(.caption2, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(tint)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
             }
             .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
             .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
