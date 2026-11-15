@@ -154,6 +154,8 @@
                 .onGeometryChange(for: CGFloat.self) {
                     $0.size.width
                 } action: {
+                    PaseoPerf.count("md.geo.fire")
+                    if tableViewport != $0 { PaseoPerf.count("md.geo.changed") }
                     tableViewport = $0
                 }
                 .sheet(item: $expandedCode) { item in
