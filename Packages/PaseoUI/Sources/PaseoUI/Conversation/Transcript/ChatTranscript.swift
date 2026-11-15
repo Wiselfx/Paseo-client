@@ -349,10 +349,6 @@ struct TranscriptView: View {
             current = max(all.count - Self.windowSize, 0)
         }
         var target = current
-        if PaseoPerf.enabled {
-            let found = seq.flatMap { q in all.firstIndex(where: { $0.containsRow(seqEnd: q) }) }
-            PaseoPerf.countNamed("grow.cur\(current).all\(all.count).found\(found.map(String.init) ?? "nil").seq\(seq.map(String.init) ?? "-")")
-        }
         if let count { target = max(current - count, 0) }
         if let id, let index = all.firstIndex(where: { $0.id == id }) { target = min(target, index) }
         if let seq, let index = all.firstIndex(where: { $0.containsRow(seqEnd: seq) }) {
@@ -841,18 +837,24 @@ struct TranscriptView: View {
     }
 
     /// A step in find: the row's own view id, centred.
-    private func scrollToRow(_ seq: Int, animated: Bool, proxy: ScrollViewProxy) {
-        PaseoPerf.mark("find.scrollToRow")
+    private func scrollToRow(_ seq: Int, animated: Bool, proxy: ScrollViewProxy, retries: Int = 3) {
+        // A match in history that is still arriving: no turn holds it yet. With every turn in the
+        // stack the anchor was found the moment it landed; with a window the turn has to be mounted
+        // first, so wait for the pages to land (a geometry pass each) and ask again.
+        if retries > 0, !store.turns.contains(where: { $0.containsRow(seqEnd: seq) }) {
+            afterWindowGrowth = {
+                scrollToRow(seq, animated: animated, proxy: proxy, retries: retries - 1)
+            }
+            return
+        }
         if growWindow(seq: seq) {
-            PaseoPerf.mark("find.grewWindow")
             // The match is in a turn that was held back: mount it, then scroll on the next pass.
             // The turn's own id is known to the lazy stack as soon as the turn is in the window; the
             // row anchor inside it only once the row is built. Land on the turn, then refine.
             let turnId = store.turns.first(where: { $0.containsRow(seqEnd: seq) })?.id
             afterWindowGrowth = {
                 if let turnId { proxy.scrollTo(turnId, anchor: .center) }
-                PaseoPerf.mark("find.windowLanded")
-                afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
+                afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy, retries: 0) }
             }
             return
         }
