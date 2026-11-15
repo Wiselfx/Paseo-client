@@ -122,6 +122,31 @@ public struct FormPreferences: Codable, Hashable, Sendable {
     }
 }
 
+/// The screen the app was on, so a cold launch reopens it: the workspace, and either the agent or
+/// the unsent new-session draft with its draft id.
+/// `Upstream: packages/app/src/stores/last-workspace-selection.ts:3-9` (the last navigated
+/// workspace) and `docs/expo-router.md:37-45` (restored after the remembered selection has
+/// hydrated, based on what was opened, never on connection state).
+public struct LastScreen: Codable, Hashable, Sendable {
+    /// The daemon the screen belonged to; nil when the record was written before the handshake.
+    public var hostId: String?
+    public var workspaceId: String?
+    /// The open conversation, or nil for a draft.
+    public var agentId: String?
+    /// The open new-session draft's id, or nil for a conversation.
+    public var draftId: String?
+
+    public init(
+        hostId: String? = nil, workspaceId: String? = nil, agentId: String? = nil,
+        draftId: String? = nil
+    ) {
+        self.hostId = hostId
+        self.workspaceId = workspaceId
+        self.agentId = agentId
+        self.draftId = draftId
+    }
+}
+
 /// Unsent composer text, kept as you type.
 ///
 /// One record per key, written to Application Support/Paseo/drafts.json (the app's file-draft
@@ -152,6 +177,8 @@ public final class DraftStore {
     /// The last choices made in a new-session draft.
     /// `Upstream: packages/app/src/create-agent-preferences/preferences.ts:16-24`.
     public private(set) var formPreferences = FormPreferences()
+    /// The screen to reopen at launch.
+    public private(set) var lastScreen: LastScreen?
 
     private let fileURL: URL?
     private var pendingWrite: Task<Void, Never>?
@@ -167,6 +194,7 @@ public final class DraftStore {
             if let storedPreferences = stored.formPreferences {
                 formPreferences = storedPreferences
             }
+            lastScreen = stored.lastScreen
         }
         pruneFinalized()
     }
@@ -195,42 +223,21 @@ public final class DraftStore {
         return records[key]
     }
 
-    /// Every key whose draft is still active: what a restore or an attachment cleanup may touch.
-    /// `Upstream: packages/app/src/stores/draft-store/index.ts:458-460`.
-    public var activeKeys: [String] {
-        records.compactMap { key, record in record.lifecycle == .active ? key : nil }
-    }
-
     // MARK: Writing
 
     /// The input's own edit, on every keystroke. An edit that empties the draft abandons it
-    /// without losing the record until its TTL runs out.
+    /// without losing the record until its TTL runs out; the attachments of an active draft stay
+    /// with its text.
     /// `Upstream: packages/app/src/stores/draft-store/state.ts:40-54`.
     public func editText(_ text: String, for key: String) {
         migrateLegacyDraft(for: key)
         let previous = records[key]
         if previous?.lifecycle == .active, previous?.input.text == text { return }
         let attachments = previous?.lifecycle == .active ? previous?.input.attachments ?? [] : []
+        let input = DraftInput(text: text, attachments: attachments)
         records[key] = DraftRecord(
-            input: DraftInput(text: text, attachments: attachments),
-            lifecycle: text.isEmpty && attachments.isEmpty ? .abandoned : .active,
-            updatedAt: Self.nowMs(),
-            version: (previous?.version ?? 0) + 1)
-        schedulePersist()
-    }
-
-    /// The full input, for a caller that writes text and attachments together (upstream
-    /// `saveDraftInput`, `index.ts:311-326`). An empty input abandons the draft.
-    public func save(_ input: DraftInput, for key: String) {
-        guard input.hasContent else {
-            clear(key, lifecycle: .abandoned)
-            return
-        }
-        migrateLegacyDraft(for: key)
-        let previous = records[key]
-        records[key] = DraftRecord(
-            input: input, lifecycle: .active, updatedAt: Self.nowMs(),
-            version: (previous?.version ?? 0) + 1)
+            input: input, lifecycle: input.hasContent ? .active : .abandoned,
+            updatedAt: Self.nowMs(), version: (previous?.version ?? 0) + 1)
         schedulePersist()
     }
 
@@ -275,6 +282,16 @@ public final class DraftStore {
         }
         formPreferences.provider = provider
         formPreferences.providerPreferences[provider] = picks
+        schedulePersist()
+    }
+
+    // MARK: Last screen
+
+    /// Remembers the screen to reopen. The same screen again does not touch the disk.
+    /// `Upstream: packages/app/src/stores/last-workspace-selection.ts:50-63`.
+    public func remember(_ screen: LastScreen) {
+        guard lastScreen != screen else { return }
+        lastScreen = screen
         schedulePersist()
     }
 
@@ -324,8 +341,10 @@ public final class DraftStore {
         lastWriteAt = .now
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(
-            StoredFile(drafts: records, formPreferences: formPreferences))
+        guard
+            let data = try? encoder.encode(
+                StoredFile(
+                    drafts: records, formPreferences: formPreferences, lastScreen: lastScreen))
         else { return }
         do {
             try FileManager.default.createDirectory(
@@ -367,10 +386,12 @@ public final class DraftStore {
         var version = 1
         var drafts: [String: DraftRecord]
         var formPreferences: FormPreferences?
+        var lastScreen: LastScreen?
 
-        init(drafts: [String: DraftRecord], formPreferences: FormPreferences) {
+        init(drafts: [String: DraftRecord], formPreferences: FormPreferences, lastScreen: LastScreen?) {
             self.drafts = drafts
             self.formPreferences = formPreferences
+            self.lastScreen = lastScreen
         }
     }
 }

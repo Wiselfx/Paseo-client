@@ -132,6 +132,25 @@ struct DraftPersistenceTests {
         #expect(UserDefaults.standard.string(forKey: legacyKey) == nil)
     }
 
+    // MARK: Last screen (R1.C)
+
+    @Test func theLastScreenSurvivesAReload() {
+        let url = scratchURL()
+        let store = DraftStore(fileURL: url)
+        let agentScreen = LastScreen(hostId: "h1", workspaceId: "ws-1", agentId: "a1")
+        store.remember(agentScreen)
+        store.flush()
+
+        #expect(DraftStore(fileURL: url).lastScreen == agentScreen)
+
+        let draftScreen = LastScreen(hostId: "h1", workspaceId: "ws-2", draftId: "d1")
+        store.remember(draftScreen)
+        store.flush()
+
+        #expect(DraftStore(fileURL: url).lastScreen == draftScreen)
+        #expect(DraftStore(fileURL: url).input(for: DraftKey.draft("d1")) == nil)
+    }
+
     // MARK: New-session drafts (R1.B)
 
     /// Two providers: `claude` ready with one model, `codex` ready with two models, one carrying
