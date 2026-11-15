@@ -179,7 +179,7 @@ struct UserActivityWiring: ViewModifier {
             .onChange(of: focused) { _, isFocused in
                 if isFocused {
                     controller.feedMascot(.userActivity(at: Date()))
-                    controller.requestEndScroll()
+                    // EXPERIMENT: controller.requestEndScroll()
                 }
             }
             .onChange(of: scenePhase) { _, phase in

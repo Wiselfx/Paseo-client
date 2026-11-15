@@ -157,7 +157,7 @@ struct TranscriptView: View {
                     .coordinateSpace(name: TranscriptScrollTrack.contentSpace)
                 }
                 .scrollPosition($scrollPosition)
-                .scrollDismissesKeyboard(.interactively)
+                .scrollDismissesKeyboard(.never)
                 // Opening the conversation lands at the bottom; growth at the tail keeps it
                 // pinned while following, and the reader's line stays put when not.
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
