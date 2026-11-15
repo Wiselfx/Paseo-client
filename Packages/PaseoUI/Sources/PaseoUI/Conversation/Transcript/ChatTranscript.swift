@@ -225,7 +225,7 @@ struct TranscriptView: View {
                 }
                 .overlay(alignment: .trailing) { outlineRail }
                 .onChange(of: controller.find.isOpen) { _, isOpen in
-                    if isOpen { windowDisabled = true }
+                    if isOpen { windowDisabled = true; openPin = false }
                     if isOpen { restoreFindAnchor() } else { restoreScroll(proxy: proxy) }
                 }
                 .onChange(of: controller.find.jump) { _, jump in
@@ -543,6 +543,9 @@ struct TranscriptView: View {
                 openNudgedHeight = metrics.contentHeight
                 PaseoPerf.count("openpin.nudge")
                 scrollPosition.scrollTo(y: max(metrics.offsetY - 2, 0))
+            } else {
+                // Nudged at this height and still at the end on a later pass: the open is done.
+                openPin = false
             }
             return
         }
@@ -852,6 +855,7 @@ struct TranscriptView: View {
         // A match can be in a turn the window holds back. Find and jumps are the rare, deliberate
         // moves: mount every turn first (the stack then behaves exactly as it did before the window),
         // and run the scroll on the next geometry pass, once the rows exist.
+        openPin = false
         if !windowDisabled {
             windowDisabled = true
             afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
@@ -892,6 +896,7 @@ struct TranscriptView: View {
     /// animation. Short jumps just glide.
     private func jumpToTurn(_ id: String, proxy: ScrollViewProxy) {
         // See `scrollToRow`: an older turn may be held back by the window.
+        openPin = false
         if !windowDisabled {
             windowDisabled = true
             afterWindowGrowth = { jumpToTurn(id, proxy: proxy) }
