@@ -97,14 +97,7 @@
         /// SwiftUI could not skip them): the settled pieces now draw once. The closures are not
         /// part of equality on purpose; they are stable objects' methods (`ChatActions`).
         nonisolated public static func == (lhs: ClaudeMarkdownView, rhs: ClaudeMarkdownView) -> Bool {
-            if PaseoPerf.enabled {
-                if lhs.isStreaming != rhs.isStreaming { PaseoPerf.count("md.neq.stream") }
-                if lhs.theme != rhs.theme { PaseoPerf.count("md.neq.theme") }
-                if lhs.document.source != rhs.document.source { PaseoPerf.count("md.neq.source") }
-                if lhs.document.blocks != rhs.document.blocks { PaseoPerf.count("md.neq.blocks") }
-                PaseoPerf.count("md.eq.called")
-            }
-            return lhs.isStreaming == rhs.isStreaming && lhs.theme == rhs.theme
+            lhs.isStreaming == rhs.isStreaming && lhs.theme == rhs.theme
                 && lhs.document.source == rhs.document.source
                 && lhs.document.blocks == rhs.document.blocks
         }
@@ -151,14 +144,9 @@
         public var body: some View {
             let _ = PaseoPerf.body("Markdown")
             blocks(document.blocks).foregroundStyle(theme.foreground)
-                .onAppear { PaseoPerf.count("md.appear") }
-                .onDisappear { PaseoPerf.count("md.disappear") }
                 .onGeometryChange(for: CGFloat.self) {
                     $0.size.width
                 } action: {
-                    if PaseoPerf.enabled { PaseoPerf.countNamed("md.w.\(Int($0 * 100))") }
-                    PaseoPerf.count("md.geo.fire")
-                    if tableViewport != $0 { PaseoPerf.count("md.geo.changed") }
                     tableViewport = $0
                 }
                 .sheet(item: $expandedCode) { item in

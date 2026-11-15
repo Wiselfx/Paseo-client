@@ -532,7 +532,7 @@ struct ComposerView: View {
             Button("Files", systemImage: "folder") { showFileImporter = true }
             // The field takes ⌘V; the menu offers the same thing for discovery, and attaches
             // every image on the pasteboard (D2 §2).
-            if PaseoPerf.measure("composer.pasteboard", { UIPasteboard.general.hasImages }) {
+            if UIPasteboard.general.hasImages {
                 Button("Paste image", systemImage: "doc.on.clipboard") { pasteImageFromClipboard() }
             }
             Button(

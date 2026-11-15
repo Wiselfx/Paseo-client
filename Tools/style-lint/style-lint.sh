@@ -23,7 +23,8 @@ done
 
 [ -d "$path" ] || { echo "style-lint: no such directory: $path" >&2; exit 0; }
 
-# rule id <TAB> extended grep pattern
+# rule id <TAB> extended grep pattern <TAB> optional extended grep pattern a hit must NOT match
+# (R-4 token rules, then the W1 performance rules R-8: docs/perf/PERFORMANCE-RULES.md)
 rules=(
   $'system-font\t\\.system\\(size:'
   $'color-literal-red\tColor\\(red:'
@@ -45,14 +46,25 @@ rules=(
   $'haptics-uikit\tUINotificationFeedbackGenerator'
   $'haptics-sensoryFeedback\tsensoryFeedback'
   $'palette-secondary\tClaudePalette\\.secondary\\b'
+  # R-8 (performance). Each pattern is a thing the W1 measurements proved harmful.
+  # Rule 3: view identity must not follow a value that moves while text streams.
+  $'perf-id-seqEnd\t\\.id\\(.*seqEnd\t(Color\\.clear|rowAnchor)'
+  # Rule 2: `State(initialValue: Controller(...))` runs the controller on every init of the view.
+  $'perf-eager-state-object\tState\\(initialValue: [A-Z][A-Za-z]*(Controller|Store|Model|Session)\\('
+  $'perf-state-default-object\t@State[^=]*= [A-Z][A-Za-z]*(Controller|Engine)\\('
+  # Rule 6: a synchronous system query asked from a body (the camera probe cost 1 to 2 ms a pass).
+  $'perf-body-ipc\tisSourceTypeAvailable\tstatic let'
+  # Rule 4: a content id built from a changing value tears the subtree down per change.
+  $'perf-id-count\t\\.id\\(.*\\.(count|text|length)\\b'
 )
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
-while IFS=$'\t' read -r rule pattern; do
+while IFS=$'\t' read -r rule pattern exclude; do
   grep -rnE --include='*.swift' -- "$pattern" "$path" 2>/dev/null |
     while IFS= read -r hit; do
+      if [ -n "$exclude" ] && printf '%s' "$hit" | grep -qE -- "$exclude"; then continue; fi
       file="${hit%%:*}"
       case "$file" in
         */DesignSystem/*) [ "$include_design_system" -eq 1 ] || continue ;;
