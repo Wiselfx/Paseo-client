@@ -66,14 +66,12 @@
             #if arch(arm64)
                 PerfSampler.shared.start()
             #endif
-            let screen = UIScreen.main.maximumFramesPerSecond
             #if targetEnvironment(simulator)
                 let target = "sim"
             #else
                 let target = "device"
             #endif
-            PaseoPerf.log.notice(
-                "perf start target=\(target, privacy: .public) maxfps=\(screen, privacy: .public)")
+            PaseoPerf.log.notice("perf start target=\(target, privacy: .public)")
         }
 
         // MARK: Run-loop observers
@@ -133,7 +131,10 @@
         @objc private func tick(_ link: CADisplayLink) {
             let now = link.timestamp
             let budget = max(link.targetTimestamp - link.timestamp, 0.001)
-            if windowStart == 0 { windowStart = now }
+            if windowStart == 0 {
+                windowStart = now
+                PaseoPerf.log.notice("perf budget=\(Self.ms(budget), privacy: .public)ms")
+            }
             if lastTimestamp > 0 {
                 let delta = now - lastTimestamp
                 // A gap over a second is the app leaving the foreground, not a frame.
@@ -205,12 +206,14 @@
             PaseoPerf.log.notice("perf \(line, privacy: .public)")
             #if arch(arm64)
                 // A second line, because the system truncates one dynamic string at 1 KB.
-                let samples = PerfSampler.shared.drain()
-                if !samples.isEmpty {
-                    let summary = PerfSampler.shared.summarize(samples)
-                    let own = summary.own.map { "\($0.0):\($0.1)" }.joined(separator: " | ")
-                    let leaf = summary.leaf.map { "\($0.0):\($0.1)" }.joined(separator: " | ")
-                    let hot = "t=\(Self.seconds(now - launchedAt)) samples=\(samples.count) own=\(own) leaf=\(leaf)"
+                let histogram = PerfSampler.shared.drain()
+                if histogram.samples > 0 {
+                    func top(_ table: [String: Int]) -> String {
+                        table.sorted { $0.value > $1.value }.prefix(4)
+                            .map { "\($0.key):\($0.value)" }.joined(separator: " | ")
+                    }
+                    let hot =
+                        "t=\(Self.seconds(now - launchedAt)) samples=\(histogram.samples) own=\(top(histogram.own)) leaf=\(top(histogram.leaf))"
                     PaseoPerf.log.notice("perf.hot \(hot, privacy: .public)")
                 }
             #endif

@@ -21,13 +21,19 @@
         static let after: Double = 0.004
         private static let maxDepth = 48
 
-        struct Sample: Sendable {
-            let frames: [UInt]
+        /// One window's histograms, built on the sampler thread so the main thread never pays for
+        /// symbolication (a first cut did, and its own stalls were what it measured).
+        struct Histogram: Sendable {
+            var samples = 0
+            var leaf: [String: Int] = [:]
+            var own: [String: Int] = [:]
         }
 
         /// The wake the main thread is inside, or 0 when it sleeps. Written by `PerfMonitor`.
         private let busySince = OSAllocatedUnfairLock<Double>(initialState: 0)
-        private let collected = OSAllocatedUnfairLock<[Sample]>(initialState: [])
+        private let collected = OSAllocatedUnfairLock<Histogram>(initialState: Histogram())
+        /// Only the sampler thread touches it.
+        private var symbolCache: [UInt: Symbol] = [:]
 
         private var mainThread: mach_port_t = 0
         private var stackLow: UInt = 0
@@ -54,10 +60,11 @@
             thread.start()
         }
 
-        func drain() -> [Sample] {
-            collected.withLock { samples in
-                let out = samples
-                samples.removeAll(keepingCapacity: true)
+        /// The window's histograms; resets them.
+        func drain() -> Histogram {
+            collected.withLock { histogram in
+                let out = histogram
+                histogram = Histogram()
                 return out
             }
         }
@@ -73,9 +80,7 @@
                 let depth = capture(into: buffer)
                 guard depth > 0 else { continue }
                 let frames = Array(UnsafeBufferPointer(start: buffer, count: depth))
-                collected.withLock { samples in
-                    if samples.count < 4000 { samples.append(Sample(frames: frames)) }
-                }
+                record(frames)
             }
         }
 
@@ -120,8 +125,6 @@
             let own: Bool
         }
 
-        private var symbolCache: [UInt: Symbol] = [:]
-
         private func symbol(for address: UInt) -> Symbol {
             if let cached = symbolCache[address] { return cached }
             var info = Dl_info()
@@ -154,25 +157,23 @@
             return text.count > 90 ? String(text.prefix(90)) : text
         }
 
-        /// "leaf" and "own" histograms for a window's samples: the hottest innermost frames, and the
-        /// hottest outermost-to-innermost first frame that is the app's own code.
-        func summarize(_ samples: [Sample]) -> (leaf: [(String, Int)], own: [(String, Int)]) {
-            var leaf: [String: Int] = [:]
-            var own: [String: Int] = [:]
-            for sample in samples {
-                if let first = sample.frames.first { leaf[symbol(for: first).name, default: 0] += 1 }
-                for address in sample.frames {
-                    let resolved = symbol(for: address)
-                    if resolved.own {
-                        own[resolved.name, default: 0] += 1
-                        break
-                    }
+        /// Runs on the sampler thread, after the main thread has been resumed.
+        private func record(_ frames: [UInt]) {
+            guard let first = frames.first else { return }
+            let leaf = symbol(for: first).name
+            var own: String?
+            for address in frames {
+                let resolved = symbol(for: address)
+                if resolved.own {
+                    own = resolved.name
+                    break
                 }
             }
-            func top(_ table: [String: Int]) -> [(String, Int)] {
-                Array(table.sorted { $0.value > $1.value }.prefix(4)).map { ($0.key, $0.value) }
+            collected.withLock { histogram in
+                histogram.samples += 1
+                histogram.leaf[leaf, default: 0] += 1
+                if let own { histogram.own[own, default: 0] += 1 }
             }
-            return (top(leaf), top(own))
         }
     }
 
