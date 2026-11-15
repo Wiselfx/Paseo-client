@@ -344,7 +344,7 @@ struct TranscriptView: View {
     private func turnIndex(forSeq seq: Int) -> Int? {
         let all = store.turns
         return all.firstIndex(where: { $0.containsRow(seqEnd: seq) })
-            ?? all.lastIndex(where: { $0.firstRowSeq <= seq })
+            ?? all.lastIndex(where: { ($0.firstRowSeq ?? Int.max) <= seq })
     }
 
     /// Moves the window start back by `count` turns (or to the turn holding `seq` / `id`).
