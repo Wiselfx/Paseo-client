@@ -150,7 +150,8 @@ struct ClaudeTurnView: View {
                     onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
                     attributed: bubbleAttributed(message.text),
                     rewindInFlight: rewindInFlight,
-                    clientMessageId: message.clientMessageId
+                    clientMessageId: message.clientMessageId,
+                    sentAt: PaseoDate.parse(row.timestamp)
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -214,7 +215,8 @@ struct ClaudeTurnView: View {
                     onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
                     attributed: bubbleAttributed(message.text),
                     rewindInFlight: rewindInFlight,
-                    clientMessageId: message.clientMessageId
+                    clientMessageId: message.clientMessageId,
+                    sentAt: PaseoDate.parse(row.timestamp)
                 )
                 .id("row:\(row.seqEnd)")
                 .background(findHighlight(row.seqEnd))
@@ -429,7 +431,8 @@ struct ClaudeMidTurnBubble: View {
                     text: message.text, isPending: row.isPending,
                     rewindChoices: [], onRewind: nil,
                     attributed: attributed?(message.text),
-                    clientMessageId: message.clientMessageId
+                    clientMessageId: message.clientMessageId,
+                    sentAt: PaseoDate.parse(row.timestamp)
                 )
                 .id("row:\(row.seqEnd)")
                 .background {

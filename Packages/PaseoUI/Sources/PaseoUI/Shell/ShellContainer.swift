@@ -456,9 +456,11 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
                 }
                 driving = .sidebar
             } else {
-                guard start.x > width - EdgeDrawer.edgeZone,
-                    !drawer.trailingEdgeReserved
-                else { return false }
+                // A swipe from anywhere opens the panel, as the sidebar does; only the turn rail's
+                // strip stays the rail's (upstream `mobile-panels.md`: one position, three panels).
+                if drawer.trailingEdgeReserved, start.x > width - EdgeDrawer.edgeZone {
+                    return false
+                }
                 driving = .panel
             }
         case .sidebar:

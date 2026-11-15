@@ -363,6 +363,9 @@ struct ClaudeUserBubble: View {
     /// This device's sent images, looked up by the send's `clientMessageId` (§9.5).
     /// Nil (another device, an evicted entry) draws nothing: no placeholder, no fetch.
     var clientMessageId: String? = nil
+    /// When the daemon recorded the message; drawn under the bubble once it is acknowledged
+    /// (upstream `message.tsx:423,527`, `user-message-timestamp`).
+    var sentAt: Date? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Disk entries for a send whose memory seed is gone (relaunch, eviction).
     @State private var diskImages: [UIImage]? = nil
@@ -378,7 +381,7 @@ struct ClaudeUserBubble: View {
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
         onRewind: ((RewindScope) -> Void)? = nil, attributed: AttributedString? = nil,
-        rewindInFlight: Bool = false, clientMessageId: String? = nil
+        rewindInFlight: Bool = false, clientMessageId: String? = nil, sentAt: Date? = nil
     ) {
         self.text = text
         self.isPending = isPending
@@ -387,13 +390,22 @@ struct ClaudeUserBubble: View {
         self.attributed = attributed
         self.rewindInFlight = rewindInFlight
         self.clientMessageId = clientMessageId
+        self.sentAt = sentAt
         self._entered = State(initialValue: !isPending)
     }
 
     var body: some View {
-        HStack {
-            Spacer(minLength: 42)
-            bubble
+        VStack(alignment: .trailing, spacing: Space.xs) {
+            HStack {
+                Spacer(minLength: 42)
+                bubble
+            }
+            if let sentAt, !isPending, !text.isEmpty {
+                Text(PaseoFormat.messageTimestamp(sentAt))
+                    .font(.paseo(.caption))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .padding(.trailing, Space.xs)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
         .offset(y: shownOffset)

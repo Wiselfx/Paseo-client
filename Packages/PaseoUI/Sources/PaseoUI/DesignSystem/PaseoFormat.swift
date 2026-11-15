@@ -5,6 +5,22 @@ import Foundation
 /// English UI: grouping always uses a comma, regardless of device region.
 /// Never call `.formatted()` or `NumberFormatter` for display elsewhere.
 enum PaseoFormat {
+    /// A sent message's time, as upstream shows it under a user message: today "3:00 PM" (the device's
+    /// 12 h / 24 h choice), the previous six calendar days "Wednesday 3:00 PM", older "14 May 2026, 3:00 PM".
+    /// Upstream: `packages/app/src/utils/time.ts:128-158`.
+    static func messageTimestamp(_ date: Date, now: Date = Date()) -> String {
+        let calendar = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+        let days = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)
+        ).day ?? 0
+        if days == 0 { return time }
+        if days > 0, days < 7 {
+            return "\(date.formatted(.dateTime.weekday(.wide))) \(time)"
+        }
+        return "\(date.formatted(.dateTime.day().month(.abbreviated).year())), \(time)"
+    }
+
     private static var displayLocale: Locale { Locale(identifier: "en_US") }
 
     private static func decimalFormatter(maximumFractionDigits: Int) -> NumberFormatter {
