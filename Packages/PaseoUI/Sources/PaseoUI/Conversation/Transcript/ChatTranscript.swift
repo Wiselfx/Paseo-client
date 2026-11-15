@@ -447,7 +447,8 @@ struct TranscriptView: View {
     /// opened in the middle of itself (a normal launch, 17 000 pt of content) or on rows that were
     /// never built (blank, seen under the perf instrument's timing). The edge scroll targets the *real*
     /// content bottom, so repeating it while the transcript is still opening converges: it stops at
-    /// the first rest within `followSlack` of the end, and the moment a finger or flick owns the scroll.
+    /// the moment a finger or flick owns the scroll, a send takes over, or after 16 re-seats. (The first rest
+    /// cannot end it: that rest is at the estimated end, before the rows below it exist.)
     private func repinOpen(_ metrics: ScrollFollowMetrics) {
         PaseoPerf.count("openpin.enter")
         guard openPin else { PaseoPerf.count("openpin.disabled"); return }
@@ -475,7 +476,6 @@ struct TranscriptView: View {
     /// button and anchor decisions run on the distance the gesture left behind, before the trim
     /// below changes the range.
     private func scrollSettled() {
-        if openPin, scrollTrack.distanceFromBottom <= Self.followSlack { openPin = false }
         reportReadingPosition()
         handOverAnchorIfFilled()
         followIfAtEnd()
