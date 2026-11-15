@@ -63,6 +63,9 @@
             link.add(to: .main, forMode: .common)
             self.link = link
             installObservers()
+            #if arch(arm64)
+                PerfSampler.shared.start()
+            #endif
             let screen = UIScreen.main.maximumFramesPerSecond
             #if targetEnvironment(simulator)
                 let target = "sim"
@@ -99,6 +102,9 @@
 
         private func didWake() {
             wakeAt = CACurrentMediaTime()
+            #if arch(arm64)
+                PerfSampler.shared.markBusy(wakeAt)
+            #endif
         }
 
         private func willSleep() {
@@ -107,6 +113,9 @@
             let busy = now - wakeAt
             let began = wakeAt
             wakeAt = 0
+            #if arch(arm64)
+                PerfSampler.shared.markBusy(0)
+            #endif
             busySeconds += busy
             wakes += 1
             guard busy >= Self.stallThreshold else { return }
@@ -194,6 +203,17 @@
             let line = parts.joined(separator: " ")
             windowsPrinted += 1
             PaseoPerf.log.notice("perf \(line, privacy: .public)")
+            #if arch(arm64)
+                // A second line, because the system truncates one dynamic string at 1 KB.
+                let samples = PerfSampler.shared.drain()
+                if !samples.isEmpty {
+                    let summary = PerfSampler.shared.summarize(samples)
+                    let own = summary.own.map { "\($0.0):\($0.1)" }.joined(separator: " | ")
+                    let leaf = summary.leaf.map { "\($0.0):\($0.1)" }.joined(separator: " | ")
+                    let hot = "t=\(Self.seconds(now - launchedAt)) samples=\(samples.count) own=\(own) leaf=\(leaf)"
+                    PaseoPerf.log.notice("perf.hot \(hot, privacy: .public)")
+                }
+            #endif
         }
 
         private func reset(at now: Double) {
