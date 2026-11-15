@@ -30,15 +30,18 @@ enum FocusDiag {
 
 struct FocusDiagOverlay: View {
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-            Text(FocusDiag.tail(22))
-                .font(.system(size: 7, design: .monospaced))
-                .foregroundStyle(Color.red)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(width: 400, alignment: .leading)
-                .background(Color.white.opacity(0.85))
-                .allowsHitTesting(false)
+        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            VStack(alignment: .leading, spacing: 0) {
+                Text("DIAG alive \(Int(context.date.timeIntervalSince1970) % 1000)")
+                Text(FocusDiag.tail(20))
+            }
+            .font(.system(size: 8, design: .monospaced))
+            .foregroundStyle(Color.black)
+            .multilineTextAlignment(.leading)
+            .padding(2)
+            .frame(width: 380, alignment: .leading)
+            .background(Color.yellow.opacity(0.9))
+            .allowsHitTesting(false)
         }
     }
 }

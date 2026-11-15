@@ -98,7 +98,7 @@ struct TranscriptView: View {
             // Tapping a message, a bubble or the transcript's background drops the keyboard, the
             // way Claude does (V5 §2). Simultaneous, so a link, a menu, a long-press preview and
             // text selection all still get their tap.
-            // EXPERIMENT: transcript tap gesture removed
+            .simultaneousGesture(TapGesture().onEnded { controller.dismissKeyboard() })
     }
 
     @ViewBuilder private var content: some View {
@@ -157,7 +157,7 @@ struct TranscriptView: View {
                     .coordinateSpace(name: TranscriptScrollTrack.contentSpace)
                 }
                 .scrollPosition($scrollPosition)
-                .scrollDismissesKeyboard(.never)
+                .scrollDismissesKeyboard(.interactively)
                 // Opening the conversation lands at the bottom; growth at the tail keeps it
                 // pinned while following, and the reader's line stays put when not.
                 .defaultScrollAnchor(.bottom, for: .initialOffset)

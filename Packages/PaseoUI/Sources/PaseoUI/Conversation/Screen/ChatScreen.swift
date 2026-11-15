@@ -173,14 +173,13 @@ struct UserActivityWiring: ViewModifier {
                 controller.showToast(message)
                 store.clearNotice()
             }
-            .overlay(alignment: .top) { FocusDiagOverlay().padding(.top, 140) }
             .onChange(of: store.isRunning) { wasRunning, isRunning in
                 if wasRunning && !isRunning { Haptics.settle() }
             }
             .onChange(of: focused) { _, isFocused in
                 if isFocused {
                     controller.feedMascot(.userActivity(at: Date()))
-                    // EXPERIMENT: controller.requestEndScroll()
+                    controller.requestEndScroll()
                 }
             }
             .onChange(of: scenePhase) { _, phase in
