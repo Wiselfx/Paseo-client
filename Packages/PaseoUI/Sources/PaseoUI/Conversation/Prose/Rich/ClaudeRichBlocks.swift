@@ -50,6 +50,8 @@ struct ClaudeRichBlockView: View {
             MermaidCard(code: source)
         case .visualize(let code, _):
             RichWebCard(code: code)
+        case .htmlArtifact(let code, _):
+            RichWebCard(code: code)
         case .mapCard(let reference, _):
             RichMapCard(reference: reference)
         }

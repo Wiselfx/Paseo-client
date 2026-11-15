@@ -43,6 +43,10 @@ public enum RichContentBlock: Sendable, Equatable {
     /// §2 — a ` ```visualize ` fence with a non-blank body: a self-contained HTML
     /// fragment hosting the sandboxed stage. Unclosed (streaming) fences are detected.
     case visualize(code: String, range: Range<String.Index>)
+    /// V2 — a closed ` ```html ` (or ` ```htm `) fence whose body is an HTML document or
+    /// fragment: the same sandboxed page as a visualize fence. A streaming fence stays a
+    /// code block, so a half-written page never flashes.
+    case htmlArtifact(code: String, range: Range<String.Index>)
     /// C9 — a closed ` ```mermaid ` fence with a non-blank body: a diagram the client
     /// renders natively. A streaming (unclosed) fence stays a code block until it closes.
     case mermaid(source: String, range: Range<String.Index>)
@@ -88,6 +92,7 @@ public extension RichContentBlock {
              .localFileLink(_, let range),
              .rawSVG(_, let range),
              .visualize(_, let range),
+             .htmlArtifact(_, let range),
              .mermaid(_, let range),
              .localMedia(_, _, let range),
              .remoteMedia(_, _, let range),
@@ -137,18 +142,35 @@ public enum RichContentDetector {
         let fences = scanFences(in: source)
         for fence in fences {
             let info = fence.info.trimmingCharacters(in: .whitespaces).lowercased()
-            switch info {
+            // The first word is the language; a `source` or `title` word after it is the
+            // author asking for a plain code block (for example ```html source), never a
+            // rendered page.
+            let words = info.split(whereSeparator: { $0.isWhitespace })
+            let language = words.first.map(String.init) ?? ""
+            let wantsSource = words.dropFirst().contains { $0 == "source" || $0 == "title" }
+            let bodyIsBlank = fence.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            switch language {
             case "visualize":
                 // §2 — fence value must be non-blank or the fence renders nothing.
-                if !fence.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !wantsSource, !bodyIsBlank {
                     blocks.append(.visualize(code: fence.body, range: fence.range))
+                }
+            case "html", "htm":
+                // V2 — what models already write. Closed only: an open fence stays a code
+                // block until it closes, so a half-written page never flashes.
+                if fence.closed, !wantsSource, !bodyIsBlank, looksLikeHTMLMarkup(fence.body) {
+                    blocks.append(.htmlArtifact(code: fence.body, range: fence.range))
+                }
+            case "svg", "xml":
+                // V2 — a fenced drawing, not its source. `xml` counts only when the body is
+                // an `<svg` document (any other XML is data, not a picture).
+                if fence.closed, !wantsSource, isSVGDocument(fence.body) {
+                    blocks.append(.rawSVG(source: fence.body, range: fence.range))
                 }
             case "mermaid":
                 // C9 — closed fences only: a streaming fence stays a code block, so the
                 // half-written diagram never flashes or errors mid-stream.
-                if fence.closed
-                    && !fence.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                {
+                if fence.closed, !bodyIsBlank, !wantsSource {
                     blocks.append(.mermaid(source: fence.body, range: fence.range))
                 }
             case "youtube":
@@ -612,6 +634,62 @@ struct Fence {
     /// True when a closing fence terminated the block. Unclosed (streaming) fences run
     /// to the end of input; only hosts that render partial content claim them.
     var closed: Bool
+}
+
+// MARK: - Fenced artifacts (V2)
+
+/// An HTML document or fragment: some tag opens — `<` followed by an ASCII letter or `!`
+/// (doctype, comment). A fence of plain text is not a page, so it stays a code block.
+private func looksLikeHTMLMarkup(_ body: String) -> Bool {
+    var index = body.startIndex
+    while index < body.endIndex {
+        if body[index] == "<" {
+            let next = body.index(after: index)
+            if next < body.endIndex {
+                let char = body[next]
+                if char.isASCII && (char.isLetter || char == "!") { return true }
+            }
+        }
+        index = body.index(after: index)
+    }
+    return false
+}
+
+/// A fenced `svg`/`xml` body that is really a drawing: its first element is `<svg` (an XML
+/// declaration, doctype or comment may precede it), the document closes, and it fits the
+/// raw-SVG cap. Any other XML is data, so it stays a code block.
+private func isSVGDocument(_ body: String) -> Bool {
+    guard body.utf8.count <= RichContentDetector.rawSVGMaxLength else { return false }
+    var rest = body.trimmingCharacters(in: .whitespacesAndNewlines)[...]
+    if rest.first == "\u{FEFF}" { rest = rest.dropFirst() }
+    while true {
+        while let first = rest.first, first.isWhitespace { rest = rest.dropFirst() }
+        if rest.hasPrefix("<?") {
+            guard let end = rest.range(of: "?>") else { return false }
+            rest = rest[end.upperBound...]
+        } else if rest.hasPrefix("<!--") {
+            guard let end = rest.range(of: "-->") else { return false }
+            rest = rest[end.upperBound...]
+        } else if rest.lowercased().hasPrefix("<!doctype") {
+            guard let end = rest.firstIndex(of: ">") else { return false }
+            rest = rest[rest.index(after: end)...]
+        } else {
+            break
+        }
+    }
+    let lower = rest.lowercased()
+    guard lower.hasPrefix("<svg") else { return false }
+    guard let next = rest.dropFirst(4).first,
+        next == ">" || next == "/" || next.isWhitespace
+    else { return false }
+    // A self-closing `<svg/>` draws nothing and an unclosed one is not a document.
+    var search = lower[lower.startIndex...]
+    while let close = search.range(of: "</svg") {
+        let after = search[close.upperBound...]
+        if let first = after.first, first == ">" || first.isWhitespace { return true }
+        search = search[close.upperBound...]
+    }
+    return false
 }
 
 private func openingFence<S: StringProtocol>(_ line: S) -> (marker: Character, length: Int, info: String)? {
