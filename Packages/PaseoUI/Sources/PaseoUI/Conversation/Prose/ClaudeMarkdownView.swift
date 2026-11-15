@@ -48,6 +48,17 @@
             // the code container (`codeTypeScale()`), not baked into the face.
             codeFont = ProseFonts.mono(size: 15)
         }
+        /// What decides how a piece lays out: the size ladder, spacing and the two faces. Colours are
+        /// Palette tokens that resolve per trait when drawn, and the theme builder makes fresh
+        /// colour values on every call (`Palette.adaptive`), so comparing them would make every pair
+        /// unequal and defeat `ClaudeMarkdownView`'s Equatable (W1).
+        nonisolated public static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.bodySize == rhs.bodySize && lhs.blockSpacing == rhs.blockSpacing
+                && lhs.lineSpacing == rhs.lineSpacing && lhs.listSpacing == rhs.listSpacing
+                && lhs.tableColumnWidth == rhs.tableColumnWidth && lhs.bodyFont == rhs.bodyFont
+                && lhs.codeFont == rhs.codeFont && lhs.headingFonts == rhs.headingFonts
+        }
+
         public static var artifact: Self {
             var theme = Self()
             theme.bodyFont = .system(size: 17)
