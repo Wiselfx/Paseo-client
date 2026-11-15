@@ -38,7 +38,6 @@ struct FocusDiagOverlay: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 400, alignment: .leading)
                 .background(Color.white.opacity(0.85))
-                .offset(y: -620)
                 .allowsHitTesting(false)
         }
     }

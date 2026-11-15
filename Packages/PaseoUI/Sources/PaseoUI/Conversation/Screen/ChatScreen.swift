@@ -173,6 +173,7 @@ struct UserActivityWiring: ViewModifier {
                 controller.showToast(message)
                 store.clearNotice()
             }
+            .overlay(alignment: .top) { FocusDiagOverlay().padding(.top, 140) }
             .onChange(of: store.isRunning) { wasRunning, isRunning in
                 if wasRunning && !isRunning { Haptics.settle() }
             }

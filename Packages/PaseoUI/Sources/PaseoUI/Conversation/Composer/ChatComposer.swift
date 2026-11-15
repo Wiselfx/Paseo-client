@@ -356,7 +356,6 @@ struct ComposerView: View {
         }
         // The crab stands on the card's top edge, flush with its trailing edge.
         .overlay(alignment: .topTrailing) { mascotCrab }
-        .overlay(alignment: .topLeading) { FocusDiagOverlay() }
         .sheet(isPresented: $showDraftControls) {
             if let draft = draftSession, let session = draftHost {
                 DraftControlsSheet(session: session, draft: draft)
