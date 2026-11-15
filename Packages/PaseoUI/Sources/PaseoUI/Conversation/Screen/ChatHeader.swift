@@ -7,9 +7,9 @@ import UIKit
 /// safe-area bar. Only this struct reads `controller.headerHidden`, so hiding the header
 /// re-evaluates it (and the bar it draws) and nothing in the transcript (R-1, H2 §3).
 ///
-/// **Layout:** the bar keeps its height in both states; the header only *renders* translated and
-/// faded. The transcript's top inset is therefore constant, and hiding the header cannot shift a
-/// single row.
+/// **Layout:** the bar keeps its height in both states; only the title pill *renders* translated and
+/// faded (N6 B). The side buttons never hide. The transcript's top inset is therefore constant, and
+/// hiding the header cannot shift a single row.
 struct ChatTopChrome: View {
     let store: ConversationStore
     let controller: ChatController
@@ -17,9 +17,6 @@ struct ChatTopChrome: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Never hide chrome from VoiceOver.
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
-    /// The header's laid-out height: the slide distance. Measured, not hard-coded, so Dynamic Type
-    /// and the two-line title still leave the bar completely.
-    @State private var headerHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,16 +41,10 @@ struct ChatTopChrome: View {
 
     private var hidden: Bool { controller.headerHidden && !pinned }
 
+    /// Only the title pill hides (N6 B); the bar's side buttons stay where they are, tappable.
     private var header: some View {
-        ChatHeaderBar(store: store, controller: controller)
-            .offset(y: hidden && !reduceMotion ? -(headerHeight + Space.xs) : 0)
-            .opacity(hidden ? 0 : 1)
+        ChatHeaderBar(store: store, controller: controller, titleHidden: hidden)
             .animation(hideAnimation, value: hidden)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                if abs(height - headerHeight) > 0.5 { headerHeight = height }
-            }
-            .allowsHitTesting(!hidden)
-            .accessibilityHidden(hidden)
     }
 
     /// The bar's backdrop (N1 C): a solid `Palette.background` fill that extends under the status
@@ -82,8 +73,14 @@ struct ChatTopChrome: View {
 struct ChatHeaderBar: View {
     @Bindable var store: ConversationStore
     @Bindable var controller: ChatController
+    /// True while the header is hidden on scroll: only the title pill slides up and fades (N6 B).
+    var titleHidden: Bool = false
     /// The shell's drawer, nil outside the shell. The sidebar button toggles through it (N1 B).
     @Environment(\.shellDrawer) private var shellDrawer
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The title pill's laid-out height: the slide distance. Measured so Dynamic Type sizes leave
+    /// the pill completely.
+    @State private var titleHeight: CGFloat = 0
 
     var body: some View {
         headerBar
@@ -143,7 +140,8 @@ struct ChatHeaderBar: View {
         } else {
             leading = .none
         }
-        return ShellHeader(leading: leading, title: title, trailing: trailing)
+        return ShellHeader(
+            leading: leading, title: title, trailing: trailing, alignsControlsToTop: true)
     }
 
     /// The sidebar button toggles (N1 B): it closes the sidebar when the sidebar is already on
@@ -161,13 +159,26 @@ struct ChatHeaderBar: View {
     }
 
     private var headerBar: some View {
-        makeHeaderBar(title: { titleMenu }) {
+        makeHeaderBar(title: { hideableTitle }) {
             if let onOpenPanel = controller.onOpenPanel {
                 GlassIconButton(systemName: "sidebar.right", label: "Open workspace panel") {
                     onOpenPanel()
                 }
             }
         }
+    }
+
+    /// The title pill with the scroll-hide motion (N6 B): it slides up by its own height and fades,
+    /// and stops taking touches and VoiceOver focus while hidden. The bar's layout does not change.
+    private var hideableTitle: some View {
+        titleMenu
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                if abs(height - titleHeight) > 0.5 { titleHeight = height }
+            }
+            .offset(y: titleHidden && !reduceMotion ? -(titleHeight + Space.xs) : 0)
+            .opacity(titleHidden ? 0 : 1)
+            .allowsHitTesting(!titleHidden)
+            .accessibilityHidden(titleHidden)
     }
 
     /// The title menu, in PLAN §RH order: jump, find, rename, copy id, divider, archive.
@@ -200,7 +211,7 @@ struct ChatHeaderBar: View {
             // workspace stays reachable in this menu (H2 §3). The bar's height is constant: the
             // title block is shorter than `ShellHeader`'s 48 pt either way.
             ViewThatFits(in: .horizontal) {
-                VStack(alignment: .center, spacing: 1) {
+                VStack(alignment: .center, spacing: Space.xs) {
                     headerTitle
                     if let workspaceLine {
                         headerWorkspace(workspaceLine)
@@ -208,6 +219,9 @@ struct ChatHeaderBar: View {
                 }
                 headerTitle
             }
+            // N6 C: the pill takes the height its text needs at every Dynamic Type size, so the two
+            // lines never draw over each other. No fixed height anywhere on this path.
+            .fixedSize(horizontal: false, vertical: true)
             // The title sits in a pill (N1 D): a solid fill and a hairline border, hugging the title
             // up to the room between the two buttons, then truncating. Upstream: none (user directive).
             .padding(.horizontal, Space.md)
