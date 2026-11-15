@@ -377,3 +377,8 @@ Unverified on device:
 D5 haptics merged: selection() 213→84, light() 1→47, success() is now a soft tap and fires only on awaited completions.
 Notes from the D5 planning: Today there are 212 `selection()` calls and 34 `success()` notification buzzes. Plan: none on plain navigation taps, copy gets a light tick rather than success, and success is kept for awaited completions only.
 Waiting on the user: the device crash log for the draft-send crash.
+
+## N5 + N6 merged (4c97dd2)
+- N6: composer mounted once (ZStack), header hides only the title pill, title pill grows at ax5 (verified on simulator).
+- N5: stopped turn shows no "Completed in" (store records turn_canceled), compaction stays visible when folded, "Sent by" uses agent title. Built and installed; stopped-turn, compaction and Sent-by NOT yet checked on screen. canceledTurnIds is in memory only (reload shows Completed again unless daemon timeline carries it).
+- Still open: 8 pt keyboard gap unmeasured, gate openurl regex, R-2 tension (agentTitle closure on TurnRow).
