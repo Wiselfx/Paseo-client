@@ -5,7 +5,7 @@ import SwiftUI
 /// Settings → General: appearance, fonts, your name, feedback, notifications and chat display.
 /// A local page: everything here is `@AppStorage`, so there is nothing to refresh (PLAN §RE).
 struct GeneralPage: View {
-    @AppStorage(ClaudeAccent.storageKey) private var accent = ClaudeAccent.claude.rawValue
+    @AppStorage(ClaudeAccent.storageKey) private var accent = ClaudeAccent.paseo.rawValue
     @AppStorage(ClaudeTextScale.contentStorageKey) private var contentTextSize =
         ClaudeTextScale.Content.medium.rawValue
     @AppStorage(ClaudeTextScale.codeStorageKey) private var codeFontSize =
