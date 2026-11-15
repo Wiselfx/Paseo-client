@@ -71,6 +71,17 @@ struct TranscriptView: View {
     /// A ceiling, so a layout that never converges cannot loop.
     @State private var openPinCount = 0
     @State private var openNudgedHeight: CGFloat = -1
+    /// The oldest turn mounted (W1). Opening a long conversation used to hand the lazy stack every
+    /// turn: it estimated the content, landed on an estimated bottom, built about a hundred markdown
+    /// pieces in one pass (1.4 to 2.3 s) and then re-built them as the estimate corrected. Only the
+    /// newest `windowSize` turns are in the stack; scrolling toward the top reveals `windowStep` more
+    /// (the same anchor that undoes a prepended history page keeps the reader's line), and a jump or a
+    /// find match in an older turn reveals it first. Nil until the first turns arrive.
+    @State private var windowStartId: String?
+    /// Work waiting for a window growth to lay out: run by the next geometry pass.
+    @State private var afterWindowGrowth: (() -> Void)?
+    static let windowSize = 16
+    static let windowStep = 12
     /// The send runway (D1 §2). One `@State`, written on layout, never per scroll frame.
     @State private var runway = SendRunway()
     /// The transcript's height with the keyboard down (E3b). Rich media and the process cap read
@@ -87,6 +98,16 @@ struct TranscriptView: View {
         content
             // A turn arrived. If you just sent it, the runway opens and it glides to the top.
             .onChange(of: store.turns.last?.id) { _, id in beginRunway(for: id) }
+            // Fix the window's head as soon as there is something to window, so a turn appended at
+            // the tail never slides it.
+            .onChange(of: store.turns.isEmpty) { _, empty in
+                if !empty, windowStartId == nil, let first = windowedTurns.first {
+                    windowStartId = first.id
+                }
+            }
+            .onAppear {
+                if windowStartId == nil, let first = windowedTurns.first { windowStartId = first.id }
+            }
             // The anchor's job is done. At the anchor this trims nothing; if the reader scrolled
             // away while the answer ran, the idle rule already removed the room below the screen.
             .onChange(of: controller.anchoringToAnswer) { _, anchoring in
@@ -300,6 +321,44 @@ struct TranscriptView: View {
 
     // MARK: Rows
 
+    /// The turns the stack holds: from the window's first turn to the newest.
+    private var windowedTurns: ArraySlice<Turn> {
+        let all = store.turns
+        if let id = windowStartId, let index = all.firstIndex(where: { $0.id == id }) {
+            return all[index...]
+        }
+        return all.suffix(Self.windowSize)
+    }
+
+    /// Turns older than the window, still in the store.
+    private var hiddenTurnCount: Int {
+        let all = store.turns
+        guard let id = windowStartId, let index = all.firstIndex(where: { $0.id == id }) else {
+            return max(all.count - Self.windowSize, 0)
+        }
+        return index
+    }
+
+    /// Moves the window start back by `count` turns (or to the turn holding `seq` / `id`).
+    private func growWindow(by count: Int? = nil, toInclude id: String? = nil, seq: Int? = nil) -> Bool {
+        let all = store.turns
+        let current: Int
+        if let start = windowStartId, let index = all.firstIndex(where: { $0.id == start }) {
+            current = index
+        } else {
+            current = max(all.count - Self.windowSize, 0)
+        }
+        var target = current
+        if let count { target = max(current - count, 0) }
+        if let id, let index = all.firstIndex(where: { $0.id == id }) { target = min(target, index) }
+        if let seq, let index = all.firstIndex(where: { $0.containsRow(seqEnd: seq) }) {
+            target = min(target, index)
+        }
+        guard target < current, all.indices.contains(target) else { return false }
+        windowStartId = all[target].id
+        return true
+    }
+
     @ViewBuilder private var turns: some View {
         // One read of the tail id, before the loop: a turn never scans the list to know it is last.
         let lastId = store.turns.last?.id
@@ -310,7 +369,7 @@ struct TranscriptView: View {
         // One read of the turn-action value for every row: it changes when the agent or host
         // capabilities change, not per turn, and `TurnRow` compares it (E3 §2).
         let availability = controller.actions.availability
-        ForEach(store.turns) { turn in
+        ForEach(windowedTurns) { turn in
             TurnRow(
                 turn: turn,
                 availability: availability,
@@ -400,6 +459,10 @@ struct TranscriptView: View {
         }
         openRunwayIfPossible(proxy: proxy)
         repinOpen(metrics)
+        if let run = afterWindowGrowth {
+            afterWindowGrowth = nil
+            run()
+        }
         // The second half of a glide-lead: the instant jump has landed, so the last stretch
         // glides (DSH `turn-nav.ts:412-474`).
         if let glide = pendingGlide {
@@ -430,7 +493,7 @@ struct TranscriptView: View {
             reportReadingPosition()
             revealTurnRail()
         }
-        loadOlderIfNeeded(metrics)
+        if !revealOlderTurnsIfNeeded(metrics) { loadOlderIfNeeded(metrics) }
         updateHeaderReveal(metrics, from: previous)
         releaseFollowWhileDragging(metrics)
         // "Back to the end" flips only when the content itself moved. An inset-only frame is what
@@ -692,6 +755,9 @@ struct TranscriptView: View {
         /// The start cursor at request time; unchanged means the page prepended nothing.
         var cursor: TimelineCursor?
         var startedAt: Date
+        /// An in-memory window reveal, not a fetched page: nothing is in flight, so the anchor waits
+        /// for the growth to land (the 2 s ceiling still ends it).
+        var isWindow = false
         /// The growth already compensated; a correction is re-applied only when the content
         /// grows further, so the reader can scroll freely right after a page lands.
         var appliedGrowth: CGFloat = 0
@@ -721,7 +787,21 @@ struct TranscriptView: View {
     /// Older history loads itself: no "Load earlier" row and no button. While the top of the
     /// transcript is within about one screen of the viewport, the next page is fetched; the
     /// prepend is compensated so the reader's place does not move (UX spec §4.3).
+    /// Near the top with older turns held back: reveal the next slice, keeping the reader's line.
+    private func revealOlderTurnsIfNeeded(_ metrics: ScrollFollowMetrics) -> Bool {
+        guard historyAnchor == nil, hiddenTurnCount > 0,
+            metrics.distanceFromTop <= metrics.viewportHeight * 1.5
+        else { return false }
+        historyAnchor = HistoryAnchor(
+            contentHeight: metrics.contentHeight, offsetY: metrics.offsetY,
+            cursor: store.timeline.startCursor, startedAt: Date(), isWindow: true)
+        if growWindow(by: Self.windowStep) { return true }
+        historyAnchor = nil
+        return false
+    }
+
     private func loadOlderIfNeeded(_ metrics: ScrollFollowMetrics) {
+        guard hiddenTurnCount == 0 else { return }
         guard !historyLoadInFlight, store.timeline.hasOlder, !store.isLoadingOlder else { return }
         guard metrics.distanceFromTop <= metrics.viewportHeight else { return }
         historyLoadInFlight = true
@@ -753,12 +833,17 @@ struct TranscriptView: View {
             scrollPosition.scrollTo(y: anchor.offsetY + growth)
             return true
         }
-        if !historyLoadInFlight { historyAnchor = nil }
+        if !historyLoadInFlight, !anchor.isWindow { historyAnchor = nil }
         return false
     }
 
     /// A step in find: the row's own view id, centred.
     private func scrollToRow(_ seq: Int, animated: Bool, proxy: ScrollViewProxy) {
+        if growWindow(seq: seq) {
+            // The match is in a turn that was held back: mount it, then scroll on the next pass.
+            afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
+            return
+        }
         if animated {
             withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                 proxy.scrollTo("row:\(seq)", anchor: .center)
@@ -793,6 +878,15 @@ struct TranscriptView: View {
     /// glide the last `glideLead` points, so the reader is not left waiting on a whole-distance
     /// animation. Short jumps just glide.
     private func jumpToTurn(_ id: String, proxy: ScrollViewProxy) {
+        // An outline jump names a prompt row ("row:<seq>"); a rail jump names a turn.
+        let grew =
+            id.hasPrefix("row:") && Int(id.dropFirst(4)) != nil
+            ? growWindow(seq: Int(id.dropFirst(4)))
+            : growWindow(toInclude: id)
+        if grew {
+            afterWindowGrowth = { jumpToTurn(id, proxy: proxy) }
+            return
+        }
         // Jumping backwards releases the tail-follow, like M7b.
         controller.isFollowing = false
         // A jump back into the conversation is a deliberate move toward reading: the header
