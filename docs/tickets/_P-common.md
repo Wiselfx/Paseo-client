@@ -2,9 +2,10 @@
 
 Read `AGENTS.md` first. These rules sit on top of it.
 
-1. **Use roads that already exist.** Before writing anything, search the repo for the store, RPC, wire type, view or
-   component that already does part of the job and reuse it. Add no new abstraction, setting, file or copy that the
-   upstream behaviour does not need. If you can solve it by wiring something that already exists, do that.
+1. **Use the roads upstream and the daemon already give us.** Our app must not do extra work: use the protocol messages,
+   fields, capabilities and behaviour that upstream and the daemon define, and ask the daemon instead of deriving things
+   client-side. Then reuse our own existing store, RPC, wire type or component that already carries that road. Add no
+   abstraction, setting, file or copy that upstream's behaviour does not need.
 2. **Upstream is the spec (R-7).** Find the upstream behaviour in `/home/paseo/dev/paseo-upstream-ref`
    (`docs/`, `public-docs/`, `packages/protocol|server|client|app`), match fields, ordering, capability gating and
    user-facing words from `packages/app/src/i18n/resources/en.ts` verbatim, and cite `Upstream: path:line` in code
