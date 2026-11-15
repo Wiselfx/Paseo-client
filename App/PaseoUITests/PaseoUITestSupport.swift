@@ -19,16 +19,18 @@ func connectToTestDaemon(_ app: XCUIApplication) throws {
     }
 
     // Already connected: the composer is on screen.
-    // The composer is a text view or a text field depending on how UIKit exposes it; poll for either.
-    for _ in 0..<12 {
+    // After launch the app either reconnects to the saved host (composer) or shows the welcome screen
+    // (Direct connection). Reconnecting can take a while: wait for whichever shows up first.
+    let directConnection = app.buttons
+        .matching(NSPredicate(format: "label BEGINSWITH 'Direct connection'")).firstMatch
+    for _ in 0..<60 {
         if app.textViews["composer.draft"].exists || app.textFields["composer.draft"].exists {
             return
         }
+        if directConnection.exists { break }
         Thread.sleep(forTimeInterval: 0.5)
     }
 
-    let directConnection = app.buttons
-        .matching(NSPredicate(format: "label BEGINSWITH 'Direct connection'")).firstMatch
     XCTAssertTrue(directConnection.waitForExistence(timeout: 5), "Direct connection button not found")
     directConnection.tap()
 
