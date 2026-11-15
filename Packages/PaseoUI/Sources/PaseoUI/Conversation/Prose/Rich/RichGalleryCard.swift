@@ -215,20 +215,22 @@ struct RichGalleryCard: View {
                 showViewer = true
             }
         } label: {
-            ZStack {
-                Rectangle().fill(Palette.codeSurface)
-                if let uiImage = resolvedThumb(id: id, image: image) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .transition(.opacity)
-                } else if failedTiles.contains(id) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.glyph(.regular, weight: .light))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .accessibilityLabel("Couldn't load image")
+            // The box decides the size; the picture is drawn over it and can never push the row
+            // wider (a `.fill` image proposes its pixel size to its parent).
+            Rectangle().fill(Palette.codeSurface)
+                .overlay {
+                    if let uiImage = resolvedThumb(id: id, image: image) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .transition(.opacity)
+                    } else if failedTiles.contains(id) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.glyph(.regular, weight: .light))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .accessibilityLabel("Couldn't load image")
+                    }
                 }
-            }
             .aspectRatio(aspect, contentMode: .fit)
             .clipped()
             .contentShape(.rect)
