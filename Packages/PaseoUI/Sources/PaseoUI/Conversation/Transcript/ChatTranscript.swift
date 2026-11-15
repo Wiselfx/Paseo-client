@@ -514,8 +514,7 @@ struct TranscriptView: View {
     /// the moment a finger or flick owns the scroll, a send takes over, or after 16 re-seats. (The first rest
     /// cannot end it: that rest is at the estimated end, before the rows below it exist.)
     private func repinOpen(_ metrics: ScrollFollowMetrics) {
-        PaseoPerf.count("openpin.enter")
-        guard openPin else { PaseoPerf.count("openpin.disabled"); return }
+        guard openPin else { return }
         if scrollHeld || !controller.isFollowing || controller.anchoringToAnswer || openPinCount >= 16 {
             if PaseoPerf.enabled {
                 PaseoPerf.countNamed("openpin.off.held\(scrollHeld).follow\(controller.isFollowing).anchor\(controller.anchoringToAnswer).n\(openPinCount)")
