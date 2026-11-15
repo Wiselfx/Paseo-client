@@ -4,7 +4,7 @@ import PaseoKit
 import PaseoProtocol
 
 /// The git extras for open workspaces: the modern binary diff pipeline, discard, branch
-/// suggestions/switching, the PR badge and live file subscriptions.
+/// suggestions/switching with stash & switch, the PR badge and live file subscriptions.
 ///
 /// `HostSession` owns one of these per host. It hands out one `WorkspaceGitExtras` per checkout and
 /// routes binary frames and `fs.file.update` events here. The modern pipeline is used when the
@@ -184,6 +184,12 @@ public final class WorkspaceGitExtras: Identifiable {
     public private(set) var diffError: String?
     public private(set) var branchSuggestions: [BranchSuggestion] = []
     public private(set) var branchError: String?
+    /// The host's Paseo-created stashes, as `stash_list_request` reports them.
+    public private(set) var paseoStashes: [StashEntry] = []
+    public private(set) var stashError: String?
+    /// True when the last switch was refused because the working tree is dirty. The branch
+    /// switcher offers "Stash & Switch" then (`Upstream: packages/app/src/hooks/use-branch-switcher.ts:164-168`).
+    public private(set) var lastSwitchBlockedByChanges = false
     public private(set) var prStatus: CheckoutPrStatus?
     public private(set) var prAuthState: ForgeAuthState?
     public private(set) var prError: String?
@@ -348,12 +354,17 @@ public final class WorkspaceGitExtras: Identifiable {
             return false
         }
         isSwitchingBranch = true
+        lastSwitchBlockedByChanges = false
         defer { isSwitchingBranch = false }
         do {
             let response = try await client.send(
                 CheckoutSwitchBranchRequest(cwd: cwd, branch: trimmed))
             guard response.success else {
-                actionError = response.error?.message ?? "The branch switch failed."
+                let message = response.error?.message ?? "The branch switch failed."
+                // Upstream keys the stash dialog off the daemon's words, not an error code
+                // (`use-branch-switcher.ts:164-168`); the code is UNKNOWN for a dirty tree.
+                lastSwitchBlockedByChanges = message.lowercased().contains("uncommitted")
+                actionError = message
                 return false
             }
             actionError = nil
@@ -365,6 +376,74 @@ public final class WorkspaceGitExtras: Identifiable {
             actionError = gitExtrasErrorText(error)
             return false
         }
+    }
+
+    // MARK: Stashes
+
+    /// The Paseo-created stash saved for `branch`, when the host has one. Upstream matches on the
+    /// entry's branch tag before offering a restore (`use-branch-switcher.ts:96-102`).
+    public func paseoStash(forBranch branch: String) -> StashEntry? {
+        paseoStashes.first { $0.branch == branch }
+    }
+
+    /// Reads the Paseo-created stashes. Upstream lists them on a branch switch to see whether the
+    /// branch being entered left work behind (`use-branch-switcher.ts:96-101`,
+    /// `branch-switcher-operations.ts:9`).
+    public func loadPaseoStashes() async {
+        do {
+            let response = try await client.send(StashListRequest(cwd: cwd, paseoOnly: true))
+            paseoStashes = response.entries
+            stashError = response.error?.message
+        } catch {
+            paseoStashes = []
+            stashError = gitExtrasErrorText(error)
+        }
+    }
+
+    /// Stashes the working tree, tagging it with `branch` so it can be restored later
+    /// (`stash_save_request`; `branch-switcher-operations.ts:10`).
+    public func saveStash(branch: String?) async -> Bool {
+        do {
+            let response = try await client.send(StashSaveRequest(cwd: cwd, branch: branch))
+            guard response.success else {
+                actionError = response.error?.message ?? "Failed to stash changes"
+                return false
+            }
+            actionError = nil
+            await checkout.loadStatus()
+            await reloadDiff()
+            await loadPaseoStashes()
+            return true
+        } catch {
+            actionError = gitExtrasErrorText(error)
+            return false
+        }
+    }
+
+    /// Restores one stashed entry by index (`stash_pop_request`; `branch-switcher-operations.ts:11`).
+    public func popStash(index: Int) async -> Bool {
+        do {
+            let response = try await client.send(StashPopRequest(cwd: cwd, stashIndex: index))
+            guard response.success else {
+                actionError = response.error?.message ?? "The restore failed."
+                return false
+            }
+            actionError = nil
+            await checkout.loadStatus()
+            await reloadDiff()
+            await loadPaseoStashes()
+            return true
+        } catch {
+            actionError = gitExtrasErrorText(error)
+            return false
+        }
+    }
+
+    /// Stashes the dirty tree under the current branch, then switches to `branch`: upstream's
+    /// "Stash & Switch" (`use-branch-switcher.ts:124-153`).
+    public func stashAndSwitch(to branch: String) async -> Bool {
+        guard await saveStash(branch: currentBranch) else { return false }
+        return await switchBranch(branch)
     }
 
     /// Re-reads the PR badge, keeping the auth state the plain checkout store discards.
