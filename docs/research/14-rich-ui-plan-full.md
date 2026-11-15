@@ -335,6 +335,13 @@ Data legend:
   - Today: ```` ```visualize ```` and raw `<svg>` (detector).
   - New: a "Preview" button in the header of ```` ```html ```` and ```` ```svg ```` code blocks.
     Code fences are never auto-rendered (§6).
+  - **V2 owner decision (supersedes the "Preview" button).** Ordinary fences render: a closed
+    ```` ```html ````/```` ```htm ```` fence whose body is a document or fragment, a ```` ```svg ```` fence,
+    and a ```` ```xml ```` fence whose body is an `<svg` document draw the artifact card with
+    "View source" and "Copy source". The ```` ```visualize ```` fence stays an alias. A `source` or
+    `title` word in the info string keeps a fence as code; streaming html/svg/xml fences stay
+    code until they close. Bodies that arrive HTML-escaped (as some models send them) get the
+    five basic entities decoded, artifact/diagram bodies only.
 - **Anatomy (inline).** E3's sizing, inside the media card. The header keeps "Visualization" /
   "SVG" and "View source" (existing copy). A new trailing "Open" (approved in E3) appears whenever
   the content is clipped, and in the menu otherwise.
@@ -861,6 +868,11 @@ As C4.
   - the Files panel's "Open full screen" for `.html` files (it reuses E3's file preview
     configuration: scripts on, non-persistent data store, top-level navigation into
     `SFSafariViewController`).
+- **V2 addendum (owner decision).** The "Preview" button is not built: closed ` ```html `/
+  ` ```htm `, ` ```svg ` and ` ```xml ` (with an `<svg` document) fences render the card directly,
+  the visualize fence is an alias, and a `source`/`title` info word keeps a fence as code.
+  Streaming fences stay code. The inline card measures the page once after load and never
+  re-flows; a snapshot per content makes a revisit flash-free.
 - **Security posture, unchanged from E3 and doc 05:**
   - chat artifacts stay offline (CSP `connect-src 'none'`, navigation blocked);
   - file previews may load CDN subresources;
