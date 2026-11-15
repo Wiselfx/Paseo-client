@@ -40,12 +40,14 @@
 #                 separated by |. Steps: ui [navigation|reading|full] (the screen as text), tap <label>,
 #                 tapid <id>, tapxy <x> <y>, hold <label> (long press), type <text>, return, delete, key <n>,
 #                 scroll up|down|left|right, edge left|right|top|bottom, swipe <x1> <y1> <x2> <y2>, home,
-#                 wait <1-5>, shot [name]. Only the test simulator is ever addressed.
+#                 wait <1-15>, shot [name]. Only the test simulator is ever addressed.
 #   openurl <url> open a paseo:// URL in the simulator (nothing else is accepted)
 #   appearance light|dark
 #   textsize <category>   Dynamic Type: xs s m l xl xxl xxxl ax1 ax2 ax3 ax4 ax5
 #   statusbar on|off      fixed 9:41 status bar for comparable screenshots
 #   privacy <grant|revoke|reset> <service>   photos camera microphone location contacts calendar
+#   applog [minutes]  the app's own log (subsystem com.wiselfx.paseoclient) for the last 1-60 minutes
+#                 (default 5), newest 300 lines; use it after driving the app by hand
 #   crashes [n]   newest n (max 3) Paseo crash reports from this Mac, trimmed
 #   status        disk, memory use of this user's processes, simulator state, installed app, lock holder, last gate log lines
 #   kill <pid>    stop one process, only if it belongs to this user AND is a build/simulator tool
@@ -82,7 +84,7 @@ nargs=0
 for a in "${ref:-}" "${arg2:-}" "${arg3:-}" "${extra:-}"; do [[ -n "$a" ]] && nargs=$((nargs + 1)); done
 case "${verb:-}" in
     ping|sims|simreset|terminate|status|clean|killbuilds) maxargs=0 ;;
-    build|ipa|analyze|regen|install|launch|ls|get|shot|openurl|appearance|textsize|statusbar|crashes|kill) maxargs=1 ;;
+    build|ipa|analyze|regen|install|launch|ls|get|shot|openurl|appearance|textsize|statusbar|crashes|kill|applog) maxargs=1 ;;
     uitest|privacy) maxargs=2 ;;
     do) maxargs=4 ;;
     test) maxargs=3 ;;
@@ -486,8 +488,8 @@ do)
     rest="${SSH_ORIGINAL_COMMAND#do}"
     rest="${rest# }"
     steps_re="^[A-Za-z0-9 _.,:'!?@#%+=/|-]+\$"
-    if (( ${#rest} < 1 || ${#rest} > 400 )) || [[ ! "$rest" =~ $steps_re ]]; then
-        echo "refused: steps must be 1-400 characters of letters, digits, spaces and _.,:'!?@#%+=/- separated by |" >&2
+    if (( ${#rest} < 1 || ${#rest} > 800 )) || [[ ! "$rest" =~ $steps_re ]]; then
+        echo "refused: steps must be 1-800 characters of letters, digits, spaces and _.,:'!?@#%+=/- separated by |" >&2
         exit 2
     fi
     xy_re="^[0-9]{1,4}[ ][0-9]{1,4}\$"
@@ -532,7 +534,7 @@ do)
                 ax swipe --start-x "$x1" --start-y "$y1" --end-x "$x2" --end-y "$y2" ;;
             home) ax button home ;;
             wait)
-                if [[ ! "$arg" =~ ^[1-5]$ ]]; then echo "refused: wait 1-5" >&2; exit 2; fi
+                if [[ ! "$arg" =~ ^([1-9]|1[0-5])$ ]]; then echo "refused: wait 1-15" >&2; exit 2; fi
                 sleep "$arg" ;;
             shot) take_shot "${arg:-shot}" ;;
             *) echo "refused: unknown step $cmd" >&2; exit 2 ;;
@@ -584,6 +586,13 @@ crashes)
         echo "== $(basename "$f")"
         head -c 40000 "$f" | head -400
     done
+    ;;
+applog)
+    require_sim
+    minutes="${ref:-5}"
+    if [[ ! "$minutes" =~ ^[0-9]{1,2}$ ]] || (( minutes < 1 || minutes > 60 )); then echo "refused: minutes 1-60" >&2; exit 2; fi
+    xcrun simctl spawn "$udid" log show --last "${minutes}m" --style compact --info --debug \
+        --predicate 'subsystem BEGINSWITH "com.wiselfx.paseoclient"' 2>/dev/null | tail -300
     ;;
 status)
     echo "gate v$GATE_VERSION"
