@@ -309,13 +309,13 @@ final class RichSnapshotQueue {
     static let shared = RichSnapshotQueue()
     private var tail: Task<Void, Never>?
 
-    func snapshot(html: String, width: CGFloat, scale: CGFloat) async -> UIImage? {
+    func snapshot(html: String, width: CGFloat, scale: CGFloat, maxHeight: CGFloat? = nil) async -> UIImage? {
         let previous = tail
         let result: UIImage? = await withCheckedContinuation { continuation in
             let task = Task { @MainActor in
                 _ = await previous?.value
                 let image = await RichWebSnapshotRenderer.shared.snapshot(
-                    html: html, width: width, scale: scale)
+                    html: html, width: width, scale: scale, maxHeight: maxHeight)
                 continuation.resume(returning: image)
             }
             tail = task
