@@ -339,6 +339,14 @@ struct TranscriptView: View {
         return index
     }
 
+    /// The turn that holds `seq`, or the latest turn that starts at or before it (a match whose row was
+    /// merged into a neighbour, or whose own row is not in a turn yet).
+    private func turnIndex(forSeq seq: Int) -> Int? {
+        let all = store.turns
+        return all.firstIndex(where: { $0.containsRow(seqEnd: seq) })
+            ?? all.lastIndex(where: { $0.firstRowSeq <= seq })
+    }
+
     /// Moves the window start back by `count` turns (or to the turn holding `seq` / `id`).
     private func growWindow(by count: Int? = nil, toInclude id: String? = nil, seq: Int? = nil) -> Bool {
         let all = store.turns
@@ -351,9 +359,7 @@ struct TranscriptView: View {
         var target = current
         if let count { target = max(current - count, 0) }
         if let id, let index = all.firstIndex(where: { $0.id == id }) { target = min(target, index) }
-        if let seq, let index = all.firstIndex(where: { $0.containsRow(seqEnd: seq) }) {
-            target = min(target, index)
-        }
+        if let seq, let index = turnIndex(forSeq: seq) { target = min(target, index) }
         guard target < current, all.indices.contains(target) else { return false }
         windowStartId = all[target].id
         return true
@@ -841,7 +847,7 @@ struct TranscriptView: View {
         // A match in history that is still arriving: no turn holds it yet. With every turn in the
         // stack the anchor was found the moment it landed; with a window the turn has to be mounted
         // first, so wait for the pages to land (a geometry pass each) and ask again.
-        if retries > 0, !store.turns.contains(where: { $0.containsRow(seqEnd: seq) }) {
+        if retries > 0, turnIndex(forSeq: seq) == nil {
             afterWindowGrowth = {
                 scrollToRow(seq, animated: animated, proxy: proxy, retries: retries - 1)
             }
@@ -851,10 +857,20 @@ struct TranscriptView: View {
             // The match is in a turn that was held back: mount it, then scroll on the next pass.
             // The turn's own id is known to the lazy stack as soon as the turn is in the window; the
             // row anchor inside it only once the row is built. Land on the turn, then refine.
-            let turnId = store.turns.first(where: { $0.containsRow(seqEnd: seq) })?.id
+            let turnId = turnIndex(forSeq: seq).map { store.turns[$0].id }
             afterWindowGrowth = {
                 if let turnId { proxy.scrollTo(turnId, anchor: .center) }
                 afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy, retries: 0) }
+            }
+            return
+        }
+        // No turn owns the row itself: centre the turn it falls in.
+        if !store.turns.contains(where: { $0.containsRow(seqEnd: seq) }),
+            let index = turnIndex(forSeq: seq)
+        {
+            let id = store.turns[index].id
+            withAnimation(animated ? Motion.disclosure.resolved(reduceMotion: reduceMotion) : nil) {
+                proxy.scrollTo(id, anchor: .center)
             }
             return
         }
