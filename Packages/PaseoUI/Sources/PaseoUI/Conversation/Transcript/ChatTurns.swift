@@ -599,7 +599,7 @@ extension View {
     /// view and code block) was destroyed and rebuilt per token: 12 to 25 markdown views per update,
     /// each one re-measured and re-highlighted. The anchor now changes identity; the content does not.
     func rowAnchor(_ seqEnd: Int) -> some View {
-        overlay { Color.clear.allowsHitTesting(false).accessibilityHidden(true).id("row:\(seqEnd)") }
+        id("row:\(seqEnd)")
     }
 }
 
