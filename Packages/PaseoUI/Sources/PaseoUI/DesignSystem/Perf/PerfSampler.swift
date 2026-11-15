@@ -169,10 +169,11 @@
                     break
                 }
             }
+            let ownName = own
             collected.withLock { histogram in
                 histogram.samples += 1
                 histogram.leaf[leaf, default: 0] += 1
-                if let own { histogram.own[own, default: 0] += 1 }
+                if let ownName { histogram.own[ownName, default: 0] += 1 }
             }
         }
     }
