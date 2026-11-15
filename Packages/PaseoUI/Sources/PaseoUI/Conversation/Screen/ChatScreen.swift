@@ -57,7 +57,7 @@ public struct ChatScreen: View {
                     .padding(.bottom, Space.sm)
             }
             .safeAreaBar(edge: .top) { topChrome }
-            .safeAreaBar(edge: .bottom) { bottomChrome }
+            .safeAreaInset(edge: .bottom, spacing: 0) { bottomChrome }
             .scrollEdgeEffectStyle(.hard, for: .top)
             .scrollEdgeEffectStyle(.hard, for: .bottom)
             // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so
