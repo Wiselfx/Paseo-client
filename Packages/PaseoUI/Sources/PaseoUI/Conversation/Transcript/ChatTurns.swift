@@ -209,7 +209,7 @@ struct ClaudeTurnView: View {
                             segment: segment, turnIsRunning: isRunning,
                             onMarkdown: onMarkdown,
                             highlightedSeq: highlightedSeq, findTarget: findTarget,
-                            onOpenFile: onOpenFile)
+                            onOpenFile: onOpenFile, bubbleAttributed: bubbleAttributed)
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: -2)))
@@ -339,6 +339,9 @@ struct ClaudeSegmentView: View {
     var highlightedSeq: Int?
     var findTarget: Int?
     var onOpenFile: ((String) -> Void)?
+    /// The turn's file-link builder for your bubbles (`ClaudeTurnView.bubbleAttributed`). Nil
+    /// renders a mid-turn message as plain text.
+    var bubbleAttributed: ((String) -> AttributedString)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -361,7 +364,26 @@ struct ClaudeSegmentView: View {
             // The per-turn card above owns todos now: a row here would duplicate it.
             EmptyView()
         case .notice(let row):
-            ClaudeNoticeRow(item: row.item)
+            // A message you sent while the turn was running is a notice row in the model
+            // (Turn.swift TurnDraft.add). Upstream shows a user message as a normal row wherever it
+            // falls in the stream. Upstream: packages/app/src/agent-stream/layout.ts:330-331
+            if case .userMessage(let message) = row.item {
+                // Same bubble as the turn's first message (fullTurn); no rewind on a steered message.
+                ClaudeUserBubble(
+                    text: message.text, isPending: row.isPending,
+                    rewindChoices: [], onRewind: nil,
+                    attributed: bubbleAttributed?(message.text),
+                    clientMessageId: message.clientMessageId
+                )
+                .id("row:\(row.seqEnd)")
+                .background {
+                    RoundedRectangle(cornerRadius: Radius.md)
+                        .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
+                        .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
+                }
+            } else {
+                ClaudeNoticeRow(item: row.item)
+            }
         }
     }
 }
