@@ -99,10 +99,27 @@ struct ComposerTextView: UIViewRepresentable {
         guard isFocused != coordinator.lastAppliedFocus else { return }
         coordinator.lastAppliedFocus = isFocused
         if isFocused {
+            // SwiftUI hosts this composer twice (the bottom bar keeps a second instance) and both
+            // read the same focus binding. The second instance must never take focus from the one
+            // the user is typing in: UIKit would end editing there, the binding would flip to
+            // false, and both would resign. That is the "keyboard closes again right after a
+            // rewound message was sent" bug. Only take focus when no composer has it.
+            if let window = uiView.window, let other = Self.focusedComposer(in: window), other !== uiView {
+                return
+            }
             if !uiView.isFirstResponder { uiView.becomeFirstResponder() }
         } else if uiView.isFirstResponder {
             uiView.resignFirstResponder()
         }
+    }
+
+    /// The composer text view in `view`'s tree that is first responder, if any.
+    private static func focusedComposer(in view: UIView) -> ComposerUITextView? {
+        if let field = view as? ComposerUITextView, field.isFirstResponder { return field }
+        for subview in view.subviews {
+            if let found = focusedComposer(in: subview) { return found }
+        }
+        return nil
     }
 
     func makeCoordinator() -> Coordinator {

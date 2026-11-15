@@ -460,7 +460,10 @@ install)
         echo "INSTALL FAILED (build exit $status)"
         exit "$status"
     fi
-    app="$(find "$DERIVED/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name '*.app' | head -1)"
+    # Never the UI test runner or the widgets: after a `uitest` the folder holds more than one .app,
+    # and "the first one" installed the wrong thing (the simulator kept running an older build).
+    app="$DERIVED/Build/Products/Debug-iphonesimulator/PaseoClient.app"
+    [[ -d "$app" ]] || { echo "INSTALL FAILED: PaseoClient.app was not built" >&2; exit 1; }
     xcrun simctl install "$udid" "$app"
     echo "installed $(git rev-parse --short HEAD) on $udid"
     ;;
