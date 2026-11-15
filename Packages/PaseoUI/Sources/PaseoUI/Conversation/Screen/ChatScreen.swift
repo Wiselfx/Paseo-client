@@ -118,12 +118,12 @@ public struct ChatScreen: View {
             // Blur that fades in, so there is no visible edge to the slab.
             Rectangle()
                 .fill(.regularMaterial)
-                .mask(fadeIn(from: 0, to: 0.6))
+                .mask(fadeIn(from: 0, to: 0.45))
             // Page colour over it cancels the material's grey tint; text beneath stays soft.
             Rectangle()
                 .fill(Palette.background)
-                .opacity(0.8)
-                .mask(fadeIn(from: 0.1, to: 0.8))
+                .opacity(0.4)
+                .mask(fadeIn(from: 0.2, to: 1))
         }
         .frame(height: 64)
         .ignoresSafeArea(.container, edges: .bottom)
