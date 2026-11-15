@@ -110,6 +110,11 @@ struct ComposerView: View {
             composerCard
         }
         .padding(.horizontal, isDraft && !composerExpanded ? Space.lg : ComposerMetrics.sideInset)
+        // While the field is focused the keyboard is up, and the card keeps 8 pt above it, as
+        // Claude's does (N3 C). Focus is the flag the field keeps in sync with the keyboard; no
+        // keyboard arithmetic, and nothing changes while the keyboard is down.
+        .padding(.bottom, focused ? Space.sm : 0)
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: focused)
         // The pill's wider margin is part of the same disclosure as its height and corner: the
         // card widens while it grows, so the field slides instead of jumping (E1 §4).
         .animation(

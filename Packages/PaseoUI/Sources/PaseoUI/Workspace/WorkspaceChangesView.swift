@@ -795,7 +795,8 @@ struct WorkspaceChangesView: View {
     private var moreMenu: some View {
         Menu {
             Section("Diff options") {
-                Toggle("Hide whitespace changes", isOn: $hideWhitespace).tint(Palette.toggleTint)
+                // Upstream: packages/app/src/git/diff-pane.tsx:842-844; en.ts:983 ("Hide whitespace").
+                Toggle("Hide whitespace", isOn: $hideWhitespace).tint(Palette.toggleTint)
                 Toggle("Wrap long lines", isOn: $wrapLongLines).tint(Palette.toggleTint)
                 Button(collapseAllHunks ? "Expand all files" : "Collapse all files") {
                     collapseAllHunks.toggle()
