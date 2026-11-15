@@ -19,10 +19,12 @@ func connectToTestDaemon(_ app: XCUIApplication) throws {
     }
 
     // Already connected: the composer is on screen.
-    if app.textViews["composer.draft"].waitForExistence(timeout: 3)
-        || app.textFields["composer.draft"].exists
-    {
-        return
+    // The composer is a text view or a text field depending on how UIKit exposes it; poll for either.
+    for _ in 0..<12 {
+        if app.textViews["composer.draft"].exists || app.textFields["composer.draft"].exists {
+            return
+        }
+        Thread.sleep(forTimeInterval: 0.5)
     }
 
     let directConnection = app.buttons
@@ -58,7 +60,10 @@ func connectToTestDaemon(_ app: XCUIApplication) throws {
         notNow.tap()
     }
 
-    let composerShown = app.textViews["composer.draft"].waitForExistence(timeout: 20)
-        || app.textFields["composer.draft"].waitForExistence(timeout: 1)
+    var composerShown = false
+    for _ in 0..<40 where !composerShown {
+        composerShown = app.textViews["composer.draft"].exists || app.textFields["composer.draft"].exists
+        if !composerShown { Thread.sleep(forTimeInterval: 0.5) }
+    }
     XCTAssertTrue(composerShown, "composer did not appear after connecting")
 }
