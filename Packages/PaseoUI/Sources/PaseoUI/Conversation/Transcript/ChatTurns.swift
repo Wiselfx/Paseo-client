@@ -99,6 +99,16 @@ struct ClaudeTurnView: View {
         }
     }
 
+    /// Messages you sent while this turn ran. Upstream never folds a user message away
+    /// (`turn-collapse/model.ts` `staysVisibleWhenCollapsed`), so these render whether the work is
+    /// shown or folded: in place inside the work when shown, after the summary when not.
+    var midTurnRows: [TimelineRow] {
+        turn.segments.compactMap { (segment: Turn.Segment) -> TimelineRow? in
+            guard case .notice(let row) = segment, case .userMessage = row.item else { return nil }
+            return row
+        }
+    }
+
     /// The overview sentence under the prompt. In `collapseTurns` it is the whole fold affordance;
     /// the answer below it is never clipped, so there is no separate "Show more".
     var turnSummaryLabel: String { TurnSummary(turn: turn).detailsLabel }
@@ -162,6 +172,10 @@ struct ClaudeTurnView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(turnSummaryLabel)
+            // Messages sent mid-turn stay visible while the work is folded (never folded away).
+            ForEach(midTurnRows) { row in
+                ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
+            }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown)
                 if let todoState = turn.todoState {
@@ -213,6 +227,11 @@ struct ClaudeTurnView: View {
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: -2)))
+            } else {
+                // Work folded: the messages sent mid-turn still show, in order, after the header.
+                ForEach(midTurnRows) { row in
+                    ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
+                }
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: isRunning)
@@ -364,25 +383,40 @@ struct ClaudeSegmentView: View {
             // The per-turn card above owns todos now: a row here would duplicate it.
             EmptyView()
         case .notice(let row):
-            // A message you sent while the turn was running is a notice row in the model
-            // (Turn.swift TurnDraft.add). Upstream shows a user message as a normal row wherever it
-            // falls in the stream. Upstream: packages/app/src/agent-stream/layout.ts:330-331
-            if case .userMessage(let message) = row.item {
-                // Same bubble as the turn's first message (fullTurn); no rewind on a steered message.
-                ClaudeUserBubble(
-                    text: message.text, isPending: row.isPending,
-                    rewindChoices: [], onRewind: nil,
-                    attributed: bubbleAttributed?(message.text),
-                    clientMessageId: message.clientMessageId
-                )
-                .id("row:\(row.seqEnd)")
-                .background {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
-                        .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
-                }
+            // A message sent mid-turn is a notice row in the model (Turn.swift TurnDraft.add).
+            if case .userMessage = row.item {
+                ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
             } else {
                 ClaudeNoticeRow(item: row.item)
+            }
+        }
+    }
+}
+
+/// A message you sent while the turn was running, shown as the same bubble as the turn's first
+/// message. Upstream shows a user message as a normal row wherever it falls in the stream
+/// (`packages/app/src/agent-stream/layout.ts:330-331`). Drawn in two places, never both at once:
+/// in place among the work when the work is shown, after the summary when it is folded.
+struct ClaudeMidTurnBubble: View {
+    let row: TimelineRow
+    var highlightedSeq: Int?
+    var attributed: ((String) -> AttributedString)?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if case .userMessage(let message) = row.item {
+            // No rewind on a steered message: it is not a rewind point here.
+            ClaudeUserBubble(
+                text: message.text, isPending: row.isPending,
+                rewindChoices: [], onRewind: nil,
+                attributed: attributed?(message.text),
+                clientMessageId: message.clientMessageId
+            )
+            .id("row:\(row.seqEnd)")
+            .background {
+                RoundedRectangle(cornerRadius: Radius.md)
+                    .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
+                    .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
             }
         }
     }
