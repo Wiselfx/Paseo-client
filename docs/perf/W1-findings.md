@@ -50,3 +50,20 @@ Core tests: `StreamingIdentityTests` (new; passes with the full Core run: 1131 +
   it is O5.
 - Check by eye: opening a very long chat (does it ever show blank, O6), typing in the composer (O2), the first
   scroll over images and diagrams (O4).
+
+
+## Second pass (after the merge of the first)
+
+| # | Item | Result | Evidence (Debug simulator) |
+| --- | --- | --- | --- |
+| S1 (O1, O6) | Opening a long chat: 1.4 to 2.3 s main-thread stall, and opened mid-chat or blank | **Fixed in the app, found to be real.** The blank was not the instrument: a normal launch of the 65 000 pt chat opened blank (restore) or mid-chat (opened from Search). Two causes: `defaultScrollAnchor(.bottom)` lands on an estimated bottom of a lazy stack whose rows are unmeasured, and the stack builds no rows under the final offset until the visible rect changes. Fixes: `repinOpen` re-seats the real bottom while the transcript opens and nudges once at the end (`1833067` to `0aa0d6c`); only the newest 16 turns are mounted, older ones are revealed 12 at a time on scroll with the history anchor keeping the reader's line (`97ccf22`) | restore of the 65 000 pt chat: blank -> lands on the last message, normal launch and `-paseo-perf`; markdown parses at open 93 to 115 -> 9; main-thread stall at open 2274 ms -> 1105 ms (what remains is the app's first SwiftUI render in Debug); scroll back through the window: 0 stalls over 22 ms, 4 hitches in 21 s |
+| S2 (O5) | Sidebar body re-ran at every drawer motion | **Fixed** (`b27adb8`): the sidebar read `\.isSurfaceObscured` itself only to drive the usage footer; that read and the poll moved into `SidebarUsageDriver`, a child | `Sidebar` / `SidebarRoll` bodies per motion 1 -> 0; settle stall 10 to 36 ms -> 11 to 30 ms, 2 hitches in 12 motions |
+| S3 | Gate: Release install | **Written, not deployed**: `Tools/build-gate/build-gate` v4 has `install-release <ref>`; deploy steps in `GATE-UPGRADE.md` | needs the owner's copy of the script on the Mac |
+| S4 | Find in chat and jump to message after the `rowAnchor` change | **Not verified as working; a regression risk.** Driven on the simulator with a 27-turn chat: with the foundation build (`b322786`, no window) a step to a far match scrolls and centres a bubble; with this branch (window) the step does not scroll at all, also after mounting every turn first and ending the open re-seat. Cause not found. To switch the window off: `ChatTranscript.windowSize = Int.max`; the open fixes stay | screenshots in the session only; no numbers |
+
+### Still open (not fixed in this pass, and why)
+
+- **Composer keystroke cost (O2), new-session open and focus (O3).** A sampled run of typing shows the time is inside UIKit's text view (`ComposerUITextView.fittedSize` -> `UITextView.sizeThatFits`, text-services IPC, `langid_consume_string`) and in two to three composer evaluations per key; `ChatScreen.body` also re-runs per keystroke (26 a window), which was not traced to its input. A size memo was judged unsafe without a way to verify it. Target < 4 ms per key is not met.
+- **Rich media first scroll (O4).** Not re-measured or changed.
+- **Scenarios 3 to 5, link previews, video, audio** are not scripted; `scenarios/README.md` lists only what was run.
+- Find into history that is not yet loaded does not scroll (S4).
