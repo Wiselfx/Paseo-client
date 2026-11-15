@@ -102,6 +102,32 @@ struct ClaudeDiffLine: Identifiable, Equatable {
             return ClaudeDiffLine(id: index, kind: kind, text: line)
         }
     }
+
+    /// Upstream: packages/app/src/git/diff-pane.tsx:842-847 (the "Hide whitespace" option). A
+    /// removed line and the added line right after it are dropped when they match once whitespace
+    /// is trimmed and collapsed. One pass over the lines, O(lines).
+    static func hidingWhitespaceOnly(_ lines: [ClaudeDiffLine]) -> [ClaudeDiffLine] {
+        var kept: [ClaudeDiffLine] = []
+        kept.reserveCapacity(lines.count)
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            if line.kind == .removed, index + 1 < lines.count, lines[index + 1].kind == .added,
+                normalized(line.text) == normalized(lines[index + 1].text)
+            {
+                index += 2
+                continue
+            }
+            kept.append(line)
+            index += 1
+        }
+        return kept
+    }
+
+    /// The line's content without its sign, whitespace runs collapsed to one space.
+    private static func normalized(_ text: String) -> String {
+        text.dropFirst().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
 }
 
 struct ClaudeDiffView: View {
@@ -109,6 +135,13 @@ struct ClaudeDiffView: View {
     let unifiedDiff: String?
     let old: String?
     let new: String?
+    /// The chat diff sheet asks for the whole file: it fills the sheet and gets the options menu
+    /// in the top bar. Inline tool rows keep the compact 300 pt box.
+    var fullHeight: Bool = false
+
+    /// The same two preferences as the workspace Changes screen (`WorkspaceChangesDiffView`).
+    @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
+    @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
 
     /// Parsed once per diff, not in `body`.
     @State private var lines: [ClaudeDiffLine] = []
@@ -121,7 +154,8 @@ struct ClaudeDiffView: View {
             oldHash: old?.hashValue ?? 0,
             oldLength: old?.count ?? 0,
             newHash: new?.hashValue ?? 0,
-            newLength: new?.count ?? 0)
+            newLength: new?.count ?? 0,
+            hideWhitespace: hideWhitespace)
     }
 
     var body: some View {
@@ -134,33 +168,83 @@ struct ClaudeDiffView: View {
                 .padding(.horizontal, Space.md)
                 .padding(.vertical, 9)
             ClaudeDivider()
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(lines) { line in
-                        Text(line.text.isEmpty ? " " : line.text)
-                            .font(.paseo(.codeSmall))
-                            .foregroundStyle(line.kind == .header ? Palette.tertiaryInk : Palette.ink)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .padding(.horizontal, Space.md)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(background(for: line.kind))
-                    }
-                }
-                .padding(.vertical, 6)
-                .textSelection(.enabled)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: 300)
-            .fixedSize(horizontal: false, vertical: true)
+            diffScroll
         }
-        .background(Palette.codeSurface, in: .rect(cornerRadius: Radius.md))
+        .frame(
+            maxWidth: fullHeight ? .infinity : nil,
+            maxHeight: fullHeight ? .infinity : nil,
+            alignment: .top)
+        .background(Palette.codeSurface, in: .rect(cornerRadius: fullHeight ? 0 : Radius.md))
         .overlay {
-            RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
+            if !fullHeight {
+                RoundedRectangle(cornerRadius: Radius.md).strokeBorder(Palette.cardBorder, lineWidth: 1)
+            }
         }
         .codeTypeScale()
-        .task(id: key) {
-            lines = ClaudeDiffLine.parse(unifiedDiff: unifiedDiff, old: old, new: new)
+        .toolbar {
+            if fullHeight {
+                ToolbarItem(placement: .topBarTrailing) { diffOptionsMenu }
+            }
         }
+        .task(id: key) {
+            let parsed = ClaudeDiffLine.parse(unifiedDiff: unifiedDiff, old: old, new: new)
+            lines = hideWhitespace ? ClaudeDiffLine.hidingWhitespaceOnly(parsed) : parsed
+        }
+    }
+
+    /// Wrap (vertical scroll only, lines wrap to the width) or scroll (one two-axis scroll view,
+    /// as before). Upstream: packages/app/src/git/diff-pane.tsx:842-847 (wrap vs scroll labels).
+    @ViewBuilder private var diffScroll: some View {
+        if wrapLongLines {
+            fitted(ScrollView(.vertical) { diffLines(wrap: true) })
+        } else {
+            fitted(ScrollView([.vertical, .horizontal]) { diffLines(wrap: false) })
+        }
+    }
+
+    private func fitted<Scroll: View>(_ scroll: Scroll) -> some View {
+        scroll
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: fullHeight ? CGFloat.infinity : 300)
+            .fixedSize(horizontal: false, vertical: !fullHeight)
+    }
+
+    private func diffLines(wrap: Bool) -> some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(lines) { line in
+                Text(line.text.isEmpty ? " " : line.text)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(line.kind == .header ? Palette.tertiaryInk : Palette.ink)
+                    .fixedSize(horizontal: !wrap, vertical: wrap)
+                    .padding(.horizontal, Space.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(background(for: line.kind))
+            }
+        }
+        .padding(.vertical, 6)
+        .textSelection(.enabled)
+    }
+
+    /// The three-dot menu in the sheet's top bar. Upstream: packages/app/src/git/diff-pane.tsx:883-897
+    /// (the two items); the words are en.ts `workspace.git.diff` (`options`, `hideWhitespace`,
+    /// `showWhitespace`, `wrapLongLines`, `scrollLongLines`), packages/app/src/i18n/resources/en.ts:981-986.
+    private var diffOptionsMenu: some View {
+        Menu {
+            Toggle(isOn: $hideWhitespace) {
+                Text(hideWhitespace ? "Show whitespace" : "Hide whitespace")
+            }
+            .tint(Palette.toggleTint)
+            Toggle(isOn: $wrapLongLines) {
+                Text(wrapLongLines ? "Scroll long lines" : "Wrap long lines")
+            }
+            .tint(Palette.toggleTint)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.glyph(.small, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .accessibilityLabel("Diff options")
     }
 
     private func background(for kind: ClaudeDiffLine.Kind) -> Color {
@@ -180,6 +264,7 @@ private struct ClaudeDiffKey: Hashable {
     let oldLength: Int
     let newHash: Int
     let newLength: Int
+    let hideWhitespace: Bool
 }
 
 struct ClaudeSearchResults: View {
