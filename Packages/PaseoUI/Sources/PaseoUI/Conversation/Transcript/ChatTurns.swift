@@ -34,6 +34,12 @@ struct ClaudeTurnView: View {
     var canForkWorkspace: Bool = false
     /// False for every turn except the most recent one; only that turn never collapses.
     var isLatestTurn: Bool = true
+    /// The user stopped this turn (`ConversationStore.canceledTurnIds`): it shows no "Completed in"
+    /// text. The parent reads the store and passes the flag; the row never reads the store (N5 A).
+    var isCanceled: Bool = false
+    /// The sending agent's live title by id, for "Sent by" (upstream `user-message/index.tsx:95`).
+    /// Nil or a nil answer falls back to the sender's own title, then its id.
+    var agentTitle: ((String) -> String?)? = nil
 
     /// Nil until the reader taps, so the default can follow the turn's phase.
     @State private var userExpanded: Bool?
@@ -99,13 +105,17 @@ struct ClaudeTurnView: View {
         }
     }
 
-    /// Messages you sent while this turn ran. Upstream never folds a user message away
-    /// (`turn-collapse/model.ts` `staysVisibleWhenCollapsed`), so these render whether the work is
-    /// shown or folded: in place inside the work when shown, after the summary when not.
-    var midTurnRows: [TimelineRow] {
+    /// Rows that stay visible while the work is folded: messages you sent while this turn ran, and
+    /// compaction markers. Upstream never folds these away (`turn-collapse/model.ts:102`
+    /// `staysVisibleWhenCollapsed`), so they render whether the work is shown or folded: in place
+    /// inside the work when shown, after the summary when not.
+    var visibleRows: [TimelineRow] {
         turn.segments.compactMap { (segment: Turn.Segment) -> TimelineRow? in
-            guard case .notice(let row) = segment, case .userMessage = row.item else { return nil }
-            return row
+            guard case .notice(let row) = segment else { return nil }
+            switch row.item {
+            case .userMessage, .compaction: return row
+            default: return nil
+            }
         }
     }
 
@@ -114,13 +124,9 @@ struct ClaudeTurnView: View {
     var turnSummaryLabel: String { TurnSummary(turn: turn).detailsLabel }
 
     /// "Sent by {{name}}" above the bubble (upstream `user-message/index.tsx:95`, rendered
-    /// from `message.tsx:481`). No agent registry reaches this view, so the name falls back
-    /// to `sender.title ?? sender.id` instead of resolving the agent's live title.
+    /// from `message.tsx:481`), named by `agentTitle` (see `ClaudeSentByLine`).
     @ViewBuilder func sentByLine(_ sender: TimelineItem.AgentMessage.Sender) -> some View {
-        Text(TurnSummary.sentByLabel(name: TurnSummary.senderName(agentTitle: nil, senderTitle: sender.title, senderID: sender.id)))
-            .font(.paseo(.code))
-            .foregroundStyle(Palette.secondaryInk)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+        ClaudeSentByLine(sender: sender, agentTitle: agentTitle)
     }
 
     var body: some View {
@@ -172,9 +178,11 @@ struct ClaudeTurnView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(turnSummaryLabel)
-            // Messages sent mid-turn stay visible while the work is folded (never folded away).
-            ForEach(midTurnRows) { row in
-                ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
+            // Messages sent mid-turn and compaction markers stay visible while the work is folded.
+            ForEach(visibleRows) { row in
+                ClaudeVisibleRow(
+                    row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed,
+                    agentTitle: agentTitle)
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown)
@@ -223,14 +231,18 @@ struct ClaudeTurnView: View {
                             segment: segment, turnIsRunning: isRunning,
                             onMarkdown: onMarkdown,
                             highlightedSeq: highlightedSeq, findTarget: findTarget,
-                            onOpenFile: onOpenFile, bubbleAttributed: bubbleAttributed)
+                            onOpenFile: onOpenFile, bubbleAttributed: bubbleAttributed,
+                            agentTitle: agentTitle)
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: -2)))
             } else {
-                // Work folded: the messages sent mid-turn still show, in order, after the header.
-                ForEach(midTurnRows) { row in
-                    ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
+                // Work folded: the messages sent mid-turn and compaction markers still show, in
+                // order, after the header.
+                ForEach(visibleRows) { row in
+                    ClaudeVisibleRow(
+                        row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed,
+                        agentTitle: agentTitle)
                 }
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
@@ -314,14 +326,17 @@ struct ClaudeTurnView: View {
                     case .running:
                         ClaudeLiveStatusLine(turn: turn)
                     case .completed:
-                        // A clock before the duration, as the reasoning line has one (user directive).
-                        Image(systemName: "clock")
-                            .font(.paseo(.callout))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .accessibilityHidden(true)
-                        Text(turn.duration.map(DurationText.completed) ?? "Completed")
-                            .font(.paseo(.callout))
-                            .foregroundStyle(Palette.secondaryInk)
+                        // A stopped turn says nothing here: upstream has no wording for it (N5 A).
+                        if !isCanceled {
+                            // A clock before the duration, as the reasoning line has one (user directive).
+                            Image(systemName: "clock")
+                                .font(.paseo(.callout))
+                                .foregroundStyle(Palette.secondaryInk)
+                                .accessibilityHidden(true)
+                            Text(turn.duration.map(DurationText.completed) ?? "Completed")
+                                .font(.paseo(.callout))
+                                .foregroundStyle(Palette.secondaryInk)
+                        }
                         Spacer(minLength: 0)
                     case .failed(let message):
                         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -366,6 +381,8 @@ struct ClaudeSegmentView: View {
     /// The turn's file-link builder for your bubbles (`ClaudeTurnView.bubbleAttributed`). Nil
     /// renders a mid-turn message as plain text.
     var bubbleAttributed: ((String) -> AttributedString)? = nil
+    /// The sending agent's live title by id, for a mid-turn message's "Sent by" line.
+    var agentTitle: ((String) -> String?)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -390,7 +407,9 @@ struct ClaudeSegmentView: View {
         case .notice(let row):
             // A message sent mid-turn is a notice row in the model (Turn.swift TurnDraft.add).
             if case .userMessage = row.item {
-                ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
+                ClaudeMidTurnBubble(
+                    row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed,
+                    agentTitle: agentTitle)
             } else {
                 ClaudeNoticeRow(item: row.item)
             }
@@ -406,24 +425,77 @@ struct ClaudeMidTurnBubble: View {
     let row: TimelineRow
     var highlightedSeq: Int?
     var attributed: ((String) -> AttributedString)?
+    /// The sending agent's live title by id, for the "Sent by" line (upstream `user-message/index.tsx:95`).
+    var agentTitle: ((String) -> String?)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if case .userMessage(let message) = row.item {
-            // No rewind on a steered message: it is not a rewind point here.
-            ClaudeUserBubble(
-                text: message.text, isPending: row.isPending,
-                rewindChoices: [], onRewind: nil,
-                attributed: attributed?(message.text),
-                clientMessageId: message.clientMessageId
-            )
-            .id("row:\(row.seqEnd)")
-            .background {
-                RoundedRectangle(cornerRadius: Radius.md)
-                    .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
-                    .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
+            VStack(alignment: .leading, spacing: 14) {
+                if let sender = message.sender {
+                    ClaudeSentByLine(sender: sender, agentTitle: agentTitle)
+                }
+                // No rewind on a steered message: it is not a rewind point here.
+                ClaudeUserBubble(
+                    text: message.text, isPending: row.isPending,
+                    rewindChoices: [], onRewind: nil,
+                    attributed: attributed?(message.text),
+                    clientMessageId: message.clientMessageId
+                )
+                .id("row:\(row.seqEnd)")
+                .background {
+                    RoundedRectangle(cornerRadius: Radius.md)
+                        .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
+                        .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
+                }
             }
         }
+    }
+}
+
+/// A row that stays in the chat while the work is folded: a message you sent mid-turn
+/// (`ClaudeMidTurnBubble`) or a compaction marker (`ClaudeCompactionMarker`, the same marker
+/// `ClaudeNoticeRow` draws in place). Upstream keeps both visible (`turn-collapse/model.ts:102`).
+struct ClaudeVisibleRow: View {
+    let row: TimelineRow
+    var highlightedSeq: Int?
+    var attributed: ((String) -> AttributedString)?
+    var agentTitle: ((String) -> String?)? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if case .compaction(let status, let trigger, let preTokens) = row.item {
+            ClaudeCompactionMarker(status: status, trigger: trigger, preTokens: preTokens)
+                .id("row:\(row.seqEnd)")
+                .background {
+                    RoundedRectangle(cornerRadius: Radius.md)
+                        .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
+                        .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
+                }
+        } else {
+            ClaudeMidTurnBubble(
+                row: row, highlightedSeq: highlightedSeq, attributed: attributed,
+                agentTitle: agentTitle)
+        }
+    }
+}
+
+/// "Sent by {{name}}" above a message you sent (upstream `user-message/index.tsx:95`). The name
+/// is the sending agent's live title, then the sender's own title, then its id
+/// (`TurnSummary.senderName`). Copy: `turnSummary.sentBy` (`en.ts:2151`).
+struct ClaudeSentByLine: View {
+    let sender: TimelineItem.AgentMessage.Sender
+    var agentTitle: ((String) -> String?)? = nil
+
+    var body: some View {
+        Text(
+            TurnSummary.sentByLabel(
+                name: TurnSummary.senderName(
+                    agentTitle: agentTitle?(sender.id), senderTitle: sender.title,
+                    senderID: sender.id)))
+            .font(.paseo(.code))
+            .foregroundStyle(Palette.secondaryInk)
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -521,6 +593,12 @@ struct TurnRow: View, Equatable {
     let flashSeq: Int?
     let isLanding: Bool
     let actions: ChatActions
+    /// The user stopped this turn; the parent reads `ConversationStore.canceledTurnIds` (N5 A).
+    /// Part of `==`: a stopped turn must redraw without its content changing.
+    var isCanceled: Bool = false
+    /// The sending agent's live title by id, for "Sent by" (N5 C). Read at draw time, so it is not
+    /// part of `==`, like `actions`.
+    var agentTitle: ((String) -> String?)? = nil
 
     @State private var landingStartedAt = Date()
 
@@ -530,6 +608,7 @@ struct TurnRow: View, Equatable {
         lhs.turn == rhs.turn && lhs.availability == rhs.availability
             && lhs.isLatest == rhs.isLatest && lhs.findSeq == rhs.findSeq
             && lhs.flashSeq == rhs.flashSeq && lhs.isLanding == rhs.isLanding
+            && lhs.isCanceled == rhs.isCanceled
     }
 
     var body: some View {
@@ -545,7 +624,9 @@ struct TurnRow: View, Equatable {
             onForkInFlight: availability.canForkInFlight ? actions.forkInFlight : nil,
             rewindInFlight: availability.rewindInFlight,
             canForkWorkspace: availability.canForkWorkspace,
-            isLatestTurn: isLatest
+            isLatestTurn: isLatest,
+            isCanceled: isCanceled,
+            agentTitle: agentTitle
         )
         .overlay(alignment: .top) {
             if isLanding {

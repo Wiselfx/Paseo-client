@@ -703,6 +703,10 @@ public final class ConversationStore: Identifiable {
     /// The running turn. From the agent snapshot, made snappier by `turn_started`/`turn_completed`
     /// stream events.
     public private(set) var activeTurnId: String?
+    /// Turns the user stopped (`turn_canceled`), by daemon turn id. A stopped turn shows no
+    /// "Completed in" text. Upstream: `packages/app/src/timeline/session-stream-reducers.ts:1820`
+    /// (a terminal turn event, same as `turn_completed`/`turn_failed`).
+    public private(set) var canceledTurnIds: Set<String> = []
     public private(set) var isLoadingOlder = false
     /// Pending permission requests, oldest first. Seeded from the agent snapshot and kept live by
     /// `agent_permission_request`/`agent_permission_resolved` (and the stream's permission events).
@@ -971,7 +975,12 @@ public final class ConversationStore: Identifiable {
                     turnId: turnId, provider: eventProvider ?? agent?.provider, usage: usage)
             }
 
-        case .turnFailed, .turnCanceled:
+        case .turnCanceled(let turnId, _):
+            // Upstream: `packages/app/src/timeline/session-stream-reducers.ts:1820`.
+            if let turnId { canceledTurnIds.insert(turnId) }
+            setActiveTurn(nil)
+
+        case .turnFailed:
             setActiveTurn(nil)
 
         case .permissionRequested(let raw):
