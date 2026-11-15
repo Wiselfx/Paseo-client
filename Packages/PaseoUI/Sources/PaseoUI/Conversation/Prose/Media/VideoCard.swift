@@ -27,12 +27,16 @@ struct VideoCard: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.richViewportHeight) private var viewportHeight
+    @Environment(\.richProseWidth) private var proseWidth
 
-    /// Stable identity across re-renders: the content key, not the card instance.
+    /// Stable identity across re-renders: the content key, not the card instance. The
+    /// workspace is part of it so the card's `prepare` task re-runs when the agent snapshot
+    /// names the workspace a restored chat was missing (V1.1).
     private var cardID: String {
+        let workspace = richActions?.daemonWorkspaceID ?? "-"
         switch input {
-        case .remote(let url): "video:\(url)"
-        case .local(let path): "video:local:\(path)"
+        case .remote(let url): "video:\(workspace):\(url)"
+        case .local(let path): "video:local:\(workspace):\(path)"
         }
     }
 
@@ -67,6 +71,10 @@ struct VideoCard: View {
     @State private var width: CGFloat = 0
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
+
+    /// The stage's width: the prose column when the transcript published one, else this card's
+    /// own measurement. Fixed, so the poster's box is decided before the file arrives.
+    private var slotWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
 
     /// Reserved 16:9 until the track ratio arrives; one settle, at most.
     private var reservedAspect: CGFloat { aspectRatio }
@@ -170,16 +178,15 @@ struct VideoCard: View {
     private var stage: some View {
         if let player {
             InlineAVPlayer(player: player)
-                .frame(maxWidth: .infinity)
                 .aspectRatio(reservedAspect, contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .mediaSlot(width: slotWidth, heightCap: heightCap)
                 .transition(.opacity)
         } else if let poster {
             ZStack {
                 Image(uiImage: poster)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity, maxHeight: heightCap)
+                    .mediaSlot(width: slotWidth, heightCap: heightCap)
                     .clipped()
                 Circle()
                     .fill(Palette.mediaBadge)
@@ -203,9 +210,8 @@ struct VideoCard: View {
                         .padding(Space.sm)
                 }
             }
-            .frame(maxWidth: .infinity)
             .aspectRatio(reservedAspect, contentMode: .fit)
-            .frame(maxWidth: .infinity, maxHeight: heightCap)
+            .mediaSlot(width: slotWidth, heightCap: heightCap)
             .clipped()
             .contentShape(.rect)
             .onTapGesture { startTappedPlayback() }
@@ -219,11 +225,21 @@ struct VideoCard: View {
             Rectangle()
                 .fill(Palette.codeSurface)
                 .aspectRatio(reservedAspect, contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .mediaSlot(width: slotWidth, heightCap: heightCap)
                 .overlay {
-                    ProgressView().controlSize(.small).tint(Palette.secondaryInk)
+                    VStack(spacing: Space.sm) {
+                        ProgressView().controlSize(.small).tint(Palette.secondaryInk)
+                        // A whole local file arrives in one daemon read, so there is no byte
+                        // progress to report: say what is happening instead of a bare ring
+                        // (V1.4). Remote posters stream and show the ring only.
+                        if tappedLoad {
+                            Text("Downloading...")
+                                .font(.paseo(.caption))
+                                .foregroundStyle(Palette.secondaryInk)
+                        }
+                    }
                 }
-                .accessibilityLabel("Loading video")
+                .accessibilityLabel(tappedLoad ? "Downloading video" : "Loading video")
         }
     }
 
@@ -285,7 +301,7 @@ struct VideoCard: View {
             Rectangle()
                 .fill(Palette.codeSurface)
                 .aspectRatio(reservedAspect, contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .mediaSlot(width: slotWidth, heightCap: heightCap)
                 .overlay {
                     VStack(spacing: Space.sm) {
                         Image(systemName: "arrow.down.circle")
@@ -363,7 +379,7 @@ struct VideoCard: View {
             Rectangle()
                 .fill(Palette.codeSurface)
                 .aspectRatio(reservedAspect, contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .mediaSlot(width: slotWidth, heightCap: heightCap)
                 .overlay {
                     VStack(spacing: Space.sm) {
                         Image(systemName: "film")
@@ -391,9 +407,16 @@ struct VideoCard: View {
     /// daemon has no range reads). Nothing starts until a tap on metered links.
     @MainActor
     private func prepare() async {
+        guard let source else {
+            // No workspace id yet: a restored chat draws before the agent snapshot (V1.1).
+            // `cardID` carries the id, so this task re-runs when it lands; after an explicit
+            // tap with still no source, say so instead of leaving a spinner.
+            if tappedLoad { loadFailed = true }
+            return
+        }
         // Local size first: the listing is cheap, the bytes are not. The poster gate
         // then decides from the size table above.
-        if let source, case .daemon(let ref) = source, knownBytes == nil {
+        if case .daemon(let ref) = source, knownBytes == nil {
             knownBytes = await daemonFileSize(ref: ref)
             guard !Task.isCancelled else { return }
         }

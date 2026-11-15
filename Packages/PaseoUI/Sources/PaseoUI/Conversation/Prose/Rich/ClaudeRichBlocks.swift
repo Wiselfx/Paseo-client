@@ -244,8 +244,12 @@ struct RichLinkCard: View {
     @State private var showShare = false
     @State private var width: CGFloat = 0
     @Environment(\.richActions) private var richActions
+    @Environment(\.richProseWidth) private var proseWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
+
+    /// The hero's width: the prose column when published, else this card's own measurement.
+    private var slotWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
 
     /// The OG image slot: 1.91:1 reserved from the first layout, so the card never
     /// changes height when the pixels land (C6). Tiles crop; the viewer never does.
@@ -338,6 +342,7 @@ struct RichLinkCard: View {
             .aspectRatio(heroAspect, contentMode: .fit)
             .clipped()
             .contentShape(.rect)
+            .mediaSlot(width: slotWidth, heightCap: .infinity)
     }
 
     private var rowContent: some View {
@@ -820,6 +825,8 @@ struct RichRemoteImage: View {
     @State private var showViewer = false
     /// The container's height, for the 60 % cap, known before the first frame (`RichViewport`).
     @Environment(\.richViewportHeight) private var viewportHeight
+    /// The prose column, published once by the transcript: the slot's width before any pixel.
+    @Environment(\.richProseWidth) private var proseWidth
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -860,6 +867,10 @@ struct RichRemoteImage: View {
     }
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
+
+    /// The width of the image slot: the prose column when the transcript published one, else
+    /// this card's own measurement (the file viewer and previews). Never the image's pixel size.
+    private var slotWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
 
     /// The ratio the box reserves: the image's own when we know it, else the old 4:3 guess.
     private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
@@ -933,7 +944,7 @@ struct RichRemoteImage: View {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: heightCap)
+                .mediaSlot(width: slotWidth, heightCap: heightCap)
                 .background(Palette.codeSurface)
                 .clipShape(.rect(cornerRadius: Radius.md))
                 .overlay(alignment: .bottomTrailing) {
@@ -978,7 +989,7 @@ struct RichRemoteImage: View {
         Rectangle()
             .fill(Palette.codeSurface)
             .aspectRatio(reservedAspect, contentMode: .fit)
-            .frame(maxWidth: .infinity, maxHeight: heightCap)
+            .mediaSlot(width: slotWidth, heightCap: heightCap)
             .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
                 // Streaming with a known total: the determinate ring in the same frame.
@@ -1002,7 +1013,7 @@ struct RichRemoteImage: View {
         Rectangle()
             .fill(Palette.codeSurface)
             .aspectRatio(reservedAspect, contentMode: .fit)
-            .frame(maxWidth: .infinity, maxHeight: heightCap)
+            .mediaSlot(width: slotWidth, heightCap: heightCap)
             .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
                 failureContent(failure)
@@ -1204,11 +1215,16 @@ struct RichLocalImage: View {
     @State private var showViewer = false
     @Namespace private var zoom
     @Environment(\.richViewportHeight) private var viewportHeight
+    @Environment(\.richProseWidth) private var proseWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
+
+    /// The image slot's width: the prose column when the transcript published one, else this
+    /// card's own measurement. Fixed, so the height is decided before the bytes arrive.
+    private var slotWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
 
     private var fileName: String {
         (path as NSString).lastPathComponent.nilIfEmpty ?? "image"
@@ -1267,7 +1283,7 @@ struct RichLocalImage: View {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: heightCap)
+                    .mediaSlot(width: slotWidth, heightCap: heightCap)
                     .background(Palette.codeSurface)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .contentShape(.rect)
@@ -1288,7 +1304,7 @@ struct RichLocalImage: View {
                 Rectangle()
                     .fill(Palette.codeSurface)
                     .aspectRatio(reservedAspect, contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: heightCap)
+                    .mediaSlot(width: slotWidth, heightCap: heightCap)
                     .clipShape(.rect(cornerRadius: Radius.md))
                     .overlay {
                         if let progress = downloadProgress {
@@ -1317,10 +1333,12 @@ struct RichLocalImage: View {
         }
     }
 
-    /// One load per (path, pixel bucket, retry). Nothing here runs per scroll frame.
+    /// One load per (path, pixel bucket, retry, workspace). The workspace is part of the key
+    /// so a card drawn before the agent snapshot arrives (R1, V1.1) re-runs its load the
+    /// moment `daemonWorkspaceID` becomes known.
     private var loadKey: String {
         let bucket = MediaSizing.pixelWidth(points: width, scale: displayScale)
-        return "\(path)|\(bucket)|\(retryToken)"
+        return "\(path)|\(bucket)|\(retryToken)|\(richActions?.daemonWorkspaceID ?? "-")"
     }
 
     /// The card's inner width, for decoding at the size it will be drawn at. Published only
@@ -1339,7 +1357,7 @@ struct RichLocalImage: View {
         Rectangle()
             .fill(Palette.codeSurface)
             .aspectRatio(reservedAspect, contentMode: .fit)
-            .frame(maxWidth: .infinity, maxHeight: heightCap)
+            .mediaSlot(width: slotWidth, heightCap: heightCap)
             .clipShape(.rect(cornerRadius: Radius.md))
             .overlay {
                 HStack(alignment: .center, spacing: Space.sm) {
@@ -1381,7 +1399,14 @@ struct RichLocalImage: View {
     @MainActor
     private func load() async {
         guard let ref else {
-            // No workspace (a preview): a chip was already drawn, nothing to load.
+            // No workspace id yet: a restored chat draws before the agent snapshot (V1.1).
+            // `loadKey` carries the id, so this task re-runs when it lands. If it never does
+            // (no conversation), answer honestly after the wait instead of spinning forever.
+            try? await Task.sleep(for: .seconds(8))
+            if !Task.isCancelled, image == nil, failure == nil {
+                failure = .other
+                keepsFailureBox = true
+            }
             return
         }
         guard width > 1 else { return }

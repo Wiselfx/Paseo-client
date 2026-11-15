@@ -150,6 +150,12 @@ struct TranscriptView: View {
             // The keyboard shrinks `geometry`: the first pass has no stable value yet, so it uses
             // this pass's real height; after that only a width change or real growth moves it.
             let viewport = stableViewportHeight > 0 ? stableViewportHeight : geometry.size.height
+            // The prose column: the scroll view's width less the 16 pt margins. Measured here,
+            // once per screen, and published to every media card (V1.2). The lazy stack is
+            // pinned to it too, so no row can widen the transcript's content: a card that
+            // reported a width wider than the column used to re-wrap every row above it, and
+            // a lazy row that re-wraps keeps its old height (V1.3).
+            let column = max(geometry.size.width - 32, 0)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Self.turnSpacing) {
@@ -161,10 +167,13 @@ struct TranscriptView: View {
                         // its own and the resting layout is unchanged when there is none.
                         Color.clear.frame(height: 1 + runway.height).id("bottom")
                     }
+                    .frame(width: column > 1 ? column : nil, alignment: .leading)
+                    .clipped()
                     .padding(.horizontal, 16)
                     .padding(.vertical, 20)
                     .coordinateSpace(name: TranscriptScrollTrack.contentSpace)
                 }
+                .environment(\.richProseWidth, column)
                 .scrollPosition($scrollPosition)
                 .scrollDismissesKeyboard(.interactively)
                 // Opening the conversation lands at the bottom; growth at the tail keeps it

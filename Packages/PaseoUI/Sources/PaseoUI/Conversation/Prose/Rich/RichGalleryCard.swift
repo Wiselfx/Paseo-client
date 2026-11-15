@@ -17,6 +17,7 @@ struct RichGalleryCard: View {
     let images: [RichImage]
 
     @Environment(\.richActions) private var richActions
+    @Environment(\.richProseWidth) private var proseWidth
     @Environment(\.displayScale) private var displayScale
     @Namespace private var zoom
     @State private var thumbnails: [String: UIImage] = [:]
@@ -47,17 +48,23 @@ struct RichGalleryCard: View {
             condition: richActions?.linkCondition ?? .assumed)
     }
 
+    /// The card's width: the prose column when the transcript published one, else the card's
+    /// own measurement. Fixed, so the mosaic is decided before a tile decodes.
+    private var cardWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
+
     /// The tile slot in points: two columns whatever the geometry, so the decode
     /// matches the draw. Falls back to the old constant before layout lands.
     private var slotPoints: CGFloat {
-        guard width > 1 else { return 180 }
-        return max((width - Metrics.galleryTileSpacing) / 2, 1)
+        guard cardWidth > 1 else { return 180 }
+        return max((cardWidth - Metrics.galleryTileSpacing) / 2, 1)
     }
 
-    /// One load per count + width bucket: geometry never re-runs loads,
-    /// and tiles skipped as cached never refetch on the re-run.
+    /// One load per count + width bucket + workspace: geometry never re-runs loads,
+    /// tiles skipped as cached never refetch on the re-run, and a grid drawn before the
+    /// agent snapshot names its workspace (V1.1) loads when the id lands.
     private var loadKey: String {
         "\(images.count)|\(MediaSizing.pixelWidth(points: slotPoints, scale: displayScale))"
+            + "|\(richActions?.daemonWorkspaceID ?? "-")"
     }
 
     /// The card's inner width, measured on the frame it is actually drawn in.
@@ -116,6 +123,7 @@ struct RichGalleryCard: View {
         Group {
             if images.count >= 2 {
                 PaseoMediaCard(media: grid)
+                    .mediaSlot(width: cardWidth, heightCap: .infinity)
                     .background { widthReader }
             }
         }
