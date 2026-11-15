@@ -12,6 +12,23 @@ The added `Newsreader-Italic.ttf` is the unmodified variable italic face from [G
 
 Newsreader italic SHA-256: `796668611f80b64d5adf182fde3b6f29ed83b4e7cbec7b96937e84ac01364792` (retrieved 2026-10-08).
 
+### Fonts
+
+The default faces are open-licence fonts, so each proportional, serif and mono role draws a real weight and a real italic instead of a synthesised one. All four files below are unmodified upstream releases. The DSH Claude Style package (`dsh-claude-style-reference`, `README.en.md` "Fonts", `packages/assets/src/fonts/`) ships the same open set as its default.
+
+- **Inter** — `InterVariable.ttf` and `InterVariable-Italic.ttf`, Inter 4.1 variable faces from the official release (https://github.com/rsms/inter/releases/tag/v4.1), SIL Open Font License 1.1. The full notice is bundled as `Resources/Inter-OFL.txt`. Inter is the default sans face.
+- **Newsreader** — `Newsreader.ttf` and `Newsreader-Italic.ttf`, the variable faces already bundled. The full notice is bundled as `Resources/Newsreader-OFL.txt`. Newsreader is the default serif face.
+- **JetBrains Mono** — `JetBrainsMonoVariable.ttf` and `JetBrainsMonoItalicVariable.ttf`, the variable roman and italic from the JetBrains Mono project (https://github.com/JetBrains/JetBrainsMono), SIL Open Font License 1.1. The full notice is bundled as `Resources/JetBrainsMono-OFL.txt`. JetBrains Mono is the default mono face.
+
+SHA-256, retrieved 2026-11-15:
+
+| File | SHA-256 |
+| --- | --- |
+| `InterVariable.ttf` | `4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf` |
+| `InterVariable-Italic.ttf` | `d6f1f6a172d9e588438db9f986fd5cfad7b30f644374080a8a9d4d91e344586f` |
+| `JetBrainsMonoVariable.ttf` | `662a196d58f1183bf2d77428b6d5283fe3f45161ab021bea4036bc98e5cac016` |
+| `JetBrainsMonoItalicVariable.ttf` | `f115aaa12113718c02ce72864fe6823b87241bc23d3e44cf1220155f861063f2` |
+
 ### Syntax highlighting
 
 [HighlighterSwift](https://github.com/smittytone/HighlighterSwift) is pinned to 3.1.0 (commit `fe7aae9c9b31d3b296fd3d2dd575e1a207bb29e0`). It wraps bundled highlight.js 11.11.1 through JavaScriptCore and returns native attributed text. HighlighterSwift is MIT licensed; highlight.js is BSD 3-Clause. Full upstream notices are bundled in `Resources/HighlighterSwift-LICENSE.txt` and `Resources/HighlightJS-LICENSE.txt`. The Atom One Dark/Light styles are supplied by this dependency. SwiftPM resolves the dependency source; no private source-app assets or code content are copied into it.
