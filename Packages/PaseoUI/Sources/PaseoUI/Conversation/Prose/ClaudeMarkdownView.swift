@@ -97,7 +97,14 @@
         /// SwiftUI could not skip them): the settled pieces now draw once. The closures are not
         /// part of equality on purpose; they are stable objects' methods (`ChatActions`).
         nonisolated public static func == (lhs: ClaudeMarkdownView, rhs: ClaudeMarkdownView) -> Bool {
-            lhs.isStreaming == rhs.isStreaming && lhs.theme == rhs.theme
+            if PaseoPerf.enabled {
+                if lhs.isStreaming != rhs.isStreaming { PaseoPerf.count("md.neq.stream") }
+                if lhs.theme != rhs.theme { PaseoPerf.count("md.neq.theme") }
+                if lhs.document.source != rhs.document.source { PaseoPerf.count("md.neq.source") }
+                if lhs.document.blocks != rhs.document.blocks { PaseoPerf.count("md.neq.blocks") }
+                PaseoPerf.count("md.eq.called")
+            }
+            return lhs.isStreaming == rhs.isStreaming && lhs.theme == rhs.theme
                 && lhs.document.source == rhs.document.source
                 && lhs.document.blocks == rhs.document.blocks
         }
