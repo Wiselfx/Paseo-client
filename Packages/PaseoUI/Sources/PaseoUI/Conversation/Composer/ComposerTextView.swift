@@ -31,7 +31,9 @@ struct ComposerTextView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> ComposerUITextView {
         FocusDiag.note("makeUIView")
+        defer { Task { @MainActor in FocusDiag.noteCount("makeUIView") } }
         let view = ComposerUITextView(frame: .zero)
+        FocusDiag.registry.add(view)
         view.delegate = context.coordinator
         view.text = text
         view.accessibilityIdentifier = "composer.draft"
@@ -45,7 +47,6 @@ struct ComposerTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ComposerUITextView, context: Context) {
-        FocusDiag.note("updateUIView view=\(UInt(bitPattern: ObjectIdentifier(uiView).hashValue) % 10000) coord=\(UInt(bitPattern: ObjectIdentifier(context.coordinator).hashValue) % 10000)")
         // The coordinator holds the current bindings; a stale `parent` would write into a dead one.
         context.coordinator.parent = self
         uiView.onPasteImages = onPasteImages
@@ -94,7 +95,6 @@ struct ComposerTextView: UIViewRepresentable {
     /// repeats the value seen at the event is that snapshot, so it waits; a render that changed
     /// is a newer command from the app (send, tap-outside) and it wins.
     private func bridgeFocus(_ uiView: ComposerUITextView, coordinator: Coordinator) {
-        FocusDiag.note("bridge isFocused=\(isFocused) lastApplied=\(coordinator.lastAppliedFocus) pendingEcho=\(coordinator.pendingEcho != nil) renderedChanged=\(coordinator.renderedFocusChanged) firstResponder=\(uiView.isFirstResponder)")
         if coordinator.pendingEcho != nil {
             guard coordinator.renderedFocusChanged else { return }
             coordinator.pendingEcho = nil
