@@ -27,6 +27,13 @@
     }
 
     extension PaseoPerf {
+        /// Counts an event named at run time (a measured value, an id). Free when off, but the name
+        /// is built by the caller, so wrap the call in `if PaseoPerf.enabled`.
+        static func countNamed(_ name: String) {
+            guard enabled else { return }
+            store.withLock { $0.counts[name, default: 0] += 1 }
+        }
+
         /// A poor man's `_printChanges` that reaches the gate's log (W1): call it from a body with the
         /// view's inputs as strings; each input that differs from the previous call counts
         /// `diff.<prefix>.<key>`, and a call where none differ counts `diff.<prefix>.none` (the body

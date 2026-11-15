@@ -154,6 +154,7 @@
                 .onGeometryChange(for: CGFloat.self) {
                     $0.size.width
                 } action: {
+                    if PaseoPerf.enabled { PaseoPerf.countNamed("md.w.\(Int($0 * 100))") }
                     PaseoPerf.count("md.geo.fire")
                     if tableViewport != $0 { PaseoPerf.count("md.geo.changed") }
                     tableViewport = $0
