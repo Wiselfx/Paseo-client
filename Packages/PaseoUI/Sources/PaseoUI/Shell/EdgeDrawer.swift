@@ -12,12 +12,6 @@ enum EdgeDrawer {
     /// progress (§1.1) — a card that covers the screen has the screen's own shape.
     static let cornerRadius: CGFloat = 55
 
-    /// The scrim over a covered surface is gone (E2 §1): the front card keeps its own colour and
-    /// the depth comes from its shadow. Kept as the one place a scrim would be computed.
-    static func scrimOpacity(_ progress: CGFloat, dark: Bool) -> Double {
-        0
-    }
-
     /// The front card's shadow: black at 10 % in light, 45 % in dark, a 24 pt blur along the
     /// leading edge (the panel casts the same way). The opacity is the token whenever the surface
     /// is on screen; it is zeroed only after a settle finishes closed (E2b §8).
