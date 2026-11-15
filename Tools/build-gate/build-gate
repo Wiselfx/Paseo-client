@@ -490,6 +490,8 @@ do)
         echo "refused: steps must be 1-400 characters of letters, digits, spaces and _.,:'!?@#%+=/- separated by |" >&2
         exit 2
     fi
+    xy_re="^[0-9]{1,4}[ ][0-9]{1,4}\$"
+    xyxy_re="^[0-9]{1,4}[ ][0-9]{1,4}[ ][0-9]{1,4}[ ][0-9]{1,4}\$"
     ax() { perl -e 'alarm shift; exec @ARGV' 20 axe "$@" --udid "$udid"; }
     IFS='|' read -r -a steps <<<"$rest"
     for step in "${steps[@]}"; do
@@ -513,7 +515,7 @@ do)
                     type) ax type "$arg" ;;
                 esac ;;
             tapxy)
-                if [[ ! "$arg" =~ ^[0-9]{1,4}[ ][0-9]{1,4}$ ]]; then echo "refused: tapxy <x> <y>" >&2; exit 2; fi
+                if [[ ! "$arg" =~ $xy_re ]]; then echo "refused: tapxy <x> <y>" >&2; exit 2; fi
                 ax tap -x "${arg% *}" -y "${arg#* }" ;;
             return) ax key 40 ;;
             delete) ax key 42 ;;
@@ -525,7 +527,7 @@ do)
             edge)
                 case "$arg" in left|right|top|bottom) ax gesture "swipe-from-$arg-edge" ;; *) echo "refused: edge left|right|top|bottom" >&2; exit 2 ;; esac ;;
             swipe)
-                if [[ ! "$arg" =~ ^[0-9]{1,4}[ ][0-9]{1,4}[ ][0-9]{1,4}[ ][0-9]{1,4}$ ]]; then echo "refused: swipe <x1> <y1> <x2> <y2>" >&2; exit 2; fi
+                if [[ ! "$arg" =~ $xyxy_re ]]; then echo "refused: swipe <x1> <y1> <x2> <y2>" >&2; exit 2; fi
                 read -r x1 y1 x2 y2 <<<"$arg"
                 ax swipe --start-x "$x1" --start-y "$y1" --end-x "$x2" --end-y "$y2" ;;
             home) ax button home ;;
