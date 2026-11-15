@@ -7,7 +7,10 @@ import Foundation
 // `DiffUnsubscribeRequestSchema`, `DiffSubscribeResponseSchema`, `CheckoutDiscardChangesRequestSchema`,
 // `BranchSuggestionsRequestSchema`, `BranchSuggestionsResponseSchema`,
 // `CheckoutSwitchBranchRequestSchema`, `CheckoutSwitchBranchResponseSchema`,
-// `CheckoutPrStatusPayloadSchema`, `FileSubscribeRequestSchema`, `FileUnsubscribeRequestSchema`,
+// `CheckoutPrStatusPayloadSchema`, `StashSaveRequestSchema`, `StashSaveResponseSchema`,
+// `StashPopRequestSchema`, `StashPopResponseSchema`, `StashListRequestSchema`,
+// `StashListResponseSchema`, `StashEntrySchema`,
+// `FileSubscribeRequestSchema`, `FileUnsubscribeRequestSchema`,
 // `FileSubscribeResponseSchema`, `FileUnsubscribeResponseSchema`, `FileUpdateSchema`,
 // `FileVersionSchema`, `ForgeAuthStateSchema`.
 // Source: packages/protocol/src/binary-frames/diff.ts for the frame opcodes and byte layout.
@@ -1318,5 +1321,113 @@ public struct FileUpdate: Sendable, Hashable, Decodable {
     public init(subscriptionId: String, version: FileVersion) {
         self.subscriptionId = subscriptionId
         self.version = version
+    }
+}
+
+// MARK: - Stashes
+
+/// One entry of the stash list, as the daemon tags it when the stash was saved for a branch.
+/// Source: messages.ts `StashEntrySchema`.
+public struct StashEntry: Sendable, Hashable, Decodable {
+    /// Zero-based index in the stash list; `StashPopRequest` takes this value.
+    public var index: Int
+    public var message: String
+    /// The branch the stash was tagged with when it was saved; nil for an untagged entry.
+    public var branch: String?
+    /// True for a stash Paseo created (its message carries the daemon's `paseo-auto-stash:` prefix).
+    public var isPaseo: Bool
+
+    public init(index: Int, message: String, branch: String? = nil, isPaseo: Bool = false) {
+        self.index = index
+        self.message = message
+        self.branch = branch
+        self.isPaseo = isPaseo
+    }
+}
+
+/// Source: messages.ts `StashSaveRequestSchema`, `StashSaveResponseSchema`.
+public struct StashSaveRequest: PaseoRequest {
+    public static let type = "stash_save_request"
+    public static let responseType = "stash_save_response"
+    public var requestId = ""
+    public var cwd: String
+    /// Branch name to tag the stash with for later identification.
+    public var branch: String?
+
+    public init(cwd: String, branch: String? = nil) {
+        self.cwd = cwd
+        self.branch = branch
+    }
+
+    public struct Response: Decodable, Sendable {
+        public var cwd: String
+        public var success: Bool
+        public var error: CheckoutError?
+        public var requestId: String
+
+        public init(requestId: String, cwd: String, success: Bool, error: CheckoutError?) {
+            self.requestId = requestId
+            self.cwd = cwd
+            self.success = success
+            self.error = error
+        }
+    }
+}
+
+/// Source: messages.ts `StashPopRequestSchema`, `StashPopResponseSchema`.
+public struct StashPopRequest: PaseoRequest {
+    public static let type = "stash_pop_request"
+    public static let responseType = "stash_pop_response"
+    public var requestId = ""
+    public var cwd: String
+    /// Zero-based index from `StashListRequest`'s response.
+    public var stashIndex: Int
+
+    public init(cwd: String, stashIndex: Int) {
+        self.cwd = cwd
+        self.stashIndex = stashIndex
+    }
+
+    public struct Response: Decodable, Sendable {
+        public var cwd: String
+        public var success: Bool
+        public var error: CheckoutError?
+        public var requestId: String
+
+        public init(requestId: String, cwd: String, success: Bool, error: CheckoutError?) {
+            self.requestId = requestId
+            self.cwd = cwd
+            self.success = success
+            self.error = error
+        }
+    }
+}
+
+/// Source: messages.ts `StashListRequestSchema`, `StashListResponseSchema`.
+public struct StashListRequest: PaseoRequest {
+    public static let type = "stash_list_request"
+    public static let responseType = "stash_list_response"
+    public var requestId = ""
+    public var cwd: String
+    /// If true, only Paseo-created stashes come back. The daemon defaults to true.
+    public var paseoOnly: Bool?
+
+    public init(cwd: String, paseoOnly: Bool? = nil) {
+        self.cwd = cwd
+        self.paseoOnly = paseoOnly
+    }
+
+    public struct Response: Decodable, Sendable {
+        public var cwd: String
+        public var entries: [StashEntry]
+        public var error: CheckoutError?
+        public var requestId: String
+
+        public init(requestId: String, cwd: String, entries: [StashEntry], error: CheckoutError?) {
+            self.requestId = requestId
+            self.cwd = cwd
+            self.entries = entries
+            self.error = error
+        }
     }
 }
