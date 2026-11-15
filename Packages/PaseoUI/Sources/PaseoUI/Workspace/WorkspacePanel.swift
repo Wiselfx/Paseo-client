@@ -52,6 +52,9 @@ struct WorkspacePanel: View {
     @State private var gitExtras: WorkspaceGitExtras?
     @State private var renamingAgent: AgentSnapshot?
     @State private var agentPendingArchive: AgentSnapshot?
+    @State private var renamingWorkspace = false
+    /// The archive flow shared with the sidebar row menu (risk check, undo or confirmation).
+    @State private var workspaceArchive = WorkspaceArchiveActions()
     @State private var renameText = ""
     @State private var showSetupSheet = false
     @State private var showImportSheet = false
@@ -184,6 +187,37 @@ struct WorkspacePanel: View {
                 }
             }
         }
+        .onAppear {
+            // The archived workspace is gone from the directory; the panel has nothing left to
+            // show, so it dismisses the way the back chevron does.
+            workspaceArchive.onArchived = { _ in close() }
+        }
+        .alert(
+            "Rename workspace",
+            isPresented: Binding(
+                get: { renamingWorkspace },
+                set: { if !$0 { renamingWorkspace = false } })
+        ) {
+            TextField("Name", text: $renameText)
+            Button("Cancel", role: .cancel) { renamingWorkspace = false }
+            Button("Rename") {
+                guard let workspace else { return }
+                let title = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                renamingWorkspace = false
+                guard !title.isEmpty else { return }
+                Task {
+                    let renamed = await session.workspaceDirectory.renameWorkspace(
+                        workspace.id, title: title)
+                    if !renamed {
+                        toast?.show(
+                            session.workspaceDirectory.actionError
+                                ?? "Couldn't rename the workspace.")
+                    }
+                }
+            }
+        } message: {
+            Text("Choose a short name for this workspace.")
+        }
         .alert(
             "Rename agent",
             isPresented: Binding(
@@ -221,6 +255,7 @@ struct WorkspacePanel: View {
         } message: {
             Text(archiveMessage(for: agentPendingArchive))
         }
+        .workspaceArchiveDialogs(workspaceArchive, session: session)
     }
 
     // MARK: Header
@@ -247,6 +282,33 @@ struct WorkspacePanel: View {
                     }
                     Button("Copy path", systemImage: "doc.on.doc") {
                         Clipboard.copy(workspace.cwd, toast: toast)
+                    }
+                    Divider()
+                    // Upstream's workspace actions (`sidebar.workspace.actions`): rename, pin and
+                    // archive. Their roads already live in `WorkspaceDirectory`.
+                    Button("Rename workspace", systemImage: "pencil") {
+                        renameText = workspace.title ?? ""
+                        renamingWorkspace = true
+                    }
+                    if session.workspaceDirectory.supportsWorkspacePinning {
+                        Button(
+                            workspace.isPinned ? "Unpin" : "Pin to top",
+                            systemImage: workspace.isPinned ? "pin.slash" : "pin"
+                        ) {
+                            Task {
+                                let pinned = await session.workspaceDirectory.setPinned(
+                                    workspace.id, !workspace.isPinned)
+                                if !pinned {
+                                    toast?.show(
+                                        session.workspaceDirectory.actionError
+                                            ?? "Couldn't change the pin.")
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("Archive workspace", systemImage: "archivebox", role: .destructive) {
+                        workspaceArchive.request(workspace, session: session, toast: toast)
                     }
                 }
             } label: {

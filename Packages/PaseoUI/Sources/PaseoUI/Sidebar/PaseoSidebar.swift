@@ -237,36 +237,9 @@ struct PaseoSidebar: View {
 
     func withArchiveDialogs(_ content: some View) -> some View {
         content
-        .confirmationDialog(
-            "Archive worktree?",
-            isPresented: Binding(
-                get: { archive.pendingWarning != nil },
-                set: { if !$0 { archive.pendingWarning = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Archive", role: .destructive) {
-                archive.confirmWarning(session: session, toast: toast)
-            }
-            Button("Cancel", role: .cancel) { archive.pendingWarning = nil }
-        } message: {
-            Text(archive.pendingWarning?.message ?? "")
-        }
-        .confirmationDialog(
-            "Archive workspace?",
-            isPresented: Binding(
-                get: { archive.pendingConfirmation != nil },
-                set: { if !$0 { archive.pendingConfirmation = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Archive", role: .destructive) {
-                archive.confirmPending(session: session, toast: toast)
-            }
-            Button("Cancel", role: .cancel) { archive.pendingConfirmation = nil }
-        } message: {
-            Text("Its agents and terminals stop. This host can't undo an archive.")
-        }
-        .confirmationDialog(
-            ProjectActions.removeTitle,
+            .workspaceArchiveDialogs(archive, session: session)
+            .confirmationDialog(
+                ProjectActions.removeTitle,
             isPresented: Binding(
                 get: { projectPendingRemoval != nil },
                 set: { if !$0 { projectPendingRemoval = nil } }),
