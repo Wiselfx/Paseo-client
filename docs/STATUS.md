@@ -382,3 +382,11 @@ Waiting on the user: the device crash log for the draft-send crash.
 - N6: composer mounted once (ZStack), header hides only the title pill, title pill grows at ax5 (verified on simulator).
 - N5: stopped turn shows no "Completed in" (store records turn_canceled), compaction stays visible when folded, "Sent by" uses agent title. Built and installed; stopped-turn, compaction and Sent-by NOT yet checked on screen. canceledTurnIds is in memory only (reload shows Completed again unless daemon timeline carries it).
 - Still open: 8 pt keyboard gap unmeasured, gate openurl regex, R-2 tension (agentTitle closure on TurnRow).
+
+## 2026-11-15 merged (foundation 756b38c)
+- N5/N6/N7, header and composer without bars (soft status-bar fade, native bottom blur), time under user messages, right panel opens by swipe anywhere, images always load, `/tmp` images read from the filesystem root.
+- P (DeepSeek Flash): turn state from events, outcome-unknown send, permission answers awaited, terminal focus in heartbeat, Restart daemon, open-agent-tab label, create with idempotency key (`agent.create.request`), catch-up retry, quiet foreground notifications. Skipped: X-005 (no upstream copy), X-008 (not a wire message).
+- Q1: Stash and switch. Q2: workspace rename/pin/archive in the panel. R1: drafts persist, app reopens on the last screen (attachments not persisted).
+- Verified on simulator: new-session draft survives relaunch; send creates the agent via the new path; Stop leaves no "Completed in" text; message times.
+- Not yet verified on screen: permission answers (new awaited path), Restart daemon row, terminal focus, archive-label, compaction visible, "Sent by" title, `/tmp` image.
+- Existing tests to update when modern create becomes the default: `AgentControlStoreTests` (two create tests), `DraftSessionTests` create test.
