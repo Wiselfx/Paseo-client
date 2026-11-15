@@ -16,6 +16,7 @@
 		64CC4FC98F63D9055290C03D /* GlanceEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30AA9F81CB0D401959EA7278 /* GlanceEntry.swift */; };
 		6741E75B9FEE62984B78B1ED /* LaunchSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65470003A10A656E33EA0750 /* LaunchSmokeTests.swift */; };
 		7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */; };
+		82B1916018A96D666618150F /* RewindKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD84518A87C0E4A539A989A1 /* RewindKeyboardTests.swift */; };
 		873FB425FA59049A656672C1 /* WidgetTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE98F4E6F9B3C2D8C166E9A /* WidgetTokens.swift */; };
 		8AF165246D8AE2E6D0B15C24 /* RewindComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59A878B1A76E3605AC9E747F /* RewindComposerTests.swift */; };
 		8EA2C4203BFC6D5F3E4D36FB /* SavedHosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */; };
@@ -61,6 +62,7 @@
 		B64108FA9FC10EE10BE16975 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		BCEFB31882A82F9E16F569FB /* PaseoUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PaseoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaseoClientApp.swift; sourceTree = "<group>"; };
+		CD84518A87C0E4A539A989A1 /* RewindKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindKeyboardTests.swift; sourceTree = "<group>"; };
 		D583D4EC5FCF8C4E46667749 /* PaseoCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaseoCore; path = ../Packages/PaseoCore; sourceTree = SOURCE_ROOT; };
 		E0973B3517160F9D49A8F309 /* PaseoClient.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PaseoClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E534C96E3E952966814440BD /* PaseoUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaseoUI; path = ../Packages/PaseoUI; sourceTree = SOURCE_ROOT; };
@@ -135,6 +137,7 @@
 				65470003A10A656E33EA0750 /* LaunchSmokeTests.swift */,
 				FEB9E350154B5E1D385B2F63 /* PaseoUITestSupport.swift */,
 				59A878B1A76E3605AC9E747F /* RewindComposerTests.swift */,
+				CD84518A87C0E4A539A989A1 /* RewindKeyboardTests.swift */,
 			);
 			path = PaseoUITests;
 			sourceTree = "<group>";
@@ -304,6 +307,7 @@
 				6741E75B9FEE62984B78B1ED /* LaunchSmokeTests.swift in Sources */,
 				163D2B79F260845816B7D239 /* PaseoUITestSupport.swift in Sources */,
 				8AF165246D8AE2E6D0B15C24 /* RewindComposerTests.swift in Sources */,
+				82B1916018A96D666618150F /* RewindKeyboardTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
