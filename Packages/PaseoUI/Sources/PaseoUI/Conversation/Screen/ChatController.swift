@@ -412,15 +412,13 @@ struct TranscriptJump: Equatable {
         else { return .unavailable }
         let checkout = self.session.checkout(for: descriptor)
         do {
-            let file = try await checkout.files.fetch(
+            // V3: the binary file channel. The inline JSON read carries bytes for images only;
+            // video, audio and every other binary file arrive as streamed frames, assembled off
+            // the main actor by the checkout's `BinaryFileReads`.
+            let file = try await checkout.files.fetchBytes(
                 ref.path, maxBytes: maxBytes)
-            guard file.encoding == .base64, let content = file.content,
-                let data = Data(
-                    base64Encoded: content,
-                    options: [.ignoreUnknownCharacters])
-            else { return .unavailable }
             return .bytes(
-                DaemonFileBytes(data: data, revision: file.revision))
+                DaemonFileBytes(data: file.data, revision: file.revision))
         } catch let error as PaseoStoreError {
             // The daemon stats before it transfers: over `maxBytes` it
             // answers "File is too large to display" with no file. That

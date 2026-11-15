@@ -172,6 +172,11 @@ public protocol DaemonClient: AnyObject, Sendable {
     /// Unsolicited daemon messages, in arrival order. Single consumer.
     var events: AsyncStream<DaemonEvent> { get }
 
+    /// Whether this socket can carry inbound binary frames. Every transport this app opens can
+    /// (direct WebSocket and relay both deliver binary frames); a transport that cannot makes
+    /// the store keep the inline JSON file read, which has no bytes for non-images.
+    var canReceiveBinaryFrames: Bool { get }
+
     /// Every state change, starting with the current state. Single consumer.
     var states: AsyncStream<ConnectionState> { get }
 }
@@ -180,6 +185,10 @@ extension DaemonClient {
     public func send<R: PaseoRequest>(_ request: R) async throws -> R.Response {
         try await send(request, timeout: .seconds(30))
     }
+
+    /// Direct and relay sockets both carry binary frames (`RelayTransport` maps the relay's
+    /// binary record to `WebSocketFrame.binary`). A test transport may turn this off.
+    public var canReceiveBinaryFrames: Bool { true }
 }
 
 /// A request whose frame has been written but whose response has not arrived yet.
