@@ -36,6 +36,11 @@
 #   terminate     stop the app
 #   shot [name]   screenshot of the simulator into the artifacts (fetch with `get`); half-size JPEG,
 #                 or the full PNG when the name ends in -full
+#   do <step> | <step> ...   drive the simulator with AXe (https://github.com/cameroncooke/AXe), one call, steps
+#                 separated by |. Steps: ui [navigation|reading|full] (the screen as text), tap <label>,
+#                 tapid <id>, tapxy <x> <y>, hold <label> (long press), type <text>, return, delete, key <n>,
+#                 scroll up|down|left|right, edge left|right|top|bottom, swipe <x1> <y1> <x2> <y2>, home,
+#                 wait <1-5>, shot [name]. Only the test simulator is ever addressed.
 #   openurl <url> open a paseo:// URL in the simulator (nothing else is accepted)
 #   appearance light|dark
 #   textsize <category>   Dynamic Type: xs s m l xl xxl xxxl ax1 ax2 ax3 ax4 ax5
@@ -59,6 +64,7 @@
 #   SIM_NAME=...      simulator device name (default: the first available iPhone)
 #   SIM_SIGN=none     build the tests with signing off instead of ad-hoc ("-")
 set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 REPO="$HOME/Paseo-client"
 DERIVED="$HOME/build-derived-data"
@@ -78,6 +84,7 @@ case "${verb:-}" in
     ping|sims|simreset|terminate|status|clean|killbuilds) maxargs=0 ;;
     build|ipa|analyze|regen|install|launch|ls|get|shot|openurl|appearance|textsize|statusbar|crashes|kill) maxargs=1 ;;
     uitest|privacy) maxargs=2 ;;
+    do) maxargs=4 ;;
     test) maxargs=3 ;;
     *) maxargs=0 ;;
 esac
@@ -108,6 +115,29 @@ acquire_lock() {
     echo $$ >"$LOCKDIR/pid"
     trap 'rm -rf "$LOCKDIR"' EXIT
 }
+take_shot() {
+    local name="$1" stamp png f w
+    if [[ ! "$name" =~ ^[A-Za-z0-9_-]{1,60}$ ]]; then echo "refused: bad name" >&2; return 2; fi
+    mkdir -p "$ART/shots"
+    stamp="$(date +%Y%m%d-%H%M%S)-$name"
+    png="$ART/shots/$stamp.png"
+    xcrun simctl io "$udid" screenshot --type=png "$png" >/dev/null 2>&1 || { require_sim; xcrun simctl io "$udid" screenshot --type=png "$png" >/dev/null; }
+    if [[ "$name" == *-full ]]; then
+        f="shots/$stamp.png"
+    else
+        # Half size JPEG: about a tenth of the bytes, text still legible. A name ending in -full keeps the PNG.
+        f="shots/$stamp.jpg"
+        w="$(sips -g pixelWidth "$png" 2>/dev/null | awk '/pixelWidth/ {print $2}')"
+        if [[ "$w" =~ ^[0-9]+$ ]] && sips -s format jpeg -s formatOptions 65 --resampleWidth $((w / 2)) "$png" --out "$ART/$f" >/dev/null 2>&1; then
+            rm -f "$png"
+        else
+            f="shots/$stamp.png"
+        fi
+    fi
+    ls -1t "$ART/shots" | tail -n +31 | while IFS= read -r old; do rm -f "${ART:?}/shots/$old"; done
+    echo "$f"
+}
+
 case "${verb:-}" in
     build|ipa|uitest|test|analyze|regen|install) acquire_lock ;;
 esac
@@ -448,26 +478,64 @@ terminate)
     ;;
 shot)
     require_sim
-    name="${ref:-shot}"
-    if [[ ! "$name" =~ ^[A-Za-z0-9_-]{1,60}$ ]]; then echo "refused: bad name" >&2; exit 2; fi
-    mkdir -p "$ART/shots"
-    stamp="$(date +%Y%m%d-%H%M%S)-$name"
-    png="$ART/shots/$stamp.png"
-    xcrun simctl io "$udid" screenshot --type=png "$png" >/dev/null 2>&1 || { require_sim; xcrun simctl io "$udid" screenshot --type=png "$png" >/dev/null; }
-    if [[ "$name" == *-full ]]; then
-        f="shots/$stamp.png"
-    else
-        # Half size JPEG: about a tenth of the bytes, text still legible. A name ending in -full keeps the PNG.
-        f="shots/$stamp.jpg"
-        w="$(sips -g pixelWidth "$png" 2>/dev/null | awk '/pixelWidth/ {print $2}')"
-        if [[ "$w" =~ ^[0-9]+$ ]] && sips -s format jpeg -s formatOptions 65 --resampleWidth $((w / 2)) "$png" --out "$ART/$f" >/dev/null 2>&1; then
-            rm -f "$png"
-        else
-            f="shots/$stamp.png"
-        fi
+    take_shot "${ref:-shot}"
+    ;;
+do)
+    require_sim
+    command -v axe >/dev/null || { echo "refused: axe is not installed for this user (brew install cameroncooke/axe/axe)" >&2; exit 2; }
+    rest="${SSH_ORIGINAL_COMMAND#do}"
+    rest="${rest# }"
+    steps_re="^[A-Za-z0-9 _.,:'!?@#%+=/|-]+\$"
+    if (( ${#rest} < 1 || ${#rest} > 400 )) || [[ ! "$rest" =~ $steps_re ]]; then
+        echo "refused: steps must be 1-400 characters of letters, digits, spaces and _.,:'!?@#%+=/- separated by |" >&2
+        exit 2
     fi
-    ls -1t "$ART/shots" | tail -n +31 | while IFS= read -r old; do rm -f "${ART:?}/shots/$old"; done
-    echo "$f"
+    ax() { perl -e 'alarm shift; exec @ARGV' 20 axe "$@" --udid "$udid"; }
+    IFS='|' read -r -a steps <<<"$rest"
+    for step in "${steps[@]}"; do
+        step="${step#"${step%%[![:space:]]*}"}"
+        step="${step%"${step##*[![:space:]]}"}"
+        [[ -n "$step" ]] || continue
+        cmd="${step%% *}"
+        arg=""
+        [[ "$step" == *" "* ]] && arg="${step#* }"
+        echo "> $step"
+        case "$cmd" in
+            ui)
+                case "$arg" in ""|navigation) v=navigation ;; reading) v=reading ;; full) v=full ;; *) echo "refused: ui navigation|reading|full" >&2; exit 2 ;; esac
+                ax describe-ui --agent --view "$v" ;;
+            tap|tapid|hold|type)
+                if [[ -z "$arg" || "$arg" == -* ]]; then echo "refused: $cmd needs text that does not start with -" >&2; exit 2; fi
+                case "$cmd" in
+                    tap) ax tap --label "$arg" --wait-timeout 3 ;;
+                    tapid) ax tap --id "$arg" --wait-timeout 3 ;;
+                    hold) ax tap --label "$arg" --hold 1 --wait-timeout 3 ;;
+                    type) ax type "$arg" ;;
+                esac ;;
+            tapxy)
+                if [[ ! "$arg" =~ ^[0-9]{1,4}[ ][0-9]{1,4}$ ]]; then echo "refused: tapxy <x> <y>" >&2; exit 2; fi
+                ax tap -x "${arg% *}" -y "${arg#* }" ;;
+            return) ax key 40 ;;
+            delete) ax key 42 ;;
+            key)
+                if [[ ! "$arg" =~ ^[0-9]{1,3}$ ]]; then echo "refused: key <HID code>" >&2; exit 2; fi
+                ax key "$arg" ;;
+            scroll)
+                case "$arg" in up|down|left|right) ax gesture "scroll-$arg" ;; *) echo "refused: scroll up|down|left|right" >&2; exit 2 ;; esac ;;
+            edge)
+                case "$arg" in left|right|top|bottom) ax gesture "swipe-from-$arg-edge" ;; *) echo "refused: edge left|right|top|bottom" >&2; exit 2 ;; esac ;;
+            swipe)
+                if [[ ! "$arg" =~ ^[0-9]{1,4}[ ][0-9]{1,4}[ ][0-9]{1,4}[ ][0-9]{1,4}$ ]]; then echo "refused: swipe <x1> <y1> <x2> <y2>" >&2; exit 2; fi
+                read -r x1 y1 x2 y2 <<<"$arg"
+                ax swipe --start-x "$x1" --start-y "$y1" --end-x "$x2" --end-y "$y2" ;;
+            home) ax button home ;;
+            wait)
+                if [[ ! "$arg" =~ ^[1-5]$ ]]; then echo "refused: wait 1-5" >&2; exit 2; fi
+                sleep "$arg" ;;
+            shot) take_shot "${arg:-shot}" ;;
+            *) echo "refused: unknown step $cmd" >&2; exit 2 ;;
+        esac
+    done
     ;;
 openurl)
     require_sim
