@@ -85,8 +85,31 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
+  PaseoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - PaseoUITests
+    dependencies:
+      - target: PaseoClient
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wiselfx.paseoclient.UITests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
 schemes:
   PaseoWidgets:
     build:
       targets:
         PaseoWidgets: all
+  PaseoUITests:
+    build:
+      targets:
+        PaseoClient: all
+        PaseoUITests: [test]
+    test:
+      targets:
+        - PaseoUITests
