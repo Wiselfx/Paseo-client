@@ -148,30 +148,34 @@ public enum RichContentDetector {
             let words = info.split(whereSeparator: { $0.isWhitespace })
             let language = words.first.map(String.init) ?? ""
             let wantsSource = words.dropFirst().contains { $0 == "source" || $0 == "title" }
-            let bodyIsBlank = fence.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            // V2.3 — artifact and diagram bodies get the five basic entities decoded when
+            // the whole body arrived escaped (evidence: the model sent `&lt;svg` and
+            // `--&gt;`). Ordinary code blocks and prose never pass through here.
+            let body = RichArtifactEntities.decodedArtifactBody(fence.body)
+            let bodyIsBlank = body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             switch language {
             case "visualize":
                 // §2 — fence value must be non-blank or the fence renders nothing.
                 if !wantsSource, !bodyIsBlank {
-                    blocks.append(.visualize(code: fence.body, range: fence.range))
+                    blocks.append(.visualize(code: body, range: fence.range))
                 }
             case "html", "htm":
                 // V2 — what models already write. Closed only: an open fence stays a code
                 // block until it closes, so a half-written page never flashes.
-                if fence.closed, !wantsSource, !bodyIsBlank, looksLikeHTMLMarkup(fence.body) {
-                    blocks.append(.htmlArtifact(code: fence.body, range: fence.range))
+                if fence.closed, !wantsSource, !bodyIsBlank, looksLikeHTMLMarkup(body) {
+                    blocks.append(.htmlArtifact(code: body, range: fence.range))
                 }
             case "svg", "xml":
                 // V2 — a fenced drawing, not its source. `xml` counts only when the body is
                 // an `<svg` document (any other XML is data, not a picture).
-                if fence.closed, !wantsSource, isSVGDocument(fence.body) {
-                    blocks.append(.rawSVG(source: fence.body, range: fence.range))
+                if fence.closed, !wantsSource, isSVGDocument(body) {
+                    blocks.append(.rawSVG(source: body, range: fence.range))
                 }
             case "mermaid":
                 // C9 — closed fences only: a streaming fence stays a code block, so the
                 // half-written diagram never flashes or errors mid-stream.
                 if fence.closed, !bodyIsBlank, !wantsSource {
-                    blocks.append(.mermaid(source: fence.body, range: fence.range))
+                    blocks.append(.mermaid(source: body, range: fence.range))
                 }
             case "youtube":
                 // §1.2 — fence body is a watch URL or a bare ID. An unparseable body
@@ -193,9 +197,17 @@ public enum RichContentDetector {
         let svgs = scanRawSVGs(in: source, outside: mergeRanges(fenceRanges + codeSpansForSVG))
         blocks += svgs.map { RichContentBlock.rawSVG(source: String(source[$0]), range: $0) }
 
+        // V2.3 — the same block, escaped: `&lt;svg …&gt;…&lt;/svg&gt;` with no raw angle
+        // brackets is the five basic entities away from a drawing. Claimed after the
+        // literal form, never overlapping it.
+        let escapedSVGs = scanEscapedRawSVGs(
+            in: source, outside: mergeRanges(fenceRanges + codeSpansForSVG + svgs))
+        blocks += escapedSVGs.map { RichContentBlock.rawSVG(source: $0.source, range: $0.range) }
+
         // Inline code spans (§1.4 protected zones). Single-line and multi-line;
         // unpaired backtick runs are literal text and protect nothing.
-        let protectedWithoutCode = mergeRanges(fenceRanges + svgs)
+        let svgRanges = svgs + escapedSVGs.map(\.range)
+        let protectedWithoutCode = mergeRanges(fenceRanges + svgRanges)
         let codeSpans = scanInlineCodeSpans(in: source, outside: protectedWithoutCode)
 
         // Authored links/images and autolinks (§1.4 protected zones) — they stay
@@ -216,7 +228,7 @@ public enum RichContentDetector {
         blocks += paragraphBlocks(
             in: source,
             outside: fenceRanges,
-            purityExclusions: mergeRanges(codeSpans + svgs + linkSpans.map(\.range)),
+            purityExclusions: mergeRanges(codeSpans + svgRanges + linkSpans.map(\.range)),
             linkSpans: linkSpans)
 
         return blocks.sorted { $0.range.lowerBound < $1.range.lowerBound }
@@ -261,12 +273,13 @@ public enum RichContentDetector {
             let inFence = openFence != nil
 
             // Raw SVG is tracked only outside fences: a `<svg>` in a code sample is
-            // body text, not a rich block.
+            // body text, not a rich block. The escaped form (`&lt;svg`, V2.3) is the same
+            // block, so blank lines inside it stay inside it too.
             if !inFence {
                 if inSVG {
-                    if closesSVG(text) { inSVG = false }
-                } else if opensSVG(text) && !closesSVG(text) {
-                    inSVG = true
+                    if closesSVG(text) || closesEscapedSVG(text) { inSVG = false }
+                } else if opensSVG(text) || opensEscapedSVG(text) {
+                    if !closesSVG(text) && !closesEscapedSVG(text) { inSVG = true }
                 }
             }
 
@@ -795,6 +808,73 @@ func matchRawSVG(_ text: Substring, from start: Substring.Index) -> Range<String
         search = text.index(after: close) // invalid close: keep looking
     }
     return nil
+}
+
+// MARK: - Escaped raw SVG (V2.3)
+
+/// The escaped twin of `scanRawSVGs`: `&lt;svg …&gt;…&lt;/svg&gt;` — the same drawing, the
+/// five basic entities away. A model or provider that HTML-escapes its output sends exactly
+/// this, so the block is claimed and decoded. Its range still indexes the received text.
+func scanEscapedRawSVGs(
+    in source: String, outside excluded: [Range<String.Index>]
+) -> [(source: String, range: Range<String.Index>)] {
+    var found: [(source: String, range: Range<String.Index>)] = []
+    for segment in unprotectedSegments(source, excluding: excluded) {
+        var search = segment.startIndex
+        while search < segment.endIndex {
+            guard let start = nextCaseInsensitive(segment, "&lt;svg", from: search) else { break }
+            var claimed = false
+            if let match = matchEscapedRawSVG(segment, from: start),
+                let decoded = decodedRawSVG(String(segment[match]))
+            {
+                found.append((decoded, match))
+                search = match.upperBound
+                claimed = true
+            }
+            if !claimed {
+                // Oversized, invalid or unterminated: stays text, and a later block may
+                // still start inside this one.
+                search = segment.index(after: start)
+            }
+        }
+    }
+    return found
+}
+
+/// `&lt;svg` + `&gt;`/whitespace … `&lt;/svg` + whitespace + `&gt;`, the escaped shape of
+/// [`matchRawSVG`]'s rule.
+func matchEscapedRawSVG(_ text: Substring, from start: Substring.Index) -> Range<String.Index>? {
+    guard let afterName = text.index(start, offsetBy: 7, limitedBy: text.endIndex) else {
+        return nil
+    }
+    var i = afterName
+    if i < text.endIndex, text[i...].hasPrefix("&gt;") {
+        i = text.index(i, offsetBy: 4)
+    } else {
+        guard i < text.endIndex, text[i].isWhitespace else { return nil }
+    }
+    var search = i
+    while let close = nextCaseInsensitive(text, "&lt;/svg", from: search) {
+        guard var j = text.index(close, offsetBy: 8, limitedBy: text.endIndex) else { return nil }
+        while j < text.endIndex, text[j].isWhitespace { j = text.index(after: j) }
+        if j < text.endIndex, text[j...].hasPrefix("&gt;") {
+            return start..<text.index(j, offsetBy: 4)
+        }
+        search = text.index(after: close)
+    }
+    return nil
+}
+
+/// The decoded candidate when it is a complete raw SVG block under the same rules and cap
+/// as the literal form. One decode, then the existing matcher as the judge.
+func decodedRawSVG(_ raw: String) -> String? {
+    let decoded = RichArtifactEntities.decodedArtifactBody(raw)
+    guard decoded.utf8.count <= RichContentDetector.rawSVGMaxLength else { return nil }
+    guard String(decoded.prefix(4)).lowercased() == "<svg" else { return nil }
+    guard let match = matchRawSVG(decoded[...], from: decoded.startIndex),
+        match.upperBound == decoded.endIndex
+    else { return nil }
+    return decoded
 }
 
 func nextCaseInsensitive(_ text: Substring, _ needle: String, from start: Substring.Index) -> Substring.Index? {
@@ -1391,6 +1471,19 @@ private func opensSVG<S: StringProtocol>(_ line: S) -> Bool {
 
 private func closesSVG<S: StringProtocol>(_ line: S) -> Bool {
     line.range(of: "</svg", options: .caseInsensitive) != nil
+}
+
+/// `&lt;svg` at the start of a line (V2.3): the escaped twin of `opensSVG`.
+private func opensEscapedSVG<S: StringProtocol>(_ line: S) -> Bool {
+    let trimmed = line.drop(while: { $0.isWhitespace })
+    guard trimmed.count >= 7, trimmed.prefix(7).lowercased() == "&lt;svg" else { return false }
+    let after = trimmed.dropFirst(7)
+    guard let first = after.first else { return true }
+    return first.isWhitespace || after.lowercased().hasPrefix("&gt;")
+}
+
+private func closesEscapedSVG<S: StringProtocol>(_ line: S) -> Bool {
+    line.range(of: "&lt;/svg", options: .caseInsensitive) != nil
 }
 
 private func isBareURLLine(_ t: Substring) -> Bool {
