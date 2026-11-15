@@ -840,7 +840,14 @@ struct TranscriptView: View {
     private func scrollToRow(_ seq: Int, animated: Bool, proxy: ScrollViewProxy) {
         if growWindow(seq: seq) {
             // The match is in a turn that was held back: mount it, then scroll on the next pass.
-            afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
+            // The turn's own id is known to the lazy stack as soon as the turn is in the window; the
+            // row anchor inside it only once the row is built. Land on the turn, then refine.
+            let turnId = store.turns.first(where: { $0.containsRow(seqEnd: seq) })?.id
+            afterWindowGrowth = {
+                if let turnId { proxy.scrollTo(turnId, anchor: .center) }
+                PaseoPerf.count("find.windowLanded")
+                afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
+            }
             return
         }
         if animated {
@@ -883,7 +890,10 @@ struct TranscriptView: View {
             ? growWindow(seq: Int(id.dropFirst(4)))
             : growWindow(toInclude: id)
         if grew {
-            afterWindowGrowth = { jumpToTurn(id, proxy: proxy) }
+            afterWindowGrowth = {
+                PaseoPerf.count("jump.windowLanded")
+                jumpToTurn(id, proxy: proxy)
+            }
             return
         }
         // Jumping backwards releases the tail-follow, like M7b.
