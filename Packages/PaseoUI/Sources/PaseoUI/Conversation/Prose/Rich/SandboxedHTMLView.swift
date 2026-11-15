@@ -167,6 +167,9 @@ struct SandboxedHTMLView: UIViewRepresentable {
         }
 
         private func scheduleReport(_ raw: CGFloat) {
+            // After the one published height, only the overflow flag can still change; a
+            // report that cannot change it is not worth a task (V2, no per-frame work).
+            if publishedHeight, (raw > ceiling) == reportedOverflow { return }
             pendingReport?.cancel()
             pendingReport = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(100))
@@ -188,6 +191,16 @@ struct SandboxedHTMLView: UIViewRepresentable {
             guard finishedFirstLoad, !publishedHeight else { return }
             publishedHeight = true
             onHeightChange(height)
+        }
+
+        func webView(
+            _ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!
+        ) {
+            // A new document measures itself once too (a reload, a scheme rebuild). The card
+            // ignores repeats, so this never re-flows a row.
+            finishedFirstLoad = false
+            publishedHeight = false
+            pendingReport?.cancel()
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

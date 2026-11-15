@@ -1799,6 +1799,15 @@ private enum WebCardMetrics {
 struct RichWebCard: View {
     let code: String
     let kind: RichWebCardKind
+    /// `code.hashValue` once per value, not once per `body` read: every cache key and the
+    /// viewer identity use it.
+    private let contentKey: String
+
+    init(code: String, kind: RichWebCardKind) {
+        self.code = code
+        self.kind = kind
+        self.contentKey = "\(kind.contentKey):\(code.hashValue)"
+    }
 
     @State private var showSource = false
     @State private var contentHeight: CGFloat = WebCardMetrics.reservedHeight
@@ -1836,10 +1845,6 @@ struct RichWebCard: View {
 
     /// A page that wants more than this gets the "Open" affordance instead.
     private var heightCap: CGFloat { viewportHeight * 0.7 }
-
-    /// Document identity (source + scheme) — never the document string: building it in
-    /// `body` would copy the whole page on every layout pass (R-1).
-    private var contentKey: String { "\(kind.contentKey):\(code.hashValue)" }
 
     /// The aspect the page had when it was measured, so a revisit reserves its real height
     /// before anything renders.
@@ -1904,7 +1909,8 @@ struct RichWebCard: View {
         .onDisappear { setVisible(false) }
         .onScrollVisibilityChange(threshold: 0.1) { visible in setVisible(visible) }
         .onChange(of: pageOpen) { _, open in
-            // The page outranks this slot: yield it with a snapshot, reclaim on close.
+            // The page outranks this slot: yield it with a snapshot. Closing the page leaves
+            // the card on that snapshot (it is the picture the live view showed).
             if open {
                 if holdsSlot { releaseSlot() }
             } else if isVisible {
@@ -1912,8 +1918,11 @@ struct RichWebCard: View {
             }
         }
         .onChange(of: colorScheme) { _, _ in
-            // The document bakes the scheme in; rebuild it, live or on the next visit.
+            // The document and the snapshot bake the scheme in; drop both, then rebuild
+            // the live document (or let the snapshot path render the new scheme).
             document = nil
+            snapshot = nil
+            prefersSnapshot = false
             if holdsSlot { document = makeDocument() }
         }
         .task(id: snapshotKey) { await captureSnapshotIfNeeded() }
@@ -1990,7 +1999,7 @@ struct RichWebCard: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open visualization full screen")
+        .accessibilityLabel("Open full screen")
     }
 
     private var source: some View {
@@ -2105,15 +2114,30 @@ struct RichWebCard: View {
         let key = RichSnapshotCache.key(content: contentKey, width: renderWidth, dark: dark)
         if RichSnapshotCache.image(for: key) != nil { return }
         let html = document ?? makeDocument()
+        let renderDark = dark
         capturingSnapshot = true
         Task { @MainActor in
             let rendered = await RichSnapshotQueue.shared.snapshot(
-                html: html, width: renderWidth, scale: displayScale)
+                html: html, width: renderWidth, scale: displayScale, maxHeight: heightCap)
             capturingSnapshot = false
             guard let rendered else { return }
-            RichSnapshotCache.store(rendered, for: key, content: contentKey, dark: dark)
-            if snapshot == nil { snapshot = rendered }
+            RichSnapshotCache.store(rendered, for: key, content: contentKey, dark: renderDark)
+            // A scheme change while the snapshot rendered made it the wrong picture.
+            guard renderDark == dark else { return }
+            noteOverflow(in: rendered, at: renderWidth)
+            // The card may have scrolled back and reclaimed a slot while this rendered:
+            // its live view stays, and the image is only a cache for the next visit.
+            if snapshot == nil, !holdsSlot { snapshot = rendered }
         }
+    }
+
+    /// A snapshot as tall as the card's cap was clipped by it: the page is at least that tall,
+    /// so the card shows the same "Open" the live view would have shown.
+    @MainActor
+    private func noteOverflow(in image: UIImage, at renderWidth: CGFloat) {
+        guard heightCap > 1, image.size.width > 1, renderWidth > 1 else { return }
+        let height = image.size.height * (renderWidth / image.size.width)
+        if height >= heightCap - 0.5 { overflows = true }
     }
 
     /// The page's own load-time height, once. Later reports are ignored here as well as in
@@ -2135,13 +2159,17 @@ struct RichWebCard: View {
         }
         let renderWidth = width
         let rendered = await RichSnapshotQueue.shared.snapshot(
-            html: makeDocument(), width: renderWidth, scale: displayScale)
+            html: makeDocument(), width: renderWidth, scale: displayScale, maxHeight: heightCap)
         guard !Task.isCancelled else { return }
         guard let rendered else {
             renderFailed = true
             return
         }
         RichSnapshotCache.store(rendered, for: key, content: contentKey, dark: dark)
+        noteOverflow(in: rendered, at: renderWidth)
+        // Scrolled back before the render landed: the live view is showing and keeps the
+        // slot; the image waits in the cache for the next visit.
+        guard !holdsSlot else { return }
         snapshot = rendered
         guard !measuredHeight, rendered.size.width > 1, rendered.size.height > 1 else {
             return

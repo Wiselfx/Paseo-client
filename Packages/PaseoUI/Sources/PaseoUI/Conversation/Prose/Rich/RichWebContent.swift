@@ -58,15 +58,19 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
     }
 
     /// Renders `html` at `width` points and returns the image, or nil when there is no scene to
-    /// render in (a headless test host) or WebKit refuses the snapshot.
-    func snapshot(html: String, width: CGFloat, scale: CGFloat) async -> UIImage? {
+    /// render in (a headless test host) or WebKit refuses the snapshot. `maxHeight` clips the
+    /// capture to the card's stage, so a page snapshot is the same picture the live view showed
+    /// (a tall page is not squeezed whole into the reserved box); nil captures everything, as a
+    /// raw SVG drawing wants.
+    func snapshot(html: String, width: CGFloat, scale: CGFloat, maxHeight: CGFloat? = nil) async -> UIImage? {
         guard width > 1, let webView = ensureWebView(width: width) else { return nil }
         await load(html, in: webView, width: width)
         hostKind = .svgDocument
         // One layout pass for the document's own measurement, then size the frame to the content
-        // so the snapshot holds the whole drawing.
+        // so the snapshot holds the whole drawing (or the card's visible stage).
         try? await Task.sleep(for: .milliseconds(16))
-        let height = max(await contentHeight(webView) ?? 1, 1)
+        let content = max(await contentHeight(webView) ?? 1, 1)
+        let height = maxHeight.map { min(content, max($0, 1)) } ?? content
         webView.frame = CGRect(x: 0, y: 0, width: width, height: height)
         try? await Task.sleep(for: .milliseconds(16))
         let configuration = WKSnapshotConfiguration()
@@ -349,8 +353,10 @@ enum RichSnapshotCache {
     /// draws the page instead of a placeholder: a second visit never flashes.
     private static let recent: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 40
-        cache.totalCostLimit = 8_000_000
+        cache.countLimit = 24
+        // A full-width page snapshot at screen scale is several megabytes; too small a
+        // budget would evict the image a revisit is about to ask for.
+        cache.totalCostLimit = 32_000_000
         return cache
     }()
 
@@ -432,6 +438,17 @@ final class WebViewSlotPool {
 /// content, so a card recreated by the transcript draws the drawing on its first frame.
 struct RichSVGCard: View {
     let code: String
+    /// Source identity and the drawing's own ratio, computed once per view value: both are
+    /// read from `body` (cache key, reserved height, viewer identity) and neither may scan
+    /// the source per layout pass (R-1).
+    private let contentKey: String
+    private let intrinsicAspectRatio: CGFloat?
+
+    init(code: String) {
+        self.code = code
+        self.contentKey = "svg:\(code.hashValue)"
+        self.intrinsicAspectRatio = RichSVGIntrinsic.aspectRatio(of: code)
+    }
 
     @State private var image: UIImage?
     @State private var showSource = false
@@ -444,18 +461,11 @@ struct RichSVGCard: View {
 
     private var dark: Bool { colorScheme == .dark }
 
-    /// Document identity (source + scheme) — never the document string: building a 100 KB
-    /// document in `body` is work per layout pass (R-1).
-    private var contentKey: String { "svg:\(code.hashValue)" }
-
     /// The drawing at the current width, or the latest one from another width: a revisit's
     /// first frame draws the cached drawing instead of a placeholder.
     private var resolvedImage: UIImage? {
         image ?? RichSnapshotCache.lastImage(for: contentKey, dark: dark)
     }
-
-    /// From `viewBox`, else `width`/`height`; nil when the drawing carries neither.
-    private var intrinsicAspectRatio: CGFloat? { RichSVGIntrinsic.aspectRatio(of: code) }
 
     /// The container's height, for the 60 % cap, known before the first frame (`RichViewport`).
     @Environment(\.richViewportHeight) private var viewportHeight
@@ -484,6 +494,11 @@ struct RichSVGCard: View {
             })
         .background { widthReader }
         .task(id: renderKey) { await render() }
+        .onChange(of: colorScheme) { _, _ in
+            // The snapshot bakes the scheme in; the cache lookup for the new scheme draws
+            // on the next pass and the width-keyed render replaces it.
+            image = nil
+        }
         .fullScreenCover(isPresented: $showViewer) {
             if let drawing = resolvedImage {
                 MediaViewerView(

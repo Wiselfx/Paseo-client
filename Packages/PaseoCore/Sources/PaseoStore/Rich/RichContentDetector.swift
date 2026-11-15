@@ -818,6 +818,9 @@ func matchRawSVG(_ text: Substring, from start: Substring.Index) -> Range<String
 func scanEscapedRawSVGs(
     in source: String, outside excluded: [Range<String.Index>]
 ) -> [(source: String, range: Range<String.Index>)] {
+    // Ordinary prose has no escaped tag at all: one substring search beats a scan over
+    // every character of every message.
+    guard source.range(of: "&lt;svg", options: .caseInsensitive) != nil else { return [] }
     var found: [(source: String, range: Range<String.Index>)] = []
     for segment in unprotectedSegments(source, excluding: excluded) {
         var search = segment.startIndex
