@@ -451,6 +451,9 @@ struct TranscriptView: View {
     private func repinOpen(_ metrics: ScrollFollowMetrics) {
         guard openPin else { return }
         if scrollHeld || !controller.isFollowing || controller.anchoringToAnswer || openPinCount >= 16 {
+            if PaseoPerf.enabled {
+                PaseoPerf.countNamed("openpin.off.held\(scrollHeld).follow\(controller.isFollowing).anchor\(controller.anchoringToAnswer).n\(openPinCount)")
+            }
             openPin = false
             return
         }
@@ -462,6 +465,7 @@ struct TranscriptView: View {
         guard key != openPinKey else { return }
         openPinKey = key
         openPinCount += 1
+        if PaseoPerf.enabled { PaseoPerf.countNamed("openpin.fire.h\(Int(metrics.contentHeight)).d\(Int(metrics.distanceFromBottom))") }
         scrollPosition.scrollTo(edge: .bottom)
     }
 
