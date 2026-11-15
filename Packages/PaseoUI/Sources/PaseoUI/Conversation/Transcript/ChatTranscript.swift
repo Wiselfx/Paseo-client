@@ -63,9 +63,6 @@ struct TranscriptView: View {
     /// written at phase boundaries only: the phase itself lives in `TranscriptScrollTrack`, so a
     /// scroll frame never invalidates the body.
     @State private var scrollHeld = false
-    /// True from open until the transcript is first at rest at the end or the reader takes it over.
-    /// While true, every content-size change re-seats the end marker (W1, see `repinOpen`).
-    @State private var openPin = true
     /// The send runway (D1 §2). One `@State`, written on layout, never per scroll frame.
     @State private var runway = SendRunway()
     /// The transcript's height with the keyboard down (E3b). Rich media and the process cap read
@@ -398,7 +395,6 @@ struct TranscriptView: View {
             runwayViewportChanged()
         }
         openRunwayIfPossible(proxy: proxy)
-        repinOpen(metrics, from: previous, proxy: proxy)
         // The second half of a glide-lead: the instant jump has landed, so the last stretch
         // glides (DSH `turn-nav.ts:412-474`).
         if let glide = pendingGlide {
@@ -441,32 +437,10 @@ struct TranscriptView: View {
         }
     }
 
-    /// Opening a long conversation at its end (W1). `defaultScrollAnchor(.bottom)` lands on an
-    /// estimated offset in a lazy stack whose rows have not been measured; as they realise, the size
-    /// anchor keeps the bottom pinned by moving the offset, and in a conversation of any length the
-    /// rows under the final offset were never built: a blank transcript (60 000 pt of content, then
-    /// 17 000) until the first drag. Seating the end marker by id on each size change while the
-    /// transcript is still opening makes the stack build the rows at the end. It stops at the first
-    /// rest at the end, and the moment a finger or a flick owns the scroll.
-    private func repinOpen(
-        _ metrics: ScrollFollowMetrics, from previous: ScrollFollowMetrics, proxy: ScrollViewProxy
-    ) {
-        guard openPin else { return }
-        if scrollHeld || !controller.isFollowing {
-            openPin = false
-            return
-        }
-        guard metrics.contentHeight > metrics.visibleHeight,
-            metrics.contentHeight != previous.contentHeight
-        else { return }
-        proxy.scrollTo("bottom", anchor: .bottom)
-    }
-
     /// The scroll came to rest: the one edge where chrome state is allowed to change. The follow,
     /// button and anchor decisions run on the distance the gesture left behind, before the trim
     /// below changes the range.
     private func scrollSettled() {
-        if openPin, scrollTrack.distanceFromBottom <= Self.followSlack { openPin = false }
         reportReadingPosition()
         handOverAnchorIfFilled()
         followIfAtEnd()
