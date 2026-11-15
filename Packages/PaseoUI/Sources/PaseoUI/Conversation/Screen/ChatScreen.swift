@@ -114,20 +114,30 @@ public struct ChatScreen: View {
     /// Text scrolling under the composer card, and under the home-indicator strip below it, is
     /// blurred, never sharp. Sits behind the card and does not reach above it.
     private var composerUnderBlur: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .frame(height: 56)
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .black, location: 0.5),
-                    ],
-                    startPoint: .top, endPoint: .bottom)
-            )
-            .ignoresSafeArea(.container, edges: .bottom)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        ZStack {
+            // Blur that fades in, so there is no visible edge to the slab.
+            Rectangle()
+                .fill(.regularMaterial)
+                .mask(fadeIn(from: 0, to: 0.6))
+            // Page colour over it cancels the material's grey tint; text beneath stays soft.
+            Rectangle()
+                .fill(Palette.background)
+                .opacity(0.8)
+                .mask(fadeIn(from: 0.1, to: 0.8))
+        }
+        .frame(height: 64)
+        .ignoresSafeArea(.container, edges: .bottom)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func fadeIn(from: CGFloat, to: CGFloat) -> some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: from),
+                .init(color: .black, location: to),
+            ],
+            startPoint: .top, endPoint: .bottom)
     }
 
     /// The top bar: two glass buttons and the centred title. No band, and the find bar joins it
