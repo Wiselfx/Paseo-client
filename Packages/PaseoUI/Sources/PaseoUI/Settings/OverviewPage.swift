@@ -13,6 +13,15 @@ struct OverviewPage: View {
     /// The developer facts (server id, protocol, terminal hooks) sit behind one collapsed
     /// "Advanced" disclosure; the page opens on the connection itself (R11 §3).
     @State private var showAdvanced = false
+    /// Which restart confirmation is up. Nil closes it.
+    @State private var restartKind: RestartKind?
+    /// "Host offline" is shown instead of the confirmation when the socket is down.
+    @State private var showOffline = false
+
+    private enum RestartKind: Hashable {
+        case keepTerminals
+        case closeTerminals
+    }
 
     var body: some View {
         PageList {
@@ -74,6 +83,30 @@ struct OverviewPage: View {
                     "Unset toggles show as off. Changes apply immediately; the effective config comes back from the host."
                 )
             }
+            if !hostSettings.restartRequiredPaths.isEmpty {
+                Section {
+                    InlineBanner(
+                        .warning,
+                        title: restartRequiredTitle,
+                        message: restartRequiredMessage,
+                        action: ("Restart", { startRestart(.keepTerminals) }))
+                        .panelRow(Palette.background)
+                }
+            }
+            Section {
+                restartRow
+                if hostSettings.terminalsSurviveRestart {
+                    closeTerminalsRow
+                }
+                if let restartError = hostSettings.restartError {
+                    InlineBanner(
+                        .failure, title: restartErrorTitle(restartError),
+                        message: restartErrorMessage(restartError))
+                        .panelRow(Palette.background)
+                }
+            } header: {
+                Text("Daemon")
+            }
             if let error = hostSettings.error {
                 Section {
                     InlineBanner(
@@ -85,6 +118,102 @@ struct OverviewPage: View {
         }
         .inlinePageTitle("Overview")
         .refreshable { await hostSettings.load() }
+        .confirmationDialog(
+            "Restart \(hostName)",
+            isPresented: Binding(
+                get: { restartKind != nil },
+                set: { if !$0 { restartKind = nil } }),
+            titleVisibility: .visible,
+            presenting: restartKind
+        ) { kind in
+            Button(kind == .closeTerminals ? "Restart and close terminals" : "Restart", role: .destructive) {
+                restartKind = nil
+                Haptics.medium()
+                Task { await hostSettings.restart(killTerminals: kind == .closeTerminals) }
+            }
+            Button("Cancel", role: .cancel) { restartKind = nil }
+        } message: { kind in
+            Text(kind == .closeTerminals ? closeTerminalsConfirmMessage : restartConfirmMessage)
+        }
+        .alert("Host offline", isPresented: $showOffline) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(
+                "This host is offline. Paseo reconnects automatically-wait until it's back online before restarting."
+            )
+        }
+    }
+
+    // MARK: Restart
+
+    /// Restart card, upstream's copy verbatim (`settings.host.daemon.restart`, en.ts:3074-3094).
+    @ViewBuilder private var restartRow: some View {
+        ListRow(
+            title: "Restart daemon",
+            subtitle: "Restarts the daemon process. The app will reconnect automatically",
+            systemImage: "arrow.clockwise",
+            accessory: ListRow.Accessory.value(
+                hostSettings.isRestarting ? "Restarting..." : "Restart"),
+            action: { startRestart(.keepTerminals) })
+            .panelRow()
+            .disabled(hostSettings.isRestarting)
+            .accessibilityIdentifier("settings.restart")
+    }
+
+    /// Only when the host advertises `terminalsSurviveRestart`; otherwise a restart closes
+    /// terminals anyway and offering the choice would lie
+    /// (`packages/app/src/screens/settings/host-page.tsx:679-694`).
+    @ViewBuilder private var closeTerminalsRow: some View {
+        ListRow(
+            title: "Restart and close terminals",
+            subtitle: "Restart and also close every terminal running on this host.",
+            action: { startRestart(.closeTerminals) })
+            .panelRow()
+            .disabled(hostSettings.isRestarting)
+    }
+
+    private var hostName: String { session.serverInfo?.hostname ?? "Paseo host" }
+
+    private var restartConfirmMessage: String {
+        "This will restart the daemon. Agents running on it will keep going; the app will reconnect automatically."
+    }
+
+    private var closeTerminalsConfirmMessage: String {
+        "This will restart the daemon and close every terminal on it, ending the programs running in them. The app will reconnect automatically."
+    }
+
+    /// A saved setting the running daemon did not adopt. Upstream's wording for the state is
+    /// "saved; not applied" (`public-docs/configuration.md:59`); the paths come from
+    /// `daemon.config.reload.response`.
+    private var restartRequiredTitle: String { "Restart required" }
+
+    private var restartRequiredMessage: String {
+        "Saved; not applied. Restart the daemon to apply: \(hostSettings.restartRequiredPaths.joined(separator: ", "))."
+    }
+
+    private func restartErrorTitle(_ error: HostSettingsStore.RestartError) -> String {
+        switch error {
+        case .requestFailed: "Error"
+        case .unableToReconnect: "Unable to reconnect"
+        }
+    }
+
+    private func restartErrorMessage(_ error: HostSettingsStore.RestartError) -> String {
+        switch error {
+        case .requestFailed(let message): message
+        case .unableToReconnect: "\(hostName) did not come back online. Please verify it restarted."
+        }
+    }
+
+    /// Asks for the destructive confirmation, unless the socket is down: then say so instead of
+    /// sending a request that cannot land (`host-page.tsx:598-611`).
+    private func startRestart(_ kind: RestartKind) {
+        guard hostSettings.isRestarting == false else { return }
+        guard case .connected = session.connection else {
+            showOffline = true
+            return
+        }
+        restartKind = kind
     }
 
     /// The live connection line: the state dot beside the row's value (the R4 row carries one

@@ -46,6 +46,13 @@ public final class HostSettingsStore {
     public private(set) var supportsIdleRuntimeCleanup = false
     /// `features.resumeOnStartupSetting`: same for `resumeOnStartup`/`resumePrompt` (v0.14.0).
     public private(set) var supportsResumeOnStartup = false
+    /// `features.daemonConfigReload`: only capable daemons answer `daemon.config.reload.request`,
+    /// the RPC that reports which saved changes still need a restart.
+    public private(set) var supportsConfigReload = false
+    /// `features.terminalsSurviveRestart`: restart keeps terminals, so the close-terminals option
+    /// only makes sense when it is advertised. Upstream gates the same row on it
+    /// (`packages/app/src/screens/settings/host-page.tsx:568-571`).
+    public private(set) var terminalsSurviveRestart = false
 
     // Presence state. The app drives this from focus and visibility changes.
     public private(set) var isPresenting = false
@@ -106,6 +113,10 @@ public final class HostSettingsStore {
     /// `set_daemon_config_request` has no revision field: `expectedRevision` belongs to the
     /// project-config RPC (`write_project_config_request`), not to daemon config. The daemon's
     /// response is the effective config after the merge, which is what this store adopts.
+    ///
+    /// The set response carries no restart information, so on a daemon that advertises
+    /// `features.daemonConfigReload` the save is followed by a reload: a saved-but-inactive
+    /// setting must not look applied (`public-docs/configuration.md:59`).
     @discardableResult
     public func save(_ patch: DaemonConfigPatch) async -> Bool {
         isSaving = true
@@ -115,10 +126,33 @@ public final class HostSettingsStore {
             config = response.config
             error = nil
             phase = .ready
+            await refreshRestartRequirements()
             return true
         } catch {
             self.error = hostSettingsErrorText(error)
             return false
+        }
+    }
+
+    /// Paths the last save reported as needing a daemon restart, oldest save last. Empty when the
+    /// daemon applied everything, when it cannot answer `daemon.config.reload.request`, or after
+    /// the next successful restart.
+    public private(set) var restartRequiredPaths: [String] = []
+
+    /// Asks the daemon what it applied and what still needs a restart. Upstream:
+    /// `public-docs/configuration.md:59` and the wire response at `packages/protocol/src/messages.ts:5552-5561`.
+    /// A failure here is silent on purpose: the save succeeded, and a missing restart hint must
+    /// never read as a failed save.
+    private func refreshRestartRequirements() async {
+        guard supportsConfigReload else {
+            restartRequiredPaths = []
+            return
+        }
+        do {
+            let response = try await client.send(ReloadDaemonConfigRequest())
+            restartRequiredPaths = response.restartRequiredPaths
+        } catch {
+            restartRequiredPaths = []
         }
     }
 
@@ -341,6 +375,77 @@ public final class HostSettingsStore {
         }
     }
 
+    // MARK: Lifecycle
+
+    /// Why a restart did not finish, for the card's error banner. Upstream's copy is
+    /// `settings.host.daemon.restart.requestFailedTitle` / `.unableToReconnectTitle` in en.ts:3087-3088.
+    public enum RestartError: Sendable, Equatable {
+        /// The request never reached the daemon (or the daemon refused it).
+        case requestFailed(String)
+        /// The request was acknowledged but the daemon never answered again.
+        case unableToReconnect
+    }
+
+    /// True from the tap until the daemon answers again (or the wait gives up).
+    public private(set) var isRestarting = false
+    public private(set) var restartError: RestartError?
+    /// The daemon's server id, for the restart request's reason string.
+    private var serverID: String?
+
+    /// Restarts the daemon and waits for it to answer again.
+    ///
+    /// A lost answer is the expected path: the daemon may restart before replying, so a
+    /// `ConnectionError` with `outcomeUnknown` still counts as acknowledged. The wait then polls a
+    /// plain config read until the daemon answers, which is the replacement signal this client
+    /// has (upstream polls `daemon.get_status` until the worker pid changes).
+    /// Upstream: `packages/app/src/screens/settings/host-page.tsx:558-706`,
+    /// `packages/app/src/screens/settings/daemon-lifecycle.ts:27-56`.
+    public func restart(killTerminals: Bool = false) async {
+        guard !isRestarting else { return }
+        restartError = nil
+        restartRequiredPaths = []
+        isRestarting = true
+        defer { isRestarting = false }
+
+        let request = RestartServerRequest(
+            reason: serverID.map { "settings_daemon_restart_\($0)" },
+            killTerminals: killTerminals)
+        do {
+            _ = try await client.send(request, timeout: .seconds(10))
+        } catch {
+            guard (error as? ConnectionError)?.outcomeUnknown == true else {
+                restartError = .requestFailed(hostSettingsErrorText(error))
+                return
+            }
+        }
+
+        guard await waitUntilAnswering() else {
+            restartError = .unableToReconnect
+            return
+        }
+        restartError = nil
+    }
+
+    /// Polls a cheap read until the daemon answers again. Upstream waits up to ten minutes with a
+    /// 250 ms poll (`daemon-lifecycle.ts:118-131`); one second is enough for a phone and keeps the
+    /// reconnect chatter down.
+    private func waitUntilAnswering() async -> Bool {
+        let deadline = ContinuousClock.now + .seconds(600)
+        while ContinuousClock.now < deadline {
+            do {
+                let response = try await client.send(
+                    GetDaemonConfigRequest(), timeout: .seconds(5))
+                config = response.config
+                phase = .ready
+                return true
+            } catch {
+                guard error is ConnectionError else { return false }
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        return false
+    }
+
     // MARK: Presence
 
     /// Starts the 15 s heartbeat and sends one immediately. Call when the app becomes active.
@@ -477,6 +582,9 @@ public final class HostSettingsStore {
         supportsRelayConfig = info?.hasFeature("relayConfig") ?? false
         supportsIdleRuntimeCleanup = info?.hasFeature("idleRuntimeCleanupSetting") ?? false
         supportsResumeOnStartup = info?.hasFeature("resumeOnStartupSetting") ?? false
+        supportsConfigReload = info?.hasFeature("daemonConfigReload") ?? false
+        terminalsSurviveRestart = info?.hasFeature("terminalsSurviveRestart") ?? false
+        serverID = info?.serverId
         if !supportsDaemonDiagnostics, diagnosticsState != .loading {
             diagnosticsState = .unsupported
         }
