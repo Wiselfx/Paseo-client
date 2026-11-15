@@ -82,6 +82,7 @@ public struct ShellView: View {
             .ignoresSafeArea()
             .toastHost(toastCenter)
             .overlay(alignment: .top) { FocusDiagOverlay().padding(.top, 60) }
+            .overlay(alignment: .bottom) { Color.red.frame(height: 40).allowsHitTesting(false) }
             .background {
                 ShellSessionWatcher(
                     session: session,
