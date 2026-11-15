@@ -382,6 +382,10 @@ struct TranscriptView: View {
         if transcriptHeight != metrics.viewportHeight {
             transcriptHeight = metrics.viewportHeight
         }
+        if PaseoPerf.enabled, metrics.contentHeight != previous.contentHeight || metrics.offsetY != previous.offsetY {
+            PaseoPerf.countNamed(
+                "geom.h\(Int(metrics.contentHeight / 100) * 100).y\(Int(metrics.offsetY / 100) * 100).vh\(Int(metrics.viewportHeight))")
+        }
         scrollTrack.contentOffset = metrics.offsetY
         scrollTrack.distanceFromBottom = metrics.distanceFromBottom
         scrollTrack.distanceFromContentBottom = metrics.distanceFromContentBottom
