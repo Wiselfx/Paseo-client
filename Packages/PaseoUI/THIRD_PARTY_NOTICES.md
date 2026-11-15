@@ -23,7 +23,7 @@ No third-party app binaries, proprietary fonts, account credentials, or real use
 ## Trademarks and logos
 
 - **Newsreader.ttf**: The Newsreader Project Authors (2020), SIL Open Font License 1.1. Full license accompanies the font in `Sources/ClaudeUI/Resources/Newsreader-OFL.txt`. Copied from the existing companion project's licensed font resource. This is a visual substitute; no claim it is Claude's actual iOS font.
-- **Claude_AI_symbol.svg**: Existing companion asset, copied unmodified from its `ClaudeLogo.imageset`. Claude/Anthropic brand artwork belongs to its owner. Original source and redistribution permission have not been independently established in this pass. The [MIT License](LICENSE) covers the source code only and grants no license to this mark. Replace/remove the resource before publishing if permission is not established.
+- **Paseo butterfly** (`Sources/PaseoUI/Resources/Assets.xcassets/PaseoLogo.imageset/butterfly.svg`): upstream Paseo's brand mark (`packages/app/assets/images/butterfly-white.svg`), copied unmodified and licensed with Paseo under the Apache License 2.0, Copyright (c) 2025-present Mohamed Boudra (https://github.com/getpaseo/paseo).
 - **SF Symbols**: Rendered by iOS through system symbol names; no extracted SF Symbols files are redistributed.
 - **Temporary-session ghost and unequal menu lines**: Small geometric SwiftUI paths recreated for this interface study; exact outline fidelity is unverified.
 - **Camera scene**: Original synthetic SwiftUI scene. The private camera-reference image is not redistributed.
@@ -33,4 +33,4 @@ No third-party app binaries, proprietary fonts, account credentials, or real use
 - **GitHub logo**: Simple Icons `icons/github.svg`, retrieved October 8, 2026 from https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/github.svg (SHA256 `3bf8cceead820aec50d4ee825a3fd02c5a1cd6665cc9cf4cbf3d9c8861a204bb`). Upstream CC0 text is included as `Resources/Simple-Icons-CC0.md`. GitHub trademarks remain owned by GitHub; CC0 does not grant trademark rights. The icon identifies the repository integration control, not this project's identity. GitHub's [brand guidance](https://brand.github.com/foundations/logo) describes integration use and non-affiliation constraints.
 - **Code status/configuration glyphs and sleeping mascot**: Original geometric/vector and pixel approximations of the provided UI reference. No original animated sprite asset was extracted; motion and exact outlines remain unverified.
 
-The `ClaudeWidgets` target reuses a copy of the same `ClaudeLogo` SVG to remain independent of the app UI target. Its provenance and unresolved redistribution/trademark considerations are identical to those stated above. Widget voice and Dispatch glyphs are original approximate vector geometry; camera, Code, plus and search use SF Symbols.
+Widget voice and Dispatch glyphs are original approximate vector geometry; camera, Code, plus and search use SF Symbols.

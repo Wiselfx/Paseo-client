@@ -3,7 +3,7 @@ import PaseoStore
 import SwiftUI
 
 /// A session that does not exist yet (UX-SPEC §3). It is the conversation surface, not a sheet:
-/// the workspace name in the header, the DSH mark over a serif greeting while nothing has been
+/// the workspace name in the header, the butterfly over a serif greeting while nothing has been
 /// sent, the workspace line and the normal composer. The first send creates the agent with the
 /// text and attachments as its first turn, and the shell swaps its conversation in.
 struct DraftChatView: View {

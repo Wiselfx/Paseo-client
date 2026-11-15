@@ -131,13 +131,10 @@ struct ClaudeHomeHero: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            // The DSH Claude mark (clay, vector): `packages/assets/src/brand/claude-mark-clay.svg`
-            // from the Claude style reference. No drawn stand-in.
-            Image("ClaudeMark", bundle: .module)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 44, height: 44)
-                .accessibilityHidden(true)
+            // Paseo's butterfly at the splash's 96 pt, shimmering while the hero idles
+            // (Upstream: packages/app/src/screens/startup-splash-screen.tsx:44-46,155-186);
+            // this hero is what `LaunchSkeleton` shows, so the splash and the draft draw one mark.
+            PaseoLogoShimmer()
                 .modifier(ClaudeHeroRise(visible: markIn, reduceMotion: reduceMotion))
 
             VStack(spacing: 8) {
