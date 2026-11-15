@@ -115,6 +115,7 @@ struct ClaudeRevealProse: View {
                             document: .cached(trimmed, home: richActions?.homeDirectory), theme: theme,
                             imageContent: imageContent, isStreaming: isStreaming,
                             onAction: onAction)
+                            .equatable()
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .mask(sweepMask(active: ref.isTailMarkdown))
                     }

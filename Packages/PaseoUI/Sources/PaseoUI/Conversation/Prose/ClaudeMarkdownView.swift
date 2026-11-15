@@ -6,7 +6,7 @@
     /// blocks, mono code. Sizes are measured at Claude's 17 pt body (V5); headings and code are
     /// ratios of `bodySize`, so the whole ladder follows the size setting and Dynamic Type.
     /// Claude's uncaptured rich-block metrics remain provisional.
-    public struct ClaudeMarkdownTheme {
+    public struct ClaudeMarkdownTheme: Equatable {
         public var bodyFont: Font
         public var headingFonts: [Font]
         public var codeFont: Font
@@ -80,7 +80,17 @@
         }
     }
 
-    public struct ClaudeMarkdownView: View {
+    public struct ClaudeMarkdownView: View, Equatable {
+        /// R-2 (W1): equal inputs skip `body`. A streamed message is many of these in one stack, and
+        /// every token re-ran every one of them (closures in the initialiser are never equal, so
+        /// SwiftUI could not skip them): the settled pieces now draw once. The closures are not
+        /// part of equality on purpose; they are stable objects' methods (`ChatActions`).
+        nonisolated public static func == (lhs: ClaudeMarkdownView, rhs: ClaudeMarkdownView) -> Bool {
+            lhs.isStreaming == rhs.isStreaming && lhs.theme == rhs.theme
+                && lhs.document.source == rhs.document.source
+                && lhs.document.blocks == rhs.document.blocks
+        }
+
         public let document: MarkdownDocumentModel
         public var theme: ClaudeMarkdownTheme
         @State private var tableViewport: CGFloat = 0
@@ -602,6 +612,7 @@
                     content: content, font: font ?? theme.bodyFont, theme: theme,
                     alignment: alignment == .right ? .right : alignment == .center ? .center : .left, onAction: onAction
                 )
+                .equatable()
             } else {
                 inlineText(content, font: font ?? theme.bodyFont)
                     .textRenderer(InlineCodeRenderer(background: Palette.inlineCodeFill))

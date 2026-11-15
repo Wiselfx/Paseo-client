@@ -4,7 +4,15 @@
 
     /// TextKit 1 draws the code decoration behind glyphs while UITextView retains native selection.
     /// No padding characters are inserted, so copying preserves the parsed source text.
-    struct ClaudeSelectableInlineCode: UIViewRepresentable {
+    struct ClaudeSelectableInlineCode: UIViewRepresentable, Equatable {
+        /// R-2 (W1): the representable is rebuilt and `updateUIView` runs (an attributed string built
+        /// and compared) for every paragraph with inline code each time its parent evaluates, which
+        /// during a stream is every token. The closure is not part of equality.
+        nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.alignment == rhs.alignment && lhs.theme == rhs.theme && lhs.content == rhs.content
+                && lhs.font == rhs.font
+        }
+
         let content: [MarkdownInline]
         let font: Font
         let theme: ClaudeMarkdownTheme
