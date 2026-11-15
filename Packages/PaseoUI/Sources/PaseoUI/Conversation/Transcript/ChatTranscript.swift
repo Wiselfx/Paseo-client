@@ -102,10 +102,12 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if store.turns.isEmpty, store.pendingPermissions.isEmpty {
-            states
-        } else {
+        // EXPERIMENT: both scroll views stay mounted; the empty state is drawn over the transcript.
+        ZStack {
             transcript
+            if store.turns.isEmpty, store.pendingPermissions.isEmpty {
+                states
+            }
         }
     }
 
