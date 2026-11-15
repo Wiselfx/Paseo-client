@@ -31,6 +31,9 @@
 #   regen <ref>   run xcodegen on App/project.yml; writes the resulting diff of App/ as a patch
 #                 artifact (the repo checkout is reset; apply the patch and commit it yourself)
 #   install <ref> build the Debug app for the simulator and install it on the test simulator
+#   install-release <ref>
+#                 same, Release configuration (optimised, whole-module): the build to take performance
+#                 numbers on (W1). Own derived-data folder, so Debug and Release builds never mix.
 #   launch <args|-> start the installed app with launch arguments (comma-separated, or "-" for
 #                 none); prints its pid
 #   terminate     stop the app
@@ -73,7 +76,7 @@ DERIVED="$HOME/build-derived-data"
 LOG="$HOME/build-gate.log"
 # Hard cap on one build so a hang never ties up the Mac.
 MAX_SECONDS=1500
-GATE_VERSION=3
+GATE_VERSION=4
 ART="$HOME/sim-artifacts"
 SIM_ENV="$HOME/paseo-sim.env"
 UITEST_MAX_SECONDS=2700
@@ -84,7 +87,7 @@ nargs=0
 for a in "${ref:-}" "${arg2:-}" "${arg3:-}" "${extra:-}"; do [[ -n "$a" ]] && nargs=$((nargs + 1)); done
 case "${verb:-}" in
     ping|sims|simreset|terminate|status|clean|killbuilds) maxargs=0 ;;
-    build|ipa|analyze|regen|install|launch|ls|get|shot|openurl|appearance|textsize|statusbar|crashes|kill|applog) maxargs=1 ;;
+    build|ipa|analyze|regen|install|install-release|launch|ls|get|shot|openurl|appearance|textsize|statusbar|crashes|kill|applog) maxargs=1 ;;
     uitest|privacy) maxargs=2 ;;
     do) maxargs=4 ;;
     test) maxargs=3 ;;
@@ -141,7 +144,7 @@ take_shot() {
 }
 
 case "${verb:-}" in
-    build|ipa|uitest|test|analyze|regen|install) acquire_lock ;;
+    build|ipa|uitest|test|analyze|regen|install|install-release) acquire_lock ;;
 esac
 
 # The booted test simulator or a clear refusal.
@@ -467,6 +470,29 @@ install)
     xcrun simctl install "$udid" "$app"
     echo "installed $(git rev-parse --short HEAD) on $udid"
     ;;
+install-release)
+    checkout_ref "${ref:-}"
+    require_sim
+    out="$(mktemp)"
+    trap 'rm -f "$out"; rm -rf "$LOCKDIR"' EXIT
+    set +e
+    perl -e 'alarm shift; exec @ARGV' "$MAX_SECONDS" \
+        xcodebuild -project App/PaseoClient.xcodeproj -scheme PaseoClient \
+        -configuration Release -destination "platform=iOS Simulator,id=$udid" \
+        -derivedDataPath "$DERIVED-release" -skipPackagePluginValidation -skipMacroValidation \
+        CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build >"$out" 2>&1
+    status=$?
+    set -e
+    if [[ $status -ne 0 ]]; then
+        grep -E 'error: ' "$out" | sed "s#$REPO/##g" | sort -u | head -100 || true
+        echo "INSTALL-RELEASE FAILED (build exit $status)"
+        exit "$status"
+    fi
+    app="$DERIVED-release/Build/Products/Release-iphonesimulator/PaseoClient.app"
+    [[ -d "$app" ]] || { echo "INSTALL-RELEASE FAILED: PaseoClient.app was not built" >&2; exit 1; }
+    xcrun simctl install "$udid" "$app"
+    echo "installed RELEASE $(git rev-parse --short HEAD) on $udid"
+    ;;
 launch)
     require_sim
     args=()
@@ -653,7 +679,7 @@ kill|killbuilds)
     fi
     ;;
 clean)
-    rm -rf "${HOME:?}/build-derived-data" "${HOME:?}/build-derived-data-device" "${HOME:?}/build-derived-data-analyze" "${ART:?}"
+    rm -rf "${HOME:?}/build-derived-data" "${HOME:?}/build-derived-data-device" "${HOME:?}/build-derived-data-analyze" "${HOME:?}/build-derived-data-release" "${ART:?}"
     echo "cleaned derived data and artifacts"
     ;;
 ls)
