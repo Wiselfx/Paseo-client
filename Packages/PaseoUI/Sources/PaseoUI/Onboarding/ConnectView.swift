@@ -260,9 +260,12 @@ public struct ConnectView: View {
             RowGroup {
                 field(
                     "Host", text: $host, prompt: "example.com or 192.0.2.10",
-                    symbol: "desktopcomputer", keyboard: .URL, contentType: .URL)
+                    symbol: "desktopcomputer", keyboard: .URL, contentType: .URL,
+                    identifier: "connect.host")
                 RowDivider()
-                field("Port", text: $port, prompt: "6767", symbol: "number", keyboard: .numberPad)
+                field(
+                    "Port", text: $port, prompt: "6767", symbol: "number", keyboard: .numberPad,
+                    identifier: "connect.port")
                 if let portError {
                     errorCaption(portError)
                 }
@@ -270,7 +273,9 @@ public struct ConnectView: View {
                     errorCaption(hostError)
                 }
                 RowDivider()
-                secureField("Password", text: $password, prompt: "Host password")
+                secureField(
+                    "Password", text: $password, prompt: "Host password",
+                    identifier: "connect.password")
                 RowDivider()
                 Toggle(isOn: $useTLS) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -362,7 +367,8 @@ public struct ConnectView: View {
 
     private func field(
         _ title: String, text: Binding<String>, prompt: String, symbol: String,
-        keyboard: UIKeyboardType = .default, contentType: UITextContentType? = nil
+        keyboard: UIKeyboardType = .default, contentType: UITextContentType? = nil,
+        identifier: String
     ) -> some View {
         HStack(spacing: 12) {
             fieldSymbol(symbol)
@@ -377,13 +383,16 @@ public struct ConnectView: View {
                 .textContentType(contentType)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .accessibilityIdentifier(identifier)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
     }
 
-    private func secureField(_ title: String, text: Binding<String>, prompt: String) -> some View {
+    private func secureField(
+        _ title: String, text: Binding<String>, prompt: String, identifier: String
+    ) -> some View {
         HStack(spacing: 12) {
             fieldSymbol("lock")
             VStack(alignment: .leading, spacing: 2) {
@@ -396,6 +405,7 @@ public struct ConnectView: View {
                 .textContentType(.password)
                 .submitLabel(.go)
                 .onSubmit { if canConnect { onConnect() } }
+                .accessibilityIdentifier(identifier)
             }
         }
         .padding(.horizontal, 16)
