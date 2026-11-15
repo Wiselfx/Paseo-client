@@ -34,7 +34,8 @@
 #   launch <args|-> start the installed app with launch arguments (comma-separated, or "-" for
 #                 none); prints its pid
 #   terminate     stop the app
-#   shot [name]   screenshot of the simulator into the artifacts (fetch with `get`)
+#   shot [name]   screenshot of the simulator into the artifacts (fetch with `get`); half-size JPEG,
+#                 or the full PNG when the name ends in -full
 #   openurl <url> open a paseo:// URL in the simulator (nothing else is accepted)
 #   appearance light|dark
 #   textsize <category>   Dynamic Type: xs s m l xl xxl xxxl ax1 ax2 ax3 ax4 ax5
@@ -450,8 +451,21 @@ shot)
     name="${ref:-shot}"
     if [[ ! "$name" =~ ^[A-Za-z0-9_-]{1,60}$ ]]; then echo "refused: bad name" >&2; exit 2; fi
     mkdir -p "$ART/shots"
-    f="shots/$(date +%Y%m%d-%H%M%S)-$name.png"
-    xcrun simctl io "$udid" screenshot --type=png "$ART/$f" >/dev/null 2>&1 || { require_sim; xcrun simctl io "$udid" screenshot --type=png "$ART/$f" >/dev/null; }
+    stamp="$(date +%Y%m%d-%H%M%S)-$name"
+    png="$ART/shots/$stamp.png"
+    xcrun simctl io "$udid" screenshot --type=png "$png" >/dev/null 2>&1 || { require_sim; xcrun simctl io "$udid" screenshot --type=png "$png" >/dev/null; }
+    if [[ "$name" == *-full ]]; then
+        f="shots/$stamp.png"
+    else
+        # Half size JPEG: about a tenth of the bytes, text still legible. A name ending in -full keeps the PNG.
+        f="shots/$stamp.jpg"
+        w="$(sips -g pixelWidth "$png" 2>/dev/null | awk '/pixelWidth/ {print $2}')"
+        if [[ "$w" =~ ^[0-9]+$ ]] && sips -s format jpeg -s formatOptions 65 --resampleWidth $((w / 2)) "$png" --out "$ART/$f" >/dev/null 2>&1; then
+            rm -f "$png"
+        else
+            f="shots/$stamp.png"
+        fi
+    fi
     ls -1t "$ART/shots" | tail -n +31 | while IFS= read -r old; do rm -f "${ART:?}/shots/$old"; done
     echo "$f"
     ;;
