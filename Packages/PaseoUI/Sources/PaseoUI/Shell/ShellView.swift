@@ -111,6 +111,10 @@ public struct ShellView: View {
             .onChange(of: scenePhase) { _, phase in
                 session.hostSettings.updateVisibility(phase == .active)
                 session.attention.setFocusedAgent(phase == .active ? selectedAgentId : nil)
+                // The draft store coalesces writes; leaving the app must not lose the last
+                // keystrokes (upstream flushes its draft storage on AppState change,
+                // `packages/app/src/app/_layout.tsx:997`).
+                if phase == .background { DraftStore.shared.flush() }
             }
             .onChange(of: notificationTarget) { _, _ in
                 handleNotificationTarget()
