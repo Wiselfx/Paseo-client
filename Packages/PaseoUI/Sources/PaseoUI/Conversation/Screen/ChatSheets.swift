@@ -50,7 +50,7 @@ struct ChatSheets: ViewModifier {
                 SheetScaffold(document.fileName, detents: .large) {
                     ClaudeDiffView(
                         path: document.path, unifiedDiff: document.unifiedDiff,
-                        old: document.old, new: document.new)
+                        old: document.old, new: document.new, fullHeight: true)
                 }
             }
             .sheet(item: $controller.pushedSubagent) { subagent in
