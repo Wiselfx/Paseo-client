@@ -70,6 +70,7 @@ struct TranscriptView: View {
     @State private var openPinKey: CGFloat = -1
     /// A ceiling, so a layout that never converges cannot loop.
     @State private var openPinCount = 0
+    @State private var openNudgedHeight: CGFloat = -1
     /// The send runway (D1 §2). One `@State`, written on layout, never per scroll frame.
     @State private var runway = SendRunway()
     /// The transcript's height with the keyboard down (E3b). Rich media and the process cap read
@@ -462,6 +463,14 @@ struct TranscriptView: View {
         guard metrics.contentHeight > metrics.visibleHeight else { return }
         if metrics.distanceFromBottom <= Self.followSlack {
             PaseoPerf.count("openpin.atEnd")
+            // A jump of thousands of points leaves the stack without rows under the final offset until
+            // the scroll view's visible rect changes; a programmatic scroll to where it already is
+            // changes nothing. Two points up is invisible and does change it, once per content height.
+            if openNudgedHeight != metrics.contentHeight {
+                openNudgedHeight = metrics.contentHeight
+                PaseoPerf.count("openpin.nudge")
+                scrollPosition.scrollTo(y: max(metrics.offsetY - 2, 0))
+            }
             return
         }
         let key = metrics.contentHeight * 1000 + metrics.offsetY
