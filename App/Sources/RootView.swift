@@ -130,6 +130,10 @@ struct RootView: View {
                 // the app last saw, honestly timestamped.
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .background else { return }
+                    // Draft writes are coalesced (200 ms); leaving the app flushes the last
+                    // keystrokes whatever screen is up (R1.A; upstream flushes its draft storage
+                    // on AppState, `packages/app/src/app/_layout.tsx:997`).
+                    DraftStore.shared.flush()
                     Task { await model.publishGlanceSnapshot(session: session, force: true) }
                 }
 

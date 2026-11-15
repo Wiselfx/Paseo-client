@@ -35,11 +35,6 @@ public struct ShellView: View {
     /// The draft session (UX-SPEC §3): shown while no agent is selected and after every "New
     /// session" entry point. One slot, like one draft tab.
     @State private var draft: DraftSession?
-    /// Rebuilds the draft's view when the slot is filled with a different draft, so its focus and
-    /// attachment tray never leak from one workspace to another.
-    @State private var draftId = UUID()
-    /// The last settings picked in a draft, for the next one on this host (§3.1).
-    @State private var lastDraftPreferences = DraftPreferences()
     /// True when the draft was opened from an entry point rather than by the idle shell, so a
     /// late agent list never yanks it away from someone who is typing.
     @State private var draftOpenedByUser = false
@@ -85,17 +80,14 @@ public struct ShellView: View {
                 ShellSessionWatcher(
                     session: session,
                     onAgentsChange: adoptAgents,
-                    onDirectoryLoaded: showDefaultDraftIfIdle)
+                    onDirectoryLoaded: directoryLoaded)
             }
             .onAppear {
                 drawer.onNewSession = { openNewSession(workspaceId: nil) }
                 session.hostSettings.startPresence(
                     focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
                 session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
-                if selectedAgentId == nil, let first = session.agents.first {
-                    select(first.id, closeDrawer: false)
-                }
-                showDefaultDraftIfIdle()
+                restoreStartupScreen()
                 handleNotificationTarget()
                 handleDeepLinkTarget()
                 homeSettled = true
@@ -111,9 +103,15 @@ public struct ShellView: View {
             .onChange(of: scenePhase) { _, phase in
                 session.hostSettings.updateVisibility(phase == .active)
                 session.attention.setFocusedAgent(phase == .active ? selectedAgentId : nil)
+                // The screen it reopens on is the one that was on screen when the app left.
+                if phase == .background { rememberScreen() }
             }
             .onChange(of: notificationTarget) { _, _ in
                 handleNotificationTarget()
+            }
+            .onChange(of: draft?.workspaceId) { _, _ in
+                // Moving the draft to another workspace changes the screen to reopen.
+                rememberScreen()
             }
             .onChange(of: deepLinkTarget) { _, _ in
                 handleDeepLinkTarget()
@@ -186,7 +184,9 @@ public struct ShellView: View {
                         },
                         onSubmit: { submission in submitDraft(submission) }
                     )
-                    .id(draftId)
+                    // The draft's own id is the view's identity: focus and attachment tray never
+                    // leak from one draft to another, and a restored draft keeps its identity.
+                    .id(draft.draftId)
                 } else if !homeSettled
                     || (!session.workspaceDirectory.hasLoaded
                         && session.workspaceDirectory.error == nil)
@@ -271,6 +271,9 @@ public struct ShellView: View {
             select(first.id, closeDrawer: false)
         }
         showDefaultDraftIfIdle()
+        // The agent list also carries the workspace a conversation lives in; the screen record
+        // learns it as soon as it is known.
+        rememberScreen()
     }
 
     // MARK: Selection
@@ -364,6 +367,120 @@ public struct ShellView: View {
             }
         }
         if closeDrawer, drawer.state == .sidebar { drawer.close() }
+        rememberScreen()
+    }
+
+    // MARK: Startup
+
+    /// Reopens the screen the app was left on: the last workspace and its tab — a conversation
+    /// or an unsent new-session draft. Restore follows what was last opened, never the
+    /// connection state; a host that is still connecting or offline keeps the target.
+    /// `Upstream: docs/expo-router.md:37-45`,
+    /// `packages/app/src/navigation/host-runtime-bootstrap.ts:141-171`.
+    private func restoreStartupScreen() {
+        guard selectedAgentId == nil, draft == nil else { return }
+        guard let last = DraftStore.shared.lastScreen else {
+            openStartupFallback()
+            return
+        }
+        // Another host's screen: this host starts as it always did.
+        if let hostId = last.hostId, let current = session.serverInfo?.serverId, hostId != current {
+            openStartupFallback()
+            return
+        }
+        // The remembered workspace is proven gone once the directory has loaded.
+        if let workspaceId = last.workspaceId, session.workspaceDirectory.hasLoaded,
+            session.workspaceDirectory.workspace(id: workspaceId) == nil
+        {
+            openStartupFallback()
+            return
+        }
+        if let agentId = last.agentId {
+            // A conversation loads its own snapshot, so a not-yet-listed agent is still restored.
+            // An agent that left the list after it loaded is gone: the fallback takes over.
+            if !session.agents.isEmpty, !session.agents.contains(where: { $0.id == agentId }) {
+                openStartupFallback()
+                return
+            }
+            select(agentId, closeDrawer: false)
+            return
+        }
+        if let draftId = last.draftId {
+            restoreDraft(workspaceId: last.workspaceId, draftId: draftId)
+            return
+        }
+        openStartupFallback()
+    }
+
+    /// What launch does when there is nothing to restore, or the remembered screen is gone.
+    private func openStartupFallback() {
+        if let first = session.agents.first { select(first.id, closeDrawer: false) }
+        showDefaultDraftIfIdle()
+    }
+
+    /// Puts back the unsent new-session draft, workspace id included: the directory may still be
+    /// loading, so the draft keeps the remembered id and picks up its `cwd` once the workspace is
+    /// known (`directoryLoaded`).
+    private func restoreDraft(workspaceId: String?, draftId: String) {
+        let workspace = workspaceId.flatMap { session.workspaceDirectory.workspace(id: $0) }
+        drawer.close()
+        selectedAgentId = nil
+        conversation = nil
+        // A restored screen is the user's: a late agent list must not yank them to a chat.
+        draftOpenedByUser = true
+        draft = DraftSession(
+            workspaceId: workspaceId, cwd: workspace?.cwd ?? "",
+            preferences: DraftStore.shared.formPreferences.draftPreferences, draftId: draftId,
+            drafts: .shared)
+        rememberScreen()
+    }
+
+    /// The directory has loaded: a restored draft learns its workspace's `cwd`, and a draft whose
+    /// workspace turned out to be gone falls back to today's launch screen.
+    private func directoryLoaded() {
+        if selectedAgentId == nil, draft == nil {
+            restoreStartupScreen()
+            return
+        }
+        if let draft, let workspaceId = draft.workspaceId {
+            if let workspace = session.workspaceDirectory.workspace(id: workspaceId) {
+                if draft.cwd.isEmpty {
+                    draft.move(toWorkspace: workspace.id, cwd: workspace.cwd)
+                }
+            } else if draft.pendingPrompt == nil, draft.text.isEmpty {
+                dropDraft()
+                openStartupFallback()
+                return
+            }
+        }
+        showDefaultDraftIfIdle()
+        rememberScreen()
+    }
+
+    // MARK: Last screen
+
+    /// Keeps the screen that is on screen, so the next launch reopens it. Writes only when it
+    /// changed (the store compares the record).
+    /// `Upstream: packages/app/src/stores/last-workspace-selection.ts:50-63`.
+    private func rememberScreen() {
+        let screen: LastScreen
+        if let conversation {
+            let workspaceId =
+                conversation.agent?.workspaceId
+                ?? session.agents.first { $0.id == conversation.agentId }?.workspaceId
+            screen = LastScreen(
+                hostId: session.serverInfo?.serverId, workspaceId: workspaceId,
+                agentId: conversation.agentId)
+        } else if let draft {
+            // A draft that is creating its agent is not a screen to reopen.
+            guard draft.pendingPrompt == nil else { return }
+            screen = LastScreen(
+                hostId: session.serverInfo?.serverId, workspaceId: draft.workspaceId,
+                draftId: draft.draftId)
+        } else {
+            return
+        }
+        DraftStore.shared.remember(screen)
     }
 
     // MARK: Drafts
@@ -389,13 +506,14 @@ public struct ShellView: View {
         {
             return
         }
-        let preferences = draft?.preferences ?? lastDraftPreferences
-        if let current = draft { lastDraftPreferences = current.preferences }
+        let preferences =
+            draft?.preferences ?? DraftStore.shared.formPreferences.draftPreferences
         // No workspace at all: the draft's hero offers "Add project" instead of a composer
         // (§2.2), so there is still somewhere to go.
         draft = DraftSession(
-            workspaceId: resolved?.id, cwd: resolved?.cwd ?? "", preferences: preferences)
-        draftId = UUID()
+            workspaceId: resolved?.id, cwd: resolved?.cwd ?? "", preferences: preferences,
+            drafts: .shared)
+        rememberScreen()
     }
 
     /// The workspace with the newest activity, for “New session” with no conversation on
@@ -449,6 +567,9 @@ public struct ShellView: View {
             // The draft stays: `error` shows inline and the composer restores its tray.
             return
         }
+        // The agent exists: the draft is spent whether or not its screen is still the one on
+        // show (upstream clears the draft's input on create success).
+        draft.markSent()
         // The user may have opened something else while the create was in flight; their screen
         // wins over this draft's.
         guard self.draft === draft else { return }
@@ -475,7 +596,6 @@ public struct ShellView: View {
     }
 
     private func dropDraft() {
-        if let draft { lastDraftPreferences = draft.preferences }
         draft = nil
         draftOpenedByUser = false
     }

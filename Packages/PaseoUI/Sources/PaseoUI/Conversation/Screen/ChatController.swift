@@ -231,7 +231,6 @@ struct TranscriptJump: Equatable {
     /// The shell's toast center, injected by `ChatScreen` (`@Environment(\.toast)`).
     var toastCenter: ToastCenter?
 
-    private var draftSaveTask: Task<Void, Never>?
     /// Re-arms itself on each agent/host capability change; see `startAvailabilityTracking`.
     private var availabilityTask: Task<Void, Never>?
     /// Inline images, by `(workspaceId, path)`. Bounded by count and bytes: a long conversation
@@ -929,7 +928,7 @@ struct TranscriptJump: Equatable {
     /// (steer/queue/interrupt) choice.
     func send(behavior: String? = nil, attachments: [AgentAttachment]) {
         dictation.stop(keepingDraft: true)
-        SavedDraftStore.clear(store.agentId)
+        DraftStore.shared.markSent(DraftKey.agent(store.agentId))
         anchoringToAnswer = true
         isFollowing = false
         Haptics.send()
@@ -1023,22 +1022,21 @@ struct TranscriptJump: Equatable {
 
     // MARK: Saved drafts
 
-    /// Restores the persisted draft when the conversation opens and the store's draft is empty.
+    /// Restores the persisted draft when the conversation opens and the store's draft is empty
+    /// (R1.A): the same store the draft screen writes to.
     func seedSavedDraft() {
         guard store.draft.isEmpty else { return }
-        let saved = SavedDraftStore.load(store.agentId)
-        if !saved.isEmpty { store.draft = saved }
+        if let saved = DraftStore.shared.input(for: DraftKey.agent(store.agentId)),
+            !saved.text.isEmpty
+        {
+            store.draft = saved.text
+        }
     }
 
-    /// Debounced write of the draft (~500 ms) to UserDefaults, cleared on send.
+    /// Every keystroke goes to the draft store; the store coalesces the writes (200 ms) and
+    /// flushes on background, so no debounce timer lives here any more (R1.A).
     func scheduleDraftSave(_ value: String) {
-        draftSaveTask?.cancel()
-        let agentId = store.agentId
-        draftSaveTask = Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            SavedDraftStore.save(agentId, value)
-        }
+        DraftStore.shared.editText(value, for: DraftKey.agent(store.agentId))
     }
 
     // MARK: Slash
