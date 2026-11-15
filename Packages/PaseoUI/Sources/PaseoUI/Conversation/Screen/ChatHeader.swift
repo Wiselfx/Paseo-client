@@ -54,24 +54,14 @@ struct ChatTopChrome: View {
             .accessibilityHidden(hidden)
     }
 
-    /// The visible bar's wash: opaque enough that prose and a bubble cannot read through the title
-    /// or the workspace line, in light and dark. It fades out with the header, so the hidden state
-    /// keeps only the system's soft scroll edge under the clock (H2 §3).
+    /// The bar's backdrop (N1 C): a solid `Palette.background` fill that extends under the status
+    /// bar, so scrolled content is cut off cleanly at the top of the screen. No blur and no fade.
+    /// It goes with the header when the header hides (H2 §3).
     private var backdrop: some View {
-        LinearGradient(
-            stops: [
-                .init(
-                    color: Palette.background.opacity(TranscriptHeader.backdropOpacity),
-                    location: 0),
-                .init(
-                    color: Palette.background.opacity(TranscriptHeader.backdropOpacity),
-                    location: TranscriptHeader.backdropFadeLocation),
-                .init(color: Palette.background.opacity(0), location: 1),
-            ],
-            startPoint: .top, endPoint: .bottom
-        )
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        Palette.background
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// Reduce Motion keeps the fade (opacity is allowed) and drops the slide.
@@ -90,6 +80,8 @@ struct ChatTopChrome: View {
 struct ChatHeaderBar: View {
     @Bindable var store: ConversationStore
     @Bindable var controller: ChatController
+    /// The shell's drawer, nil outside the shell. The sidebar button toggles through it (N1 B).
+    @Environment(\.shellDrawer) private var shellDrawer
 
     var body: some View {
         headerBar
@@ -143,13 +135,27 @@ struct ChatHeaderBar: View {
     ) -> some View {
         let leading: ShellHeader<Title, Trailing>.Leading
         if let onOpenSidebar = controller.onOpenSidebar {
-            leading = .sidebar(onOpenSidebar)
+            leading = .sidebar(toggleSidebar(open: onOpenSidebar))
         } else if let onBack = controller.onBack {
             leading = .back(onBack)
         } else {
             leading = .none
         }
         return ShellHeader(leading: leading, title: title, trailing: trailing)
+    }
+
+    /// The sidebar button toggles (N1 B): it closes the sidebar when the sidebar is already on
+    /// screen, and otherwise opens it through the shell's own action. `ShellDrawer.toggle` runs the
+    /// same motion, haptic and commit as the open path. Upstream: none (user directive).
+    private func toggleSidebar(open: @escaping () -> Void) -> () -> Void {
+        let drawer = shellDrawer
+        return {
+            if let drawer {
+                drawer.toggle(.sidebar)
+            } else {
+                open()
+            }
+        }
     }
 
     private var headerBar: some View {
@@ -200,7 +206,13 @@ struct ChatHeaderBar: View {
                 }
                 headerTitle
             }
-            // Breathing room under the status bar; the title block stays bare, no band (D1 §1).
+            // The title sits in a pill (N1 D): a solid fill and a hairline border, hugging the title
+            // up to the room between the two buttons, then truncating. Upstream: none (user directive).
+            .padding(.horizontal, Space.md)
+            .frame(minHeight: Metrics.hitSize)
+            .background(Palette.panel, in: Capsule())
+            .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 1))
+            // Breathing room under the status bar, above the pill (D1 §1).
             .padding(.top, Space.xs)
             .frame(maxWidth: .infinity, alignment: .center)
             .contentShape(.rect)

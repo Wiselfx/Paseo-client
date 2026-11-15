@@ -76,7 +76,7 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
     // MARK: Geometry
 
     private var width: CGFloat { max(view.bounds.width, 1) }
-    private var drawerWidth: CGFloat { (width * 0.82).rounded() }
+    private var drawerWidth: CGFloat { (width * 0.75).rounded() }
     private var parallax: CGFloat { width * 0.3 }
     private var isDark: Bool { traitCollection.userInterfaceStyle == .dark }
 
