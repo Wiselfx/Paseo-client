@@ -117,15 +117,28 @@ struct SidebarUsageFooter: View {
         .accessibilityIdentifier("sidebar.usage.\(line.id)")
     }
 
-    /// "21% used · resets in 3h 12m": the percent and the countdown, in upstream's words.
+    /// The compact visible text, "21% · resets 3h": the sidebar line is one short row, so it
+    /// drops "used" and "in" and keeps the countdown's first unit. The numbers are the same ones
+    /// the spoken label reads in full (`fullText`).
     private func trailing(_ display: UsageWindowDisplay) -> String {
+        let value = display.value.replacingOccurrences(of: " used", with: "")
+        guard let countdown = display.countdown else { return value }
+        if display.isAtRisk { return "\(value) · \(countdown)" }
+        let words = countdown.replacingOccurrences(of: "resets in ", with: "resets ")
+            .split(separator: " ")
+        let short = countdown.hasPrefix("resets in ") ? words.prefix(2).joined(separator: " ") : countdown
+        return "\(value) · \(short)"
+    }
+
+    /// The same figures in full, in upstream's words: "21% used · resets in 3h 12m".
+    private func fullText(_ display: UsageWindowDisplay) -> String {
         guard let countdown = display.countdown else { return display.value }
         return "\(display.value) · \(countdown)"
     }
 
     /// The row's spoken label is the row's own strings: nothing is computed a second time.
     private func accessibilityLabel(_ line: Line) -> String {
-        "\(line.source), \(line.display.label), \(trailing(line.display))"
+        "\(line.source), \(line.display.label), \(fullText(line.display))"
     }
 
     // MARK: One line of state
