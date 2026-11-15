@@ -73,7 +73,7 @@ struct ClaudeWorkGroupCell: View {
                 .contentShape(.rect)
             }
             .buttonStyle(ClaudePressButtonStyle())
-            .id("group:\(group.rows.first?.seqEnd ?? 0)")
+            .id("group:\(group.rows.first?.seqStart ?? 0)")
             .onAppear { checkFindTarget() }
             .onChange(of: findTarget) { _, _ in checkFindTarget() }
             .accessibilityLabel(derived.summary)
@@ -202,11 +202,11 @@ struct ClaudeWorkGroupCell: View {
         switch item {
         case .thought(let row):
             ClaudeStepRow(row: row, isLive: isLive)
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background(findHighlight(row.seqEnd))
         case .tool(let row):
             ClaudeStepRow(row: row, isLive: isLive)
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background(findHighlight(row.seqEnd))
         case .fileCall(let call):
             ClaudeMergedFileRow(
