@@ -56,6 +56,10 @@ struct PaseoSidebar: View {
     /// False while the drawer shows the sidebar itself (H4 §2). The usage footer refreshes on
     /// that edge — a commit, not a drag frame.
     @Environment(\.isSurfaceObscured) private var isSurfaceObscured
+    /// Upstream refreshes its reports on an interval only while the summary is on screen and the
+    /// app is visible (`packages/app/src/usage/queries.ts:182-197`), so the app's own phase is one
+    /// of the two facts that start and stop the poll.
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         // Derived once per evaluation and shared by the directory and every row (P5 #3).
@@ -103,9 +107,13 @@ struct PaseoSidebar: View {
             consumeAddProjectRequest()
             loadDirectoryIfNeeded()
         }
-        // Usage is state-driven, never appear-driven (H4 §2): the toggle, the host's capability
-        // and the host itself decide when a load is worth asking for.
+        // Usage is state-driven, never appear-driven (H4 §2): the toggle, the host's capability,
+        // the host itself and the app coming back to the front decide when a load is worth asking
+        // for. The store's minute throttle keeps a foreground flip from re-asking at once.
         .task(id: usageLoadKey) { await loadUsage() }
+        // While the summary is on screen and the app is visible, ask again every five minutes
+        // (Upstream: packages/app/src/usage/queries.ts:39, 182-197).
+        .task(id: usagePollKey) { await pollUsage() }
         .onChange(of: isSurfaceObscured) { _, obscured in
             guard !obscured else { return }
             Task { await loadUsage() }
@@ -298,10 +306,30 @@ struct PaseoSidebar: View {
             onOpenUsage: { sheet = .usage })
     }
 
-    /// The three facts a usage load depends on: the toggle, the host's capability, and the host
-    /// itself. `.task(id:)` re-runs on a change of one of them — never per frame.
+    /// The facts a usage load depends on: the toggle, the host's capability, the host itself and
+    /// the app being in front. `.task(id:)` re-runs on a change of one of them — never per frame.
     private var usageLoadKey: String {
-        "\(showUsageInSidebar)|\(session.hostUsage.isSupported)|\(session.serverInfo?.serverId ?? "")"
+        "\(showUsageInSidebar)|\(session.hostUsage.isSupported)|\(session.serverInfo?.serverId ?? "")|\(scenePhase)"
+    }
+
+    /// The facts that start and stop the interval poll: the toggle, the host's capability, the
+    /// drawer showing the summary and the app being in front.
+    private var usagePollKey: String {
+        "\(showUsageInSidebar)|\(session.hostUsage.isSupported)|\(isSurfaceObscured)|\(scenePhase)"
+    }
+
+    /// Upstream's `refetchInterval` (queries.ts:36-39, 182-197): five minutes, and only while the
+    /// summary is on screen and the app is visible. Replies are not forced — the daemon decides
+    /// whether its provider cache is stale.
+    private func pollUsage() async {
+        guard showUsageInSidebar, session.hostUsage.isSupported, !isSurfaceObscured,
+            scenePhase == .active
+        else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(HostUsageStore.automaticPollInterval))
+            guard !Task.isCancelled else { return }
+            _ = await session.hostUsage.load(forceRefresh: false)
+        }
     }
 
     /// The state-driven load: turning the toggle on, or a `server_info` that finally reports

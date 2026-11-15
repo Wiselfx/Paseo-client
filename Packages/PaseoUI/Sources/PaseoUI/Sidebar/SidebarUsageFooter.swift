@@ -12,6 +12,11 @@ import SwiftUI
 /// Both are single `.caption` rows at `SidebarMetrics.usageLineHeight`, so the footer keeps its
 /// height when the first load lands; the only growth allowed is one meter line becoming several,
 /// and that is animated with `Motion.disclosure`.
+///
+/// Every number and word on a meter row comes from `UsageModel.display(window:as:)`
+/// (Upstream: `packages/app/src/usage/window-bar.tsx:44-60`, `model.ts:7-19`): the drawn text, the
+/// reset wording and the row's accessible label are read from that one value, so they cannot
+/// disagree. Upstream's own copy, not ours (en.ts:2223-2292).
 struct SidebarUsageFooter: View {
     let hostUsage: HostUsageStore
     /// Settings → Sidebar's toggle, passed as a value: the block hides itself, the page does not
@@ -25,7 +30,7 @@ struct SidebarUsageFooter: View {
     var body: some View {
         if showInSidebar {
             // Built once per body, and only while the block is on screen.
-            let lines = Self.lines(for: hostUsage.reports)
+            let lines = Self.lines(for: hostUsage.reports, now: now)
             VStack(spacing: 4) {
                 if lines.isEmpty {
                     statusLine
@@ -45,29 +50,32 @@ struct SidebarUsageFooter: View {
         }
     }
 
+    /// One clock for the whole block: a countdown is read once per body, not once per row.
+    private var now: Date { Date() }
+
     // MARK: One meter
 
-    /// A meter the footer can draw: a provider's summary window with its percentage and reset.
+    /// A meter the footer can draw: a provider's summary window, with every string the row shows.
     struct Line: Identifiable {
         let id: String
         let source: String
-        let label: String
-        let used: Double
-        let resetsAt: String?
+        /// `UsageModel.display` for the window: label, percent, wording, tone.
+        let display: UsageWindowDisplay
     }
 
-    /// A report's summary windows (or its first window), only when the host gave a percentage.
-    static func lines(for reports: [UsageReportEntry]) -> [Line] {
+    /// A report's summary windows (or its first window) that have a figure to draw. A window the
+    /// host reports with only `remainingPct` still has one: `UsageModel.usedPercent` derives it
+    /// (model.ts:7-11) and `displayPercent` reads that one function.
+    static func lines(for reports: [UsageReportEntry], now: Date) -> [Line] {
         reports.flatMap { report -> [Line] in
             guard case .available(let available) = report.report else { return [] }
             return summaryWindows(available).compactMap { window in
-                guard let used = window.usedPct else { return nil }
+                let display = UsageModel.display(window, as: .used, now: now)
+                guard display.percent != nil else { return nil }
                 return Line(
                     id: "\(report.sourceId).\(window.id)",
                     source: report.sourceLabel,
-                    label: window.label,
-                    used: used,
-                    resetsAt: window.resetsAt)
+                    display: display)
             }
         }
     }
@@ -79,21 +87,23 @@ struct SidebarUsageFooter: View {
     }
 
     private func meterLine(_ line: Line) -> some View {
-        let resets = ClaudeUsageResets.short(afterISO: line.resetsAt)
-        let percent = Int(min(max(line.used, 0), 100).rounded())
-        return Button {
+        Button {
             onOpenUsage()
         } label: {
             HStack(spacing: 8) {
-                Text("\(line.source) · \(line.label)")
+                Text("\(line.source) · \(line.display.label)")
                     .font(.paseo(.caption))
                     .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
-                ClaudeUsageBar(percent: line.used, width: 44)
-                Text(resets.map { "\(percent)% · \($0)" } ?? "\(percent)%")
+                // One size for every row of every surface: a bar is never wider or taller here
+                // than on the row above.
+                ClaudeUsageBar(percent: line.display.percent ?? 0)
+                    .frame(width: SidebarMetrics.usageMeterWidth, alignment: .leading)
+                Text(trailing(line.display))
                     .monospacedDigit()
                     .font(.paseo(.caption2))
                     .foregroundStyle(Palette.secondaryInk)
+                    .lineLimit(1)
                     .fixedSize()
             }
             .frame(
@@ -103,10 +113,19 @@ struct SidebarUsageFooter: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(
-            "\(line.source), \(line.label), \(percent) percent used"
-                + (resets.map { ", \($0)" } ?? ""))
+        .accessibilityLabel(accessibilityLabel(line))
         .accessibilityIdentifier("sidebar.usage.\(line.id)")
+    }
+
+    /// "21% used · resets in 3h 12m": the percent and the countdown, in upstream's words.
+    private func trailing(_ display: UsageWindowDisplay) -> String {
+        guard let countdown = display.countdown else { return display.value }
+        return "\(display.value) · \(countdown)"
+    }
+
+    /// The row's spoken label is the row's own strings: nothing is computed a second time.
+    private func accessibilityLabel(_ line: Line) -> String {
+        "\(line.source), \(line.display.label), \(trailing(line.display))"
     }
 
     // MARK: One line of state
@@ -124,9 +143,10 @@ struct SidebarUsageFooter: View {
         }
         switch hostUsage.phase {
         case .idle, .loading:
+            // Upstream `providerUsage.loading` (en.ts:2248).
             return .loading
         case .ready:
-            // Upstream `providerUsage.empty` (en.ts:2249): the host answered, and no account had a
+            // Upstream `providerUsage.empty` (en.ts:2251): the host answered, and no account had a
             // quota window to draw.
             return .message("No usage data", retries: false)
         case .failed(let message):
@@ -137,7 +157,7 @@ struct SidebarUsageFooter: View {
     @ViewBuilder private var statusLine: some View {
         switch status {
         case .loading:
-            caption("Loading usage…")
+            caption("Loading usage...")
         case .message(let text, let retries):
             Button {
                 if retries {

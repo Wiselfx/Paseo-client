@@ -322,16 +322,35 @@ public struct UsageReportEntry: Sendable, Hashable, Decodable, Identifiable {
     public var report: UsageReport
     public var successfulAt: String?
     public var lastSuccessful: LastSuccessful?
+    /// COMPAT(usageLoginErrors): added upstream in v0.11.0. One entry per harness whose login
+    /// could not be used while the report itself is `unavailable`.
+    public var loginErrors: [LoginError]?
 
     public struct LastSuccessful: Sendable, Hashable, Decodable {
         public var fetchedAt: String
         public var report: AvailableUsageReport
+
+        public init(fetchedAt: String, report: AvailableUsageReport) {
+            self.fetchedAt = fetchedAt
+            self.report = report
+        }
+    }
+
+    /// `UsageReportEntrySchema.loginErrors` — a per-harness problem behind a failed report.
+    public struct LoginError: Sendable, Hashable, Decodable {
+        public var harness: String
+        public var report: UsageReport
+
+        public init(harness: String, report: UsageReport) {
+            self.harness = harness
+            self.report = report
+        }
     }
 
     public init(
         id: String, accountLabel: String? = nil, fetchedAt: String, sourceId: String,
         sourceLabel: String, icon: String? = nil, report: UsageReport, successfulAt: String? = nil,
-        lastSuccessful: LastSuccessful? = nil
+        lastSuccessful: LastSuccessful? = nil, loginErrors: [LoginError]? = nil
     ) {
         self.id = id
         self.accountLabel = accountLabel
@@ -342,10 +361,12 @@ public struct UsageReportEntry: Sendable, Hashable, Decodable, Identifiable {
         self.report = report
         self.successfulAt = successfulAt
         self.lastSuccessful = lastSuccessful
+        self.loginErrors = loginErrors
     }
 
     private enum K: String, CodingKey {
-        case id, account, fetchedAt, sourceId, sourceLabel, icon, report, successfulAt, lastSuccessful
+        case id, account, fetchedAt, sourceId, sourceLabel, icon, report, successfulAt,
+            lastSuccessful, loginErrors
     }
 
     private struct Account: Decodable {
@@ -363,6 +384,7 @@ public struct UsageReportEntry: Sendable, Hashable, Decodable, Identifiable {
         report = try c.decode(UsageReport.self, forKey: .report)
         successfulAt = try c.decodeIfPresent(String.self, forKey: .successfulAt)
         lastSuccessful = try c.decodeIfPresent(LastSuccessful.self, forKey: .lastSuccessful)
+        loginErrors = try c.decodeIfPresent([LoginError].self, forKey: .loginErrors)
     }
 }
 
