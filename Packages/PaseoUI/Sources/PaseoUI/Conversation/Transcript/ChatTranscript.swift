@@ -98,7 +98,7 @@ struct TranscriptView: View {
             // Tapping a message, a bubble or the transcript's background drops the keyboard, the
             // way Claude does (V5 §2). Simultaneous, so a link, a menu, a long-press preview and
             // text selection all still get their tap.
-            .simultaneousGesture(TapGesture().onEnded { controller.dismissKeyboard() })
+            // EXPERIMENT: transcript tap gesture removed
     }
 
     @ViewBuilder private var content: some View {

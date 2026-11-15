@@ -28,11 +28,10 @@ struct FocusDiagOverlay: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let text = FocusDiag.dump()
-            Text(text)
-                .font(.system(size: 1))
-                .opacity(0.02)
-                .frame(width: 2, height: 2)
+            Color.clear
+                .frame(width: 24, height: 24)
                 .allowsHitTesting(false)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(text)
                 .accessibilityIdentifier("diag.log")
         }

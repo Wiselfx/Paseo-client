@@ -30,6 +30,7 @@ struct ComposerTextView: UIViewRepresentable {
     let onPasteImages: ([Data]) -> Void
 
     func makeUIView(context: Context) -> ComposerUITextView {
+        FocusDiag.note("makeUIView")
         let view = ComposerUITextView(frame: .zero)
         view.delegate = context.coordinator
         view.text = text
@@ -44,6 +45,7 @@ struct ComposerTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ComposerUITextView, context: Context) {
+        FocusDiag.note("updateUIView view=\(UInt(bitPattern: ObjectIdentifier(uiView).hashValue) % 10000) coord=\(UInt(bitPattern: ObjectIdentifier(context.coordinator).hashValue) % 10000)")
         // The coordinator holds the current bindings; a stale `parent` would write into a dead one.
         context.coordinator.parent = self
         uiView.onPasteImages = onPasteImages
