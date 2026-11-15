@@ -82,6 +82,9 @@ public struct ShellView: View {
                     session: session,
                     onAgentsChange: adoptAgents,
                     onDirectoryLoaded: directoryLoaded)
+                if PaseoPerf.enabled {
+                    ShellPerfProbes(session: session, conversation: conversation)
+                }
             }
             .onAppear {
                 drawer.onNewSession = { openNewSession(workspaceId: nil) }
@@ -621,6 +624,25 @@ struct ShellSessionWatcher: View {
             .onChange(of: session.workspaceDirectory.hasLoaded) { _, loaded in
                 if loaded { onDirectoryLoaded() }
             }
+    }
+}
+
+/// W1: which of the shell's inputs move, and how often (`-paseo-perf` only; never mounted
+/// otherwise). Reads live here so the shell's own body gains no dependency.
+struct ShellPerfProbes: View {
+    let session: HostSession
+    let conversation: ConversationStore?
+
+    var body: some View {
+        let _ = PaseoPerf.body("ShellProbes")
+        Group {
+            PerfProbe("conv.agent", conversation?.agent)
+            PerfProbe("dir.loaded", session.workspaceDirectory.hasLoaded)
+            PerfProbe("dir.error", session.workspaceDirectory.error)
+            PerfProbe("connection", session.connection)
+            PerfProbe("agents.ids", session.agents.map(\.id))
+            PerfProbe("agents.count", session.agents.count)
+        }
     }
 }
 

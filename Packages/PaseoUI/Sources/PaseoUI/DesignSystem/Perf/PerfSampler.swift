@@ -154,22 +154,25 @@
                 text = text.replacingOccurrences(of: prefix, with: "")
             }
             text = text.replacingOccurrences(of: " in closure", with: "")
-            return text.count > 90 ? String(text.prefix(90)) : text
+            text = text.replacingOccurrences(
+                of: " in _[0-9A-F]{32}", with: "", options: .regularExpression)
+            text = text.replacingOccurrences(of: "(extension in SwiftUI):", with: "")
+            return text.count > 60 ? String(text.prefix(60)) : text
         }
 
         /// Runs on the sampler thread, after the main thread has been resumed.
         private func record(_ frames: [UInt]) {
             guard let first = frames.first else { return }
             let leaf = symbol(for: first).name
-            var own: String?
+            // The innermost three frames of the app's own code, leaf first: the path a fix needs.
+            var chain: [String] = []
             for address in frames {
                 let resolved = symbol(for: address)
-                if resolved.own {
-                    own = resolved.name
-                    break
-                }
+                guard resolved.own, chain.last != resolved.name else { continue }
+                chain.append(resolved.name)
+                if chain.count == 3 { break }
             }
-            let ownName = own
+            let ownName: String? = chain.isEmpty ? nil : chain.joined(separator: " < ")
             collected.withLock { histogram in
                 histogram.samples += 1
                 histogram.leaf[leaf, default: 0] += 1
