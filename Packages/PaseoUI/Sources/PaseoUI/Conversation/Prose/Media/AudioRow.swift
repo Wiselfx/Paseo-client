@@ -32,6 +32,11 @@ struct AudioRow: View {
     /// downloads the whole file. One row, one player: the coordinator stops the other.
     @State private var localPlayer: AVAudioPlayer?
     @State private var streamPlayer: AVPlayer?
+    /// A tap that could not load: the row says so instead of looking like a dead button,
+    /// and the next tap retries (V1.4).
+    @State private var loadFailure = false
+    /// A tap while the bytes are on their way: the time slot says so once, not per frame.
+    @State private var loading = false
 
     private var isPlaying: Bool { playing }
 
@@ -90,14 +95,27 @@ struct AudioRow: View {
                     .buttonStyle(.plain)
                     .disabled(policy == .cacheOnly)
                     .accessibilityLabel(isPlaying ? "Pause audio" : "Play audio")
-                    .accessibilityHint(fileName)
+                    .accessibilityHint(loadFailure ? "Retries loading \(fileName)" : fileName)
                     waveform
-                    Text(timeText)
-                        .font(.paseo(.caption))
-                        .monospacedDigit()
-                        .foregroundStyle(Palette.secondaryInk)
-                        .accessibilityLabel(
-                            "Elapsed \(Self.timestamp(elapsed)) of \(Self.timestamp(duration))")
+                    if loading {
+                        Text("Loading…")
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .accessibilityLabel("Loading audio")
+                    } else if loadFailure {
+                        Text("Couldn't load audio")
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.failureInk)
+                            .lineLimit(1)
+                            .accessibilityLabel("Couldn't load audio, \(fileName)")
+                    } else {
+                        Text(timeText)
+                            .font(.paseo(.caption))
+                            .monospacedDigit()
+                            .foregroundStyle(Palette.secondaryInk)
+                            .accessibilityLabel(
+                                "Elapsed \(Self.timestamp(elapsed)) of \(Self.timestamp(duration))")
+                    }
                 }
             }
             .frame(minHeight: Metrics.rowCardMinHeight - Space.md * 2, alignment: .leading)
@@ -185,8 +203,16 @@ struct AudioRow: View {
             MediaPlaybackCoordinator.shared.stop(cardID)
         } else {
             Task { @MainActor in
+                loading = true
+                loadFailure = false
                 await ensurePlayer()
-                guard localPlayer != nil || streamPlayer != nil else { return }
+                loading = false
+                // Nothing to play: the row says so and the next tap retries, instead of a
+                // button that silently does nothing (V1.4).
+                guard localPlayer != nil || streamPlayer != nil else {
+                    loadFailure = true
+                    return
+                }
                 MediaPlaybackCoordinator.shared.play(cardID)
                 await MediaAudioSession.activateForPlayback()
                 localPlayer?.volume = 1
@@ -247,26 +273,49 @@ struct AudioRow: View {
     @MainActor
     private func ensureLocalPlayer() async {
         if localPlayer != nil { return }
-        guard case .local(let path) = input,
-            let workspaceID = richActions?.daemonWorkspaceID
-        else { return }
+        guard case .local(let path) = input else { return }
+        var workspaceID = richActions?.daemonWorkspaceID
+        if workspaceID == nil {
+            // A restored chat can be tapped before the agent snapshot names its workspace
+            // (V1.1). Wait a moment for it; a row is not the place to wait forever, so the
+            // tap ends in an honest failure when the id never arrives.
+            var attempts = 0
+            while workspaceID == nil, attempts < 20 {
+                try? await Task.sleep(for: .milliseconds(200))
+                workspaceID = richActions?.daemonWorkspaceID
+                attempts += 1
+            }
+        }
+        guard let workspaceID else {
+            loadFailure = true
+            return
+        }
         let ref = DaemonFileRef(workspaceID: workspaceID, path: path, revision: nil)
         guard
             case .bytes(let fetched) = await MediaPipeline.shared.fetchDaemonFile(
                 ref: ref, maxBytes: Int(MediaPipeline.maxDaemonBytes))
-        else { return }
+        else {
+            loadFailure = true
+            return
+        }
         guard !Task.isCancelled else { return }
         // The bytes land in the cache file off main; the player opens it on main
         // (fast once the file exists), so no player ever crosses isolation.
         guard let fileURL = await MediaPipeline.cacheDaemonFile(data: fetched.data, ref: ref)
-        else { return }
+        else {
+            loadFailure = true
+            return
+        }
         guard !Task.isCancelled else { return }
         // Detached work returns values only: the bars. The file stays in the cache.
         bars = await Task.detached(priority: .userInitiated) {
             Self.waveformBuckets(fileURL: fileURL)
         }.value
         guard !Task.isCancelled else { return }
-        guard let player = try? AVAudioPlayer(contentsOf: fileURL) else { return }
+        guard let player = try? AVAudioPlayer(contentsOf: fileURL) else {
+            loadFailure = true
+            return
+        }
         player.prepareToPlay()
         duration = player.duration
         localPlayer = player

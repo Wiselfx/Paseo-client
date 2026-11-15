@@ -300,6 +300,22 @@ actor MediaPipeline {
     /// configure and unregisters on dealloc; last registration per workspace wins. A
     /// missing resolver is "not reachable yet", never a memoized failure.
     private var resolvers: [String: (token: UUID, fetch: DaemonMediaFetch)] = [:]
+    /// The load a parked daemon flight will start once its workspace gets a reader, and the
+    /// keys parked per workspace so registration can release exactly them.
+    private struct ParkedLoad {
+        var source: MediaSource
+        var pixelWidth: Int
+        var capBytes: Int64?
+        var maxSide: Double
+        var cacheResult: Bool
+        var allowStaleDisk: Bool
+    }
+    private var parked: [String: ParkedLoad] = [:]
+    private var parkedByWorkspace: [String: Set<String>] = [:]
+    /// How long a parked daemon load waits for a reader before answering honestly. A restored
+    /// chat gets its agent snapshot in milliseconds; a card on a screen with no conversation
+    /// never gets one, and must not spin forever (V1.1).
+    private static let parkTimeout: Duration = .seconds(8)
     /// Live keys fetched this launch. The disk entry for a path is served only when
     /// validated here or requested as the offline fallback: a first view in a new session
     /// always refetches, so an agent-edited file never serves last launch's bytes.
@@ -326,6 +342,8 @@ actor MediaPipeline {
     func registerDaemonFetch(for workspaceID: String, _ fetch: @escaping DaemonMediaFetch) -> UUID {
         let token = UUID()
         resolvers[workspaceID] = (token, fetch)
+        // Cards that asked before this reader existed are waiting, parked: start them now.
+        releaseParked(for: workspaceID)
         return token
     }
 
@@ -487,9 +505,14 @@ actor MediaPipeline {
             return Self.single(.final(.failure(.unsupportedScheme("blob"))))
         }
         if case .daemon(let ref) = source, resolvers[ref.workspaceID] == nil {
-            // No resolver: unreachable, not broken — fail closed with no flight, no memo,
-            // no report. The card retries when a controller registers.
-            return Self.single(.final(.failure(.other)))
+            // No reader yet: a restored chat opens before the agent snapshot that names its
+            // workspace (V1.1). That is "not reachable yet", not broken, so the load waits
+            // instead of failing; the first registration for the workspace starts it. Nothing
+            // is memoized, so the card's Retry is never blocked by a stale failure.
+            return parkDaemon(
+                source: source, ref: ref, pixelWidth: pixelWidth, capBytes: capBytes,
+                maxSide: maxSide, cacheResult: cacheResult, allowStaleDisk: allowStaleDisk,
+                identity: identity, key: key)
         }
 
         let (stream, continuation) = AsyncStream<MediaEvent>.makeStream()
@@ -516,6 +539,71 @@ actor MediaPipeline {
             continuation.yield(.size(CGSize(width: aspect, height: 1)))
         }
         return stream
+    }
+
+    /// Waits for a workspace reader on the flight `key`. Shares the flight with every card
+    /// showing the same bytes, so one registration resumes one download (V1.1).
+    private func parkDaemon(
+        source: MediaSource, ref: DaemonFileRef, pixelWidth: Int, capBytes: Int64?,
+        maxSide: Double, cacheResult: Bool, allowStaleDisk: Bool, identity: String, key: String
+    ) -> AsyncStream<MediaEvent> {
+        let (stream, continuation) = AsyncStream<MediaEvent>.makeStream()
+        let id = UUID()
+        continuation.onTermination = { _ in
+            Task { await MediaPipeline.shared.detach(id: id, key: key) }
+        }
+        var flight = flights[key] ?? Flight()
+        let isNew = flights[key] == nil
+        flight.watchers[id] = continuation
+        flights[key] = flight
+        if isNew {
+            parked[key] = ParkedLoad(
+                source: source, pixelWidth: pixelWidth, capBytes: capBytes, maxSide: maxSide,
+                cacheResult: cacheResult, allowStaleDisk: allowStaleDisk)
+            parkedByWorkspace[ref.workspaceID, default: []].insert(key)
+            let workspaceID = ref.workspaceID
+            Task.detached {
+                try? await Task.sleep(for: MediaPipeline.parkTimeout)
+                await MediaPipeline.shared.expireParked(key: key, workspaceID: workspaceID)
+            }
+        }
+        if let aspect = MediaMetadataCache.aspectRatio(for: identity) {
+            continuation.yield(.size(CGSize(width: aspect, height: 1)))
+        }
+        return stream
+    }
+
+    /// Starts every load parked for `workspaceID`, in registration order.
+    private func releaseParked(for workspaceID: String) {
+        guard let keys = parkedByWorkspace.removeValue(forKey: workspaceID) else { return }
+        for key in keys {
+            guard let load = parked.removeValue(forKey: key) else { continue }
+            start(load, key: key)
+        }
+    }
+
+    /// The reader did not appear in `parkTimeout`: answer honestly (no memo), so the card can
+    /// show its failure and Retry instead of a spinner that never ends.
+    private func expireParked(key: String, workspaceID: String) {
+        guard let load = parked.removeValue(forKey: key) else { return }
+        parkedByWorkspace[workspaceID]?.remove(key)
+        if parkedByWorkspace[workspaceID]?.isEmpty == true {
+            parkedByWorkspace.removeValue(forKey: workspaceID)
+        }
+        if resolvers[workspaceID] != nil {
+            start(load, key: key)
+        } else {
+            reportUnresolved(key: key)
+        }
+    }
+
+    private func start(_ load: ParkedLoad, key: String) {
+        Task.detached {
+            await MediaPipeline.drive(
+                source: load.source, pixelWidth: load.pixelWidth, key: key,
+                capBytes: load.capBytes, maxSide: load.maxSide,
+                cacheResult: load.cacheResult, allowStaleDisk: load.allowStaleDisk)
+        }
     }
 
     /// The classic one-shot: the final outcome, for callers with no streaming UI (YouTube

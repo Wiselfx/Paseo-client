@@ -289,7 +289,6 @@ struct TranscriptJump: Equatable {
         actions.forkInFlight = { [weak self] target in
             await self?.forkInto(target, boundary: nil)
         }
-        richActions.daemonWorkspaceID = store.agent?.workspaceId
         startHomeDirectoryMirror()
         richActions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
@@ -333,26 +332,74 @@ struct TranscriptJump: Equatable {
         // per workspace (last registration wins) and unregistered in `deinit`, so a stale
         // controller never answers — or blocks — another conversation's images.
         richActions.linkCondition = MediaLinkCondition(offline: false)
-        if let workspaceID = store.agent?.workspaceId {
-            daemonFetchRegistration.retain(workspaceID: workspaceID)
-            Task { @MainActor [weak self] in
-                let token = await MediaPipeline.shared.registerDaemonFetch(
-                    for: workspaceID,
-                    { [weak self] ref, maxBytes in
-                        // The resolver runs off the main actor; the store, the session and
-                        // the checkout are main-actor isolated, so it hops once into
-                        // `fetchDaemonMedia`, which suspends on the socket (never blocks).
-                        await self?.fetchDaemonMedia(ref: ref, maxBytes: maxBytes) ?? .unavailable
-                    })
-                self?.daemonFetchRegistration.retain(token: token)
-                self?.startMediaLinkUpdates()
-            }
-        } else {
-            startMediaLinkUpdates()
-        }
+        // The workspace id can arrive after this controller exists (R1 restores the last
+        // screen before the agent snapshot): the registration follows it (V1.1).
+        startDaemonFetchRegistration()
+        startMediaLinkUpdates()
         refreshAvailability()
         startAvailabilityTracking()
         startConnectionRefresh()
+    }
+
+    /// Registers the daemon read for the agent's workspace and keeps it following that id
+    /// (V1.1). A restored chat renders before its agent snapshot, so `store.agent` can be nil
+    /// here and the workspace id lands a moment later; the registration then follows every
+    /// change, exactly once per id, and the previous workspace's entry is unregistered. The
+    /// pipeline starts the loads that parked while no reader existed, so cards already on
+    /// screen stop waiting the moment the id is known.
+    private func startDaemonFetchRegistration() {
+        syncDaemonFetchRegistration()
+        withObservationTracking { [weak self] in
+            _ = self?.store.agent?.workspaceId
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.startDaemonFetchRegistration()
+            }
+        }
+    }
+
+    private func syncDaemonFetchRegistration() {
+        let workspaceID = store.agent?.workspaceId
+        // Cards build their daemon refs from this value; assigning it is O(1) and the
+        // observation only fires when it actually changed (RichActions is @Observable).
+        if richActions.daemonWorkspaceID != workspaceID {
+            richActions.daemonWorkspaceID = workspaceID
+        }
+        guard let change = daemonFetchRegistration.begin(workspaceID: workspaceID) else { return }
+        if let previous = change.previous {
+            Task {
+                await MediaPipeline.shared.unregisterDaemonFetch(
+                    for: previous.workspaceID, token: previous.token)
+            }
+        }
+        guard let workspaceID else { return }
+        let generation = change.generation
+        Task { @MainActor [weak self] in
+            let token = await MediaPipeline.shared.registerDaemonFetch(
+                for: workspaceID,
+                { [weak self] ref, maxBytes in
+                    // The resolver runs off the main actor; the store, the session and
+                    // the checkout are main-actor isolated, so it hops once into
+                    // `fetchDaemonMedia`, which suspends on the socket (never blocks).
+                    await self?.fetchDaemonMedia(ref: ref, maxBytes: maxBytes) ?? .unavailable
+                })
+            guard let self else {
+                Task {
+                    await MediaPipeline.shared.unregisterDaemonFetch(
+                        for: workspaceID, token: token)
+                }
+                return
+            }
+            guard self.daemonFetchRegistration.settle(token: token, generation: generation)
+            else {
+                // The agent moved to another workspace while this registration was in
+                // flight: the entry it just made is stale, so take it back down.
+                await MediaPipeline.shared.unregisterDaemonFetch(
+                    for: workspaceID, token: token)
+                return
+            }
+        }
     }
 
     /// One daemon read for the media pipeline (G2). A resolver is registered *for* its
@@ -1378,17 +1425,51 @@ struct TranscriptJump: Equatable {
 /// Written once, read in `deinit`. `Mutex`-guarded (the codebase's lock) so the box is
 /// `Sendable` without isolation acrobatics.
 final class DaemonFetchRegistration: @unchecked Sendable {
-    private let state = Mutex<(workspaceID: String?, token: UUID?)>((nil, nil))
+    struct Change: Sendable {
+        /// The workspace whose entry is still registered and must be torn down.
+        var previous: (workspaceID: String, token: UUID)?
+        /// Identifies the pending registration, so an actor hop that lands after the id moved
+        /// on does not overwrite the newer entry.
+        var generation: Int
+    }
 
-    func retain(workspaceID: String? = nil, token: UUID? = nil) {
-        state.withLock {
-            if let workspaceID { $0.workspaceID = workspaceID }
-            if let token { $0.token = token }
+    private struct State {
+        var workspaceID: String?
+        var token: UUID?
+        var generation = 0
+    }
+
+    private let state = Mutex<State>(State())
+
+    /// Starts following `workspaceID`. Nil when the id did not change (the entry, or the
+    /// registration in flight, still owns it). Otherwise the previous entry is returned for
+    /// the caller to unregister, and the token is cleared until `settle` records the new one.
+    func begin(workspaceID: String?) -> Change? {
+        state.withLock { state in
+            guard state.workspaceID != workspaceID else { return nil }
+            var previous: (workspaceID: String, token: UUID)?
+            if let oldID = state.workspaceID, let oldToken = state.token {
+                previous = (oldID, oldToken)
+            }
+            state.workspaceID = workspaceID
+            state.token = nil
+            state.generation += 1
+            return Change(previous: previous, generation: state.generation)
+        }
+    }
+
+    /// Records the token for `generation` when it is still the current one. False means the id
+    /// moved on while the registration was in flight: the caller must unregister its token.
+    func settle(token: UUID, generation: Int) -> Bool {
+        state.withLock { state in
+            guard state.generation == generation, state.workspaceID != nil else { return false }
+            state.token = token
+            return true
         }
     }
 
     func snapshot() -> (workspaceID: String?, token: UUID?) {
-        state.withLock { $0 }
+        state.withLock { ($0.workspaceID, $0.token) }
     }
 }
 
