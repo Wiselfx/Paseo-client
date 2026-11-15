@@ -351,6 +351,7 @@ struct ComposerView: View {
             composerFocusRequested.wrappedValue = false
         }
         .onChange(of: controller?.dismissKeyboardRequest) { _, _ in
+            FocusDiag.note("composer onChange dismissKeyboardRequest -> focused=false")
             focused = false
         }
         // The crab stands on the card's top edge, flush with its trailing edge.
@@ -737,6 +738,7 @@ struct ComposerView: View {
     }
 
     private func send(behavior: String? = nil) {
+        FocusDiag.note("composer send() -> focused=false")
         focused = false
         if let draft = draftSession {
             guard canSend else { return }

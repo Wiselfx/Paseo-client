@@ -824,6 +824,7 @@ struct TranscriptJump: Equatable {
                 // a conversation rewind puts the rewound text back into an empty composer.
                 let rewritesConversation = rewind.scope == .conversation || rewind.scope == .both
                 if rewritesConversation, self.store.draft.isEmpty, let rewoundText {
+                    FocusDiag.note("rewind restoring draft")
                     self.store.draft = rewoundText
                 }
                 // The timeline is truncated away from the rewound point; resume tail-follow.
@@ -1332,6 +1333,7 @@ struct TranscriptJump: Equatable {
     }
 
     func dismissKeyboard() {
+        FocusDiag.note("controller dismissKeyboard()")
         dismissKeyboardRequest += 1
     }
 

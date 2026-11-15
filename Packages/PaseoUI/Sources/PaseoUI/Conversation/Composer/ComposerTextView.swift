@@ -92,6 +92,7 @@ struct ComposerTextView: UIViewRepresentable {
     /// repeats the value seen at the event is that snapshot, so it waits; a render that changed
     /// is a newer command from the app (send, tap-outside) and it wins.
     private func bridgeFocus(_ uiView: ComposerUITextView, coordinator: Coordinator) {
+        FocusDiag.note("bridge isFocused=\(isFocused) lastApplied=\(coordinator.lastAppliedFocus) pendingEcho=\(coordinator.pendingEcho != nil) renderedChanged=\(coordinator.renderedFocusChanged) firstResponder=\(uiView.isFirstResponder)")
         if coordinator.pendingEcho != nil {
             guard coordinator.renderedFocusChanged else { return }
             coordinator.pendingEcho = nil
@@ -99,8 +100,10 @@ struct ComposerTextView: UIViewRepresentable {
         guard isFocused != coordinator.lastAppliedFocus else { return }
         coordinator.lastAppliedFocus = isFocused
         if isFocused {
+            FocusDiag.note("bridge APPLY become (firstResponder=\(uiView.isFirstResponder))")
             if !uiView.isFirstResponder { uiView.becomeFirstResponder() }
         } else if uiView.isFirstResponder {
+            FocusDiag.note("bridge APPLY RESIGN")
             uiView.resignFirstResponder()
         }
     }
@@ -158,10 +161,12 @@ struct ComposerTextView: UIViewRepresentable {
         // middle of a SwiftUI update, and writing a binding there is "state during view update".
         // `lastAppliedFocus` is recorded now, so nothing can fight what UIKit just did.
         func textViewDidBeginEditing(_ textView: UITextView) {
+            FocusDiag.note("delegate didBeginEditing parent.isFocused=\(parent.isFocused) lastApplied=\(lastAppliedFocus)")
             syncFocus(from: textView)
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
+            FocusDiag.note("delegate didEndEditing parent.isFocused=\(parent.isFocused) lastApplied=\(lastAppliedFocus)")
             syncFocus(from: textView)
         }
 
