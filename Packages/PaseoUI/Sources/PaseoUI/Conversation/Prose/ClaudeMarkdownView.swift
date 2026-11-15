@@ -151,6 +151,8 @@
         public var body: some View {
             let _ = PaseoPerf.body("Markdown")
             blocks(document.blocks).foregroundStyle(theme.foreground)
+                .onAppear { PaseoPerf.count("md.appear") }
+                .onDisappear { PaseoPerf.count("md.disappear") }
                 .onGeometryChange(for: CGFloat.self) {
                     $0.size.width
                 } action: {
