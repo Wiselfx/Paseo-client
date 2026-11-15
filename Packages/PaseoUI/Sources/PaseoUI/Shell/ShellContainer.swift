@@ -100,7 +100,8 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
         conversationCard.contentView.addSubview(conversationHost.view)
         conversationHost.didMove(toParent: self)
 
-        dimView.backgroundColor = .black
+        // Clear and drawn with nothing: the tap target only (N3 E).
+        dimView.backgroundColor = .clear
         dimView.alpha = 0
         dimView.isUserInteractionEnabled = false
         dimView.isAccessibilityElement = false
@@ -183,9 +184,10 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
         conversationCard.transform = CGAffineTransform(
             translationX: drawerWidth * s - parallax * p, y: 0)
         panelCard.transform = CGAffineTransform(translationX: width * (1 - p), y: 0)
-        // No scrim: the dim view stays as the tap-to-close target with zero alpha, and the
-        // front card's shadow supplies the depth (E2 §1).
-        dimView.alpha = CGFloat(EdgeDrawer.scrimOpacity(max(s, p), dark: isDark))
+        // No scrim: the dim view draws nothing, and the front card's shadow supplies the depth (E2 §1).
+        // It must stay hit-testable while a surface is on screen: UIKit skips hit-testing below
+        // alpha 0.01, so a zero alpha let the tap-to-close never arrive (N3 E).
+        dimView.alpha = max(s, p) > 0 ? 1 : 0
         // A surface that is on screen casts the full token shadow. Never write 0 here: this body
         // also runs inside the settle animation, where a zero would vanish at release while the
         // card is still sliding (E2b §8). The zero is written when a settle finishes closed.

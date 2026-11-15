@@ -167,7 +167,7 @@ public struct ShellView: View {
                     ClaudeChatView(
                         session: session,
                         store: conversation,
-                        onOpenSidebar: { drawer.open(.sidebar) },
+                        onOpenSidebar: { drawer.toggle(.sidebar) },
                         onOpenPanel: { drawer.open(.panel) },
                         onNewAgent: { prompt in openNewAgent(prompt: prompt) },
                         onForkAgent: { agentId in select(agentId) },
@@ -178,7 +178,7 @@ public struct ShellView: View {
                     DraftChatView(
                         session: session,
                         draft: draft,
-                        onOpenSidebar: { drawer.open(.sidebar) },
+                        onOpenSidebar: { drawer.toggle(.sidebar) },
                         onOpenPanel: { drawer.open(.panel) },
                         onAddProject: {
                             addProjectRequested = true
@@ -196,7 +196,7 @@ public struct ShellView: View {
                     // on the very next frame (E2 §3.3).
                     LaunchSkeleton()
                 } else {
-                    EmptyMain(session: session, onOpenSidebar: { drawer.open(.sidebar) })
+                    EmptyMain(session: session, onOpenSidebar: { drawer.toggle(.sidebar) })
                 }
             }
             .environment(\.composerFocusRequested, $composerFocusRequested))

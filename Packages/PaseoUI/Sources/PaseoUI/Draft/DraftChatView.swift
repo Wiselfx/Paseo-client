@@ -21,6 +21,8 @@ struct DraftChatView: View {
     @State private var composerFocused = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The shell's drawer, nil outside the shell. The sidebar button toggles through it (N3 F).
+    @Environment(\.shellDrawer) private var shellDrawer
 
     var body: some View {
         column
@@ -52,9 +54,19 @@ struct DraftChatView: View {
 
     // MARK: Header
 
+    /// The sidebar button toggles, as the chat header's does (N1 B, N3 F): it closes the sidebar
+    /// when the sidebar is already on screen, and otherwise opens it. Upstream: none (user directive).
+    private func toggleSidebar() {
+        if let shellDrawer {
+            shellDrawer.toggle(.sidebar)
+        } else {
+            onOpenSidebar()
+        }
+    }
+
     private var header: some View {
         HStack(spacing: 8) {
-            Button(action: onOpenSidebar) {
+            Button(action: toggleSidebar) {
                 UnequalMenu().stroke(
                     Palette.ink.opacity(0.8),
                     style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
