@@ -59,11 +59,10 @@ public struct ChatScreen: View {
             // Maximum chat area: no bar anywhere. A short fade keeps the status bar readable, and a
             // blur strip sits under the composer card only (user directive; upstream: none).
             .overlay(alignment: .top) { statusBarFade }
-            .overlay(alignment: .bottom) { composerUnderBlur }
             .safeAreaBar(edge: .top) { topChrome }
             .safeAreaBar(edge: .bottom) { bottomChrome }
             .scrollEdgeEffectHidden(true, for: .top)
-            .scrollEdgeEffectHidden(true, for: .bottom)
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
             // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so
             // the corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).
             .foregroundStyle(Palette.ink)
@@ -111,34 +110,6 @@ public struct ChatScreen: View {
         .accessibilityHidden(true)
     }
 
-    /// Text scrolling under the composer card, and under the home-indicator strip below it, is
-    /// blurred, never sharp. Sits behind the card and does not reach above it.
-    private var composerUnderBlur: some View {
-        ZStack {
-            // Blur that fades in, so there is no visible edge to the slab.
-            Rectangle()
-                .fill(.regularMaterial)
-                .mask(fadeIn(from: 0, to: 0.45))
-            // Page colour over it cancels the material's grey tint; text beneath stays soft.
-            Rectangle()
-                .fill(Palette.background)
-                .opacity(0.4)
-                .mask(fadeIn(from: 0.2, to: 1))
-        }
-        .frame(height: 64)
-        .ignoresSafeArea(.container, edges: .bottom)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private func fadeIn(from: CGFloat, to: CGFloat) -> some View {
-        LinearGradient(
-            stops: [
-                .init(color: .clear, location: from),
-                .init(color: .black, location: to),
-            ],
-            startPoint: .top, endPoint: .bottom)
-    }
 
     /// The top bar: two glass buttons and the centred title. No band, and the find bar joins it
     /// when find is open; content dissolves under them through the scroll edge effect (D1 §1).
