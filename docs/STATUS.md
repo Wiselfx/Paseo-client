@@ -5,6 +5,8 @@ Last updated 2026-11-12. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 ## Next session starts here (2026-11-11)
 
+**Composer keyboard bug FIXED (2026-11-15, merge of fix-composer-focus):** the bottom bar hosts the composer twice and both instances share one focus binding; the hidden one also took first responder when the binding turned true, UIKit ended editing in the visible one, the binding flipped false and both resigned (seen after a rewound message was sent, because that flow leaves the hidden instance in a window). Fix: `ComposerTextView.bridgeFocus` never takes focus while another composer in the window has it. Verified on the simulator with the real sequence (rewind the first message, send it back, tap, type). Also fixed: the gate's `install` picked the first `.app` in the build folder, which since the UITests target arrived could be the test runner, so manual simulator tests were running an older build (all earlier simulator experiments and the bisect in this session are void); it now installs `PaseoClient.app` only. Until the Mac has the new gate, run `clean` before `install`. Tests: `App/PaseoUITests/RewindKeyboardTests` and `RewindComposerTests` (the strict one still needs its send-wait fixed).
+
 **QUEUE after the composer-keyboard fix (user, 2026-11-15; reference screenshot kept outside the repo in `/home/paseo/dev/feedback/claude-app-sidebar-reference.jpg`):**
 1. Remove the blur at the top of the screen. Make the top a plain readable window (no see-through blur).
 2. The chat title is a pill, not a bar: no bar behind it, no blur.
