@@ -265,6 +265,7 @@ struct TranscriptJump: Equatable {
         self.onForkAgent = onForkAgent
         self.onOpenAgent = onOpenAgent
         self.actions = ChatActions(store: store)
+        PaseoPerf.count("ChatController.init")
         configureActions()
     }
 
@@ -443,6 +444,7 @@ struct TranscriptJump: Equatable {
     private let daemonFetchRegistration = DaemonFetchRegistration()
 
     deinit {
+        PaseoPerf.count("ChatController.deinit")
         // A dead controller must not resolve another screen's images. The actor hop
         // cannot run synchronously here, so the unregister rides an unstructured task
         // carrying only values (never self).
