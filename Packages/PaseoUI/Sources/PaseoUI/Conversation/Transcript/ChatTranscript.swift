@@ -101,12 +101,21 @@ struct TranscriptView: View {
             .simultaneousGesture(TapGesture().onEnded { controller.dismissKeyboard() })
     }
 
+    /// Both the states and the transcript stay mounted, so the bottom bar attached to this view is
+    /// never rebuilt by a swap (N6 A). The state view draws on top while there is nothing to show.
     @ViewBuilder private var content: some View {
-        if store.turns.isEmpty, store.pendingPermissions.isEmpty {
-            states
-        } else {
+        ZStack {
             transcript
+                .accessibilityHidden(showsStates)
+            if showsStates {
+                states
+            }
         }
+    }
+
+    /// Loading, empty or failed: nothing in the transcript to show. O(1), two emptiness checks.
+    private var showsStates: Bool {
+        store.turns.isEmpty && store.pendingPermissions.isEmpty
     }
 
     /// Loading, empty and failed states in a scroll view of their own, so the chrome attaches the
