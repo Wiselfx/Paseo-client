@@ -17,12 +17,12 @@ final class RewindComposerTests: XCTestCase {
         let composer = textView.exists ? textView : app.textFields["composer.draft"]
 
         // Send two messages.
-        composer.tap()
+        focus(composer)
         composer.typeText("rewind test one")
         app.buttons["Send message"].tap()
         XCTAssertTrue(app.staticTexts["rewind test one"].waitForExistence(timeout: 40))
 
-        composer.tap()
+        focus(composer)
         composer.typeText("rewind test two")
         // While the agent still runs the button reads "Send and steer", so wait for "Send message".
         XCTAssertTrue(app.buttons["Send message"].waitForExistence(timeout: 40))
@@ -51,13 +51,24 @@ final class RewindComposerTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["rewind test one"].waitForExistence(timeout: 40))
 
         // This is the bug: the composer must take typing again.
-        composer.tap()
+        focus(composer)
         composer.typeText("typed after")
         XCTAssertTrue(waitForComposerValue(composer, "typed after"))
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    /// Taps the composer and waits for the on-screen keyboard; taps once more if it did not appear.
+    private func focus(_ composer: XCUIElement) {
+        composer.tap()
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 4) {
+            composer.tap()
+            XCTAssertTrue(
+                app.keyboards.firstMatch.waitForExistence(timeout: 6),
+                "The on-screen keyboard did not appear after tapping the composer")
+        }
     }
 
     /// Polls the composer's value for up to 5 s (10 x 0.5 s).
