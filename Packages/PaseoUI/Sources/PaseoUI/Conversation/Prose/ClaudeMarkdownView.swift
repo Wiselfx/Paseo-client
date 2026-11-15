@@ -97,9 +97,11 @@
         /// SwiftUI could not skip them): the settled pieces now draw once. The closures are not
         /// part of equality on purpose; they are stable objects' methods (`ChatActions`).
         nonisolated public static func == (lhs: ClaudeMarkdownView, rhs: ClaudeMarkdownView) -> Bool {
-            lhs.isStreaming == rhs.isStreaming && lhs.theme == rhs.theme
-                && lhs.document.source == rhs.document.source
-                && lhs.document.blocks == rhs.document.blocks
+            // Statements, not one `&&` chain: `theme` is main-actor isolated and an autoclosure is not.
+            guard lhs.isStreaming == rhs.isStreaming else { return false }
+            guard lhs.theme == rhs.theme else { return false }
+            guard lhs.document.source == rhs.document.source else { return false }
+            return lhs.document.blocks == rhs.document.blocks
         }
 
         public let document: MarkdownDocumentModel
