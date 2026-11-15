@@ -235,16 +235,6 @@ public final class AgentControlStore {
     }
 }
 
-extension DaemonClient {
-    /// Sends a message whose outcome the daemon reports as an unsolicited event, not as a
-    /// correlated response. `agent_permission_response` is the only such message: its wire
-    /// `requestId` field is the permission id, so `send` can never match a reply and would wait
-    /// for its timeout. The frame still goes out immediately.
-    func sendExpectingEvent<R: PaseoRequest>(_ request: R, timeout: Duration = .seconds(2)) {
-        Task { _ = try? await send(request, timeout: timeout) }
-    }
-}
-
 /// One readable line for an error, for `actionError` and the catalogue phase.
 private func message(for error: Error) -> String {
     if let error = error as? LocalizedError, let description = error.errorDescription {

@@ -700,8 +700,8 @@ public final class ConversationStore: Identifiable {
     /// The open turn's latest cumulative figures, promoted to the baseline on freeze.
     public internal(set) var openLatestTokens: Int?
     public internal(set) var openLatestCost: Double?
-    /// The running turn. From the agent snapshot, made snappier by `turn_started`/`turn_completed`
-    /// stream events.
+    /// The running turn. Seeded from a fresh agent snapshot, then owned by the `turn_started` /
+    /// `turn_completed` / `turn_failed` / `turn_canceled` stream events.
     public private(set) var activeTurnId: String?
     /// Turns the user stopped (`turn_canceled`), by daemon turn id. A stopped turn shows no
     /// "Completed in" text. Upstream: `packages/app/src/timeline/session-stream-reducers.ts:1820`
@@ -727,6 +727,11 @@ public final class ConversationStore: Identifiable {
     public internal(set) var lastNotice: AgentProviderNotice?
     /// Last failed send, cancel or agent change, for a transient error banner. Cleared by the next success.
     public internal(set) var actionError: String?
+    /// The last send reached the socket but its answer was lost, so the daemon may or may not have
+    /// taken the message. The pending row stays until the timeline confirms it; `actionError`
+    /// carries the connection text. Upstream: public-docs/sdk/reference.md:259-262 ("Inspect
+    /// before retrying a mutation").
+    public internal(set) var sendOutcomeUnknown = false
     /// Last failed background fetch (opening the conversation, older pages, catching up after a
     /// gap). Kept apart from `actionError` so a slow or timed-out refresh never appears on the
     /// composer: only the user's own send, cancel or settings change belongs there.
@@ -751,8 +756,11 @@ public final class ConversationStore: Identifiable {
     /// Number of `updateTurns()` commits. Test probe for the coalescing guarantee.
     internal private(set) var turnCommits = 0
 
-    /// True while the agent works: an active turn, or status `.running`.
-    public var isRunning: Bool { activeTurnId != nil || agent?.status == .running }
+    /// True while the agent works. The running turn is its liveness, never the protocol status:
+    /// completion comes from `turn_completed`/`turn_failed`/`turn_canceled`
+    /// (public-docs/sdk/events.md:103), and upstream resolves the composer's state from the
+    /// turn's phase rather than `status` (`packages/app/src/timeline/turn-liveness.ts:60-77`).
+    public var isRunning: Bool { activeTurnId != nil }
 
     init(agentId: String) {
         self.agentId = agentId
@@ -830,19 +838,33 @@ public final class ConversationStore: Identifiable {
             draft = ""
         }
 
+        let request = SendAgentMessageRequest(
+            agentId: agentId,
+            text: trimmed,
+            messageId: clientId,
+            activeTurnBehavior: behavior ?? (isRunning ? "steer" : nil))
         do {
-            let response = try await client.send(
-                SendAgentMessageRequest(
-                    agentId: agentId,
-                    text: trimmed,
-                    messageId: clientId,
-                    activeTurnBehavior: behavior ?? (isRunning ? "steer" : nil)))
-            if response.accepted {
-                actionError = nil
-            } else {
-                rollBackSend(clientId: clientId, text: trimmed, error: response.error ?? "The daemon rejected the message.")
+            // `initiate` returns once the frame is on the socket; `value()` waits for the answer.
+            // Split so a written frame whose answer was lost is not mistaken for nothing sent.
+            let initiated = try await client.initiate(request, timeout: .seconds(30))
+            do {
+                let response = try await initiated.value()
+                if response.accepted {
+                    actionError = nil
+                } else {
+                    rollBackSend(
+                        clientId: clientId, text: trimmed,
+                        error: response.error ?? "The daemon rejected the message.")
+                }
+            } catch {
+                if (error as? ConnectionError)?.outcomeUnknown == true {
+                    markSendOutcomeUnknown(error: error)
+                } else {
+                    rollBackSend(clientId: clientId, text: trimmed, error: errorText(error))
+                }
             }
         } catch {
+            // The frame never reached the socket: a clean failure.
             rollBackSend(clientId: clientId, text: trimmed, error: errorText(error))
         }
     }
@@ -864,13 +886,27 @@ public final class ConversationStore: Identifiable {
 
     // MARK: Permissions
 
-    /// Answers one pending request. The card disappears when the daemon reports the resolution
-    /// (`agent_permission_resolved`), not optimistically, so a rejected answer keeps it visible.
+    /// Answers one pending request and waits for the daemon to confirm it. The card disappears
+    /// when the daemon reports the resolution (`agent_permission_resolved`), never optimistically,
+    /// so an answer that did not land keeps it visible and says so via `actionError`.
+    ///
+    /// Upstream answers with `respondToPermissionAndWait` (`packages/app/src/agent-stream/view.tsx:1552`):
+    /// the daemon echoes `agent_permission_resolved` correlated by the permission request id, and a
+    /// failure surfaces instead of vanishing (15 s timeout, `packages/client/src/daemon-client.ts:6724`).
     public func respond(to requestId: String, with response: AgentPermissionResponse) async {
         guard let client else { return }
-        client.sendExpectingEvent(
-            RespondToAgentPermissionRequest(
-                agentId: agentId, permissionRequestId: requestId, response: response))
+        var request = RespondToAgentPermissionRequest(
+            agentId: agentId, permissionRequestId: requestId, response: response)
+        // The permission request id is the correlation id: it is what the daemon echoes back and
+        // what `DaemonConnection` matches its pending request on.
+        request.requestId = requestId
+        do {
+            _ = try await client.send(request, timeout: .seconds(15))
+            removePermission(requestId: requestId)
+            actionError = nil
+        } catch {
+            actionError = errorText(error)
+        }
     }
 
     // MARK: Agent settings
@@ -935,7 +971,25 @@ public final class ConversationStore: Identifiable {
     // MARK: HostSession handoff
 
     /// Takes an agent snapshot from `HostSession` and follows its running turn.
+    ///
+    /// A snapshot seeds the conversation before the stream resumes, but it must not overtake a
+    /// newer record: upstream accepts a directory update only when its `updatedAt` is at least the
+    /// stored one's and keeps the stored snapshot otherwise
+    /// (`packages/app/src/utils/agent-directory-update-policy.ts:11-15`). A timeline page
+    /// serialized before the daemon wrote the turn therefore cannot clear a running turn, and
+    /// completion stays event-driven (`public-docs/sdk/events.md:103`). A stale snapshot still
+    /// carries newer usage, so that one field is merged.
     internal func applyAgent(_ snapshot: AgentSnapshot) {
+        if let stored = agent,
+            let storedDate = PaseoDate.parse(stored.updatedAt),
+            let incomingDate = PaseoDate.parse(snapshot.updatedAt),
+            incomingDate < storedDate
+        {
+            if let usage = snapshot.lastUsage, usage != stored.lastUsage {
+                agent?.lastUsage = usage
+            }
+            return
+        }
         agent = snapshot
         pendingPermissions = snapshot.permissionRequests
         setActiveTurn(snapshot.activeTurn?.turnId)
@@ -1128,6 +1182,15 @@ public final class ConversationStore: Identifiable {
         actionError = error
     }
 
+    /// The frame was written but no answer came back: the daemon may have taken the message. The
+    /// optimistic row stays in its pending style (never removed: deleting it invites a resend that
+    /// would duplicate the prompt) and the timeline settles it when the daemon echoes it.
+    /// Upstream: public-docs/sdk/reference.md:259-262.
+    private func markSendOutcomeUnknown(error: Error) {
+        sendOutcomeUnknown = true
+        actionError = errorText(error)
+    }
+
     private func setActiveTurn(_ turnId: String?) {
         guard activeTurnId != turnId else { return }
         activeTurnId = turnId
@@ -1136,6 +1199,10 @@ public final class ConversationStore: Identifiable {
 
     private func updateTurns() {
         turnCommits += 1
+        // A pending send that the timeline has now confirmed is no longer outcome-unknown.
+        if sendOutcomeUnknown, !timeline.rows.contains(where: \.isPending) {
+            sendOutcomeUnknown = false
+        }
         turns = turnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
         mediaIndex.update(turns: turns)
         // The chat outline is stale whenever the newest prompt moves (a turn started, a page
