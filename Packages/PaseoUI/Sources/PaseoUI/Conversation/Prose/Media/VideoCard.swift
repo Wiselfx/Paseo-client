@@ -33,10 +33,11 @@ struct VideoCard: View {
     /// workspace is part of it so the card's `prepare` task re-runs when the agent snapshot
     /// names the workspace a restored chat was missing (V1.1).
     private var cardID: String {
-        let workspace = richActions?.daemonWorkspaceID ?? "-"
         switch input {
-        case .remote(let url): "video:\(workspace):\(url)"
-        case .local(let path): "video:local:\(workspace):\(path)"
+        case .remote(let url):
+            return "video:\(url)"
+        case .local(let path):
+            return "video:local:\(richActions?.daemonWorkspaceID ?? "-"):\(path)"
         }
     }
 
