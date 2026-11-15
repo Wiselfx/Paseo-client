@@ -349,6 +349,10 @@ struct TranscriptView: View {
             current = max(all.count - Self.windowSize, 0)
         }
         var target = current
+        if PaseoPerf.enabled {
+            let found = seq.flatMap { q in all.firstIndex(where: { $0.containsRow(seqEnd: q) }) }
+            PaseoPerf.countNamed("grow.cur\(current).all\(all.count).found\(found.map(String.init) ?? "nil").seq\(seq.map(String.init) ?? "-")")
+        }
         if let count { target = max(current - count, 0) }
         if let id, let index = all.firstIndex(where: { $0.id == id }) { target = min(target, index) }
         if let seq, let index = all.firstIndex(where: { $0.containsRow(seqEnd: seq) }) {
