@@ -16,7 +16,7 @@ foundation head as built at the start (or the first instrumented build), "after"
 | F5 | Drawer first and last frame (sidebar, panel) | `sidebar-edge` scenario: `Sidebar`, `SidebarRoll`, `Composer` bodies at each motion with a 52 to 156 ms stall | `ShellContainer.applyRoots` re-assigned every hosting controller's `rootView` with new environment values at the start and end of each motion | `9b271ee` `SurfaceFlags` observable per surface | settle stall 52 to 156 ms -> 10 to 36 ms; composer body per motion 1 -> 0 (sidebar bodies still run once, see open O5) |
 | F6 | Composer body | spans: `composer.camera` 1.0 to 2.3 ms | `UIImagePickerController.isSourceTypeAvailable(.camera)` asked on every composer pass | `9b271ee` `static let` | 1 to 2.3 ms a pass -> once |
 
-Core tests: `StreamingIdentityTests` (new; passes with the 1171-test suite). No existing test changed.
+Core tests: `StreamingIdentityTests` (new; passes with the full Core run: 1131 + 221 + 166 tests). No existing test changed.
 
 ## Open (found, measured, not fixed)
 
