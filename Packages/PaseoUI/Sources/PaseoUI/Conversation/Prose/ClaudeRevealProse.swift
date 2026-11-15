@@ -73,9 +73,28 @@ struct ClaudeRevealProse: View {
         }
     }
 
+    /// The last split, so the second and third body of one update (the reveal writes four `@State`
+    /// values per delta) do not split the whole message again (W1: three splits per delta).
+    private final class PieceMemo {
+        var source: String?
+        var home: String?
+        var refs: [PieceRef] = []
+    }
+    @State private var memo = PieceMemo()
+
     private func pieceRefs(_ source: String) -> [PieceRef] {
+        let home = richActions?.homeDirectory
+        if memo.source == source, memo.home == home { return memo.refs }
+        let refs = computePieceRefs(source, home: home)
+        memo.source = source
+        memo.home = home
+        memo.refs = refs
+        return refs
+    }
+
+    private func computePieceRefs(_ source: String, home: String?) -> [PieceRef] {
         let raw = PaseoPerf.measure("rich.pieces") {
-            richPieces(source, home: richActions?.homeDirectory)
+            richPieces(source, home: home)
         }
         var refs: [PieceRef] = []
         var offset = 0
@@ -113,7 +132,11 @@ struct ClaudeRevealProse: View {
                     if !trimmed.isEmpty {
                         ClaudeMarkdownView(
                             document: .cached(trimmed, home: richActions?.homeDirectory), theme: theme,
-                            imageContent: imageContent, isStreaming: isStreaming,
+                            // Only the open piece can be still arriving. A settled piece sees
+                            // `false` while the turn runs, so its code highlights as soon as its
+                            // fence is closed and the turn ending changes one piece, not all of
+                            // them (W1: `isStreaming` flipping made every piece unequal at once).
+                            imageContent: imageContent, isStreaming: isStreaming && ref.isTailMarkdown,
                             onAction: onAction)
                             .equatable()
                             .frame(maxWidth: .infinity, alignment: .leading)
