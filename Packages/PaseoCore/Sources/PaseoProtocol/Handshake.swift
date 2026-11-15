@@ -87,6 +87,9 @@ public enum ClientCapabilities {
             terminalChunkedReplay: true,
             providerSubagents: true,
             projectedSubagentTimeline: true,
+            "timeline_replacement_invalidation": true,
+            "timeline_notifications": true,
+            "workspace_setup_blocked": true,
         ]
         if OwnedSubscriptions.isEnabled {
             capabilities[OwnedSubscriptions.capability] = true

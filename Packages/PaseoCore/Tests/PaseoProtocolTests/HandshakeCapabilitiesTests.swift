@@ -32,6 +32,9 @@ import Testing
         "background_agents",
         "browser_host",
         "voice",
+        "timeline_replacement_invalidation",
+        "timeline_notifications",
+        "workspace_setup_blocked",
     ]
 
     /// The exact set this client advertises today. Changing it is a protocol decision: update this
@@ -43,7 +46,9 @@ import Testing
         "projected_subagent_timeline",
         "owned_subscriptions",
         "workspace_setup_observation",
-        "voice",
+        "voice",        "timeline_replacement_invalidation",
+        "timeline_notifications",
+        "workspace_setup_blocked",
     ]
 
     @Test func advertisedNamesArePinned() {

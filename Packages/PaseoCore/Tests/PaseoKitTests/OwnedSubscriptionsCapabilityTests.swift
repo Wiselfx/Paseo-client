@@ -25,6 +25,9 @@ import Testing
                     // M15: realtime voice mode is implemented (`VoiceModeSession`), so the
                     // hello advertises `voice` behind `VoiceMode.isEnabled`.
                     "voice": true,
+                    "timeline_replacement_invalidation": true,
+                    "timeline_notifications": true,
+                    "workspace_setup_blocked": true,
                 ])
     }
 
