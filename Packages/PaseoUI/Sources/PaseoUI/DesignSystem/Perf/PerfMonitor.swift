@@ -64,7 +64,12 @@
             self.link = link
             installObservers()
             #if arch(arm64)
-                PerfSampler.shared.start()
+                // The sampler suspends the main thread a thousand times a second while it is busy, which
+                // is enough to change what a timing-sensitive layout does (a long chat opened blank with
+                // it running and not without), so it is a second switch: `-paseo-perf-sample`.
+                if ProcessInfo.processInfo.arguments.contains("-paseo-perf-sample") {
+                    PerfSampler.shared.start()
+                }
             #endif
             #if targetEnvironment(simulator)
                 let target = "sim"
