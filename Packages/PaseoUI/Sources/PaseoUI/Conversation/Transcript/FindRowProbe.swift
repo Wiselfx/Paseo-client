@@ -6,7 +6,8 @@ import SwiftUI
 /// Aiming at a row id is a request, not a result: when the stack is mid-layout the request can leave the
 /// viewport on the turn's top, thousands of points from the row (a wrap to the far end of a 90 000 pt chat
 /// did). Only the row of the current match reports (`FindRowReporter`, on its highlight background), in the
-/// transcript's content space, and only while find is open: a plain reference the transcript reads, never
+/// transcript viewport's space (where it is on screen now; a frame in content space went stale while the
+/// stack re-estimated the rows above it), and only while find is open: a plain reference the transcript reads, never
 /// observed, so a report costs a dictionary write and no body.
 @MainActor final class FindRowProbe {
     private var frames: [Int: CGRect] = [:]
@@ -30,7 +31,7 @@ extension EnvironmentValues {
     }
 }
 
-/// Reports the row's frame, in the transcript's content space, when it is the current find match.
+/// Reports the row's frame, in the transcript viewport's space, when it is the current find match.
 struct FindRowReporter: ViewModifier {
     let seqEnd: Int
     let isTarget: Bool
@@ -39,7 +40,7 @@ struct FindRowReporter: ViewModifier {
     func body(content: Content) -> some View {
         if isTarget, let probe {
             content.onGeometryChange(for: CGRect.self) { geometry in
-                geometry.frame(in: .named(TranscriptScrollTrack.contentSpace))
+                geometry.frame(in: .named(TranscriptScrollTrack.viewportSpace))
             } action: { frame in
                 probe.report(seqEnd, frame)
             }

@@ -257,6 +257,7 @@ struct TranscriptView: View {
                 }
                 .environment(\.richProseWidth, column)
                 .environment(\.findRowProbe, findRows)
+                .coordinateSpace(name: TranscriptScrollTrack.viewportSpace)
                 .scrollPosition($scrollPosition)
                 .scrollDismissesKeyboard(.interactively)
                 // Opening the conversation lands at the bottom; growth at the tail keeps it
@@ -517,6 +518,7 @@ struct TranscriptView: View {
             transcriptHeight = metrics.viewportHeight
         }
         scrollTrack.contentOffset = metrics.offsetY
+        scrollTrack.viewportHeight = metrics.viewportHeight
         scrollTrack.distanceFromBottom = metrics.distanceFromBottom
         scrollTrack.distanceFromContentBottom = metrics.distanceFromContentBottom
         scrollTrack.contentHeight = metrics.contentHeight
@@ -941,10 +943,11 @@ struct TranscriptView: View {
                 // Arrived when the match's own point of the row is under the viewport (the row reports
                 // its frame while it is the current match). A row that has not reported has not arrived.
                 isReached: { [findRows, scrollTrack] in
+                    // The match's own point of the row, in the viewport's space (where it is on screen
+                    // now): between the top of the viewport and its bottom edge, which is under the composer.
                     guard let frame = findRows.frame(of: target.rowSeqEnd) else { return false }
                     let y = frame.minY + frame.height * (fraction ?? 0.5)
-                    return y > scrollTrack.contentOffset - 50
-                        && y < scrollTrack.contentOffset + scrollTrack.visibleHeight + 150
+                    return y > 0 && y < scrollTrack.viewportHeight
                 },
                 verifies: true),
             hooks: jumpHooks(onLanded: { [controller] in
@@ -955,15 +958,7 @@ struct TranscriptView: View {
     /// The transcript's side of a jump: the scroll position, the stack's mounted turns and the screen.
     private func jumpHooks(onLanded: @escaping @MainActor () -> Void) -> TranscriptJumpRunner.Hooks {
         .init(
-            isMounted: { [scrollTrack, store] id in
-                if PaseoPerf.enabled {
-                    let inList = store.turns.contains { $0.id == id }
-                    let inWindow = windowedTurns.contains { $0.id == id }
-                    PaseoPerf.countNamed(
-                        "jump.mounted.\(scrollTrack.visibleTurnIds.contains(id)).n\(scrollTrack.visibleTurnIds.count).list\(inList).win\(inWindow).off\(scrollTrack.offset(of: id) != nil)")
-                }
-                return scrollTrack.visibleTurnIds.contains(id)
-            },
+            isMounted: { [scrollTrack] id in scrollTrack.visibleTurnIds.contains(id) },
             hop: { [scrollTrack, store] id in
                 let all = store.turns
                 guard let target = all.firstIndex(where: { $0.id == id }) else { return nil }
@@ -1179,9 +1174,14 @@ struct TranscriptView: View {
 final class TranscriptScrollTrack: @unchecked Sendable {
     /// The named space the transcript's content is measured in, for the jump lead.
     static let contentSpace = "paseo.transcript.content"
+    /// The scroll view's own frame (it does not scroll): a row's frame in it is where the row is on
+    /// screen right now, whatever the stack's estimates above it did since the row last laid out.
+    static let viewportSpace = "paseo.transcript.viewport"
 
     var visibleTurnIds: Set<String> = []
     var lastTrackedTurn: String?
+    /// The scroll view's own height (bounds), from the last scroll frame.
+    var viewportHeight: CGFloat = 0
     /// The viewport's content offset, updated once per scroll frame (O(1)).
     var contentOffset: CGFloat = 0
     /// The current scroll phase. A plain field: nothing observes it, so a scroll frame that only
