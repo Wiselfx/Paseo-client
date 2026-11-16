@@ -50,8 +50,10 @@ These rules (PLAN §1, R-1…R-7) govern every line of UI code. Reviews check th
   how to measure with `-paseo-perf` and `docs/perf/scenarios/`). In short: idle is silent; no side effects or
   object creation in `init` or a `@State` default; view identity never follows a value that changes while
   streaming; repeated items are `Equatable`; no synchronous system call in a body; chrome state flips through
-  observable flags. `Tools/style-lint/style-lint.sh` reports the `perf-*` patterns. A perf change carries its
-  before and after.
+  observable flags. `Tools/style-lint/check.sh` enforces the R-4 and `perf-*` patterns (CI fails on any new hit
+  beyond `Tools/style-lint/baseline.txt`; run it before you commit). `docs/perf/HOWTO.md` explains the
+  measuring tools. A perf change carries its before and after, and `.github/pull_request_template.md` lists
+  what a reviewer checks.
 - **Copy.** Sentence case for our own labels; "host" is the user-facing noun ("daemon" only in
   troubleshooting or a command name); never invent copy — keep the existing string or port
   upstream's `en.ts` verbatim.
