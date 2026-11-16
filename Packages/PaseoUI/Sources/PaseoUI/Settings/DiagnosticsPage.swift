@@ -14,7 +14,11 @@ struct DiagnosticsPage: View {
     let session: HostSession
 
     @State private var report = ""
-    @State private var audioEngine = VoiceAudioEngine()
+    /// Built when the test tone is first played, not with the page (R-2: nothing to allocate for a page
+    /// that is only read).
+    @State private var audioEngine: VoiceAudioEngine?
+    /// The scrubbed host bundle, remembered per input: the regexes ran twice per body pass.
+    @State private var scrubMemo = ScrubMemo()
     @State private var testAudioPlaying = false
     @State private var testAudioResult: String?
 
@@ -95,8 +99,9 @@ struct DiagnosticsPage: View {
                         .foregroundStyle(Palette.secondaryInk)
                 }
             case .ready(let diagnostic):
+                let scrubbed = scrubMemo.scrubbed(diagnostic)
                 ScrollView {
-                    Text(Self.scrubHostDiagnostic(diagnostic))
+                    Text(scrubbed)
                         .font(.paseo(.codeCaption))
                         .foregroundStyle(Palette.ink)
                         .textSelection(.enabled)
@@ -105,7 +110,7 @@ struct DiagnosticsPage: View {
                 }
                 .frame(maxHeight: 300)
                 HStack {
-                    CopyButton(text: Self.scrubHostDiagnostic(diagnostic))
+                    CopyButton(text: scrubbed)
                         .accessibilityIdentifier("settings.diagnostics.hostCopy")
                     Spacer(minLength: 0)
                 }
@@ -158,7 +163,9 @@ struct DiagnosticsPage: View {
             testAudioPlaying = true
             testAudioResult = nil
             do {
-                try await audioEngine.playTestTone()
+                let engine = audioEngine ?? VoiceAudioEngine()
+                audioEngine = engine
+                try await engine.playTestTone()
                 testAudioResult = nil
             } catch {
                 testAudioResult = "Playback failed: \(error.localizedDescription)"
@@ -178,22 +185,30 @@ struct DiagnosticsPage: View {
     static func scrubHostDiagnostic(_ text: String) -> String {
         // The text comes from the daemon host, so its home directory is not this device's:
         // shorten any macOS/Linux home path (`/Users/<name>`, `/home/<name>`) to `~`.
-        var result = Self.redact(pattern: #"/(?:Users|home)/[^/\s"']+"#, in: text, replacement: "~")
-        result = Self.redact(pattern: #"(?i)\b(Bearer)\s+\S+"#, in: result, replacement: "$1 [redacted]")
-        result = Self.redact(
-            pattern: #"(?i)"(api[_-]?key)"\s*:\s*"[^"]*""#, in: result,
-            replacement: "\"$1\": \"[redacted]\"")
-        result = Self.redact(
-            pattern: #"(?i)\b(token|password|passwd|secret|api[_-]?key|access[_-]?key)\s*[:=]\s*[^\s,;]+"#,
-            in: result, replacement: "$1: [redacted]")
+        var result = text
+        for rule in Self.scrubRules {
+            guard let regex = rule.regex else { continue }
+            let range = NSRange(result.startIndex..., in: result)
+            result = regex.stringByReplacingMatches(
+                in: result, range: range, withTemplate: rule.replacement)
+        }
         return result
     }
 
-    private static func redact(pattern: String, in text: String, replacement: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
-        let range = NSRange(text.startIndex..., in: text)
-        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
-    }
+    /// The four patterns, compiled once, applied in this order.
+    private static let scrubRules: [(regex: NSRegularExpression?, replacement: String)] = [
+        (try? NSRegularExpression(pattern: #"/(?:Users|home)/[^/\s"']+"#), "~"),
+        (try? NSRegularExpression(pattern: #"(?i)\b(Bearer)\s+\S+"#), "$1 [redacted]"),
+        (
+            try? NSRegularExpression(pattern: #"(?i)"(api[_-]?key)"\s*:\s*"[^"]*""#),
+            "\"$1\": \"[redacted]\""
+        ),
+        (
+            try? NSRegularExpression(
+                pattern: #"(?i)\b(token|password|passwd|secret|api[_-]?key|access[_-]?key)\s*[:=]\s*[^\s,;]+"#
+            ), "$1: [redacted]"
+        ),
+    ]
 
     // MARK: Report
 
@@ -289,5 +304,17 @@ struct DiagnosticsPage: View {
         return formatter.string(from: date)
     }
 
+}
+/// Remembers the last scrubbed bundle for the input it came from.
+@MainActor private final class ScrubMemo {
+    private var input: String?
+    private var output = ""
+
+    func scrubbed(_ text: String) -> String {
+        if input == text { return output }
+        output = DiagnosticsPage.scrubHostDiagnostic(text)
+        input = text
+        return output
+    }
 }
 #endif

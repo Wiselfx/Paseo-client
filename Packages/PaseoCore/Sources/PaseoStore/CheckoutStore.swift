@@ -248,21 +248,26 @@ public final class CheckoutStore: Identifiable {
             supportsFileEditing: serverInfo?.hasFeature("workspaceFileEditing") ?? false)
     }
 
+    /// Called on every `session.checkout(for:)` (chat, composer, panel): a descriptor equal to the one
+    /// held must not notify the readers of `workspace`.
     internal func update(workspace: WorkspaceDescriptor) {
-        self.workspace = workspace
+        if self.workspace != workspace { self.workspace = workspace }
     }
 
     /// A pushed `checkout_status_update`.
     internal func handle(_ update: CheckoutStatusUpdate) {
         guard update.status.cwd == cwd else { return }
-        status = update.status
-        statusError = update.status.error?.message
+        // Pushes repeat what is held while git settles; write only what changed.
+        if status != update.status { status = update.status }
+        let message = update.status.error?.message
+        if statusError != message { statusError = message }
         if let payload = update.prStatus {
-            prStatus = payload.status
-            prAuthState = payload.forgeAuthState
-            prStatusError = payload.error?.message
+            if prStatus != payload.status { prStatus = payload.status }
+            if prAuthState != payload.forgeAuthState { prAuthState = payload.forgeAuthState }
+            let prMessage = payload.error?.message
+            if prStatusError != prMessage { prStatusError = prMessage }
         }
-        phase = .ready
+        if phase != .ready { phase = .ready }
     }
 
     /// A pushed `checkout_diff_update`.
@@ -286,13 +291,13 @@ public final class CheckoutStore: Identifiable {
     // MARK: Internals
 
     private func apply(_ diff: CheckoutDiff) {
-        self.diff = diff
+        if self.diff != diff { self.diff = diff }
         if let error = diff.error {
-            diffError = error.message
-            diffPhase = .failed(error.message)
+            if diffError != error.message { diffError = error.message }
+            if diffPhase != .failed(error.message) { diffPhase = .failed(error.message) }
         } else {
-            diffError = nil
-            diffPhase = .ready
+            if diffError != nil { diffError = nil }
+            if diffPhase != .ready { diffPhase = .ready }
         }
     }
 

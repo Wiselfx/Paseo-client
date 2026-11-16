@@ -161,7 +161,7 @@ public final class TerminalsStore {
                 ListTerminalsRequest(
                     cwd: watched[workspaceId]?.cwd, workspaceId: workspaceId))
             guard !Task.isCancelled else { return }
-            terminalsByWorkspace[workspaceId] = response.terminals
+            setTerminals(response.terminals, in: workspaceId)
             error = nil
         } catch {
             self.error = terminalErrorText(error)
@@ -319,7 +319,7 @@ public final class TerminalsStore {
             let response = try await client.send(
                 ListWorkspaceScriptsRequest(workspaceId: workspaceId))
             guard !Task.isCancelled else { return }
-            if let scripts = response.scripts { scriptsByWorkspace[workspaceId] = scripts }
+            if let scripts = response.scripts { setScripts(scripts, in: workspaceId) }
             if let message = response.error {
                 error = message
             } else {
@@ -339,7 +339,7 @@ public final class TerminalsStore {
         do {
             let response = try await client.send(
                 StartWorkspaceScriptRequest(workspaceId: workspaceId, scriptName: scriptName))
-            if let scripts = response.scripts { scriptsByWorkspace[workspaceId] = scripts }
+            if let scripts = response.scripts { setScripts(scripts, in: workspaceId) }
             if let message = response.error {
                 error = message
                 return nil
@@ -365,7 +365,7 @@ public final class TerminalsStore {
         do {
             let response = try await client.send(
                 StopWorkspaceScriptRequest(workspaceId: workspaceId, scriptName: scriptName))
-            if let scripts = response.scripts { scriptsByWorkspace[workspaceId] = scripts }
+            if let scripts = response.scripts { setScripts(scripts, in: workspaceId) }
             if let message = response.error {
                 error = message
                 return nil
@@ -489,7 +489,7 @@ public final class TerminalsStore {
             guard let payload = try? decoder.decode(
                 SessionPayloadEnvelope<ScriptStatusUpdate>.self, from: raw
             ).payload else { return }
-            scriptsByWorkspace[payload.workspaceId] = payload.scripts
+            setScripts(payload.scripts, in: payload.workspaceId)
 
         case "terminal_attention_required":
             guard let payload = try? decoder.decode(
@@ -616,7 +616,7 @@ public final class TerminalsStore {
         if let subscriptionId = payload.subscriptionId {
             directorySubscriptionIds[workspaceId] = subscriptionId
         }
-        terminalsByWorkspace[workspaceId] = payload.terminals
+        setTerminals(payload.terminals, in: workspaceId)
     }
 
     /// Sends the directory subscribe with a fresh `requestId`. A modern daemon refuses an owned
@@ -667,6 +667,16 @@ public final class TerminalsStore {
     private func workspaceId(matchingCwd cwd: String?) -> String? {
         guard let cwd else { return nil }
         return watched.first { $0.value.cwd == cwd }?.key
+    }
+
+    /// A snapshot that repeats what the store holds must not notify its readers (the sidebar reads
+    /// scripts, the terminals page reads the list): the daemon re-sends full snapshots on any change.
+    private func setTerminals(_ terminals: [TerminalInfo], in workspaceId: String) {
+        if terminalsByWorkspace[workspaceId] != terminals { terminalsByWorkspace[workspaceId] = terminals }
+    }
+
+    private func setScripts(_ scripts: [WorkspaceScript], in workspaceId: String) {
+        if scriptsByWorkspace[workspaceId] != scripts { scriptsByWorkspace[workspaceId] = scripts }
     }
 
     private func upsert(_ terminal: TerminalInfo, in workspaceId: String) {

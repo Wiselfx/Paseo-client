@@ -10,8 +10,7 @@ struct ProjectsPage: View {
     private var directory: WorkspaceDirectory { session.workspaceDirectory }
 
     private var projects: [WorkspaceProjectDescriptor] {
-        directory.groups
-            .map(\.project)
+        directory.projects
             .sorted {
                 ($0.projectCustomName ?? $0.projectDisplayName)
                     .localizedCaseInsensitiveCompare(
@@ -21,8 +20,8 @@ struct ProjectsPage: View {
 
     private var counts: [String: Int] {
         var result: [String: Int] = [:]
-        for group in directory.groups {
-            result[group.project.projectId, default: 0] += group.workspaces.count
+        for workspace in directory.workspaces {
+            result[workspace.projectId, default: 0] += 1
         }
         return result
     }
@@ -30,6 +29,8 @@ struct ProjectsPage: View {
     var body: some View {
         PageList {
             Section {
+                let projects = self.projects
+                let counts = self.counts
                 if projects.isEmpty {
                     EmptyState(
                         title: "No projects on this host yet",
@@ -78,7 +79,7 @@ struct ProjectPage: View {
     let projectID: String
 
     private var project: WorkspaceProjectDescriptor? {
-        session.workspaceDirectory.groups.map(\.project).first { $0.projectId == projectID }
+        session.workspaceDirectory.project(id: projectID)
     }
 
     var body: some View {

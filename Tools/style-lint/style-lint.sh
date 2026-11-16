@@ -61,6 +61,16 @@ rules=(
   $'perf-binding-store-get\tget: \\{ (store|draft|controller)\\.[A-Za-z.]+ \\}'
   # Rule 19: `rest.count` / `candidate.count` on a suffix of a string inside a scan loop is O(n) per step.
   $'perf-suffix-count\t(rest|candidate)\\.count >= '
+  # Sweep (W3): `workspaceDirectory.groups` builds every group (and reads every workspace) per call; a view
+  # that needs the projects or the workspaces reads those. The sidebar's directory is the one place that groups.
+  $'perf-groups-in-view\tworkspaceDirectory\\.groups\t(SidebarDirectory|DraftChatView)'
+  # Sweep (W3): a Set/Dictionary built from every agent inside a view helper runs once per row or per pass.
+  $'perf-agents-set-in-view\tSet\\(session\\.agents\\.map'
+  # Sweep (W3): `NSRegularExpression(pattern:` compiles on every call; keep compiled patterns in a `static let`.
+  $'perf-regex-compile\tNSRegularExpression\\(pattern:\t(static let|try\\? NSRegularExpression\\(pattern: #|private static let)'
+  # Sweep (W3): a closure with the hosting view's whole copy in a row action object is fine; a list row that sorts
+  # in its parent per pass is not: sorting with a locale-aware compare belongs in a memo (FileListMemo).
+  $'perf-localized-sort-in-view\t\\.sorted \\{[^}]*localizedCaseInsensitiveCompare\t(Memo|memo)'
 )
 
 tmp="$(mktemp)"

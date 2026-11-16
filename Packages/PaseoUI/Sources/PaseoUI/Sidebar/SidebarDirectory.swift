@@ -8,6 +8,25 @@ import SwiftUI
 struct SidebarDerivations {
     let agentsByWorkspace: [String: [AgentSnapshot]]
     let activityDates: [String: Date]
+    /// One clock for the whole pass (row ages), the label catalog and the capability flags, read once
+    /// instead of per row; `actions` is the one object every row shares.
+    let now: Date
+    let labelCatalog: [WorkspaceLabelDefinition]
+    let supportsPinning: Bool
+    let supportsLabels: Bool
+    let actions: SidebarRowActions
+}
+
+/// The directory (projects, date groups, pinned, rows) in a child of the sidebar, so the
+/// agent and workspace lists it reads re-run this body only; the sidebar's header, navigation, footer,
+/// sheets and dialogs do not re-evaluate when an agent or workspace changes (R-1).
+struct SidebarDirectoryHost: View {
+    let sidebar: PaseoSidebar
+
+    var body: some View {
+        let _ = PaseoPerf.body("SidebarDirectory")
+        sidebar.directory(derivations: sidebar.sidebarDerivations())
+    }
 }
 
 extension PaseoSidebar {
@@ -37,7 +56,11 @@ extension PaseoSidebar {
             }
         }
         return SidebarDerivations(
-            agentsByWorkspace: agentsByWorkspace, activityDates: activityDates)
+            agentsByWorkspace: agentsByWorkspace, activityDates: activityDates,
+            now: Date(), labelCatalog: session.labels.labels,
+            supportsPinning: session.workspaceDirectory.supportsWorkspacePinning,
+            supportsLabels: session.labels.supportsLabels,
+            actions: SidebarRowActions(sidebar: self))
     }
 
     @ViewBuilder func directory(derivations: SidebarDerivations) -> some View {

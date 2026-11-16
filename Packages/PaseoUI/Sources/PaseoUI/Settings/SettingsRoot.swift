@@ -270,7 +270,7 @@ struct SettingsRoot: View {
     }
 
     private var projectCountLine: String {
-        let count = session.workspaceDirectory.groups.count
+        let count = session.workspaceDirectory.projects.count
         return count == 1 ? "1 project" : "\(count) projects"
     }
 

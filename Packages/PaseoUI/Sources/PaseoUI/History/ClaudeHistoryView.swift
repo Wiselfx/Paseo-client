@@ -461,12 +461,10 @@ struct ClaudeHistoryView: View {
     /// Feeds the model the values it needs; it does the parsing and grouping once.
     private func rebuild() {
         var workspaceTitles: [String: String] = [:]
-        for group in session.workspaceDirectory.groups {
-            for workspace in group.workspaces {
-                let title = workspace.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-                workspaceTitles[workspace.id] = (title?.isEmpty == false ? title : nil)
-                    ?? workspace.name
-            }
+        for workspace in session.workspaceDirectory.workspaces {
+            let title = workspace.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            workspaceTitles[workspace.id] = (title?.isEmpty == false ? title : nil)
+                ?? workspace.name
         }
         var providerLabels: [String: String] = [:]
         for provider in session.agentControl.providers {

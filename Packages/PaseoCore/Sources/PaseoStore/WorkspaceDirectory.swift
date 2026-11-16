@@ -69,10 +69,11 @@ public final class WorkspaceDirectory {
     /// Projects with their workspaces, pinned/active first. Projects whose last workspace was
     /// archived still appear (the daemon sends them as `emptyProjects`).
     public var groups: [WorkspaceGroup] {
-        projects.map { project in
-            WorkspaceGroup(
-                project: project,
-                workspaces: workspaces.filter { $0.projectId == project.projectId })
+        // One pass over the workspaces (they keep their order inside a group), not one filter per project.
+        var byProject: [String: [WorkspaceDescriptor]] = [:]
+        for workspace in workspaces { byProject[workspace.projectId, default: []].append(workspace) }
+        return projects.map { project in
+            WorkspaceGroup(project: project, workspaces: byProject[project.projectId] ?? [])
         }
     }
 
@@ -343,7 +344,8 @@ public final class WorkspaceDirectory {
     /// `WorkspaceLabelsStore` can call it.
     internal func patchLabels(_ workspaceId: String, _ labels: [String]) {
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else { return }
-        workspaces[index].labels = labels.isEmpty ? nil : labels
+        let next = labels.isEmpty ? nil : labels
+        if workspaces[index].labels != next { workspaces[index].labels = next }
     }
 
     /// A reconnect means the daemon forgot the event subscription too.
@@ -357,7 +359,8 @@ public final class WorkspaceDirectory {
         switch update {
         case .upsert(let workspace, _):
             if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
-                workspaces[index] = workspace
+                // A push that repeats what we hold must not notify every reader of `workspaces`.
+                if workspaces[index] != workspace { workspaces[index] = workspace }
             } else {
                 workspaces.append(workspace)
             }
@@ -403,7 +406,7 @@ public final class WorkspaceDirectory {
         runtime.aheadOfOrigin = status.aheadOfOrigin
         runtime.behindOfOrigin = status.behindOfOrigin
         if let remoteUrl = status.remoteUrl { runtime.remoteUrl = remoteUrl }
-        workspaces[index].gitRuntime = runtime
+        if workspaces[index].gitRuntime != runtime { workspaces[index].gitRuntime = runtime }
     }
 
     // MARK: Internals
@@ -452,14 +455,17 @@ public final class WorkspaceDirectory {
         sortProjects()
     }
 
+    /// Sorting assigns only when the order changed: an in-place `sort` notifies every reader even when
+    /// nothing moved, and the sidebar re-derives its whole directory on that.
     private func sortProjects() {
-        projects.sort {
+        let sorted = projects.sorted {
             $0.projectDisplayName.localizedCaseInsensitiveCompare($1.projectDisplayName) == .orderedAscending
         }
+        if !sorted.elementsEqual(projects, by: { $0.projectId == $1.projectId }) { projects = sorted }
     }
 
     private func sortWorkspaces() {
-        workspaces.sort { lhs, rhs in
+        let sorted = workspaces.sorted { lhs, rhs in
             if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
             let left = activityDate(lhs)
             let right = activityDate(rhs)
@@ -472,6 +478,7 @@ public final class WorkspaceDirectory {
             }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
+        if !sorted.elementsEqual(workspaces, by: { $0.id == $1.id }) { workspaces = sorted }
     }
 
     private func activityDate(_ workspace: WorkspaceDescriptor) -> Date? {

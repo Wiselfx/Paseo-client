@@ -169,6 +169,22 @@ finding says so and names the cause; a change that makes a budgeted scenario wor
     UIKit's keyboard views, the render server, the key-command walk) is the system's, and no invisible
     prewarm was found for it.
 
+## Sweep rules (W3, code read, not measured on a device)
+
+24. **Read the lists in a child, not in the page that owns the chrome.** The sidebar body read `session.agents` and
+    the workspace list, so every agent or workspace update re-evaluated the header, navigation, footer and the sheet
+    and dialog modifiers with it. The directory is `SidebarDirectoryHost`, a child that reads them; rows are
+    `SidebarWorkspaceRow` (`Equatable` on a value model, one `SidebarRowActions` object per pass).
+25. **An `@Observable` setter always notifies, even for an equal value.** A store that receives repeated snapshots
+    (workspace pushes, terminal and script lists, checkout status, usage phase) writes only when the value differs
+    (`WorkspaceDirectory`, `TerminalsStore.setTerminals/setScripts`, `CheckoutStore`, `HostUsageStore`), and sorts
+    into a copy, assigning only when the order changed (an in-place `sort` notifies even when nothing moved).
+26. **A page that owns text-field state re-evaluates per keystroke.** Anything it sorts or filters is remembered per
+    input (`FileListMemo`; `ScrubMemo` for the diagnostics bundle); regexes are compiled once in a `static let`.
+27. **Do not build a lookup once per row.** `Set(session.agents.map(\.id))` was a computed property read by every
+    schedule row; build it once per pass and only when a row needs it. Lint: `perf-agents-set-in-view`,
+    `perf-groups-in-view`, `perf-regex-compile`.
+
 ## Keeping it true
 
 - Run `Tools/style-lint/style-lint.sh` and read the `perf-*` lines; new hits need a reason or a fix.
