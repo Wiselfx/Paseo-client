@@ -279,11 +279,54 @@ final class ComposerUITextView: UITextView {
 
     /// The height the field wants at `width`: its content, capped at `lineLimit` lines. Above the
     /// cap it scrolls inside itself instead of pushing the controls row under the keyboard.
+    /// Everything `sizeThatFits` reads for this field, so a hit is exactly an uncached call (W1).
+    private struct FitKey: Equatable {
+        let text: String
+        let width: CGFloat
+        let fontName: String
+        let fontSize: CGFloat
+        let insets: UIEdgeInsets
+        let category: UIContentSizeCategory
+        let exclusions: Int
+        let padding: CGFloat
+        let lines: Int
+    }
+
+    private var fitMemo: (key: FitKey, size: CGSize)?
+
+    /// The text's laid-out size at `width`. SwiftUI asks for it several times per keystroke (ideal,
+    /// proposed, after the binding write) and each call is a full TextKit layout of the draft plus a
+    /// language-identification pass inside UIKit; the answer only changes when the text, the width,
+    /// the font or the insets do. In `-paseo-perf` every hit is re-checked against a real call.
+    private func contentSize(width: CGFloat) -> CGSize {
+        let key = FitKey(
+            text: text ?? "", width: width, fontName: font?.fontName ?? "",
+            fontSize: font?.pointSize ?? 0, insets: textContainerInset,
+            category: traitCollection.preferredContentSizeCategory,
+            exclusions: textContainer.exclusionPaths.count,
+            padding: textContainer.lineFragmentPadding,
+            lines: textContainer.maximumNumberOfLines)
+        if let memo = fitMemo, memo.key == key {
+            if PaseoPerf.enabled {
+                PaseoPerf.count("fit.hit")
+                let real = sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+                if real != memo.size { PaseoPerf.count("fit.MISMATCH") }
+            }
+            return memo.size
+        }
+        PaseoPerf.count("fit.miss")
+        let size = PaseoPerf.measure("fit.layout") {
+            sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        }
+        fitMemo = (key, size)
+        return size
+    }
+
     func fittedSize(width: CGFloat) -> CGSize {
         let lineHeight = ceil(font?.lineHeight ?? Typography.chatBodySize * 1.4)
         let cap = lineHeight * CGFloat(max(lineLimit, 1))
             + textContainerInset.top + textContainerInset.bottom
-        let content = sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        let content = contentSize(width: width)
         let height = min(content.height, cap)
         let scrolls = content.height > cap + 0.5
         if isScrollEnabled != scrolls { isScrollEnabled = scrolls }

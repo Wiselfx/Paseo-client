@@ -25,7 +25,7 @@ model changed.
    `grep -n command= /Users/claude/.ssh/authorized_keys` (the `command="..."` path is the installed script);
    then `sudo cp Tools/build-gate/build-gate <that path> && sudo chown claude:staff <that path> && sudo chmod 755 <that path>`
    (keep the owner and mode the old file had: `ls -l` it first).
-2. Check: `ssh -i <key> claude@host.orb.internal ping` prints `gate v4`.
+2. Check: `ssh -i <key> claude@<gate-host> ping` prints `gate v4`.
 3. First use: `install-release foundation` (a cold Release build is slower than the Debug one; the cap is 1500 s).
    Then `launch -paseo-perf` and run the scenarios exactly as for Debug; compare the `VERDICT` lines.
 

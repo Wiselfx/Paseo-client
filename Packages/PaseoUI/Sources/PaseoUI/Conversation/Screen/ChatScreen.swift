@@ -30,9 +30,6 @@ public struct ChatScreen: View {
     /// The composer's focus (E1 §1): a plain flag, because the composer's field is a
     /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
     @State private var composerFocused = false
-    @Environment(\.toast) private var toast
-    @Environment(\.openURL) private var openURL
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         session: HostSession, store: ConversationStore, onOpenSidebar: (() -> Void)? = nil,
@@ -80,7 +77,7 @@ public struct ChatScreen: View {
             .tint(Palette.ink)
             // File links in prose and in your bubbles (`paseo-file://…`) open the file viewer;
             // ordinary links fall through to the host's handler unchanged.
-            .environment(\.openURL, controller.fileLinkAction(host: openURL))
+            .modifier(ChatOpenURLWiring(controller: controller))
             .environment(\.chatActions, controller.actions)
             .environment(\.richActions, controller.richActions)
             .modifier(
@@ -91,15 +88,15 @@ public struct ChatScreen: View {
             .modifier(MascotDriver(store: store, session: session, controller: controller))
             .modifier(ChatSheets(store: store, session: session, controller: controller))
             .onAppear {
-                controller.toastCenter = toast
-                controller.reduceMotion = reduceMotion
-                controller.openURLFromEnvironment = { url in openURL(url) }
                 // The user-image manifest loads once, off main: bubbles with history
                 // reserve their image boxes on the first pass instead of jumping.
                 Task { await UserImageCache.shared.ensureManifestLoaded() }
+                // The shared web view for diagrams and SVG cards starts now, not mid-scroll (W1).
+                Task { @MainActor in
+                    await Task.yield()
+                    RichWebSnapshotRenderer.shared.prewarm()
+                }
             }
-            .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
-            .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }
     }
 
     // MARK: Chrome
@@ -162,6 +159,28 @@ final class ChatControllerHolder {
         let controller = withObservationTracking({ make() }, onChange: {})
         built = controller
         return controller
+    }
+}
+
+/// Reads `\.openURL` in its own body (W1). `ChatScreen` read it itself, and the value is rebuilt by the
+/// hosting controller whenever the input session changes, so every keystroke re-ran the screen's body
+/// (21 runs a window with no input of its own changing). Here only this modifier re-evaluates.
+struct ChatOpenURLWiring: ViewModifier {
+    let controller: ChatController
+    @Environment(\.openURL) private var openURL
+    @Environment(\.toast) private var toast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.openURL, controller.fileLinkAction(host: openURL))
+            .onAppear {
+                controller.openURLFromEnvironment = { url in openURL(url) }
+                controller.toastCenter = toast
+                controller.reduceMotion = reduceMotion
+            }
+            .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
+            .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }
     }
 }
 

@@ -233,6 +233,15 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         return CGFloat(number.doubleValue)
     }
 
+    /// Starts the shared web view's process before a card needs it (W1). The first diagram or SVG
+    /// snapshot built the view on the main thread in the middle of a scroll and waited for WebKit's
+    /// content process to launch: a 605 to 726 ms stall (`WKWebView.init` blocked in `__ulock_wait2`,
+    /// sampled). Called once when a conversation opens, so the cost lands where the chat is already
+    /// busy opening, not under the reader's finger.
+    func prewarm() {
+        _ = ensureWebView(width: 390)
+    }
+
     private func ensureWebView(width: CGFloat) -> WKWebView? {
         if let webView { return webView }
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
