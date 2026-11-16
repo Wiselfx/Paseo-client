@@ -27,6 +27,7 @@ struct DraftChatView: View {
     var body: some View {
         column
             .task { await loadCatalogue() }
+            .onAppear { TextInputWarmup.start() }
             .onChange(of: session.agentControl.providers) { _, _ in seedIfNeeded() }
     }
 
