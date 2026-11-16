@@ -72,6 +72,12 @@ public struct TimelineState: Sendable, Equatable {
     public private(set) var latestRowKind: RowKind?
     /// `id` of `rows.last`.
     public private(set) var latestRowId: String?
+    /// Bumps whenever `rows` is assigned or mutated — page merges, live merges, pending
+    /// sends and their removal — and never otherwise (duplicates, gaps, epoch changes and
+    /// removals that match nothing leave it alone). Readers that derive O(rows) work
+    /// (the chat outline's fallback list) key their memo on `(epoch, rowsVersion)` and
+    /// recompute once per change instead of once per body pass (W8).
+    public private(set) var rowsVersion: Int = 0
 
     /// `seqEnd` -> index of the first row with that `seqEnd`. Rows are the source of truth;
     /// this only saves the scan. A pending send can briefly share a `seqEnd` with a live row.
@@ -162,6 +168,7 @@ public struct TimelineState: Sendable, Equatable {
         latestPromptSeq = Self.newestPromptSeq(in: rows)
         // A page can rewrite or drop rows anywhere: recompute the digest from scratch.
         rebuildDigest()
+        rowsVersion += 1
     }
 
     /// Applies one live event. See T2 for the merge rules.
@@ -175,6 +182,7 @@ public struct TimelineState: Sendable, Equatable {
         if seq > expected { return .gap(expected: expected, received: seq) }
 
         merge(item: item, turnId: turnId, seq: seq, timestamp: payload.timestamp)
+        rowsVersion += 1
         nextSeq = expected + 1
         // Live merges only append or update in place, so the newest prompt can only move
         // when the last non-pending row became a user message.
@@ -188,13 +196,18 @@ public struct TimelineState: Sendable, Equatable {
         let seq = nextSeq ?? 0
         let item = TimelineItem.userMessage(TimelineItem.UserMessage(text: text, clientMessageId: clientMessageId))
         rows.append(TimelineRow(id: "local:\(clientMessageId)", turnId: nil, item: item, timestamp: timestamp, seqStart: seq, seqEnd: seq, isPending: true))
+        rowsVersion += 1
         digestDidInsertRow(at: rows.count - 1)
     }
 
     /// Drops an optimistic user message that the daemon never accepted. A confirmed message is
     /// kept: only rows still marked pending are removed.
     public mutating func removePendingUserMessage(clientMessageId: String) {
+        guard rows.contains(where: { $0.isPending && $0.id == "local:\(clientMessageId)" }) else {
+            return
+        }
         rows.removeAll { $0.isPending && $0.id == "local:\(clientMessageId)" }
+        rowsVersion += 1
         // Removal can drop a row anywhere in the index map: recompute it.
         rebuildDigest()
     }

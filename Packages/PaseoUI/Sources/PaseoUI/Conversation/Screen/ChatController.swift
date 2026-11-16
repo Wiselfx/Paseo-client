@@ -1358,6 +1358,14 @@ struct TranscriptJump: Equatable {
 
     // MARK: Outline and end-of-transcript requests
 
+    /// The fallback outline, memoized on the timeline it was built from (W8): the transcript
+    /// reads `outlineItems` on every body pass — including once per streamed token — and the
+    /// fallback maps every turn. The same (epoch, rows version) answers the cached list; any
+    /// row change rebuilds it once. Ignored by observation (like `mediaIndexStorage`): the
+    /// memo is written while a body reads it, and must never notify on its own (M05).
+    @ObservationIgnored private var outlineMemoKey: (epoch: String, version: Int)?
+    @ObservationIgnored private var outlineMemoItems: [ChatOutlineItem] = []
+
     /// The chat outline: the daemon's prompt index when the host serves it (the whole
     /// conversation, loaded or not), otherwise the loaded turns. Never pages history in.
     var outlineItems: [ChatOutlineItem] {
@@ -1365,13 +1373,19 @@ struct TranscriptJump: Equatable {
         if store.promptOutline.isSupported, !indexed.isEmpty {
             return indexed.map { ChatOutlineItem(seq: $0.seq, preview: $0.preview) }
         }
-        return store.turns.compactMap { turn in
+        let timeline = store.timeline
+        let key = (epoch: timeline.epoch ?? "", version: timeline.rowsVersion)
+        if outlineMemoKey == key { return outlineMemoItems }
+        let items = store.turns.compactMap { turn in
             guard let row = turn.userMessage, case .userMessage(let message) = row.item else {
                 return nil
             }
             return ChatOutlineItem(
                 seq: row.seqStart, preview: PromptOutline.previewText(message.text))
         }
+        outlineMemoKey = key
+        outlineMemoItems = items
+        return items
     }
 
     /// "Jump to message…" is offered once the conversation has enough prompts for the rail.
