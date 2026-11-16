@@ -71,7 +71,6 @@ struct TranscriptView: View {
     /// A ceiling, so a layout that never converges cannot loop.
     @State private var openPinCount = 0
     @State private var openNudgedHeight: CGFloat = -1
-    @State private var previousHeight: CGFloat = -1
     /// The oldest turn mounted (W1). Opening a long conversation used to hand the lazy stack every
     /// turn: it estimated the content, landed on an estimated bottom, built about a hundred markdown
     /// pieces in one pass (1.4 to 2.3 s) and then re-built them as the estimate corrected. Only the
@@ -540,13 +539,6 @@ struct TranscriptView: View {
             return
         }
         guard metrics.contentHeight > metrics.visibleHeight else { return }
-        // Already seated at this content height, and only the insets moved (the composer growing or
-        // the keyboard): the open is over, and the follow rules own the bottom from here.
-        if openNudgedHeight == metrics.contentHeight, metrics.contentHeight == previousHeight {
-            openPin = false
-            return
-        }
-        previousHeight = metrics.contentHeight
         if metrics.distanceFromBottom <= Self.followSlack {
             PaseoPerf.count("openpin.atEnd")
             // A jump of thousands of points leaves the stack without rows under the final offset until
@@ -634,6 +626,9 @@ struct TranscriptView: View {
     /// real screen the transcript glides there and the last line keeps resting on the composer;
     /// further up the reader's place wins and the button offers the way back.
     private func endScrollRequested() {
+        // Focusing the composer is the reader acting: the open is over (W1). Ending the re-seat on
+        // "only the insets moved" instead left a long chat blank with a tall saved draft.
+        openPin = false
         guard scrollTrack.distanceFromBottom > Self.followSlack else { return }
         let screen = stableViewportHeight > 0 ? stableViewportHeight : scrollTrack.visibleHeight
         guard scrollTrack.distanceFromBottom <= screen else {
@@ -872,20 +867,6 @@ struct TranscriptView: View {
         if !windowDisabled {
             windowDisabled = true
             afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
-            return
-        }
-        // Stepping through matches is reading, not following the tail (as an outline jump already
-        // says): without this the size anchor pulls the view back to the bottom after the scroll.
-        controller.isFollowing = false
-        // A row anchor inside a lazy row that is not built yet is not findable; the turn's own id is.
-        // Go to the turn, then centre the row once the stack has built it, then nudge a point so the
-        // stack builds the rows under a long jump.
-        if let index = turnIndex(forSeq: seq) {
-            proxy.scrollTo(store.turns[index].id, anchor: .top)
-            afterWindowGrowth = {
-                centreRow(seq, animated: animated, proxy: proxy)
-                afterWindowGrowth = { scrollPosition.scrollTo(y: scrollTrack.contentOffset + 1) }
-            }
             return
         }
         centreRow(seq, animated: animated, proxy: proxy)
