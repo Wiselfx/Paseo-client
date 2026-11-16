@@ -945,8 +945,14 @@ struct TranscriptView: View {
                 isReached: { [findRows, scrollTrack] in
                     // The match's own point of the row, in the viewport's space (where it is on screen
                     // now): between the top of the viewport and its bottom edge, which is under the composer.
-                    guard let frame = findRows.frame(of: target.rowSeqEnd) else { return false }
+                    guard let frame = findRows.frame(of: target.rowSeqEnd) else {
+                        if PaseoPerf.enabled { PaseoPerf.countNamed("dbg.noframe") }
+                        return false
+                    }
                     let y = frame.minY + frame.height * (fraction ?? 0.5)
+                    if PaseoPerf.enabled {
+                        PaseoPerf.countNamed("dbg.y\(Int(y)).minY\(Int(frame.minY)).h\(Int(frame.height)).f\(Int((fraction ?? 0.5) * 100)).vh\(Int(scrollTrack.viewportHeight))")
+                    }
                     return y > 0 && y < scrollTrack.viewportHeight
                 },
                 verifies: true),
