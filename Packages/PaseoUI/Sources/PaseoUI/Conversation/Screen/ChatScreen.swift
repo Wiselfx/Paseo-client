@@ -53,6 +53,12 @@ public struct ChatScreen: View {
 
     public var body: some View {
         let _ = PaseoPerf.body("ChatScreen")
+        let _ = PaseoPerf.diff(
+            "chat",
+            [
+                ("focused", "\(composerFocused)"), ("reduce", "\(reduceMotion)"),
+                ("toast", toast.map { "\(ObjectIdentifier($0))" } ?? "-"),
+            ])
         // D1 §1: the transcript is the screen's base layer; the chrome floats over it in
         // safe-area bars and the system's scroll edge effect is the only background.
         TranscriptView(store: store, controller: controller)
