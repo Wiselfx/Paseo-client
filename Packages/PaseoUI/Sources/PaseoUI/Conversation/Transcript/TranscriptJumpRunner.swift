@@ -26,6 +26,12 @@ import SwiftUI
         /// The row's place in the viewport: the match for a find step, the top for a prompt. Read when
         /// the row is aimed at, so it can use what the layout knows by then (a turn's height).
         var rowAnchor: @MainActor () -> UnitPoint
+        /// Whether the row has really arrived, when the transcript can tell (the end marker: the end of
+        /// the content is at the bottom). The runner aims again, a few times, while this says no.
+        var isReached: @MainActor () -> Bool = { true }
+        /// The first aim at the row glides (the row is inside the turn just reached). The end marker of a
+        /// tall last turn is thousands of points away, so it does not.
+        var glides = true
     }
 
     /// What the runner needs from the transcript.
@@ -74,6 +80,8 @@ import SwiftUI
     /// The most times the turn is asked for again, and the row aimed at: a bound, not a goal.
     static let maxTurnAims = 10
     static let maxRowAims = 2
+    /// Extra aims allowed while `isReached` says no.
+    static let maxReachAims = 6
 
     private var task: Task<Void, Never>?
 
@@ -147,11 +155,11 @@ import SwiftUI
             // The turn is in view and the layout has held: aim at the row inside it. Twice, the second a
             // no-op unless something above the row finished measuring after the first.
             let row = target.rowId()
-            if rowAims < maxRowAims {
+            if rowAims < maxRowAims || (!target.isReached() && rowAims < maxRowAims + maxReachAims) {
                 rowAims += 1
                 PaseoPerf.count("jump.rowAim")
                 stable = 0
-                hooks.scrollTo(row ?? target.turnId, row == nil ? .top : target.rowAnchor(), rowAims == 1)
+                hooks.scrollTo(row ?? target.turnId, row == nil ? .top : target.rowAnchor(), target.glides && rowAims == 1)
                 continue
             }
             PaseoPerf.mark("jump.landed")

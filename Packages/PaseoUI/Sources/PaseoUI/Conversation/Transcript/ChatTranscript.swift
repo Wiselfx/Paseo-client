@@ -993,7 +993,10 @@ struct TranscriptView: View {
         } else {
             // The end marker is the real last row (the open re-seat lands on it the same way).
             jumper.run(
-                .init(turnId: lastId, rowId: { "bottom" }, rowAnchor: { .bottom }),
+                .init(
+                    turnId: lastId, rowId: { "bottom" }, rowAnchor: { .bottom },
+                    isReached: { [scrollTrack] in scrollTrack.distanceFromBottom <= Self.followSlack },
+                    glides: false),
                 hooks: jumpHooks(onLanded: { [controller] in controller.isFollowing = true }))
         }
     }
