@@ -166,7 +166,10 @@ import SwiftUI
             // no-op unless something above the row finished measuring after the first.
             let row = target.rowId()
             let reached = target.isReached()
-            if PaseoPerf.enabled { PaseoPerf.countNamed("jump.tick.aims\(rowAims).reached\(reached)") }
+            if PaseoPerf.enabled {
+                PaseoPerf.countNamed(
+                    "jump.tick.aims\(rowAims).reached\(reached).o\(Int(probe.turnOffset)).h\(Int(probe.turnHeight)).co\(Int(probe.contentOffset)).vh\(Int(probe.visibleHeight)).ch\(Int(probe.contentHeight))")
+            }
             if rowAims < maxRowAims || (!reached && rowAims < maxRowAims + maxReachAims) {
                 rowAims += 1
                 PaseoPerf.count("jump.rowAim")
