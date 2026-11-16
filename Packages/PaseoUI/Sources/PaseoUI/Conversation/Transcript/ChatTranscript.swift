@@ -99,7 +99,12 @@ struct TranscriptView: View {
         let _ = PaseoPerf.body("Transcript")
         content
             // A turn arrived. If you just sent it, the runway opens and it glides to the top.
-            .onChange(of: store.turns.last?.id) { _, id in beginRunway(for: id) }
+            .onChange(of: store.turns.last?.id) { old, id in
+                // A turn arriving after the open is live traffic, not the open: stop re-seating.
+                if old != nil { openPin = false }
+                beginRunway(for: id)
+            }
+            .onChange(of: store.isRunning) { _, _ in openPin = false }
             // Fix the window's head as soon as there is something to window, so a turn appended at
             // the tail never slides it.
             .onChange(of: store.turns.isEmpty) { _, empty in
