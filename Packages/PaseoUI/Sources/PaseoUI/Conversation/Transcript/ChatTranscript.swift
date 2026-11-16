@@ -937,12 +937,15 @@ struct TranscriptView: View {
         .init(
             isMounted: { [scrollTrack] id in scrollTrack.visibleTurnIds.contains(id) },
             probe: { [scrollTrack] id in
-                guard let offset = scrollTrack.offset(of: id), let height = scrollTrack.turnHeight(of: id),
-                    scrollTrack.visibleHeight > 0
-                else { return nil }
+                guard scrollTrack.visibleHeight > 0 else { return nil }
+                // A built turn whose geometry callback has not reported (or was dropped with a re-built
+                // view) counts as under the viewport: the aim at its row is what tells, and the layout key
+                // still has to hold still.
+                let offset = scrollTrack.offset(of: id) ?? scrollTrack.contentOffset
                 return .init(
-                    turnOffset: offset, turnHeight: height, contentOffset: scrollTrack.contentOffset,
-                    visibleHeight: scrollTrack.visibleHeight, contentHeight: scrollTrack.contentHeight)
+                    turnOffset: offset, turnHeight: scrollTrack.turnHeight(of: id) ?? 1,
+                    contentOffset: scrollTrack.contentOffset, visibleHeight: scrollTrack.visibleHeight,
+                    contentHeight: scrollTrack.contentHeight)
             },
             scrollTo: { id, anchor, animated in
                 if animated {
