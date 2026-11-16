@@ -112,7 +112,7 @@ struct SidebarWorkspaceRow: View, Equatable {
     let model: SidebarRowModel
     let actions: SidebarRowActions
 
-    static func == (left: Self, right: Self) -> Bool { left.model == right.model }
+    nonisolated static func == (left: Self, right: Self) -> Bool { left.model == right.model }
 
     var body: some View {
         let workspace = model.workspace
