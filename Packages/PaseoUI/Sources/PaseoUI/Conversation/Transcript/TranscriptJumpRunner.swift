@@ -27,7 +27,8 @@ import SwiftUI
         /// the row is aimed at, so it can use what the layout knows by then (a turn's height).
         var rowAnchor: @MainActor () -> UnitPoint
         /// Whether the row has really arrived, when the transcript can tell (the end marker: the end of
-        /// the content is at the bottom). The runner aims again, a few times, while this says no.
+        /// the content is at the bottom; a find row: its measured frame holds the match under the
+        /// viewport). The runner aims again, a few times, while this says no.
         var isReached: @MainActor () -> Bool = { true }
         /// The first aim at the row glides (the row is inside the turn just reached). The end marker of a
         /// tall last turn is thousands of points away, so it does not.

@@ -53,6 +53,8 @@ struct TranscriptView: View {
     /// Brings a row that may be far away into view in steps that each run on a settled layout: find,
     /// the outline rail, a media item and closing find (`TranscriptJumpRunner`).
     @State private var jumper = TranscriptJumpRunner()
+    /// Where the current find match's row is (it reports its own frame while it is the match).
+    @State private var findRows = FindRowProbe()
     /// The last throttled reading-position / rail tick, so a scroll frame does O(1) work.
     @State private var lastRailTick = Date.distantPast
     /// True while a finger, a flick or the deceleration owns the transcript. A plain `Bool`
@@ -247,6 +249,7 @@ struct TranscriptView: View {
                     .coordinateSpace(name: TranscriptScrollTrack.contentSpace)
                 }
                 .environment(\.richProseWidth, column)
+                .environment(\.findRowProbe, findRows)
                 .scrollPosition($scrollPosition)
                 .scrollDismissesKeyboard(.interactively)
                 // Opening the conversation lands at the bottom; growth at the tail keeps it
@@ -907,6 +910,7 @@ struct TranscriptView: View {
         }
         controller.find.rowSeq = target.rowSeqEnd
         controller.find.moved = true
+        findRows.reset()
         mountTurn(at: target.turnIndex)
         let turnId = store.turns[target.turnIndex].id
         let seq = jump.seq
@@ -926,7 +930,15 @@ struct TranscriptView: View {
                     FindNavigation.target(in: store.turns, seq: seq, role: role)
                         .map { "row:\($0.rowSeqEnd)" }
                 },
-                rowAnchor: { fraction.map { UnitPoint(x: 0.5, y: $0) } ?? .center }),
+                rowAnchor: { fraction.map { UnitPoint(x: 0.5, y: $0) } ?? .center },
+                // Arrived when the match's own point of the row is under the viewport (the row reports
+                // its frame while it is the current match). A row that has not reported has not arrived.
+                isReached: { [findRows, scrollTrack] in
+                    guard let frame = findRows.frame(of: target.rowSeqEnd) else { return false }
+                    let y = frame.minY + frame.height * (fraction ?? 0.5)
+                    return y > scrollTrack.contentOffset - 50
+                        && y < scrollTrack.contentOffset + scrollTrack.visibleHeight + 150
+                }),
             hooks: jumpHooks(onLanded: { [controller] in
                 controller.flash(target.rowSeqEnd)
             }))

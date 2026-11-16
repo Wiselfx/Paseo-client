@@ -1,0 +1,58 @@
+#if canImport(UIKit)
+import SwiftUI
+
+/// Where the current find match's row really is, so the jump runner can tell that it arrived.
+///
+/// Aiming at a row id is a request, not a result: when the stack is mid-layout the request can leave the
+/// viewport on the turn's top, thousands of points from the row (a wrap to the far end of a 90 000 pt chat
+/// did). Only the row of the current match reports (`FindRowReporter`, on its highlight background), in the
+/// transcript's content space, and only while find is open: a plain reference the transcript reads, never
+/// observed, so a report costs a dictionary write and no body.
+@MainActor final class FindRowProbe {
+    private var frames: [Int: CGRect] = [:]
+
+    func report(_ seqEnd: Int, _ frame: CGRect) { frames[seqEnd] = frame }
+
+    func frame(of seqEnd: Int) -> CGRect? { frames[seqEnd] }
+
+    func reset() { frames.removeAll(keepingCapacity: true) }
+}
+
+private struct FindRowProbeKey: EnvironmentKey {
+    static let defaultValue: FindRowProbe? = nil
+}
+
+extension EnvironmentValues {
+    /// The transcript's find row probe; nil outside the transcript.
+    var findRowProbe: FindRowProbe? {
+        get { self[FindRowProbeKey.self] }
+        set { self[FindRowProbeKey.self] = newValue }
+    }
+}
+
+/// Reports the row's frame, in the transcript's content space, when it is the current find match.
+struct FindRowReporter: ViewModifier {
+    let seqEnd: Int
+    let isTarget: Bool
+    @Environment(\.findRowProbe) private var probe
+
+    func body(content: Content) -> some View {
+        if isTarget, let probe {
+            content.onGeometryChange(for: CGRect.self) { geometry in
+                geometry.frame(in: .named(TranscriptScrollTrack.contentSpace))
+            } action: { frame in
+                probe.report(seqEnd, frame)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    /// See `FindRowReporter`.
+    func reportsFindRow(_ seqEnd: Int, isTarget: Bool) -> some View {
+        modifier(FindRowReporter(seqEnd: seqEnd, isTarget: isTarget))
+    }
+}
+#endif

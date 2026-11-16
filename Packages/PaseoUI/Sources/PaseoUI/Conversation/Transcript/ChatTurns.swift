@@ -315,6 +315,7 @@ struct ClaudeTurnView: View {
         RoundedRectangle(cornerRadius: Radius.md)
             .fill(Palette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
             .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
+            .reportsFindRow(seqEnd, isTarget: findTarget == seqEnd)
     }
 
     var copyText: String {
@@ -427,6 +428,7 @@ struct ClaudeSegmentView: View {
                         RoundedRectangle(cornerRadius: Radius.md)
                             .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
                             .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
+                            .reportsFindRow(row.seqEnd, isTarget: findTarget == row.seqEnd)
                     }
             }
         case .todo:
