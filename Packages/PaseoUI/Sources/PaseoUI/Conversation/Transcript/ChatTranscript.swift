@@ -115,7 +115,7 @@ struct TranscriptView: View {
                 for (attempt, delay) in [0.8, 1.0, 1.5, 2.5].enumerated() {
                     try? await Task.sleep(for: .seconds(delay))
                     guard !Task.isCancelled, !scrollHeld else { return }
-                    guard scrollTrack.visibleTurnIds.isEmpty, scrollTrack.visibleHeight > 0 else { return }
+                    guard !scrollTrack.hasTurnInViewport, scrollTrack.visibleHeight > 0 else { return }
                     PaseoPerf.count("blank.nudge")
                     if attempt % 2 == 0 {
                         scrollPosition.scrollTo(y: max(scrollTrack.contentOffset - 2, 0))
@@ -1089,6 +1089,19 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     private var turnOffsets: [String: CGFloat] = [:]
     private var turnHeights: [String: CGFloat] = [:]
     private var topVisibleTurnId: String?
+
+    /// True when some mounted turn overlaps the viewport (content offsets from the geometry callbacks).
+    /// A lazy stack can hold rows that are mounted but nowhere near the offset it landed on: blank.
+    var hasTurnInViewport: Bool {
+        let top = contentOffset
+        let bottom = contentOffset + visibleHeight
+        for id in visibleTurnIds {
+            guard let offset = turnOffsets[id] else { return true }
+            let height = turnHeights[id] ?? 1
+            if offset < bottom && offset + height > top { return true }
+        }
+        return false
+    }
 
     func turnAppeared(_ id: String, seq: Int?) {
         visibleTurnIds.insert(id)

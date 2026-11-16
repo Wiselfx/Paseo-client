@@ -113,6 +113,7 @@ public struct ShellView: View {
                     focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
                 session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
                 restoreStartupScreen()
+                ComposerWarmup.scheduleOnce()
                 handleNotificationTarget()
                 handleDeepLinkTarget()
                 homeSettled = true
