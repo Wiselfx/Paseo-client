@@ -1375,7 +1375,7 @@ struct TranscriptJump: Equatable {
         }
         let timeline = store.timeline
         let key = (epoch: timeline.epoch ?? "", version: timeline.rowsVersion)
-        if outlineMemoKey == key { return outlineMemoItems }
+        if let memoKey = outlineMemoKey, memoKey == key { return outlineMemoItems }
         let items = store.turns.compactMap { turn in
             guard let row = turn.userMessage, case .userMessage(let message) = row.item else {
                 return nil
