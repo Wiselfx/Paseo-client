@@ -178,3 +178,24 @@ UIKit's first keyboard presentation. A word-tagger/language-identifier warm-up o
 **Not verified on a phone / not done:** media pipeline review (downsampling, caches) and the rich-block
 `GeometryReader`s were read but not changed; the new-session open (98 ms) is dominated by the AX/first-view cost
 above and was not reduced further; drawer settle unchanged (3 hitches, stall max 16 ms).
+
+
+## Sweep (W3): sidebar, workspace panel, settings, stores
+
+Code-read fixes, no device numbers (the lead verifies on the simulator; see the list at the end).
+
+| Where | Cause | Change |
+| --- | --- | --- |
+| Sidebar | the body read the agent and workspace lists: every update re-ran header, navigation, footer, sheets and rebuilt each realized row with its eager context menu | `SidebarDirectoryHost` child; `SidebarWorkspaceRow` is `Equatable` on `SidebarRowModel`; catalog, flags and clock read once per pass |
+| `WorkspaceDirectory` | repeated `workspace_update`, status pushes and in-place `sort` notified readers; `groups` filtered per project | writes only on change, sorts into a copy, `groups` in one pass |
+| `TerminalsStore`, `CheckoutStore`, `HostUsageStore` | equal snapshots re-assigned | writes only on change |
+| Files page | re-sorted every entry per `@State` write (each alert keystroke) | `FileListMemo` |
+| File viewer | whole-file `AttributedString` rebuilt per viewer pass | `WorkspaceCodeView` is `Equatable` |
+| Schedules list | `Set` of all agent ids built per row | built once per pass, only for agent-targeted schedules |
+| Diagnostics | four regexes compiled and run twice per pass, audio engine allocated with the page | compiled once, memoised, engine on first use |
+| Settings, projects, history, schedule detail | `groups` built to read projects or workspaces | read `projects` / `workspaces` / `workspace(id:)` |
+| Launch | nine `CTFontManagerRegisterFontsForURL` calls before the first frame | one `CTFontManagerRegisterFontURLs` call |
+
+Not done: `HostSession.conversations` keeps every opened chat (store, timeline, live subscription) until the session
+ends; nothing calls `closeConversation`. A bounded policy belongs in `ShellView` (not in this sweep's files): keep the
+selected and running ones, close the rest.
