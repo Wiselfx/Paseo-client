@@ -36,6 +36,10 @@ import SwiftUI
         /// False for a target that is one real id the stack always knows (the end marker): no turn to
         /// approach, the id is aimed at directly until `isReached` says it arrived.
         var approaches = true
+        /// `isReached` is a real measurement (the match's own frame, the end of the content): the runner
+        /// looks again half a second after it first says yes, because a row that finishes measuring late
+        /// (a long message, an image) moves the match after the aim.
+        var verifies = false
         /// The first aim at the row glides (the row is inside the turn just reached). The end marker of a
         /// tall last turn is thousands of points away, so it does not.
         var glides = true
@@ -96,6 +100,8 @@ import SwiftUI
     static let maxRowAims = 2
     /// Extra aims allowed while `isReached` says no.
     static let maxReachAims = 6
+    /// Ticks `isReached` must keep saying yes before a verified target counts as landed.
+    static let confirmTicks = 5
 
     private var task: Task<Void, Never>?
 
@@ -121,6 +127,7 @@ import SwiftUI
     private static func steps(_ target: Target, _ hooks: Hooks) async {
         var turnAims = 0
         var rowAims = 0
+        var confirmed = 0
         var stable = 0
         var lastKey: [Int] = []
         var lastTurnAimTick = -reaskAfter
@@ -199,7 +206,12 @@ import SwiftUI
                 rowAims += 1
                 PaseoPerf.count("jump.rowAim")
                 stable = 0
+                confirmed = 0
                 hooks.scrollTo(row ?? turnId, row == nil ? .top : target.rowAnchor(), target.glides && rowAims == 1)
+                continue
+            }
+            if target.verifies, reached, confirmed < confirmTicks {
+                confirmed += 1
                 continue
             }
             PaseoPerf.mark("jump.landed")

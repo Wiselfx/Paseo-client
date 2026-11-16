@@ -945,7 +945,8 @@ struct TranscriptView: View {
                     let y = frame.minY + frame.height * (fraction ?? 0.5)
                     return y > scrollTrack.contentOffset - 50
                         && y < scrollTrack.contentOffset + scrollTrack.visibleHeight + 150
-                }),
+                },
+                verifies: true),
             hooks: jumpHooks(onLanded: { [controller] in
                 controller.flash(target.rowSeqEnd)
             }))
@@ -1052,7 +1053,7 @@ struct TranscriptView: View {
                     isReached: { [scrollTrack] in
                         scrollTrack.distanceFromContentBottom <= Self.endMargin
                     },
-                    approaches: false, glides: false),
+                    approaches: false, verifies: true, glides: false),
                 hooks: jumpHooks(onLanded: { [controller] in controller.isFollowing = true }))
         }
     }
