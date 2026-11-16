@@ -145,7 +145,7 @@ that change how every earlier number must be read (rules 22 and 23):
 - **AXe is not free.** The first interaction after a launch initialises the accessibility validation machinery in the
   app (`AXValidationManager`, `AXCoreUtilities` conformance lookups: sampled in the new-session open and the
   first tap). A throwaway `ui reading` step before the measured action absorbs it: the tap-window stall fell
-  from 117 to 140 ms to under 28 ms. The remaining ~340 ms is the first software keyboard show (UIKit keyboard
+  from 117 to 140 ms to under 28 ms (single run). The remaining ~340 ms is the first software keyboard show (UIKit keyboard
   views, render server, IOSurface allocation, `RBSAssertion` XPC, key-command walk), present with AX warm.
 
 | # | Area | Cause (evidence) | Fix | Before -> after (Release) |
