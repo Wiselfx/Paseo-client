@@ -1014,7 +1014,7 @@ struct TranscriptJump: Equatable {
     private func stickToEndForSend() {
         if anchoringToAnswer { anchoringToAnswer = false }
         if !isFollowing { isFollowing = true }
-        jumpToEndRequest += 1
+        sendEndRequest += 1
     }
 
     /// Called by the composer after it has checked `canSend`. Behaviour is the send button's
@@ -1420,6 +1420,8 @@ struct TranscriptJump: Equatable {
     var endScrollRequest = 0
     /// Bumped by "Back to the end": always goes, whatever the distance (H2 §2).
     var jumpToEndRequest = 0
+    /// A send asks the transcript to go to the end and keep following (upstream `message-sent` request).
+    var sendEndRequest = 0
     /// Bumped when the transcript is tapped: the composer drops focus (it owns the field).
     var dismissKeyboardRequest = 0
 

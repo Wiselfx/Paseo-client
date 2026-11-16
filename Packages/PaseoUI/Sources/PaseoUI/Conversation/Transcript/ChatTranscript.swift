@@ -302,6 +302,9 @@ struct TranscriptView: View {
                 .onChange(of: controller.endScrollRequest) { _, _ in
                     endScrollRequested()
                 }
+                .onChange(of: controller.sendEndRequest) { _, _ in
+                    followEndAfterSend()
+                }
                 .onChange(of: controller.jumpToEndRequest) { _, _ in
                     // The end marker is a real row: `scrollTo(edge:)` targets a lazy stack's estimated
                     // bottom and can land short or blank in a long chat.
@@ -322,6 +325,12 @@ struct TranscriptView: View {
                     if scrollHeld != held { scrollHeld = held }
                     switch phase {
                     case .interacting, .tracking, .decelerating, .animating:
+                        // A finger takes the viewport from a send's go-to-end that has not landed yet
+                        // (upstream `beginUserScroll` cancels the pending attempt and detaches).
+                        if case .interacting = phase, scrollTrack.sendEndActive {
+                            scrollTrack.sendEndActive = false
+                            jumper.cancel()
+                        }
                         revealTurnRail()
                     case .idle:
                         // A flick that reached the end settles with no further geometry change;
@@ -551,6 +560,7 @@ struct TranscriptView: View {
         }
         openRunwayIfPossible(proxy: proxy)
         repinOpen(metrics)
+        pinEndIfFollowing(metrics, from: previous)
         // A prepended page moved the content down by its own height; put the reader back before
         // anything else reacts to the new offsets.
         if restoreHistoryAnchor(metrics) { return }
@@ -571,6 +581,41 @@ struct TranscriptView: View {
         {
             decideBackToEnd()
         }
+    }
+
+    /// A send: go to the end and stay there while the reply streams. Upstream `bottom-anchor-controller.ts`:
+    /// the `message-sent` request is `sticky-bottom`; it scrolls to the native end, verifies the end was
+    /// reached after layout, retries (at most three times) and keeps looking while content size changes.
+    /// The jump runner is that loop here: it aims at the real end marker, checks the measured distance
+    /// each tick and aims again until the end is reached, then keeps watching for a few seconds (the user
+    /// bubble and the first lines of the reply arrive after the send). A finger cancels it.
+    private func followEndAfterSend() {
+        openPin = false
+        scrollTrack.sendEndActive = true
+        jumper.run(
+            .init(
+                turnId: { "bottom" }, rowId: { "bottom" }, rowAnchor: { .bottom },
+                isReached: { [scrollTrack] in
+                    scrollTrack.distanceFromContentBottom <= Self.endMargin
+                },
+                approaches: false, verifies: true, glides: false),
+            hooks: jumpHooks(onLanded: { [scrollTrack] in scrollTrack.sendEndActive = false }))
+    }
+
+    /// While following, content that grew below the end is scrolled to (upstream's end pin keeps the end
+    /// "in the frame the change mounts"). `defaultScrollAnchor(.bottom, .sizeChanges)` does this itself
+    /// when it can; when it lags by more than a line (tall rows measured late, the user bubble landing
+    /// while the send's glide ran) this puts the end back in view. One scroll per content-height change,
+    /// never while a finger or a flick owns the scroll.
+    private func pinEndIfFollowing(_ metrics: ScrollFollowMetrics, from previous: ScrollFollowMetrics) {
+        guard controller.isFollowing, !controller.anchoringToAnswer, !openPin, !scrollHeld else { return }
+        guard metrics.contentHeight > previous.contentHeight + 0.5,
+            metrics.distanceFromBottom > Self.followSlack * 2,
+            metrics.contentHeight != scrollTrack.lastPinnedContentHeight
+        else { return }
+        scrollTrack.lastPinnedContentHeight = metrics.contentHeight
+        PaseoPerf.count("follow.pin")
+        scrollPosition.scrollTo(id: "bottom", anchor: .bottom)
     }
 
     /// Opening a long conversation at its end (W1). `defaultScrollAnchor(.bottom, for: .initialOffset)`
@@ -1289,6 +1334,10 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     var lastTrackedTurn: String?
     /// Alternates on every programmatic aim at an id (see the jump hooks' `scrollTo`).
     var aimParity = false
+    /// A send's go-to-end is running and has not landed: a finger cancels it.
+    var sendEndActive = false
+    /// The content height the end pin last scrolled for, so one growth never scrolls twice.
+    var lastPinnedContentHeight: CGFloat = 0
     /// The scroll view's own height (bounds), from the last scroll frame.
     var viewportHeight: CGFloat = 0
     /// The viewport's content offset, updated once per scroll frame (O(1)).
