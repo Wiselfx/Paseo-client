@@ -34,7 +34,29 @@ struct ComposerView: View {
     /// Draft mode: the shell creates the agent and swaps its conversation in (D2 §3).
     let onSubmit: ((DraftSubmission) -> Void)?
 
-    @Binding var text: String
+    /// The composer's text, read and written through the store the mode names. Not a `Binding`
+    /// handed in by the parent (W1): a `Binding(get: { store.draft })` created in the parent's body
+    /// is evaluated by SwiftUI when it compares the view's inputs, which made `store.draft` a
+    /// dependency of `ChatScreen.body` and re-ran the screen, the composer and the bars on every
+    /// keystroke. Here the read happens in this view's own body only.
+    private var text: String {
+        get {
+            switch mode {
+            case .conversation: store?.draft ?? ""
+            case .draft(let draft): draft.text
+            }
+        }
+        nonmutating set {
+            switch mode {
+            case .conversation: store?.draft = newValue
+            case .draft(let draft): draft.text = newValue
+            }
+        }
+    }
+
+    private var textBinding: Binding<String> {
+        Binding(get: { text }, set: { text = $0 })
+    }
     /// The composer's focus. A plain `Bool`, not `@FocusState`: nothing SwiftUI-focusable is
     /// bound to it (`ComposerTextView` is a `UITextView`), and SwiftUI drops writes to a
     /// `FocusState` with no view bound to it — which is what resigned the field on every
@@ -80,8 +102,6 @@ struct ComposerView: View {
         self.controller = controller
         self.draftHost = nil
         self.onSubmit = nil
-        self._text = Binding(
-            get: { store.draft }, set: { store.draft = $0 })
         self._focused = focused
     }
 
@@ -95,8 +115,6 @@ struct ComposerView: View {
         self.controller = nil
         self.draftHost = session
         self.onSubmit = onSubmit
-        self._text = Binding(
-            get: { draft.text }, set: { draft.text = $0 })
         self._focused = focused
     }
 
@@ -372,7 +390,7 @@ struct ComposerView: View {
         }
         .fullScreenCover(isPresented: fullScreenComposerBinding) {
             FullScreenComposer(
-                draft: $text,
+                draft: textBinding,
                 isRunning: store?.isRunning ?? false
             ) { send() }
         }
@@ -451,7 +469,7 @@ struct ComposerView: View {
         // the ink tint, the placeholder, the grow-to-cap height and the focus binding are all
         // applied there; ⌘↩ still belongs to the send button.
         ComposerTextView(
-            text: $text,
+            text: textBinding,
             isFocused: $focused,
             placeholder: placeholder,
             lineLimit: composerFieldLineLimit,
