@@ -19,7 +19,6 @@ enum RichPiece {
 /// deterministic, hence cacheable. An LRU under a byte budget (P5-B) keeps the recent
 /// units warm instead of evicting the whole table at 64 entries. Called from view
 /// bodies, i.e. on the main actor.
-@MainActor
 enum RichContentCache {
     private static let table = ProseCache<String, [RichContentBlock]>(
         budget: 4 * 1024 * 1024,
@@ -31,6 +30,28 @@ enum RichContentCache {
         let blocks = RichContentDetector.detect(in: source)
         table.setValue(blocks, for: source)
         return blocks
+    }
+}
+
+/// The rich-piece split of a whole message, remembered per (source, home) (W1): the views split on every
+/// first render of a message and the warm-up splits off the main actor, both through here.
+enum RichPiecesCache {
+    private struct Key: Hashable {
+        let source: String
+        let home: String?
+    }
+
+    private static let table = ProseCache<Key, [RichPiece]>(
+        budget: 8 * 1024 * 1024,
+        countLimit: 256,
+        cost: { key, _ in key.source.utf8.count * 2 })
+
+    static func pieces(_ source: String, home: String?) -> [RichPiece] {
+        let key = Key(source: source, home: home)
+        if let cached = table.value(for: key) { return cached }
+        let pieces = richPieces(source, home: home)
+        table.setValue(pieces, for: key)
+        return pieces
     }
 }
 
@@ -68,7 +89,6 @@ extension RichContentBlock {
 /// `home` is the agent's working directory (J2): markdown images `![alt](~/a.png)` that
 /// sat in a paragraph with anything else now render as images, and text the reader sees
 /// gets links for bare URLs (item 3). Nil keeps today's behaviour.
-@MainActor
 func richPieces(_ source: String, home: String? = nil) -> [RichPiece] {
     var pieces: [RichPiece] = []
     // Adjacent single-image units whose only separation is blank text merge into
@@ -262,7 +282,6 @@ func richPieces(_ source: String, home: String? = nil) -> [RichPiece] {
 /// The unit-shape checks J2 added (images-only, file-link lines, list unit) scan the whole
 /// unit; `richPieces` runs from view bodies, so they are memoized per (unit, home) like
 /// `RichContentCache` — never re-scanned per render (lead fix, mission-critical §1).
-@MainActor
 enum RichUnitShapeCache {
     struct Shape {
         let images: [RichImage]?
@@ -296,7 +315,6 @@ enum RichUnitShapeCache {
 /// (the reveal animation walks the pieces by length) — split by line, and the remainder
 /// rides the last piece, which keeps the sum exact even when a line's stored text is
 /// longer than its path (an authored `[name](path)`).
-@MainActor
 private func fileLinePieces(
     _ paths: [String], range: Range<String.Index>, unit: String
 ) -> [RichPiece] {

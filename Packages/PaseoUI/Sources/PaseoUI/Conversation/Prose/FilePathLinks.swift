@@ -99,15 +99,15 @@ enum FilePathLinks {
     /// Linkifying is pure: four regex passes over the whole answer, ~0.7 ms per 8 k-char message,
     /// and SwiftUI asks for it on every body evaluation — not only when the text changed. Pieces
     /// are small and stable, so the LRU holds the recent ones at a bounded cost.
-    @MainActor static func linkifiedForProse(_ markdown: String) -> String {
+    static func linkifiedForProse(_ markdown: String) -> String {
         if let cached = linkifiedCache.value(for: markdown) { return cached }
         let result = linkified(markdown: markdown)
         linkifiedCache.setValue(result, for: markdown)
         return result
     }
 
-    /// Main-actor only, reached through `linkifiedForProse`.
-    @MainActor private static let linkifiedCache = ProseCache<String, String>(
+    /// Thread-safe cache, reached through `linkifiedForProse`.
+    private static let linkifiedCache = ProseCache<String, String>(
         budget: 4 * 1024 * 1024,
         countLimit: 512,
         cost: { source, linked in source.utf8.count + linked.utf8.count })

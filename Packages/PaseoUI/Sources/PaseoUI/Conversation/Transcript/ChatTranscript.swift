@@ -106,6 +106,12 @@ struct TranscriptView: View {
                 beginRunway(for: id)
             }
             .onChange(of: store.isRunning) { _, _ in openPin = false }
+            // The first render of the newest turns finds their pieces, documents and highlights ready
+            // when this has run ahead of it (`ProseWarmup`, off the main actor, newest first).
+            .task(id: store.turns.isEmpty) {
+                guard !store.turns.isEmpty else { return }
+                ProseWarmup.startForOpen(store: store, limit: Self.windowSize)
+            }
             // Blank guard (W1): a long chat can open with the lazy stack holding no rows under its final
             // offset until the visible rect changes (reproduced on plain launches; the open nudge covers most
             // cases, not all). If turns exist, the viewport has a height and nothing has mounted after a
