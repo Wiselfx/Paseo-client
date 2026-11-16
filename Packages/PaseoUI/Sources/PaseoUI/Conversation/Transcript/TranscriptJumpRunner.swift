@@ -102,6 +102,10 @@ import SwiftUI
     static let maxReachAims = 6
     /// Ticks `isReached` must keep saying yes before a verified target counts as landed.
     static let confirmTicks = 5
+    /// Ticks a verified target keeps being watched after it has landed: a message above it that finishes
+    /// measuring a second or two later (a long bubble) moves it out of view, and the runner aims again.
+    /// The reader's own scroll ends the watch.
+    static let watchTicks = 40
 
     private var task: Task<Void, Never>?
 
@@ -128,6 +132,7 @@ import SwiftUI
         var turnAims = 0
         var rowAims = 0
         var confirmed = 0
+        var landedAt: Int?
         var stable = 0
         var lastKey: [Int] = []
         var lastTurnAimTick = -reaskAfter
@@ -137,10 +142,13 @@ import SwiftUI
             try? await Task.sleep(for: tickInterval)
             guard !Task.isCancelled else { return }
             if hooks.isScrolling() {
+                // The reader took over: a landed jump is done, whatever the layout does next.
+                if landedAt != nil { return }
                 PaseoPerf.count("jump.wait.scrolling")
                 stable = 0
                 continue
             }
+            if let landed = landedAt, tick - landed >= watchTicks { return }
             guard let turnId = target.turnId() else {
                 stable = 0
                 continue
@@ -210,10 +218,14 @@ import SwiftUI
                 confirmed += 1
                 continue
             }
-            PaseoPerf.mark("jump.landed")
-            hooks.landed()
-            return
+            if landedAt == nil {
+                PaseoPerf.mark("jump.landed")
+                hooks.landed()
+                guard target.verifies else { return }
+                landedAt = tick
+            }
         }
+        guard landedAt == nil else { return }
         PaseoPerf.mark("jump.gaveUp")
         hooks.landed()
     }
