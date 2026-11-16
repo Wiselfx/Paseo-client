@@ -176,12 +176,20 @@
                 if chain.count == 3 { break }
             }
             let ownName: String? = chain.isEmpty ? nil : chain.joined(separator: " < ")
-            var path: [String] = []
-            for address in frames {
+            // The leaf, then the frames above it that are not the Swift runtime's own plumbing
+            // (casts, conformance lookups, metadata): who asked for the work, not how it ran.
+            var path: [String] = [String(leaf.prefix(40))]
+            for address in frames.dropFirst() {
                 let name = symbol(for: address).name
                 guard name != "?", path.last != name else { continue }
-                path.append(String(name.prefix(34)))
-                if path.count == 8 { break }
+                if name.hasPrefix("_ZL") || name.hasPrefix("_ZN5swift") || name.hasPrefix("swift_")
+                    || name.hasPrefix("tryCast") || name.hasPrefix("mach_msg") || name.hasPrefix("_pthread")
+                    || name.hasPrefix("dyld") || name.hasPrefix("_dispatch") || name.hasPrefix("__")
+                {
+                    continue
+                }
+                path.append(String(name.prefix(36)))
+                if path.count == 9 { break }
             }
             let stackName = path.joined(separator: " < ")
             collected.withLock { histogram in

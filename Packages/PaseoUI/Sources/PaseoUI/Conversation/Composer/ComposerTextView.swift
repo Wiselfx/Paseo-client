@@ -175,6 +175,7 @@ struct ComposerTextView: UIViewRepresentable {
         // middle of a SwiftUI update, and writing a binding there is "state during view update".
         // `lastAppliedFocus` is recorded now, so nothing can fight what UIKit just did.
         func textViewDidBeginEditing(_ textView: UITextView) {
+            PaseoPerf.mark("composer.focus")
             syncFocus(from: textView)
         }
 

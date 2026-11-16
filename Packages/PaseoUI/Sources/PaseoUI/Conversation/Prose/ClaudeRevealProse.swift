@@ -123,6 +123,7 @@ struct ClaudeRevealProse: View {
 
     var body: some View {
         let _ = PaseoPerf.body("RevealProse")
+        let _ = PaseoPerf.why(Self.self)
         let refs = pieceRefs(markdown)
         VStack(alignment: .leading, spacing: theme.blockSpacing) {
             ForEach(refs, id: \.stableIdentity) { ref in

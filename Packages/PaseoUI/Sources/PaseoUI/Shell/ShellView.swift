@@ -74,6 +74,7 @@ public struct ShellView: View {
 
     public var body: some View {
         let _ = PaseoPerf.body("Shell")
+        let _ = PaseoPerf.why(Self.self)
         let _ = PaseoPerf.diff(
             "shell",
             [

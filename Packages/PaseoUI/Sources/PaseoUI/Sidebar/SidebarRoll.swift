@@ -13,6 +13,7 @@ struct SidebarRoll<Content: View>: View {
 
     var body: some View {
         let _ = PaseoPerf.body("SidebarRoll")
+        let _ = PaseoPerf.why(Self.self)
         contentOrEmpty
             .frame(height: expanded ? contentHeight : 0, alignment: .top)
             .clipped()
