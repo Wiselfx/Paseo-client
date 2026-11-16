@@ -600,7 +600,7 @@ struct TranscriptView: View {
         openPinKey = key
         openPinCount += 1
         if PaseoPerf.enabled { PaseoPerf.countNamed("openpin.fire.h\(Int(metrics.contentHeight)).d\(Int(metrics.distanceFromBottom))") }
-        scrollPosition.scrollTo(edge: .bottom)
+        scrollPosition.scrollTo(id: "bottom", anchor: .bottom)
     }
 
     /// The scroll came to rest: the one edge where chrome state is allowed to change. The follow,
