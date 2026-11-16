@@ -949,7 +949,15 @@ struct TranscriptView: View {
     /// The transcript's side of a jump: the scroll position, the stack's mounted turns and the screen.
     private func jumpHooks(onLanded: @escaping @MainActor () -> Void) -> TranscriptJumpRunner.Hooks {
         .init(
-            isMounted: { [scrollTrack] id in scrollTrack.visibleTurnIds.contains(id) },
+            isMounted: { [scrollTrack, store] id in
+                if PaseoPerf.enabled {
+                    let inList = store.turns.contains { $0.id == id }
+                    let inWindow = windowedTurns.contains { $0.id == id }
+                    PaseoPerf.countNamed(
+                        "jump.mounted.\(scrollTrack.visibleTurnIds.contains(id)).n\(scrollTrack.visibleTurnIds.count).list\(inList).win\(inWindow).off\(scrollTrack.offset(of: id) != nil)")
+                }
+                return scrollTrack.visibleTurnIds.contains(id)
+            },
             probe: { [scrollTrack] id in
                 guard scrollTrack.visibleHeight > 0 else { return nil }
                 // A built turn whose geometry callback has not reported (or was dropped with a re-built
@@ -990,7 +998,9 @@ struct TranscriptView: View {
     /// when they were following the tail), so closing find after the matches moved them can bring them
     /// back, and the bar appearing does not move the conversation.
     private func restoreFindAnchor() {
-        let atEnd = scrollTrack.distanceFromBottom <= Self.followSlack
+        // At the end within the content's own gap (no composer or keyboard inset in it, J3 §3): the
+        // inset-including distance is the composer's height at rest, never within the follow slack.
+        let atEnd = scrollTrack.distanceFromContentBottom <= Self.endMargin
         controller.find.anchor = atEnd ? nil : scrollTrack.turnAtViewportTop()
         controller.find.moved = false
     }
