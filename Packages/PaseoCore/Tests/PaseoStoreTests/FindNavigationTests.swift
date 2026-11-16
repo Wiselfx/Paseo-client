@@ -142,4 +142,30 @@ import PaseoProtocol
         #expect(FindNavigation.text(of: .init(turnIndex: 0, rowSeqEnd: 3), in: sample) == "a")
         #expect(FindNavigation.text(of: .init(turnIndex: 5, rowSeqEnd: 3), in: sample) == nil)
     }
+
+    // MARK: Turn positions
+
+    @Test func aTurnKnowsWhereItStartsAndEnds() {
+        let t = turn(0, user: user(1), [.work(.init(rows: [thought(2)])), .prose(prose(3))])
+        #expect(t.firstRowSeq == 1)
+        #expect(t.lastRowSeq == 3)
+        let headless = turn(1, user: nil, [.work(.init(rows: [thought(7), thought(8)]))])
+        #expect(headless.firstRowSeq == 7)
+        #expect(headless.lastRowSeq == 8)
+        let promptOnly = turn(2, user: user(9), [])
+        #expect(promptOnly.firstRowSeq == 9)
+        #expect(promptOnly.lastRowSeq == 9)
+    }
+
+    @Test func aWindowStartSurvivesAnOlderPagePrependingToItsTurn() {
+        // The window starts at the turn that begins at seq 40. An older page then prepends rows 30...39 to it:
+        // its id (the first row's) would change, its place in the timeline holds.
+        let before = [turn(0, user: user(10), [.prose(prose(20))]), turn(1, user: nil, [.prose(prose(45, startsAt: 40))])]
+        let after = [turn(0, user: user(10), [.prose(prose(20))]), turn(1, user: nil, [.prose(prose(35, startsAt: 30)), .prose(prose(45, startsAt: 40))])]
+        #expect(FindNavigation.firstTurnIndex(endingAtOrAfter: 40, in: before) == 1)
+        #expect(FindNavigation.firstTurnIndex(endingAtOrAfter: 40, in: after) == 1)
+        #expect(FindNavigation.firstTurnIndex(endingAtOrAfter: 46, in: after) == nil)
+        #expect(FindNavigation.firstTurnIndex(endingAtOrAfter: 0, in: after) == 0)
+    }
 }
+

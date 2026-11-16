@@ -18,8 +18,11 @@ import SwiftUI
 @MainActor final class TranscriptJumpRunner {
     /// Where to go.
     struct Target {
-        /// The turn's `ForEach` id: always known to the stack, so it is what the first scroll asks for.
-        var turnId: String
+        /// The turn's `ForEach` id: always known to the stack, so it is what the first scroll asks for. Read
+        /// again every tick: a turn's id is its first row's id, so it changes when an older page prepends
+        /// rows to a partial turn while the runner is on its way (a fetched window does exactly that).
+        /// Nil while the turn cannot be found.
+        var turnId: @MainActor () -> String?
         /// The id to settle on, read again every tick: a streaming row's id moves with every delta.
         /// Nil settles on the turn itself.
         var rowId: @MainActor () -> String?
@@ -125,7 +128,11 @@ import SwiftUI
                 stable = 0
                 continue
             }
-            guard hooks.isMounted(target.turnId), let probe = hooks.probe(target.turnId) else {
+            guard let turnId = target.turnId() else {
+                stable = 0
+                continue
+            }
+            guard hooks.isMounted(turnId), let probe = hooks.probe(turnId) else {
                 // Not built, or built and not measured yet: ask for the turn (instant: a long glide is
                 // what leaves the stack without rows).
                 stable = 0
@@ -138,7 +145,7 @@ import SwiftUI
                 lastTurnAimTick = tick
                 PaseoPerf.count("jump.turnAim.unmounted")
                 if turnAims > 3 { hooks.nudge() }
-                hooks.scrollTo(target.turnId, .top, false)
+                hooks.scrollTo(turnId, .top, false)
                 continue
             }
             if probe.layoutKey == lastKey { stable += 1 } else { stable = 0 }
@@ -155,7 +162,7 @@ import SwiftUI
                 lastTurnAimTick = tick
                 PaseoPerf.count("jump.turnAim.offscreen")
                 if turnAims > 3 { hooks.nudge() }
-                hooks.scrollTo(target.turnId, .top, false)
+                hooks.scrollTo(turnId, .top, false)
                 continue
             }
             guard stable >= stableLooks else {
@@ -174,7 +181,7 @@ import SwiftUI
                 rowAims += 1
                 PaseoPerf.count("jump.rowAim")
                 stable = 0
-                hooks.scrollTo(row ?? target.turnId, row == nil ? .top : target.rowAnchor(), target.glides && rowAims == 1)
+                hooks.scrollTo(row ?? turnId, row == nil ? .top : target.rowAnchor(), target.glides && rowAims == 1)
                 continue
             }
             PaseoPerf.mark("jump.landed")

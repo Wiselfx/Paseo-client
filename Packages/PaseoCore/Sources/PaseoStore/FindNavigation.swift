@@ -110,3 +110,43 @@ public enum FindNavigation {
         return Double(match.range.location) / Double(whole.length)
     }
 }
+
+extension Turn {
+    /// The timeline position of the turn's first row. A turn without a leading user message (rewinds,
+    /// streamed tails, a partial turn at the edge of a loaded window) starts at its first segment row.
+    public var firstRowSeq: Int? {
+        if let row = userMessage { return row.seqStart }
+        for segment in segments {
+            switch segment {
+            case .work(let group):
+                if let row = group.rows.first { return row.seqStart }
+            case .prose(let row), .todo(let row), .notice(let row):
+                return row.seqStart
+            }
+        }
+        return nil
+    }
+
+    /// The timeline position where the turn's last row ends.
+    public var lastRowSeq: Int? {
+        for segment in segments.reversed() {
+            switch segment {
+            case .work(let group):
+                if let row = group.rows.last { return row.seqEnd }
+            case .prose(let row), .todo(let row), .notice(let row):
+                return row.seqEnd
+            }
+        }
+        return userMessage?.seqEnd
+    }
+}
+
+extension FindNavigation {
+    /// The index of the first turn that ends at or after `seq`: where a window that starts at `seq` begins.
+    /// A turn's id is its first row's id, so it changes when an older page prepends rows to a partial turn;
+    /// a position in the timeline does not. Nil when every turn ends before `seq`.
+    public static func firstTurnIndex(endingAtOrAfter seq: Int, in turns: [Turn]) -> Int? {
+        turns.firstIndex { ($0.lastRowSeq ?? Int.min) >= seq }
+    }
+}
+

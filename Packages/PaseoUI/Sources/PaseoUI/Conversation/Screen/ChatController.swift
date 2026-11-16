@@ -106,6 +106,10 @@ struct TurnActionAvailability: Sendable, Equatable {
     /// The turn the reader was nearest when find opened (nil: they were at the end); closing restores
     /// it when stepping moved them. Survives `reset()`: the transcript reads it after the close.
     var anchor: String?
+    /// The same place as a timeline position (the first row's seq of that turn): a turn's id is its first
+    /// row's id, which changes when an older page prepends rows to a partial turn, a position does not.
+    /// Set by the transcript when find opens; nil: the reader was at the end.
+    var anchorSeq: Int?
     /// A scroll the transcript owes after a step or a search result. Cleared by the transcript.
     var jump: FindJump?
     var task: Task<Void, Never>?

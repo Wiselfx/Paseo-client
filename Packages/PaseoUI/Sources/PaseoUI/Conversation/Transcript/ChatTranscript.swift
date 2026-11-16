@@ -75,7 +75,12 @@ struct TranscriptView: View {
     /// newest `windowSize` turns are in the stack; scrolling toward the top reveals `windowStep` more
     /// (the same anchor that undoes a prepended history page keeps the reader's line), and a jump or a
     /// find match in an older turn reveals it first. Nil until the first turns arrive.
-    @State private var windowStartId: String?
+    ///
+    /// Held as a position in the timeline (the first row's seq of the oldest mounted turn), never as a turn
+    /// id: a turn's id is its first row's id, so an older page prepending rows to a partial turn at the edge
+    /// of a loaded window changes it, and a window keyed by the old id silently fell back to the newest 16
+    /// turns while a find or jump was on its way to an older one.
+    @State private var windowStartSeq: Int?
     static let windowSize = 16
     static let windowStep = 12
     /// Turns mounted above a find or jump target when the window grows to reach it, so the reader can
@@ -146,12 +151,14 @@ struct TranscriptView: View {
             // Fix the window's head as soon as there is something to window, so a turn appended at
             // the tail never slides it.
             .onChange(of: store.turns.isEmpty) { _, empty in
-                if !empty, windowStartId == nil, let first = windowedTurns.first {
-                    windowStartId = first.id
+                if !empty, windowStartSeq == nil, let first = windowedTurns.first {
+                    windowStartSeq = first.firstRowSeq
                 }
             }
             .onAppear {
-                if windowStartId == nil, let first = windowedTurns.first { windowStartId = first.id }
+                if windowStartSeq == nil, let first = windowedTurns.first {
+                    windowStartSeq = first.firstRowSeq
+                }
             }
             // The anchor's job is done. At the anchor this trims nothing; if the reader scrolled
             // away while the answer ran, the idle rule already removed the room below the screen.
@@ -375,26 +382,19 @@ struct TranscriptView: View {
 
     /// The turns the stack holds: from the window's first turn to the newest.
     private var windowedTurns: ArraySlice<Turn> {
-        let all = store.turns
-        if let id = windowStartId, let index = all.firstIndex(where: { $0.id == id }) {
-            return all[index...]
-        }
-        return all.suffix(Self.windowSize)
+        store.turns[windowStartIndex...]
     }
 
     /// Turns older than the window, still in the store.
-    private var hiddenTurnCount: Int {
-        let all = store.turns
-        guard let id = windowStartId, let index = all.firstIndex(where: { $0.id == id }) else {
-            return max(all.count - Self.windowSize, 0)
-        }
-        return index
-    }
+    private var hiddenTurnCount: Int { windowStartIndex }
 
-    /// The index of the window's first turn in `store.turns`.
+    /// The index of the window's first turn in `store.turns`: the first turn that ends at or after the
+    /// window's start position, else the newest `windowSize` turns.
     private var windowStartIndex: Int {
         let all = store.turns
-        if let start = windowStartId, let index = all.firstIndex(where: { $0.id == start }) {
+        if let start = windowStartSeq,
+            let index = FindNavigation.firstTurnIndex(endingAtOrAfter: start, in: all)
+        {
             return index
         }
         return max(all.count - Self.windowSize, 0)
@@ -405,8 +405,10 @@ struct TranscriptView: View {
         let all = store.turns
         let current = windowStartIndex
         let target = max(current - count, 0)
-        guard target < current, all.indices.contains(target) else { return false }
-        windowStartId = all[target].id
+        guard target < current, all.indices.contains(target),
+            let seq = all[target].firstRowSeq
+        else { return false }
+        windowStartSeq = seq
         return true
     }
 
@@ -419,8 +421,9 @@ struct TranscriptView: View {
         let current = windowStartIndex
         let start = FindNavigation.windowStart(
             forTurnAt: index, currentStart: current, lead: Self.windowLead)
-        guard start < current, all.indices.contains(start) else { return }
-        windowStartId = all[start].id
+        guard start < current, all.indices.contains(start), let seq = all[start].firstRowSeq
+        else { return }
+        windowStartSeq = seq
     }
 
     @ViewBuilder private var turns: some View {
@@ -914,7 +917,6 @@ struct TranscriptView: View {
         controller.find.moved = true
         findRows.reset()
         mountTurn(at: target.turnIndex)
-        let turnId = store.turns[target.turnIndex].id
         let seq = jump.seq
         let role = jump.role
         // Where the match sits in a message taller than the screen: the message rests so the match,
@@ -926,7 +928,10 @@ struct TranscriptView: View {
         }
         jumper.run(
             .init(
-                turnId: turnId,
+                turnId: { [store] in
+                    FindNavigation.target(in: store.turns, seq: seq, role: role)
+                        .map { store.turns[$0.turnIndex].id }
+                },
                 rowId: { [store] in
                     // The row can have streamed on since: resolve it again for its current id.
                     FindNavigation.target(in: store.turns, seq: seq, role: role)
@@ -1001,7 +1006,12 @@ struct TranscriptView: View {
         // At the end within the content's own gap (no composer or keyboard inset in it, J3 §3): the
         // inset-including distance is the composer's height at rest, never within the follow slack.
         let atEnd = scrollTrack.distanceFromContentBottom <= Self.endMargin
-        controller.find.anchor = atEnd ? nil : scrollTrack.turnAtViewportTop()
+        controller.find.anchorSeq =
+            atEnd
+            ? nil
+            : scrollTrack.turnAtViewportTop().flatMap { id in
+                store.turns.first { $0.id == id }?.firstRowSeq
+            }
         controller.find.moved = false
     }
 
@@ -1011,17 +1021,25 @@ struct TranscriptView: View {
         guard controller.find.moved else { return }
         controller.find.moved = false
         let all = store.turns
-        guard let lastId = all.last?.id else { return }
-        if let anchor = controller.find.anchor, let index = all.firstIndex(where: { $0.id == anchor }) {
+        guard !all.isEmpty else { return }
+        if let seq = controller.find.anchorSeq,
+            let index = FindNavigation.firstTurnIndex(endingAtOrAfter: seq, in: all)
+        {
             mountTurn(at: index)
             jumper.run(
-                .init(turnId: anchor, rowId: { nil }, rowAnchor: { .top }),
+                .init(
+                    turnId: { [store] in
+                        FindNavigation.firstTurnIndex(endingAtOrAfter: seq, in: store.turns)
+                            .map { store.turns[$0].id }
+                    },
+                    rowId: { nil }, rowAnchor: { .top }),
                 hooks: jumpHooks(onLanded: {}))
         } else {
             // The end marker is the real last row (the open re-seat lands on it the same way).
             jumper.run(
                 .init(
-                    turnId: lastId, rowId: { "bottom" }, rowAnchor: { .bottom },
+                    turnId: { [store] in store.turns.last?.id }, rowId: { "bottom" },
+                    rowAnchor: { .bottom },
                     // The content's own gap to the viewport's bottom, with no inset in it (J3 §3), so the
                     // keyboard going down while the jump runs cannot move the answer. The marker rests at
                     // the bottom edge with the stack's 20 pt padding under it: at the end within a margin.
@@ -1043,17 +1061,23 @@ struct TranscriptView: View {
         controller.isFollowing = false
         controller.anchoringToAnswer = false
         let all = store.turns
-        let index: Int?
+        // The row's position in the timeline, or the turn's first row for a turn id: ids move when an
+        // older page prepends rows to a partial turn, positions do not.
+        let seq: Int?
         let rowId: String?
-        if id.hasPrefix("row:"), let seq = Int(id.dropFirst(4)) {
-            index = all.firstIndex(where: { $0.containsRow(seqEnd: seq) })
-                ?? all.lastIndex(where: { ($0.firstRowSeq ?? Int.max) <= seq })
+        if id.hasPrefix("row:"), let rowSeq = Int(id.dropFirst(4)) {
+            seq = rowSeq
             rowId = id
         } else {
-            index = all.firstIndex(where: { $0.id == id })
+            seq = all.first { $0.id == id }?.firstRowSeq
             rowId = nil
         }
-        guard let index else {
+        let indexOfTurn: @MainActor ([Turn]) -> Int? = { turns in
+            guard let seq else { return nil }
+            return turns.firstIndex(where: { $0.containsRow(seqEnd: seq) })
+                ?? turns.lastIndex(where: { ($0.firstRowSeq ?? Int.max) <= seq })
+        }
+        guard let index = indexOfTurn(all) else {
             PaseoPerf.mark("jump.noTurn")
             return
         }
@@ -1068,7 +1092,9 @@ struct TranscriptView: View {
         }
         showLandingLine(for: turnId)
         jumper.run(
-            .init(turnId: turnId, rowId: { rowId }, rowAnchor: { .top }),
+            .init(
+                turnId: { [store] in indexOfTurn(store.turns).map { store.turns[$0].id } },
+                rowId: { rowId }, rowAnchor: { .top }),
             hooks: jumpHooks(onLanded: {}))
     }
 
@@ -1396,20 +1422,4 @@ private struct ResolvedPermissionLines: View {
     }
 }
 
-/// The timeline position of a turn's first row, for the outline's reading-position report. A turn
-/// without a leading user message (rewinds, streamed tails) starts at its first segment row.
-extension Turn {
-    var firstRowSeq: Int? {
-        if let row = userMessage { return row.seqStart }
-        for segment in segments {
-            switch segment {
-            case .work(let group):
-                if let row = group.rows.first { return row.seqStart }
-            case .prose(let row), .todo(let row), .notice(let row):
-                return row.seqStart
-            }
-        }
-        return nil
-    }
-}
 #endif
