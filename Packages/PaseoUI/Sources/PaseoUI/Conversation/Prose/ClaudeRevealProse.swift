@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import PaseoStore
 import SwiftUI
 
 /// Chat-reveal (M7d §2, `chat-reveal` in DSH): newly arriving assistant prose fades in.
