@@ -84,8 +84,8 @@ public final class HostUsageStore {
             phase = .failed(Self.unsupportedMessage)
             return false
         }
-        phase = .loading
-        error = nil
+        setPhase(.loading)
+        if error != nil { error = nil }
 
         // The host owns its policy; ask the daemon what is enabled before asking for reports.
         if let config = try? await client.send(GetDaemonConfigRequest()).config {
@@ -113,6 +113,16 @@ public final class HostUsageStore {
 
     private var isUsageSourcesModern = false
 
+    /// The sidebar footer and the usage sheet read these; a write of the value already held would
+    /// still re-evaluate them (an `@Observable` setter always notifies).
+    private func setPhase(_ next: Phase) {
+        if phase != next { phase = next }
+    }
+
+    private func setReports(_ next: [UsageReportEntry]) {
+        if reports != next { reports = next }
+    }
+
     /// One `usage.list_reports.update` from the daemon; only events for the in-flight request count.
     /// The report replaces its previous copy on screen immediately, in arrival order, so a slow
     /// source never holds back the others (Upstream: packages/app/src/usage/queries.ts:73-93,
@@ -127,10 +137,10 @@ public final class HostUsageStore {
         // The streamed list is what the response settles against; the display is updated as it
         // arrives so a slow source never holds back the others.
         pendingReports?.reports.append(update.report)
-        reports = UsageModel.upsertReport(reports, update.report)
+        setReports(UsageModel.upsertReport(reports, update.report))
         // Upstream's view is ready as soon as it has data, while the request keeps streaming
         // (model.ts:131-133).
-        if phase == .loading { phase = .ready }
+        if phase == .loading { setPhase(.ready) }
     }
 
     internal func update(serverInfo info: ServerInfo?) {
@@ -154,14 +164,14 @@ public final class HostUsageStore {
             // The finished list is in fetch-completion order, which can change on every refresh;
             // settle keeps what is on screen in place, drops what the host no longer has, and
             // keeps whichever copy of a report was fetched later (model.ts:80-99).
-            reports = UsageModel.settleReports(shown: reports, finished: finished)
+            setReports(UsageModel.settleReports(shown: reports, finished: finished))
             if let error = response.error {
                 self.error = error
                 // Data on screen wins over a failed request (model.ts:131-140).
-                phase = reports.isEmpty ? .failed(error) : .ready
+                setPhase(reports.isEmpty ? .failed(error) : .ready)
                 return
             }
-            phase = .ready
+            setPhase(.ready)
         } catch {
             fail(error)
         }
@@ -172,8 +182,8 @@ public final class HostUsageStore {
     private func legacyReports() async {
         do {
             let response = try await client.send(ProviderUsageListRequest())
-            reports = response.providers.map { legacyEntry($0, fetchedAt: response.fetchedAt) }
-            phase = .ready
+            setReports(response.providers.map { legacyEntry($0, fetchedAt: response.fetchedAt) })
+            setPhase(.ready)
         } catch {
             fail(error)
         }
