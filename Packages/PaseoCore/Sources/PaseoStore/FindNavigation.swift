@@ -160,8 +160,36 @@ extension FindNavigation {
     /// The index of the first turn that ends at or after `seq`: where a window that starts at `seq` begins.
     /// A turn's id is its first row's id, so it changes when an older page prepends rows to a partial turn;
     /// a position in the timeline does not. Nil when every turn ends before `seq`.
+    ///
+    /// Turns are in timeline order, so each turn's last row seq is at least the one before it: the test
+    /// is false up to some index and true from there on, and a binary search finds that index in O(log n).
+    /// The window start is read on every body pass and every scroll frame, so it must not scan the chat.
     public static func firstTurnIndex(endingAtOrAfter seq: Int, in turns: [Turn]) -> Int? {
-        turns.firstIndex { ($0.lastRowSeq ?? Int.min) >= seq }
+        var low = 0
+        var high = turns.count
+        while low < high {
+            let middle = low + (high - low) / 2
+            if (turns[middle].lastRowSeq ?? Int.min) >= seq {
+                high = middle
+            } else {
+                low = middle + 1
+            }
+        }
+        return low < turns.count ? low : nil
+    }
+
+    /// The index nearest `target` (within `0..<count`) for which `isBuilt` holds, searched outward from
+    /// `target`, so a built turn a few places away is found in a few steps. A tie goes to the lower index,
+    /// as `hopTarget` picks it from an ascending list. Nil when none holds, or `target` is out of range.
+    public static func nearestIndex(to target: Int, count: Int, where isBuilt: (Int) -> Bool) -> Int? {
+        guard (0..<count).contains(target) else { return nil }
+        for distance in 0..<count {
+            let below = target - distance
+            if below >= 0, isBuilt(below) { return below }
+            let above = target + distance
+            if distance > 0, above < count, isBuilt(above) { return above }
+        }
+        return nil
     }
 }
 

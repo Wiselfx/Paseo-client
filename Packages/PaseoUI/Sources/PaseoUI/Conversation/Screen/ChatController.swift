@@ -841,7 +841,7 @@ struct TranscriptJump: Equatable {
     /// result, or a step after the reader scrolled away) scrolls again.
     func requestFindScroll(backward: Bool = false) {
         guard let location = findLocation else { return }
-        isFollowing = false
+        if isFollowing { isFollowing = false }
         find.jump = FindJump(seq: location.seq, role: location.role, backward: backward)
     }
 
