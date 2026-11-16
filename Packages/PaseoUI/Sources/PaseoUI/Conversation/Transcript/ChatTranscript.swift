@@ -844,8 +844,10 @@ struct TranscriptView: View {
         // Not while the open re-seat is still settling (W1): its scrolls pass near the top of an estimated
         // content height, and each pass revealed twelve more turns. Sampled opens of a 65 000 pt chat
         // ended with 370 markdown bodies and a 2.6 s stall because the window grew to the whole chat.
-        guard !openPin, historyAnchor == nil, hiddenTurnCount > 0,
-            metrics.distanceFromTop <= metrics.viewportHeight * 1.5
+        // The distance first: it is O(1), and most scroll frames are nowhere near the top, so the window's
+        // start is not looked up on them. Every condition is a pure read; only the order changes.
+        guard !openPin, historyAnchor == nil,
+            metrics.distanceFromTop <= metrics.viewportHeight * 1.5, hiddenTurnCount > 0
         else { return false }
         historyAnchor = HistoryAnchor(
             contentHeight: metrics.contentHeight, offsetY: metrics.offsetY,
@@ -856,9 +858,9 @@ struct TranscriptView: View {
     }
 
     private func loadOlderIfNeeded(_ metrics: ScrollFollowMetrics) {
+        guard metrics.distanceFromTop <= metrics.viewportHeight else { return }
         guard hiddenTurnCount == 0 else { return }
         guard !historyLoadInFlight, store.timeline.hasOlder, !store.isLoadingOlder else { return }
-        guard metrics.distanceFromTop <= metrics.viewportHeight else { return }
         historyLoadInFlight = true
         let cursor = store.timeline.startCursor
         historyAnchor = HistoryAnchor(
@@ -900,13 +902,15 @@ struct TranscriptView: View {
     private func scrollToMatch(_ jump: FindJump) {
         // Stepping through matches is reading, not following the tail; the open re-seat is over too.
         openPin = false
-        controller.isFollowing = false
-        controller.anchoringToAnswer = false
+        if controller.isFollowing { controller.isFollowing = false }
+        if controller.anchoringToAnswer { controller.anchoringToAnswer = false }
         guard let target = FindNavigation.target(in: store.turns, seq: jump.seq, role: jump.role) else {
-            Task {
-                // One window fetch, then once more; a message that still is not there is skipped.
-                guard await store.loadTimelineWindow(aroundSeq: jump.seq),
-                    FindNavigation.target(in: store.turns, seq: jump.seq, role: jump.role) != nil
+            // One window fetch, then once more; a message that still is not there is skipped. The runner
+            // owns the fetch, so closing find cancels it.
+            jumper.runAfterFetch {
+                let loaded = await store.loadTimelineWindow(aroundSeq: jump.seq)
+                guard !Task.isCancelled else { return }
+                guard loaded, FindNavigation.target(in: store.turns, seq: jump.seq, role: jump.role) != nil
                 else {
                     controller.find.rowSeq = nil
                     return
@@ -915,8 +919,8 @@ struct TranscriptView: View {
             }
             return
         }
-        controller.find.rowSeq = target.rowSeqEnd
-        controller.find.moved = true
+        if controller.find.rowSeq != target.rowSeqEnd { controller.find.rowSeq = target.rowSeqEnd }
+        if !controller.find.moved { controller.find.moved = true }
         findRows.reset()
         mountTurn(at: target.turnIndex)
         let seq = jump.seq
@@ -969,9 +973,13 @@ struct TranscriptView: View {
             isMounted: { [scrollTrack] id in scrollTrack.visibleTurnIds.contains(id) },
             hop: { [scrollTrack, store] id in
                 let all = store.turns
-                guard let target = all.firstIndex(where: { $0.id == id }) else { return nil }
-                let built = all.indices.filter { scrollTrack.visibleTurnIds.contains(all[$0].id) }
-                return FindNavigation.hopTarget(targetIndex: target, builtIndices: built)
+                guard let target = all.firstIndex(where: { $0.id == id }),
+                    let built = FindNavigation.nearestIndex(
+                        to: target, count: all.count,
+                        where: { scrollTrack.visibleTurnIds.contains(all[$0].id) })
+                else { return nil }
+                // The nearest built turn is the only one a hop starts from, so no list of them is built.
+                return FindNavigation.hopTarget(targetIndex: target, builtIndices: [built])
                     .map { all[$0].id }
             },
             probe: { [scrollTrack] id in

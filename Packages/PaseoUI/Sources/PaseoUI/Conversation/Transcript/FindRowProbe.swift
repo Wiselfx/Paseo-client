@@ -8,15 +8,19 @@ import SwiftUI
 /// did). Only the row of the current match reports (`FindRowReporter`, on its highlight background), in the
 /// transcript viewport's space (where it is on screen now; a frame in content space went stale while the
 /// stack re-estimated the rows above it), and only while find is open: a plain reference the transcript reads, never
-/// observed, so a report costs a dictionary write and no body.
+/// observed. One match is on screen at a time, so the probe keeps one report: a report is a store, with no hashing
+/// and no growth, and a scroll frame that moves the match costs nothing more.
 @MainActor final class FindRowProbe {
-    private var frames: [Int: CGRect] = [:]
+    private var lastReport: (seqEnd: Int, frame: CGRect)?
 
-    func report(_ seqEnd: Int, _ frame: CGRect) { frames[seqEnd] = frame }
+    func report(_ seqEnd: Int, _ frame: CGRect) { lastReport = (seqEnd, frame) }
 
-    func frame(of seqEnd: Int) -> CGRect? { frames[seqEnd] }
+    func frame(of seqEnd: Int) -> CGRect? {
+        guard let lastReport, lastReport.seqEnd == seqEnd else { return nil }
+        return lastReport.frame
+    }
 
-    func reset() { frames.removeAll(keepingCapacity: true) }
+    func reset() { lastReport = nil }
 }
 
 private struct FindRowProbeKey: EnvironmentKey {

@@ -114,16 +114,33 @@ import SwiftUI
     static let watchTicks = 40
 
     private var task: Task<Void, Never>?
+    /// A fetch a find step waits for before it can aim (a window that does not hold the match yet). A
+    /// newer step replaces it; a new run does not cancel it.
+    private var fetch: Task<Void, Never>?
 
+    /// Closing find or the rail: nothing this runner started goes on.
     func cancel() {
+        cancelRun()
+        fetch?.cancel()
+        fetch = nil
+    }
+
+    private func cancelRun() {
         task?.cancel()
         task = nil
     }
 
     func run(_ target: Target, hooks: Hooks) {
-        cancel()
+        cancelRun()
         PaseoPerf.mark("jump.run")
         task = Task { @MainActor in await Self.steps(target, hooks) }
+    }
+
+    /// Runs `work` once the fetch it waits for has returned. `work` checks `Task.isCancelled` after its
+    /// own await: cancelling a task does not stop a closure that is already waiting.
+    func runAfterFetch(_ work: @escaping @MainActor () async -> Void) {
+        fetch?.cancel()
+        fetch = Task { @MainActor in await work() }
     }
 
     /// The steps, separated from the task so they read in order.
