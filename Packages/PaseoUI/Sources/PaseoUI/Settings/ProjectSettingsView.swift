@@ -17,6 +17,7 @@ struct ProjectSettingsView: View {
     let project: WorkspaceProjectDescriptor
 
     @Environment(\.dismiss) private var dismiss
+    @State private var iconMemo = ProjectIconImageMemo()
     @State private var setupText = ""
     @State private var teardownText = ""
     @State private var scripts: [ProjectScriptDraft] = []
@@ -237,8 +238,9 @@ struct ProjectSettingsView: View {
         .padding(.vertical, 2)
     }
 
+    /// Decoded once per icon: the page re-evaluates for every keystroke in its text fields.
     private var iconImage: UIImage? {
-        icons.iconData.flatMap(UIImage.init(data:))
+        icons.iconData.flatMap { iconMemo.image(for: $0) }
     }
 
     // MARK: Name
@@ -795,6 +797,19 @@ private struct ScriptEditSheet: View {
             .frame(height: 48)
             .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
         }
+    }
+}
+
+/// The decoded project icon for the bytes it came from.
+@MainActor private final class ProjectIconImageMemo {
+    private var data: Data?
+    private var image: UIImage?
+
+    func image(for data: Data) -> UIImage? {
+        if self.data == data { return image }
+        self.data = data
+        image = UIImage(data: data)
+        return image
     }
 }
 #endif
