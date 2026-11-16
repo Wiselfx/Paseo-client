@@ -851,7 +851,10 @@ struct TranscriptView: View {
     /// prepend is compensated so the reader's place does not move (UX spec §4.3).
     /// Near the top with older turns held back: reveal the next slice, keeping the reader's line.
     private func revealOlderTurnsIfNeeded(_ metrics: ScrollFollowMetrics) -> Bool {
-        guard historyAnchor == nil, hiddenTurnCount > 0,
+        // Not while the open re-seat is still settling (W1): its scrolls pass near the top of an estimated
+        // content height, and each pass revealed twelve more turns. Sampled opens of a 65 000 pt chat
+        // ended with 370 markdown bodies and a 2.6 s stall because the window grew to the whole chat.
+        guard !openPin, historyAnchor == nil, hiddenTurnCount > 0,
             metrics.distanceFromTop <= metrics.viewportHeight * 1.5
         else { return false }
         historyAnchor = HistoryAnchor(
