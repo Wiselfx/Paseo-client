@@ -165,7 +165,9 @@ import SwiftUI
             // The turn is in view and the layout has held: aim at the row inside it. Twice, the second a
             // no-op unless something above the row finished measuring after the first.
             let row = target.rowId()
-            if rowAims < maxRowAims || (!target.isReached() && rowAims < maxRowAims + maxReachAims) {
+            let reached = target.isReached()
+            if PaseoPerf.enabled { PaseoPerf.countNamed("jump.tick.aims\(rowAims).reached\(reached)") }
+            if rowAims < maxRowAims || (!reached && rowAims < maxRowAims + maxReachAims) {
                 rowAims += 1
                 PaseoPerf.count("jump.rowAim")
                 stable = 0
