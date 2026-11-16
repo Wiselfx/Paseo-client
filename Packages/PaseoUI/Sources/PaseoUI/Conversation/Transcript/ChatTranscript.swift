@@ -106,6 +106,24 @@ struct TranscriptView: View {
                 beginRunway(for: id)
             }
             .onChange(of: store.isRunning) { _, _ in openPin = false }
+            // Blank guard (W1): a long chat can open with the lazy stack holding no rows under its final
+            // offset until the visible rect changes (reproduced on plain launches; the open nudge covers most
+            // cases, not all). If turns exist, the viewport has a height and nothing has mounted after a
+            // moment, move the offset by two points (invisible) and look again.
+            .task(id: store.turns.isEmpty) {
+                guard !store.turns.isEmpty else { return }
+                for (attempt, delay) in [0.8, 1.0, 1.5, 2.5].enumerated() {
+                    try? await Task.sleep(for: .seconds(delay))
+                    guard !Task.isCancelled, !scrollHeld else { return }
+                    guard scrollTrack.visibleTurnIds.isEmpty, scrollTrack.visibleHeight > 0 else { return }
+                    PaseoPerf.count("blank.nudge")
+                    if attempt % 2 == 0 {
+                        scrollPosition.scrollTo(y: max(scrollTrack.contentOffset - 2, 0))
+                    } else {
+                        scrollPosition.scrollTo(edge: .bottom)
+                    }
+                }
+            }
             // The open is over: the first quiet moment of this conversation. The shared web view starts
             // here (a second later, so the last layout pass is done), not inside the open (W1).
             .onChange(of: openPin) { _, pinned in
