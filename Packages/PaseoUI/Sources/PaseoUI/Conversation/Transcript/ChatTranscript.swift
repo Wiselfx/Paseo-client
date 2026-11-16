@@ -828,6 +828,8 @@ struct TranscriptView: View {
 
     /// How close to the end counts as "at the end" (D1 §3).
     static let followSlack: CGFloat = 8
+    /// How far from the end a jump to the end marker may rest and still have arrived.
+    static let endMargin: CGFloat = 48
 
     /// Older history loads itself: no "Load earlier" row and no button. While the top of the
     /// transcript is within about one screen of the viewport, the next page is fetched; the
@@ -1010,7 +1012,14 @@ struct TranscriptView: View {
             jumper.run(
                 .init(
                     turnId: lastId, rowId: { "bottom" }, rowAnchor: { .bottom },
-                    isReached: { [scrollTrack] in scrollTrack.distanceFromBottom <= Self.followSlack },
+                    // The end marker's own bottom edge sits at the bottom of the viewport, with the stack's
+                    // 20 pt bottom padding under it: at the end, within a margin, not exactly 0.
+                    isReached: { [scrollTrack] in
+                        if PaseoPerf.enabled {
+                            PaseoPerf.countNamed("jump.endDistance.\(Int(scrollTrack.distanceFromBottom))")
+                        }
+                        return abs(scrollTrack.distanceFromBottom) <= Self.endMargin
+                    },
                     glides: false),
                 hooks: jumpHooks(onLanded: { [controller] in controller.isFollowing = true }))
         }
