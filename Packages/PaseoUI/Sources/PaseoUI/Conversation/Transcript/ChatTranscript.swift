@@ -106,6 +106,12 @@ struct TranscriptView: View {
                 beginRunway(for: id)
             }
             .onChange(of: store.isRunning) { _, _ in openPin = false }
+            // The keyboard is the reader acting (rule 14). Its first frame moves the insets, which the open
+            // re-seat took for an unfinished layout and answered with a `scrollTo(edge: .bottom)` inside
+            // that frame (W1): end the open when the keyboard announces itself, before the insets move.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                openPin = false
+            }
             // Fix the window's head as soon as there is something to window, so a turn appended at
             // the tail never slides it.
             .onChange(of: store.turns.isEmpty) { _, empty in
