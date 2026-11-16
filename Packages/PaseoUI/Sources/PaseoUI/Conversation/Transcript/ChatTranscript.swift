@@ -565,18 +565,6 @@ struct TranscriptView: View {
                 openNudgedHeight = metrics.contentHeight
                 PaseoPerf.count("openpin.nudge")
                 scrollPosition.scrollTo(y: max(metrics.offsetY - 2, 0))
-                // The open ends on a later geometry pass at this height, and a chat that has settled
-                // produces none: the pin then stayed armed until the keyboard moved the insets, and
-                // its re-seat (`scrollTo(edge: .bottom)`) ran inside the keyboard's first frame (W1).
-                // Nothing moved for a moment, still at the end: the layout has converged.
-                let nudgedHeight = metrics.contentHeight
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(0.8))
-                    guard openPin, scrollTrack.contentHeight == nudgedHeight,
-                        scrollTrack.distanceFromBottom <= Self.followSlack, !scrollHeld
-                    else { return }
-                    openPin = false
-                }
             } else {
                 // Nudged at this height and still at the end on a later pass: the open is done.
                 openPin = false
