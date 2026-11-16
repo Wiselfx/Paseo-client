@@ -46,12 +46,13 @@ These rules (PLAN §1, R-1…R-7) govern every line of UI code. Reviews check th
   `Upstream: path:line` in the change. If upstream does not have it, we do not build it. If the daemon
   already answers something, ask it; do not derive it client-side. Do not invent, and do not rebuild what a
   path already provides.
-- **R-8. Performance rules.** `docs/perf/PERFORMANCE-RULES.md` is binding (numbered rules, budgets,
-  how to measure with `-paseo-perf` and `docs/perf/scenarios/`). In short: idle is silent; no side effects or
-  object creation in `init` or a `@State` default; view identity never follows a value that changes while
-  streaming; repeated items are `Equatable`; no synchronous system call in a body; chrome state flips through
-  observable flags. `Tools/style-lint/style-lint.sh` reports the `perf-*` patterns. A perf change carries its
-  before and after.
+- **R-8. Performance rules.** `Performance/` is binding. For any change in `Packages/PaseoUI`, `Packages/PaseoCore` or `App/`, **before
+  you report done you MUST run `Performance/scripts/final-check.sh` and paste its SIGN-OFF block** (done = AUTO-FAILED empty and every
+  MANUAL line ticked with a one-clause reason, or `ESCALATE:`). Keep `Performance/MUST.md` open while coding and re-read its section A
+  before reporting. Small-model agents follow `Performance/FINAL-CHECK.md` with no further judgement, and use
+  `Performance/DECISION-TREES.md` when adding a row, store, cache, task, animation or anything in the transcript, composer or shell. A perf
+  change carries its before and after (`Performance/MEASURE.md`, `Performance/TEMPLATES/evidence-block.md`). The script guarantees only
+  exact patterns (CI runs it plus `--self-test`); timing and semantics are yours. `docs/perf/` is the raw history.
 - **Copy.** Sentence case for our own labels; "host" is the user-facing noun ("daemon" only in
   troubleshooting or a command name); never invent copy — keep the existing string or port
   upstream's `en.ts` verbatim.

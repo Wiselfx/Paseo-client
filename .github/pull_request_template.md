@@ -1,46 +1,11 @@
-## What changed
+## What and why
 
-<!-- Link the issue, e.g. Fixes #123. Explain the trigger and resulting behavior. -->
+## Checklist (UI and store changes)
 
-## Visual evidence
+- [ ] `Performance/scripts/final-check.sh` run: AUTO-FAILED is empty and the SIGN-OFF block (every MANUAL line ticked with a reason, or `ESCALATE:`) is pasted below. `Performance/MUST.md` was open while coding.
+- [ ] `Tools/style-lint/check.sh` passes (R-4 tokens, `perf-*` rules; final-check runs it as S0). A new exception needs a reason here and an updated `Tools/style-lint/baseline.txt`, and is an escalation.
+- [ ] Hot paths (transcript, composer, shell, sidebar, media, stores, launch): measured per `Performance/MEASURE.md` (Release, 3 cold runs, median and range), before and after below; or `final-check` printed `measure: not required`.
+- [ ] Core logic has tests (`swift test` in `Packages/PaseoCore`); a store write path has a write-on-change test; a cache has a bound test.
+- [ ] No behaviour, copy or look changed unless this PR says so. No rejected option retried (`Performance/DECISIONS.md`).
 
-<!-- Required for visual changes. Use neutral content. Upload screenshots into the cells; link recordings below for motion. Include both appearances, or explain why one does not apply. -->
-
-| Appearance | Real-app reference | Recreation before | Recreation after |
-|---|---|---|---|
-| Light | | | |
-| Dark | | | |
-
-**Reference app version:**
-**Reference device / iOS version and build:**
-**Demo device / iOS version and build:**
-**Xcode version and build:**
-**Locale / text size / keyboard / accessibility settings:**
-<!-- Write unknown for metadata you cannot verify. -->
-
-**Motion recordings and measurements:** <!-- Reference, before, after; FPS, duration/easing. Or N/A. -->
-
-## Validation
-
-| Check | Command or CI link | Result |
-|---|---|---|
-| Unit tests | | |
-| Affected UI flow and return/dismiss regression | | |
-| Screenshot comparisons, light and dark | | |
-| Accessibility regression | | |
-
-**Not run / skipped and why:**
-**Fresh simulator check:** <!-- Required for changes involving widgets, installation or system state; otherwise N/A. -->
-**Known differences / remaining TODOs:**
-
-## Review checklist
-
-- [ ] Relevant tests passed; failures/skips and the tested commit are recorded above
-- [ ] Visual evidence includes reference, before and after; motion evidence is included where needed
-- [ ] Snapshot changes are intentional, individually reviewed and explained; no baseline was updated solely to hide a failure
-- [ ] CHANGELOG.md updated under *Unreleased*, with `(visual)` on entries that change how a screen looks
-- [ ] If the public API changed: the `breaking` label is set and `docs/VERSIONING.md` still holds
-- [ ] New screens have `DemoScreen` coverage; relevant fidelity/feature notes are updated
-- [ ] The package stays UI-only; new assets have provenance and uploads contain no personal information
-
-<!-- Maintainer: use docs/REVIEW_GUIDE.md. Green CI can skip simulator suites while private; run CI manually with recording disabled before approving UI changes. -->
+## Performance evidence (Performance/TEMPLATES/evidence-block.md)
