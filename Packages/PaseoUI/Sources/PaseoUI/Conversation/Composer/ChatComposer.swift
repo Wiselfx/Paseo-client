@@ -5,6 +5,12 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// Builds a `DictationController` when first asked.
+@MainActor
+final class LazyDictation {
+    lazy var controller = DictationController()
+}
+
 /// What the composer is writing into.
 enum ComposerMode {
     /// An open agent: the text is `store.draft`, and send goes through the conversation.
@@ -71,7 +77,10 @@ struct ComposerView: View {
     @State private var stashedTray: [ComposerAttachmentItem] = []
     @State private var uploadPumpRunning = false
     @State private var localAttachmentError: String?
-    @State private var draftDictation = DictationController()
+    /// The draft's own dictation, built on first use (W1): `State(initialValue:)` runs its argument on
+    /// every parent pass, and a conversation never touches this one.
+    @State private var draftDictationHolder = LazyDictation()
+    private var draftDictation: DictationController { draftDictationHolder.controller }
     @State private var showDraftControls = false
     @State private var showDraftFullScreen = false
 
