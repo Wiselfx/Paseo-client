@@ -62,4 +62,43 @@ public enum FindNavigation {
         guard target < currentStart else { return currentStart }
         return max(target - lead, 0)
     }
+
+    /// The text of the row `target` names: the prompt or the assistant message.
+    public static func text(of target: Target, in turns: [Turn]) -> String? {
+        guard turns.indices.contains(target.turnIndex) else { return nil }
+        let turn = turns[target.turnIndex]
+        if let user = turn.userMessage, user.seqEnd == target.rowSeqEnd,
+            case .userMessage(let message) = user.item
+        {
+            return message.text
+        }
+        for segment in turn.segments {
+            if case .prose(let row) = segment, row.seqEnd == target.rowSeqEnd,
+                case .assistantMessage(let message) = row.item
+            {
+                return message.text
+            }
+        }
+        return nil
+    }
+
+    /// How far into `text` the first (or, stepping backward, the last) occurrence of `query` starts, from
+    /// 0 to 1. The match's place in a tall message decides where the message rests, so the match, not
+    /// the message's middle, is what lands in view. The pattern is upstream's (`ranges.web.ts`
+    /// `findRenderedMatches`): case-insensitive, the query's words separated by any run of whitespace.
+    /// Nil when the text has no occurrence (the search counted source Markdown the message renders away).
+    public static func occurrenceFraction(of query: String, in text: String, last: Bool) -> Double? {
+        let words = query.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard !words.isEmpty, !text.isEmpty else { return nil }
+        let pattern = words.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "\\s+")
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let whole = NSRange(text.startIndex..., in: text)
+        let match = last
+            ? regex.matches(in: text, range: whole).last
+            : regex.firstMatch(in: text, range: whole)
+        guard let match, whole.length > 0 else { return nil }
+        return Double(match.range.location) / Double(whole.length)
+    }
 }

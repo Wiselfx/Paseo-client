@@ -23,8 +23,9 @@ import SwiftUI
         /// The id to settle on, read again every tick: a streaming row's id moves with every delta.
         /// Nil settles on the turn itself.
         var rowId: @MainActor () -> String?
-        /// The row's place in the viewport: centre for a find step, top for a prompt.
-        var rowAnchor: UnitPoint
+        /// The row's place in the viewport: the match for a find step, the top for a prompt. Read when
+        /// the row is aimed at, so it can use what the layout knows by then (a turn's height).
+        var rowAnchor: @MainActor () -> UnitPoint
     }
 
     /// What the runner needs from the transcript.
@@ -92,7 +93,7 @@ import SwiftUI
             }
             let row = target.rowId()
             let finalId = row ?? target.turnId
-            let anchor = row == nil ? UnitPoint.top : target.rowAnchor
+            let anchor = row == nil ? UnitPoint.top : target.rowAnchor()
             guard let askedAt = finalAskedAt else {
                 finalAskedAt = tick
                 aims = 1

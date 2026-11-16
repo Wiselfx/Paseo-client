@@ -100,4 +100,31 @@ import PaseoProtocol
         // Near the start of the conversation.
         #expect(FindNavigation.windowStart(forTurnAt: 3, currentStart: 40, lead: 8) == 0)
     }
+
+    // MARK: Where the match sits in the message
+
+    @Test func theFirstAndLastOccurrenceAreLocatedByTheirPlaceInTheText() throws {
+        let text = "Alpha beta. " + String(repeating: "x", count: 76) + " beta again. " + String(repeating: "y", count: 10)
+        let first = try #require(FindNavigation.occurrenceFraction(of: "beta", in: text, last: false))
+        let last = try #require(FindNavigation.occurrenceFraction(of: "BETA", in: text, last: true))
+        #expect(first < 0.1)
+        #expect(last > 0.7 && last < 0.9)
+        #expect(FindNavigation.occurrenceFraction(of: "gamma", in: text, last: false) == nil)
+        #expect(FindNavigation.occurrenceFraction(of: "  ", in: text, last: false) == nil)
+    }
+
+    @Test func aMultiWordQueryMatchesAcrossAnyWhitespace() throws {
+        let text = "one two\n\nthree   four five"
+        #expect(try #require(FindNavigation.occurrenceFraction(of: "two  three", in: text, last: false)) > 0.1)
+        #expect(FindNavigation.occurrenceFraction(of: "a.b", in: "axb", last: false) == nil)
+    }
+
+    @Test func theRowTextIsTheMessageOfTheTarget() {
+        let sample = [
+            turn(0, user: user(1), [.prose(prose(3))]),
+        ]
+        #expect(FindNavigation.text(of: .init(turnIndex: 0, rowSeqEnd: 1), in: sample) == "q")
+        #expect(FindNavigation.text(of: .init(turnIndex: 0, rowSeqEnd: 3), in: sample) == "a")
+        #expect(FindNavigation.text(of: .init(turnIndex: 5, rowSeqEnd: 3), in: sample) == nil)
+    }
 }

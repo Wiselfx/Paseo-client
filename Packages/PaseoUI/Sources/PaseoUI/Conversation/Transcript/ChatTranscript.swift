@@ -911,6 +911,11 @@ struct TranscriptView: View {
         let turnId = store.turns[target.turnIndex].id
         let seq = jump.seq
         let role = jump.role
+        // Where the match sits in a message taller than the screen: the message rests so the match,
+        // not its middle, is in view (upstream scrolls to the match's own rect, `viewport.web.ts`).
+        let fraction = FindNavigation.text(of: target, in: store.turns).flatMap {
+            FindNavigation.occurrenceFraction(of: store.search.query, in: $0, last: jump.backward)
+        }
         jumper.run(
             .init(
                 turnId: turnId,
@@ -919,7 +924,12 @@ struct TranscriptView: View {
                     FindNavigation.target(in: store.turns, seq: seq, role: role)
                         .map { "row:\($0.rowSeqEnd)" }
                 },
-                rowAnchor: .center),
+                rowAnchor: { [scrollTrack] in
+                    guard role == .assistant, let fraction,
+                        (scrollTrack.turnHeight(of: turnId) ?? 0) > scrollTrack.visibleHeight * 0.8
+                    else { return .center }
+                    return UnitPoint(x: 0.5, y: fraction)
+                }),
             hooks: jumpHooks(onLanded: { [controller] in
                 controller.flash(target.rowSeqEnd)
             }))
@@ -973,12 +983,12 @@ struct TranscriptView: View {
         if let anchor = controller.find.anchor, let index = all.firstIndex(where: { $0.id == anchor }) {
             mountTurn(at: index)
             jumper.run(
-                .init(turnId: anchor, rowId: { nil }, rowAnchor: .top),
+                .init(turnId: anchor, rowId: { nil }, rowAnchor: { .top }),
                 hooks: jumpHooks(onLanded: {}))
         } else {
             // The end marker is the real last row (the open re-seat lands on it the same way).
             jumper.run(
-                .init(turnId: lastId, rowId: { "bottom" }, rowAnchor: .bottom),
+                .init(turnId: lastId, rowId: { "bottom" }, rowAnchor: { .bottom }),
                 hooks: jumpHooks(onLanded: { [controller] in controller.isFollowing = true }))
         }
     }
@@ -1015,7 +1025,7 @@ struct TranscriptView: View {
         }
         showLandingLine(for: turnId)
         jumper.run(
-            .init(turnId: turnId, rowId: { rowId }, rowAnchor: .top),
+            .init(turnId: turnId, rowId: { rowId }, rowAnchor: { .top }),
             hooks: jumpHooks(onLanded: {}))
     }
 

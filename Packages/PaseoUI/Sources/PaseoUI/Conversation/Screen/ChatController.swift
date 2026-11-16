@@ -126,6 +126,9 @@ struct TurnActionAvailability: Sendable, Equatable {
 struct FindJump: Equatable {
     var seq: Int
     var role: AgentTimelineSearchRequest.Role
+    /// Stepped backward: the last occurrence in the message is the one to show (upstream
+    /// `navigate`: `occurrence = direction === 1 ? 0 : -1`).
+    var backward: Bool
 }
 
 /// A recorded jump intent: the transcript performs the scroll (it owns the scroll handles).
@@ -827,15 +830,15 @@ struct TranscriptJump: Equatable {
         let count = store.search.locations.count
         guard count > 0 else { return }
         find.index = FindNavigation.wrapped(find.index, delta: delta, count: count)
-        requestFindScroll()
+        requestFindScroll(backward: delta < 0)
     }
 
     /// Asks the transcript to bring the current match into view. A repeat of the same match (one
     /// result, or a step after the reader scrolled away) scrolls again.
-    func requestFindScroll() {
+    func requestFindScroll(backward: Bool = false) {
         guard let location = findLocation else { return }
         isFollowing = false
-        find.jump = FindJump(seq: location.seq, role: location.role)
+        find.jump = FindJump(seq: location.seq, role: location.role, backward: backward)
     }
 
     func flash(_ seq: Int) {
