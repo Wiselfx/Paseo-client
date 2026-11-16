@@ -460,7 +460,7 @@ struct TranscriptView: View {
             )
             .equatable()
             .id(turn.id)
-            .frame(minHeight: hint.map(CGFloat.init) ?? 0)
+            .frame(minHeight: hint.map { CGFloat($0) } ?? 0)
             .onAppear {
                 scrollTrack.turnAppeared(turn.id, seq: turn.firstRowSeq)
                 reportReadingPosition()
