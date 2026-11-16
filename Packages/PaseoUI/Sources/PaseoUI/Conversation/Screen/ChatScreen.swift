@@ -93,11 +93,12 @@ public struct ChatScreen: View {
                 // reserve their image boxes on the first pass instead of jumping.
                 Task { await UserImageCache.shared.ensureManifestLoaded() }
                 // The shared web view for diagrams and SVG cards starts before the first card needs it,
-                // not mid-scroll (W1). `WKWebView.init` blocks the main thread for ~100 ms waiting for
-                // WebKit's content process, so it waits until the open (first render, the re-seat,
-                // the first layout passes) is over instead of landing inside it.
+                // not mid-scroll (W1). `WKWebView.init` blocks the main thread while WebKit's content
+                // process launches (100 to 700 ms), so the transcript starts it when its open is over
+                // (`TranscriptView`, `openPin` ending); this is only the fallback for a chat whose open
+                // never ends (a conversation shorter than the screen).
                 Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(2))
+                    try? await Task.sleep(for: .seconds(8))
                     RichWebSnapshotRenderer.shared.prewarm()
                 }
             }

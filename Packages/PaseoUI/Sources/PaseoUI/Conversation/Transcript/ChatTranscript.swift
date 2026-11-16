@@ -106,6 +106,16 @@ struct TranscriptView: View {
                 beginRunway(for: id)
             }
             .onChange(of: store.isRunning) { _, _ in openPin = false }
+            // The open is over: the first quiet moment of this conversation. The shared web view starts
+            // here (a second later, so the last layout pass is done), not inside the open (W1).
+            .onChange(of: openPin) { _, pinned in
+                guard !pinned else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !scrollHeld else { return }
+                    RichWebSnapshotRenderer.shared.prewarm()
+                }
+            }
             // The keyboard is the reader acting (rule 14). Its first frame moves the insets, which the open
             // re-seat took for an unfinished layout and answered with a `scrollTo(edge: .bottom)` inside
             // that frame (W1): end the open when the keyboard announces itself, before the insets move.
