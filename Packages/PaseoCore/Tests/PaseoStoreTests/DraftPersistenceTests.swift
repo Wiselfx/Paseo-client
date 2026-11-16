@@ -58,9 +58,11 @@ struct DraftPersistenceTests {
         let store = DraftStore(fileURL: url)
 
         // The first change after the store was loaded is written at once (upstream's storage
-        // only waits when the previous write was recent).
+        // only waits when the previous write was recent). The write happens on the writer's queue,
+        // off the main actor, so the file appears a moment after the call returns.
         store.editText("one", for: DraftKey.agent("a1"))
-        #expect(storedKeys(url) == [DraftKey.agent("a1")])
+        let written = await eventually { storedKeys(url) == [DraftKey.agent("a1")] }
+        #expect(written)
 
         store.editText("two", for: DraftKey.agent("a1"))
         store.editText("three", for: DraftKey.agent("a1"))

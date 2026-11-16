@@ -316,7 +316,7 @@ public final class DraftStore {
         pendingWrite?.cancel()
         pendingWrite = nil
         pruneFinalized()
-        write()
+        write(wait: true)
     }
 
     /// Coalesces writes to one per `persistInterval`, and writes the first change at once, as
@@ -325,35 +325,30 @@ public final class DraftStore {
         guard fileURL != nil, pendingWrite == nil else { return }
         let delay = Self.persistInterval - Date.now.timeIntervalSince(lastWriteAt)
         guard delay > 0 else {
-            write()
+            write(wait: false)
             return
         }
         pendingWrite = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled else { return }
             self.pendingWrite = nil
-            self.write()
+            self.write(wait: false)
         }
     }
 
-    private func write() {
+    /// Takes the snapshot on the main actor (value copies) and encodes and writes it on the writer's
+    /// serial queue, so a keystroke never waits for JSON or the disk. `wait` is the flush path (the
+    /// app is going to the background): it returns once this snapshot, and every one before it, is on disk.
+    private func write(wait: Bool) {
         guard let fileURL else { return }
         lastWriteAt = .now
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard
-            let data = try? encoder.encode(
-                StoredFile(
-                    drafts: records, formPreferences: formPreferences, lastScreen: lastScreen))
-        else { return }
-        do {
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            // Persistence must never break typing; the drafts stay live in memory.
-        }
+        let file = StoredFile(
+            drafts: records, formPreferences: formPreferences, lastScreen: lastScreen)
+        Self.writer.write(file, to: fileURL, wait: wait)
     }
+
+    /// One serial queue for every store: writes land in the order they were taken.
+    private static let writer = DraftFileWriter()
 
     // MARK: Legacy migration
 
@@ -382,7 +377,7 @@ public final class DraftStore {
 
     /// The file's shape. `version` leaves room for a migration, as upstream's persisted state
     /// carries `DRAFT_STORE_VERSION` (`stores/draft-store/state.ts:7`).
-    private struct StoredFile: Codable {
+    struct StoredFile: Codable, Sendable {
         var version = 1
         var drafts: [String: DraftRecord]
         var formPreferences: FormPreferences?
@@ -393,5 +388,26 @@ public final class DraftStore {
             self.formPreferences = formPreferences
             self.lastScreen = lastScreen
         }
+    }
+}
+
+/// Encodes and writes the drafts file off the main actor, in order.
+private final class DraftFileWriter: Sendable {
+    private let queue = DispatchQueue(label: "paseo.draftstore.write", qos: .utility)
+
+    func write(_ file: DraftStore.StoredFile, to url: URL, wait: Bool) {
+        let work: @Sendable () -> Void = {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard let data = try? encoder.encode(file) else { return }
+            do {
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                // Persistence must never break typing; the drafts stay live in memory.
+            }
+        }
+        if wait { queue.sync(execute: work) } else { queue.async(execute: work) }
     }
 }
