@@ -187,10 +187,44 @@ private struct TurnDraft {
 
 /// Daemon timestamps are ISO-8601 with fractional seconds (`2026-11-08T20:56:19.869Z`).
 public enum PaseoDate {
+    /// Parsing through `FormatStyle` costs tens of microseconds a call, and the sidebar parses every
+    /// agent's two stamps on each of its passes, a user bubble parses its stamp on each body (W1).
+    /// The same strings come back every time, so the answer is remembered (bounded; a miss is parsed
+    /// and stored, an unparsable string is stored as nil too).
+    private static let cache = Cache()
+
     public static func parse(_ string: String) -> Date? {
+        if let cached = cache.value(for: string) { return cached.date }
+        let date = parseUncached(string)
+        cache.store(date, for: string)
+        return date
+    }
+
+    static func parseUncached(_ string: String) -> Date? {
         if let date = try? Date(string, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)) {
             return date
         }
         return try? Date(string, strategy: .iso8601)
+    }
+
+    private struct Entry { let date: Date? }
+
+    private final class Cache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var entries: [String: Entry] = [:]
+        private let limit = 4096
+
+        fileprivate func value(for key: String) -> Entry? {
+            lock.lock()
+            defer { lock.unlock() }
+            return entries[key]
+        }
+
+        fileprivate func store(_ date: Date?, for key: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            if entries.count >= limit { entries.removeAll(keepingCapacity: true) }
+            entries[key] = Entry(date: date)
+        }
     }
 }
