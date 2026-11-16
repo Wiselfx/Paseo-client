@@ -1012,13 +1012,11 @@ struct TranscriptView: View {
             jumper.run(
                 .init(
                     turnId: lastId, rowId: { "bottom" }, rowAnchor: { .bottom },
-                    // The end marker's own bottom edge sits at the bottom of the viewport, with the stack's
-                    // 20 pt bottom padding under it: at the end, within a margin, not exactly 0.
+                    // The content's own gap to the viewport's bottom, with no inset in it (J3 §3), so the
+                    // keyboard going down while the jump runs cannot move the answer. The marker rests at
+                    // the bottom edge with the stack's 20 pt padding under it: at the end within a margin.
                     isReached: { [scrollTrack] in
-                        if PaseoPerf.enabled {
-                            PaseoPerf.countNamed("jump.endDistance.\(Int(scrollTrack.distanceFromBottom))")
-                        }
-                        return abs(scrollTrack.distanceFromBottom) <= Self.endMargin
+                        scrollTrack.distanceFromContentBottom <= Self.endMargin
                     },
                     glides: false),
                 hooks: jumpHooks(onLanded: { [controller] in controller.isFollowing = true }))
