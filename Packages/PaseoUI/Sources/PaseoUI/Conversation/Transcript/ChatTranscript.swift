@@ -620,6 +620,7 @@ struct TranscriptView: View {
         followIfAtEnd()
         decideBackToEnd()
         closeRunwayAtRest()
+        revealAtRest()
     }
 
     /// The follow state machine (D1 §3). While the finger is down it may only turn follow off,
@@ -892,9 +893,18 @@ struct TranscriptView: View {
         // ended with 370 markdown bodies and a 2.6 s stall because the window grew to the whole chat.
         // The distance first: it is O(1), and most scroll frames are nowhere near the top, so the window's
         // start is not looked up on them. Every condition is a pure read; only the order changes.
+        //
+        // Revealing re-seats the offset (`restoreHistoryAnchor` scrolls by the growth), and a programmatic
+        // offset change during a flick stops the flick: the reader felt the scroll pause near the top. So
+        // the slice is revealed well ahead (`revealAhead` screens) and only while nothing owns the scroll
+        // (at rest, or the moment the scroll settles: `revealAtRest`); a reader who gets within
+        // `revealUrgent` screens of the top mid-flick gets it at once, because a blank top is worse.
         guard !openPin, historyAnchor == nil,
-            metrics.distanceFromTop <= metrics.viewportHeight * 1.5, hiddenTurnCount > 0
+            metrics.distanceFromTop <= metrics.viewportHeight * Self.revealAhead, hiddenTurnCount > 0
         else { return false }
+        if scrollHeld, metrics.distanceFromTop > metrics.viewportHeight * Self.revealUrgent {
+            return false
+        }
         historyAnchor = HistoryAnchor(
             contentHeight: metrics.contentHeight, offsetY: metrics.offsetY,
             cursor: store.timeline.startCursor, startedAt: Date(), isWindow: true)
@@ -903,8 +913,29 @@ struct TranscriptView: View {
         return false
     }
 
+    /// Screens from the top at which the next slice of held-back turns is revealed (at rest), and the
+    /// distance inside which it is revealed even while the reader's scroll is moving.
+    static let revealAhead: CGFloat = 4
+    static let revealUrgent: CGFloat = 1
+
+    /// The scroll settled: reveal the next slice now if the reader is within `revealAhead` screens of
+    /// the top, so the slice is mounted before the next flick reaches it and no flick is interrupted.
+    private func revealAtRest() {
+        guard scrollTrack.viewportHeight > 0 else { return }
+        let metrics = ScrollFollowMetrics(
+            distanceFromBottom: scrollTrack.distanceFromBottom,
+            distanceFromContentBottom: scrollTrack.distanceFromContentBottom,
+            distanceFromTop: scrollTrack.contentOffset,
+            contentHeight: scrollTrack.contentHeight, offsetY: scrollTrack.contentOffset,
+            viewportHeight: scrollTrack.viewportHeight, visibleHeight: scrollTrack.visibleHeight)
+        if !revealOlderTurnsIfNeeded(metrics) { loadOlderIfNeeded(metrics) }
+    }
+
     private func loadOlderIfNeeded(_ metrics: ScrollFollowMetrics) {
-        guard metrics.distanceFromTop <= metrics.viewportHeight else { return }
+        // Fetched ahead too: the page is on its way before the top is, so the prepend lands (and the
+        // offset is compensated) while the reader is still screens away. Only once every held-back turn
+        // is mounted, and the fetch itself never touches the scroll.
+        guard metrics.distanceFromTop <= metrics.viewportHeight * Self.revealAhead else { return }
         guard hiddenTurnCount == 0 else { return }
         guard !historyLoadInFlight, store.timeline.hasOlder, !store.isLoadingOlder else { return }
         historyLoadInFlight = true
