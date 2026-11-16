@@ -945,14 +945,8 @@ struct TranscriptView: View {
                 isReached: { [findRows, scrollTrack] in
                     // The match's own point of the row, in the viewport's space (where it is on screen
                     // now): between the top of the viewport and its bottom edge, which is under the composer.
-                    guard let frame = findRows.frame(of: target.rowSeqEnd) else {
-                        if PaseoPerf.enabled { PaseoPerf.countNamed("dbg.noframe") }
-                        return false
-                    }
+                    guard let frame = findRows.frame(of: target.rowSeqEnd) else { return false }
                     let y = frame.minY + frame.height * (fraction ?? 0.5)
-                    if PaseoPerf.enabled {
-                        PaseoPerf.countNamed("dbg.y\(Int(y)).minY\(Int(frame.minY)).h\(Int(frame.height)).f\(Int((fraction ?? 0.5) * 100)).vh\(Int(scrollTrack.viewportHeight))")
-                    }
                     return y > 0 && y < scrollTrack.viewportHeight
                 },
                 verifies: true),
@@ -983,7 +977,13 @@ struct TranscriptView: View {
                     contentOffset: scrollTrack.contentOffset, visibleHeight: scrollTrack.visibleHeight,
                     contentHeight: scrollTrack.contentHeight)
             },
-            scrollTo: { id, anchor, animated in
+            scrollTo: { [scrollTrack] id, requested, animated in
+                // `ScrollPosition` is a value: asking for the id it already holds changes nothing, so a
+                // second aim at a row the first one missed did nothing at all (the match stayed a screen
+                // away through every re-aim). The horizontal anchor does not matter in a vertical scroll
+                // view, so it alternates by a thousandth to make each aim a new request.
+                scrollTrack.aimParity.toggle()
+                let anchor = UnitPoint(x: requested.x + (scrollTrack.aimParity ? 0.001 : 0), y: requested.y)
                 if animated {
                     withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
                         scrollPosition.scrollTo(id: id, anchor: anchor)
@@ -1186,6 +1186,8 @@ final class TranscriptScrollTrack: @unchecked Sendable {
 
     var visibleTurnIds: Set<String> = []
     var lastTrackedTurn: String?
+    /// Alternates on every programmatic aim at an id (see the jump hooks' `scrollTo`).
+    var aimParity = false
     /// The scroll view's own height (bounds), from the last scroll frame.
     var viewportHeight: CGFloat = 0
     /// The viewport's content offset, updated once per scroll frame (O(1)).
