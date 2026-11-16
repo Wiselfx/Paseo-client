@@ -936,6 +936,14 @@ struct TranscriptView: View {
     private func jumpHooks(onLanded: @escaping @MainActor () -> Void) -> TranscriptJumpRunner.Hooks {
         .init(
             isMounted: { [scrollTrack] id in scrollTrack.visibleTurnIds.contains(id) },
+            probe: { [scrollTrack] id in
+                guard let offset = scrollTrack.offset(of: id), let height = scrollTrack.turnHeight(of: id),
+                    scrollTrack.visibleHeight > 0
+                else { return nil }
+                return .init(
+                    turnOffset: offset, turnHeight: height, contentOffset: scrollTrack.contentOffset,
+                    visibleHeight: scrollTrack.visibleHeight, contentHeight: scrollTrack.contentHeight)
+            },
             scrollTo: { id, anchor, animated in
                 if animated {
                     withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
@@ -950,9 +958,6 @@ struct TranscriptView: View {
                 case .idle: return false
                 default: return true
                 }
-            },
-            isBlank: { [scrollTrack] in
-                scrollTrack.visibleHeight > 0 && !scrollTrack.hasTurnInViewport
             },
             nudge: { [scrollTrack] in
                 PaseoPerf.count("jump.nudge")

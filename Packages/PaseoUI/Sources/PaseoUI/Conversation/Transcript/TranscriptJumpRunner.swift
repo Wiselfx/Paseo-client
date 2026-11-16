@@ -32,12 +32,13 @@ import SwiftUI
     struct Hooks {
         /// The lazy stack has built this turn (its `onAppear` ran and its `onDisappear` has not).
         var isMounted: @MainActor (String) -> Bool
-        /// Scroll to a view id. The flag asks for a glide; the runner passes false for the long hop.
+        /// Where the turn really is (measured by its own geometry callback, not estimated), and the
+        /// viewport's own numbers. Nil until the turn has been measured.
+        var probe: @MainActor (String) -> Probe?
+        /// Scroll to a view id. The flag asks for a glide; the runner passes false for the long hops.
         var scrollTo: @MainActor (_ id: String, _ anchor: UnitPoint, _ animated: Bool) -> Void
         /// A finger, a flick, a deceleration or a programmatic animation owns the scroll view.
         var isScrolling: @MainActor () -> Bool
-        /// Mounted turns exist but none is under the viewport (the blank stack).
-        var isBlank: @MainActor () -> Bool
         /// Moves the offset by a point, which makes the stack look again.
         var nudge: @MainActor () -> Void
         /// Reached: the row is under the viewport. Called once; also when the runner gives up, so the
@@ -45,13 +46,34 @@ import SwiftUI
         var landed: @MainActor () -> Void
     }
 
-    /// A tick every 100 ms, at most 50 of them: a layout that never settles cannot loop (rule 14).
+    /// A measurement of the target turn against the viewport, in content coordinates.
+    struct Probe: Equatable {
+        var turnOffset: CGFloat
+        var turnHeight: CGFloat
+        var contentOffset: CGFloat
+        var visibleHeight: CGFloat
+        var contentHeight: CGFloat
+
+        /// Some part of the turn is under the viewport.
+        var isInView: Bool {
+            turnOffset < contentOffset + visibleHeight && turnOffset + turnHeight > contentOffset
+        }
+
+        /// What must stay equal between two looks for the layout to count as settled: where the turn
+        /// is, how tall everything is and where the viewport sits.
+        var layoutKey: [Int] {
+            [Int(turnOffset.rounded()), Int(contentHeight.rounded()), Int(contentOffset.rounded())]
+        }
+    }
+
+    /// A tick every 100 ms, at most 80 of them: a layout that never settles cannot loop (rule 14).
     static let tickInterval: Duration = .milliseconds(100)
-    static let maxTicks = 50
-    /// Ticks to wait before asking for the turn again (the window growth or the jump needs a layout).
-    static let reissueAfter = 4
-    /// Ticks the row's own scroll needs before the screen is judged.
-    static let settleTicks = 3
+    static let maxTicks = 80
+    /// Looks at an unchanged layout before it is trusted (the stack measures rows over several frames).
+    static let stableLooks = 2
+    /// The most times the turn is asked for again, and the row aimed at: a bound, not a goal.
+    static let maxTurnAims = 10
+    static let maxRowAims = 2
 
     private var task: Task<Void, Never>?
 
@@ -66,58 +88,56 @@ import SwiftUI
     }
 
     /// The steps, separated from the task so they read in order.
+    ///
+    /// Each aim at a far id lands where the stack *estimates* the id to be; the rows it builds there are
+    /// measured and the estimate shifts, so one aim can end a few screens off (a cold open of a 65 000 pt
+    /// chat did). The stack's estimate improves with every row it measures near the viewport, so aiming
+    /// again from where the last aim ended converges. The runner therefore looks at the real, measured
+    /// frame of the turn (`probe`) after the scroll has stopped and the layout has held still, and
+    /// aims again until the turn is under the viewport; only then does it aim at the row inside it.
     private static func steps(_ target: Target, _ hooks: Hooks) async {
-        var turnAskedAt: Int?
-        var finalAskedAt: Int?
-        var reissues = 0
-        var aims = 0
-        for tick in 0..<maxTicks {
+        var turnAims = 0
+        var rowAims = 0
+        var stable = 0
+        var lastKey: [Int] = []
+        for _ in 0..<maxTicks {
             // Always after a pause: the state change that started the jump (the window, a turn opening
             // for the match) lays out before the first look.
             try? await Task.sleep(for: tickInterval)
             guard !Task.isCancelled else { return }
-            let mounted = hooks.isMounted(target.turnId)
-            guard mounted else {
-                // Not built yet: ask for the turn (instant: a long glide is what leaves the stack
-                // without rows), and again when a few ticks have passed without it appearing.
-                if turnAskedAt == nil || tick - (turnAskedAt ?? tick) >= reissueAfter {
-                    if turnAskedAt != nil {
-                        reissues += 1
-                        if reissues > 3 { hooks.nudge() }
-                    }
-                    turnAskedAt = tick
-                    finalAskedAt = nil
-                    hooks.scrollTo(target.turnId, .top, false)
-                }
+            if hooks.isScrolling() {
+                stable = 0
                 continue
             }
+            guard hooks.isMounted(target.turnId), let probe = hooks.probe(target.turnId) else {
+                // Not built, or built and not measured yet: ask for the turn (instant: a long glide is
+                // what leaves the stack without rows).
+                stable = 0
+                guard turnAims < maxTurnAims else { break }
+                turnAims += 1
+                if turnAims > 3 { hooks.nudge() }
+                hooks.scrollTo(target.turnId, .top, false)
+                continue
+            }
+            if probe.layoutKey == lastKey { stable += 1 } else { stable = 0 }
+            lastKey = probe.layoutKey
+            guard probe.isInView else {
+                // Built but off screen (the estimate was off): aim again from here.
+                stable = 0
+                guard turnAims < maxTurnAims else { break }
+                turnAims += 1
+                if turnAims > 3 { hooks.nudge() }
+                hooks.scrollTo(target.turnId, .top, false)
+                continue
+            }
+            guard stable >= stableLooks else { continue }
+            // The turn is in view and the layout has held: aim at the row inside it. Twice, the second a
+            // no-op unless something above the row finished measuring after the first.
             let row = target.rowId()
-            let finalId = row ?? target.turnId
-            let anchor = row == nil ? UnitPoint.top : target.rowAnchor()
-            guard let askedAt = finalAskedAt else {
-                finalAskedAt = tick
-                aims = 1
-                // Near (the turn was mounted when this began) glides; after a long hop the row is
-                // inside the turn just reached, so the last stretch is short and glides too.
-                hooks.scrollTo(finalId, anchor, true)
-                continue
-            }
-            if hooks.isScrolling() { continue }
-            if tick - askedAt < settleTicks { continue }
-            if hooks.isBlank() {
-                reissues += 1
-                guard reissues <= 6 else { break }
-                hooks.nudge()
-                finalAskedAt = tick
-                hooks.scrollTo(finalId, anchor, false)
-                continue
-            }
-            // Aim once more: a turn that opened or closed for the match, a row that finished measuring,
-            // moves the row after the first scroll was made. A no-op when nothing moved.
-            if aims < 2 {
-                aims += 1
-                finalAskedAt = tick
-                hooks.scrollTo(finalId, anchor, false)
+            if rowAims < maxRowAims {
+                rowAims += 1
+                stable = 0
+                hooks.scrollTo(row ?? target.turnId, row == nil ? .top : target.rowAnchor(), rowAims == 1)
                 continue
             }
             hooks.landed()
