@@ -31,11 +31,13 @@ public enum FindNavigation {
         return next < 0 ? next + count : next
     }
 
-    /// Resolves a located message to a loaded row. The daemon locates a message by the `seqEnd` of
-    /// its projected row; a message that kept streaming since has a later `seqEnd`, so the first
-    /// row of the same kind that ends at or after `seq` is the match (upstream `target(location,
-    /// exact: false)`). A prompt is a hard boundary: an assistant match is never resolved in a
-    /// later response. Nil when the message is not loaded (the caller fetches its window).
+    /// Resolves a located message to a loaded row: the row of the same kind whose range holds `seq`.
+    /// The daemon locates a message by the `seqEnd` of its projected row; a message that kept streaming
+    /// since has a later `seqEnd` but the same `seqStart`, so the old `seqEnd` is still inside its range
+    /// (upstream resolves it by "the first message of that role at or after the seq, before the next
+    /// prompt", `chat-find/model.ts` `target`; containment is the exact form of the same idea, and
+    /// never lands on a neighbouring message when the located one is not loaded). Nil when the message
+    /// is not loaded: the caller fetches its window (`HostSession.loadTimelineWindow`).
     public static func target(
         in turns: [Turn], seq: Int, role: AgentTimelineSearchRequest.Role
     ) -> Target? {
@@ -46,12 +48,14 @@ public enum FindNavigation {
         case .unknown: return nil
         }
         for (turnIndex, turn) in turns.enumerated() {
-            if let user = turn.userMessage, !user.isPending, user.seqEnd >= seq {
-                return wantsUser ? Target(turnIndex: turnIndex, rowSeqEnd: user.seqEnd) : nil
+            if wantsUser {
+                if let user = turn.userMessage, !user.isPending, user.seqStart <= seq, seq <= user.seqEnd {
+                    return Target(turnIndex: turnIndex, rowSeqEnd: user.seqEnd)
+                }
+                continue
             }
-            guard !wantsUser else { continue }
             for segment in turn.segments {
-                if case .prose(let row) = segment, row.seqEnd >= seq {
+                if case .prose(let row) = segment, row.seqStart <= seq, seq <= row.seqEnd {
                     return Target(turnIndex: turnIndex, rowSeqEnd: row.seqEnd)
                 }
             }

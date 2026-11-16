@@ -6,13 +6,17 @@ import PaseoProtocol
 /// Find in chat, the pure part: stepping wraps, a located message resolves to its row and turn, the
 /// transcript window grows to include the target.
 @Suite struct FindNavigationTests {
-    private func row(_ seq: Int, _ item: TimelineItem, pending: Bool = false) -> TimelineRow {
+    private func row(
+        _ seq: Int, _ item: TimelineItem, pending: Bool = false, startsAt: Int? = nil
+    ) -> TimelineRow {
         TimelineRow(
-            id: "seq:\(seq)", turnId: "t", item: item, timestamp: "2026-11-08T21:00:00.000Z",
-            seqStart: seq, seqEnd: seq, isPending: pending)
+            id: "seq:\(startsAt ?? seq)", turnId: "t", item: item, timestamp: "2026-11-08T21:00:00.000Z",
+            seqStart: startsAt ?? seq, seqEnd: seq, isPending: pending)
     }
     private func user(_ seq: Int) -> TimelineRow { row(seq, .userMessage(.init(text: "q"))) }
-    private func prose(_ seq: Int) -> TimelineRow { row(seq, .assistantMessage(.init(text: "a"))) }
+    private func prose(_ seq: Int, startsAt: Int? = nil) -> TimelineRow {
+        row(seq, .assistantMessage(.init(text: "a")), startsAt: startsAt)
+    }
     private func thought(_ seq: Int) -> TimelineRow { row(seq, .reasoning(.init(text: "r"))) }
 
     private func turn(_ id: Int, user: TimelineRow?, _ segments: [Turn.Segment]) -> Turn {
@@ -55,8 +59,8 @@ import PaseoProtocol
     }
 
     @Test func aMessageThatGrewSinceTheSearchResolvesToItsLaterRow() {
-        // The search saw the answer end at seq 4 of a turn; it streamed on and now ends at 5.
-        let grown: [Turn] = [turn(0, user: user(1), [.prose(prose(5))])]
+        // The search saw the answer end at seq 4; it streamed on from 2 to 5 and now ends there.
+        let grown: [Turn] = [turn(0, user: user(1), [.prose(prose(5, startsAt: 2))])]
         #expect(FindNavigation.target(in: grown, seq: 4, role: .assistant) == .init(turnIndex: 0, rowSeqEnd: 5))
     }
 
@@ -69,10 +73,21 @@ import PaseoProtocol
         #expect(FindNavigation.target(in: partial, seq: 3, role: .assistant) == nil)
     }
 
-    @Test func aUserMatchNeverResolvesToAnAssistantRowOrAnotherRole() {
-        #expect(FindNavigation.target(in: turns, seq: 5, role: .user) == .init(turnIndex: 2, rowSeqEnd: 7))
-        #expect(FindNavigation.target(in: turns, seq: 8, role: .user) == nil)
+    @Test func aUserMatchNeverResolvesToANeighbourOrAnotherRole() {
+        // seq 5 is an assistant row; the next prompt (7) is not the match.
+        #expect(FindNavigation.target(in: turns, seq: 5, role: .user) == nil)
+        #expect(FindNavigation.target(in: turns, seq: 2, role: .user) == nil)
+        #expect(FindNavigation.target(in: turns, seq: 7, role: .user) == .init(turnIndex: 2, rowSeqEnd: 7))
         #expect(FindNavigation.target(in: turns, seq: 3, role: .unknown("x")) == nil)
+    }
+
+    @Test func anUnloadedOlderMessageDoesNotLandOnTheOldestLoadedOne() {
+        // Only turns from seq 100 are loaded; a match at seq 8 (user or assistant) is not among them.
+        let loaded: [Turn] = [turn(0, user: user(100), [.prose(prose(101))])]
+        #expect(FindNavigation.target(in: loaded, seq: 8, role: .user) == nil)
+        #expect(FindNavigation.target(in: loaded, seq: 8, role: .assistant) == nil)
+        let headless: [Turn] = [turn(0, user: nil, [.prose(prose(101))])]
+        #expect(FindNavigation.target(in: headless, seq: 8, role: .assistant) == nil)
     }
 
     @Test func anUnloadedMessageResolvesToNothing() {
