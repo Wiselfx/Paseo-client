@@ -21,6 +21,18 @@ keeps it true. `Tools/style-lint/style-lint.sh` greps for the patterns it can (`
   trust counts (bodies per update, views created per update, writes per frame), ratios and main-thread
   stalls, never the simulator's headroom.
 
+## Measurement rule (read every number against this)
+
+A single run is an anecdote. For any number you report or fix against: run the scenario **at least 3
+times per configuration** with `docs/perf/scenarios/repeat.sh` (cold launch each time, same chat, same
+script, 8 s settle before the window opens so the app-start window is excluded, same window length),
+report the **median and the range**, and measure the **idle floor on the same build** (`repeat.sh idle
+"wait 12"`) and read every other number against it. A difference counts only if it is larger than the
+run-to-run range. Compare Debug and Release with the same script and the same chat: two different
+scripts (one including the keyboard appearing, one not) once made Release look 8 times worse than Debug.
+Say so when the script sends steps faster than the app can take them (AXe types about 2 to 3 keys a
+second, so each key lands in its own window).
+
 ## Budgets
 
 | Scenario | Budget |
@@ -104,7 +116,20 @@ finding says so and names the cause; a change that makes a budgeted scenario wor
 13. **A view reads a flag only if it draws it.** The sidebar read the drawer flag to start a poll, so every
     drawer motion re-ran the directory body; the read belongs in a child (`SidebarUsageDriver`).
 
-14. **Every perf change carries its before and after** (the commit subject, `W1: <what> (<before> ->
+14. **The open re-seat ends when the reader acts, never on a layout heuristic.** It ends on composer focus,
+    a finger, a send or a find/jump. "Only the insets moved" ended it too early and left a long chat blank
+    with a tall saved draft.
+
+15. **No programmatic jump of tens of thousands of points in a lazy stack.** The stack builds no rows
+    under an offset it was moved to in one step until a real scroll event (a find step landed blank).
+    Lead most of the way and glide the last stretch, scroll in bounded hops, or mount a window around the
+    target first.
+
+16. **No IPC in a hot callback.** `UIPasteboard.hasImages` is a round trip to the pasteboard daemon and was
+    asked from `canPerformAction(paste:)` (called repeatedly while editing) and from the composer body:
+    cache it (`PasteboardImageState`) and refresh on `UIPasteboard.changedNotification`.
+
+17. **Every perf change carries its before and after** (the commit subject, `W1: <what> (<before> ->
     <after>)`, and a line in `W1-findings.md`). A fix without a number is a guess.
 
 ## Keeping it true
