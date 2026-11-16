@@ -298,7 +298,7 @@ final class ComposerUITextView: UITextView {
     /// The text's laid-out size at `width`. SwiftUI asks for it several times per keystroke (ideal,
     /// proposed, after the binding write) and each call is a full TextKit layout of the draft plus a
     /// language-identification pass inside UIKit; the answer only changes when the text, the width,
-    /// the font or the insets do. In `-paseo-perf` every hit is re-checked against a real call.
+    /// the font or the insets do.
     private func contentSize(width: CGFloat) -> CGSize {
         let key = FitKey(
             text: text ?? "", width: width, fontName: font?.fontName ?? "",
@@ -308,11 +308,7 @@ final class ComposerUITextView: UITextView {
             padding: textContainer.lineFragmentPadding,
             lines: textContainer.maximumNumberOfLines)
         if let memo = fitMemo, memo.key == key {
-            if PaseoPerf.enabled {
-                PaseoPerf.count("fit.hit")
-                let real = sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-                if real != memo.size { PaseoPerf.count("fit.MISMATCH") }
-            }
+            PaseoPerf.count("fit.hit")
             return memo.size
         }
         PaseoPerf.count("fit.miss")

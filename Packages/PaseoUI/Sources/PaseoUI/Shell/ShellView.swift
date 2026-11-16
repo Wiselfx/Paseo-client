@@ -94,17 +94,6 @@ public struct ShellView: View {
     public var body: some View {
         let _ = PaseoPerf.body("Shell")
         let _ = PaseoPerf.why(Self.self)
-        let _ = PaseoPerf.diff(
-            "shell",
-            [
-                ("sel", selectedAgentId ?? "-"), ("conv", conversation.map { "\(ObjectIdentifier($0))" } ?? "-"),
-                ("draft", draft.map { "\(ObjectIdentifier($0))" } ?? "-"), ("settled", "\(homeSettled)"),
-                ("panelTerm", panelTerminalId ?? "-"), ("addProj", "\(addProjectRequested)"),
-                ("focusReq", "\(composerFocusRequested)"), ("scene", "\(scenePhase)"),
-                ("dyn", "\(dynamicTypeSize)"), ("reduce", "\(reduceMotion)"),
-                ("codeStep", "\(codeSizeStep)"), ("black", "\(pureBlack)"), ("accent", "\(accent)"),
-                ("notifTarget", "\(notificationTarget != nil)"), ("deep", "\(deepLinkTarget != nil)"),
-            ])
         ShellContainer(
             drawer: drawer, rootsKey: rootsKey, sidebar: sidebar, main: main, panel: panel)
             .ignoresSafeArea()
