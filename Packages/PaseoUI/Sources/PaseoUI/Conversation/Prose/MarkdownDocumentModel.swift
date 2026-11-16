@@ -65,7 +65,7 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
     /// `home` (the agent's working directory) rewrites authored links to local files into
     /// `paseo-file:` URLs and wraps bare URLs found in text (J2); nil is the plain parse. It is
     /// part of the cache key, so one text parsed for two workspaces is two entries.
-    @MainActor public static func cached(_ source: String, home: String? = nil) -> MarkdownDocumentModel {
+    public static func cached(_ source: String, home: String? = nil) -> MarkdownDocumentModel {
         MarkdownDocumentCache.document(for: source, home: home)
     }
 }
@@ -73,7 +73,6 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
 /// Small in-memory memo for the prose parse (P3), now an LRU under a byte budget
 /// (P5-B): the previous table evicted wholesale at 64 entries, so scrolling back to an
 /// earlier message re-parsed it. Keys share storage with the strings the views hold.
-@MainActor
 enum MarkdownDocumentCache {
     private struct Key: Hashable {
         let source: String
@@ -102,8 +101,7 @@ enum MarkdownDocumentCache {
 /// so a long answer stays warm while older pieces are evicted one at a time. The
 /// recency list is a linked list so a hit is O(1); the array version scanned every
 /// entry per hit, which is expensive when the keys are long streamed strings.
-@MainActor
-final class ProseCache<Key: Hashable, Value> {
+final class ProseCache<Key: Hashable, Value>: @unchecked Sendable {
     private final class Node {
         var key: Key
         var value: Value
@@ -117,6 +115,8 @@ final class ProseCache<Key: Hashable, Value> {
         }
     }
 
+    /// Thread-safe (W1): the warm-up fills these caches off the main actor while the views read them.
+    private let lock = NSLock()
     private var nodes: [Key: Node] = [:]
     private var head: Node?
     private var tail: Node?
@@ -132,12 +132,16 @@ final class ProseCache<Key: Hashable, Value> {
     }
 
     func value(for key: Key) -> Value? {
+        lock.lock()
+        defer { lock.unlock() }
         guard let node = nodes[key] else { return nil }
         moveToFront(node)
         return node.value
     }
 
     func setValue(_ value: Value, for key: Key) {
+        lock.lock()
+        defer { lock.unlock() }
         let newCost = costOf(key, value)
         if let node = nodes[key] {
             cost += newCost - node.cost

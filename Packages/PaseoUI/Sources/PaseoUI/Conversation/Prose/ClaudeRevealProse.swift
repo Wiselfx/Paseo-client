@@ -94,7 +94,7 @@ struct ClaudeRevealProse: View {
 
     private func computePieceRefs(_ source: String, home: String?) -> [PieceRef] {
         let raw = PaseoPerf.measure("rich.pieces") {
-            richPieces(source, home: home)
+            RichPiecesCache.pieces(source, home: home)
         }
         var refs: [PieceRef] = []
         var offset = 0

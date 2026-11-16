@@ -210,3 +210,13 @@ Code-read fixes, no device numbers (the lead verifies on the simulator; see the 
 Not done: `HostSession.conversations` keeps every opened chat (store, timeline, live subscription) until the session
 ends; nothing calls `closeConversation`. A bounded policy belongs in `ShellView` (not in this sweep's files): keep the
 selected and running ones, close the rest.
+
+## Ninth pass: long-chat first render
+
+| # | Change | Result |
+| --- | --- | --- |
+| 9.1 | Off-main warm (`ProseWarmup`) of rich pieces (`RichPiecesCache`), markdown documents and code highlights for the newest 16 turns, started when the turns are known; `ProseCache` made thread-safe, same keys as the views | warm spans 13 messages in ~25 ms off main; render misses still compute synchronously |
+| 9.2 | `CodeHighlightMirror`: a code block draws a finished highlight on its first pass (single layout) | highlighted blocks render correctly (screenshot) |
+| 9.3 | **Older turns are not revealed while the open re-seat is settling.** Sampled opens showed `Markdown:371`, `Transcript:234` bodies and a 2.6 s stall: the re-seat's passes near an estimated top revealed 12 more turns each time and the window grew to the whole chat (content 4k -> 54k pt). | removes the 2 to 4 s outliers (one run in three before) |
+
+Long-chat open, 3 cold launches, largest stall: before this pass 766 / 2712 / 1002 ms; after 9.3: 806 / 789 / 1998 ms (one run still outlies). Typical floor ~0.8 s is two windows: ~550 to 800 ms at app start (the shell, sidebar, composer and chat screen created cold: `swift_conformsToProtocol` under `DynamicPropertyCache.fields` / `makeViewList` = SwiftUI reflecting each new view type's fields) and ~560 ms for the ~50 markdown bodies of the first screens. The first is the launch path (cold per-type SwiftUI reflection; fewer distinct view types and fewer fields per view are the only lever); the second would need flatter markdown views. Not done: the flattening, and finding why one launch in three still grows the window.

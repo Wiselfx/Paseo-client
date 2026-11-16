@@ -22,12 +22,7 @@ actor CodeHighlighter {
     private let countLimit = 64
     private let costLimit = 2_000_000
 
-    private struct HighlightKey: Hashable {
-        let theme: ClaudeCodeSyntaxTheme
-        let language: String
-        let hash: Int
-        let count: Int
-    }
+    private typealias HighlightKey = CodeHighlightKey
 
     /// Nil means "no highlighting": empty, oversized, unknown language, a theme the engine could
     /// not load, or output that would not round-trip. The caller keeps its plain text.
@@ -37,11 +32,12 @@ actor CodeHighlighter {
         guard !code.isEmpty, code.utf16.count <= Self.maximumHighlightedUTF16Length else {
             return nil
         }
-        guard let canonical = CodeHighlightCore.canonicalLanguage(language) else { return nil }
-        let key = HighlightKey(
-            theme: theme, language: canonical, hash: code.hashValue, count: code.utf16.count)
+        guard let canonical = CodeHighlightCore.canonicalLanguage(language),
+            let key = HighlightKey(code: code, language: language, theme: theme)
+        else { return nil }
         if let hit = cache[key] {
             touch(key)
+            CodeHighlightMirror.store(hit, for: key)
             return hit
         }
         PaseoPerf.count("hl.miss")
@@ -54,6 +50,7 @@ actor CodeHighlighter {
             let attributed = try? AttributedString(colored, including: \.uiKit)
         else { return nil }
         store(attributed, for: key, cost: code.utf16.count * 2)
+        CodeHighlightMirror.store(attributed, for: key)
         return attributed
     }
 
@@ -86,6 +83,42 @@ actor CodeHighlighter {
                 cost -= removed.characters.count * 2
             }
         }
+    }
+}
+
+/// Identity of one highlight: theme, canonical language, the source's hash and length. Never the source
+/// itself, so a cache does not retain every streamed revision of a block.
+struct CodeHighlightKey: Hashable, Sendable {
+    let theme: ClaudeCodeSyntaxTheme
+    let language: String
+    let hash: Int
+    let count: Int
+
+    init?(code: String, language: String?, theme: ClaudeCodeSyntaxTheme) {
+        guard !code.isEmpty, code.utf16.count <= CodeHighlighter.maximumHighlightedUTF16Length,
+            let canonical = CodeHighlightCore.canonicalLanguage(language)
+        else { return nil }
+        self.theme = theme
+        self.language = canonical
+        self.hash = code.hashValue
+        self.count = code.utf16.count
+    }
+}
+
+/// A thread-safe copy of the actor's finished highlights (W1), readable without awaiting: a code block
+/// whose highlight already exists (the warm-up, an earlier visit) draws it on its first pass, so the block
+/// is laid out once instead of plain first and again when the actor answers.
+enum CodeHighlightMirror {
+    private static let table = ProseCache<CodeHighlightKey, AttributedString>(
+        budget: 8 * 1024 * 1024, countLimit: 128, cost: { key, _ in key.count * 4 })
+
+    static func store(_ value: AttributedString, for key: CodeHighlightKey) {
+        table.setValue(value, for: key)
+    }
+
+    static func value(code: String, language: String?, theme: ClaudeCodeSyntaxTheme) -> AttributedString? {
+        guard let key = CodeHighlightKey(code: code, language: language, theme: theme) else { return nil }
+        return table.value(for: key)
     }
 }
 
