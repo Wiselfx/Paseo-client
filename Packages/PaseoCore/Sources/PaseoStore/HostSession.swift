@@ -695,7 +695,18 @@ public final class ConversationStore: Identifiable {
     public private(set) var turns: [Turn] = []
     /// The conversation's media (G12 C15), derived from `turns` on the same funnel:
     /// the sheet reads this, never the turns themselves.
-    public private(set) var mediaIndex = ConversationMediaIndex()
+    ///
+    /// Built when it is asked for, not when turns change (W1): only the media sheet reads it, and
+    /// scanning every assistant message of a long conversation for image, diagram and link blocks ran
+    /// on main inside `updateTurns` while the chat opened (and `update` is incremental, so the first
+    /// ask pays once and later asks scan only new finished turns). The read of `turns` keeps a sheet
+    /// that is open up to date.
+    public var mediaIndex: ConversationMediaIndex {
+        let current = turns
+        mediaIndexStorage.update(turns: current)
+        return mediaIndexStorage
+    }
+    @ObservationIgnored private var mediaIndexStorage = ConversationMediaIndex()
     /// Per-turn usage points in completion order (G13 C16): frozen on the next
     /// turn's start, read by the context sheet's charts. Never reset by
     /// rewinds — spent cost stays spent. Settable inside the module (the M8c
@@ -1247,7 +1258,6 @@ public final class ConversationStore: Identifiable {
             sendOutcomeUnknown = false
         }
         turns = turnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)
-        mediaIndex.update(turns: turns)
         // The chat outline is stale whenever the newest prompt moves (a turn started, a page
         // arrived, the timeline was replaced). Upstream's `latestPromptSeq` effect.
         promptOutline.timelineChanged(epoch: timeline.epoch, latestPromptSeq: latestPromptSeq)
