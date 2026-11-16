@@ -1348,7 +1348,16 @@ public final class ConversationStore: Identifiable {
     @discardableResult
     public func jump(toPromptSeq seq: Int) async -> String? {
         if let rowId = promptRowId(forPromptSeq: seq) { return rowId }
-        guard let client, let epoch = timeline.epoch else { return nil }
+        guard await loadTimelineWindow(aroundSeq: seq) else { return nil }
+        return promptRowId(forPromptSeq: seq)
+    }
+
+    /// Fetches the bounded window around `seq` and merges it outside the loaded range (upstream
+    /// `planTimelinePromptJump`, used by the outline jump and by chat find's `load(epoch, seq)`,
+    /// `chat-find/index.web.tsx:81-87`). False when there is no connection or the fetch failed.
+    @discardableResult
+    public func loadTimelineWindow(aroundSeq seq: Int) async -> Bool {
+        guard let client, let epoch = timeline.epoch else { return false }
         var request = FetchAgentTimelineRequest(
             agentId: agentId, direction: .before,
             cursor: Self.promptJumpCursor(epoch: epoch, seq: seq), limit: 40)
@@ -1358,16 +1367,16 @@ public final class ConversationStore: Identifiable {
             let page = try await client.send(request)
             if let message = page.error {
                 backgroundError = message
-                return nil
+                return false
             }
             timeline.applyPage(page)
             if let snapshot = page.agent { applyAgent(snapshot) }
             updateTurns()
             backgroundError = nil
-            return promptRowId(forPromptSeq: seq)
+            return true
         } catch {
             backgroundError = conversationErrorText(error)
-            return nil
+            return false
         }
     }
 
