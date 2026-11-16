@@ -92,7 +92,6 @@ public struct ChatScreen: View {
                 // The user-image manifest loads once, off main: bubbles with history
                 // reserve their image boxes on the first pass instead of jumping.
                 Task { await UserImageCache.shared.ensureManifestLoaded() }
-                TextInputWarmup.start()
                 // The shared web view for diagrams and SVG cards starts before the first card needs it,
                 // not mid-scroll (W1). `WKWebView.init` blocks the main thread for ~100 ms waiting for
                 // WebKit's content process, so it waits until the open (first render, the re-seat,
