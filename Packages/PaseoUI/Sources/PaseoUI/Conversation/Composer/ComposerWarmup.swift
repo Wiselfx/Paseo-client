@@ -31,7 +31,7 @@ enum ComposerWarmup {
         let field = ComposerUITextView(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
         field.applyStyle(placeholder: "Message")
         field.text = "Warm"
-        _ = field.sizeThatFits(CGSize(width: 320, height: .greatestFiniteMagnitude))
+        _ = field.sizeThatFits(CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude))
         field.layoutIfNeeded()
     }
 
