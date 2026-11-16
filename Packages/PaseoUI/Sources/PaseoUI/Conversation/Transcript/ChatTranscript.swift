@@ -1015,7 +1015,10 @@ struct TranscriptView: View {
             index = all.firstIndex(where: { $0.id == id })
             rowId = nil
         }
-        guard let index else { return }
+        guard let index else {
+            PaseoPerf.mark("jump.noTurn")
+            return
+        }
         mountTurn(at: index)
         let turnId = all[index].id
         // A jump back into the conversation is a deliberate move toward reading: the header

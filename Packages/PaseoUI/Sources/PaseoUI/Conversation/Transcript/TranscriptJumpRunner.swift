@@ -84,6 +84,7 @@ import SwiftUI
 
     func run(_ target: Target, hooks: Hooks) {
         cancel()
+        PaseoPerf.mark("jump.run")
         task = Task { @MainActor in await Self.steps(target, hooks) }
     }
 
@@ -115,6 +116,7 @@ import SwiftUI
                 stable = 0
                 guard turnAims < maxTurnAims else { break }
                 turnAims += 1
+                PaseoPerf.count("jump.turnAim.unmounted")
                 if turnAims > 3 { hooks.nudge() }
                 hooks.scrollTo(target.turnId, .top, false)
                 continue
@@ -126,6 +128,7 @@ import SwiftUI
                 stable = 0
                 guard turnAims < maxTurnAims else { break }
                 turnAims += 1
+                PaseoPerf.count("jump.turnAim.offscreen")
                 if turnAims > 3 { hooks.nudge() }
                 hooks.scrollTo(target.turnId, .top, false)
                 continue
@@ -136,13 +139,16 @@ import SwiftUI
             let row = target.rowId()
             if rowAims < maxRowAims {
                 rowAims += 1
+                PaseoPerf.count("jump.rowAim")
                 stable = 0
                 hooks.scrollTo(row ?? target.turnId, row == nil ? .top : target.rowAnchor(), rowAims == 1)
                 continue
             }
+            PaseoPerf.mark("jump.landed")
             hooks.landed()
             return
         }
+        PaseoPerf.mark("jump.gaveUp")
         hooks.landed()
     }
 }

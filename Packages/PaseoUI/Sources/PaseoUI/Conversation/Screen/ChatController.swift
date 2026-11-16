@@ -874,7 +874,11 @@ struct TranscriptJump: Equatable {
     func jumpToPrompt(_ seq: Int) {
         isFollowing = false
         Task { [weak self] in
-            guard let self, let rowId = await self.store.jump(toPromptSeq: seq) else { return }
+            guard let self else { return }
+            guard let rowId = await self.store.jump(toPromptSeq: seq) else {
+                PaseoPerf.mark("jump.fetchFailed")
+                return
+            }
             self.pendingJump = TranscriptJump(id: rowId)
         }
     }
