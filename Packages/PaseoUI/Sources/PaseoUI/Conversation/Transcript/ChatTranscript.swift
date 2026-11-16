@@ -874,6 +874,20 @@ struct TranscriptView: View {
             afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
             return
         }
+        // Stepping through matches is reading, not following the tail (as an outline jump already
+        // says): without this the size anchor pulls the view back to the bottom after the scroll.
+        controller.isFollowing = false
+        // A row anchor inside a lazy row that is not built yet is not findable; the turn's own id is.
+        // Go to the turn, then centre the row once the stack has built it, then nudge a point so the
+        // stack builds the rows under a long jump.
+        if let index = turnIndex(forSeq: seq) {
+            proxy.scrollTo(store.turns[index].id, anchor: .top)
+            afterWindowGrowth = {
+                centreRow(seq, animated: animated, proxy: proxy)
+                afterWindowGrowth = { scrollPosition.scrollTo(y: scrollTrack.contentOffset + 1) }
+            }
+            return
+        }
         centreRow(seq, animated: animated, proxy: proxy)
     }
 
