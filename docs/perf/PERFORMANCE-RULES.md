@@ -95,7 +95,16 @@ finding says so and names the cause; a change that makes a budgeted scenario wor
     markdown pieces in one pass (1.4 to 1.6 s in Debug). Parse and split off the main actor or in chunks and
     show reserved space; do not accept a stall because it happens once.
 
-12. **Every perf change carries its before and after** (the commit subject, `W1: <what> (<before> ->
+12. **A lazy stack gets only what is near the viewport.** Handing it a whole long conversation made it
+    estimate the content, land on an estimated bottom, build about a hundred pieces in one pass and leave
+    the stack without rows under the final offset (a blank screen on a normal launch). Mount a window
+    (`windowSize`, `windowStep`), reveal more on demand with the history anchor, and when the stack opens
+    at the end, re-seat the real bottom (`repinOpen`). Find and jumps need every turn: reveal first.
+
+13. **A view reads a flag only if it draws it.** The sidebar read the drawer flag to start a poll, so every
+    drawer motion re-ran the directory body; the read belongs in a child (`SidebarUsageDriver`).
+
+14. **Every perf change carries its before and after** (the commit subject, `W1: <what> (<before> ->
     <after>)`, and a line in `W1-findings.md`). A fix without a number is a guess.
 
 ## Keeping it true

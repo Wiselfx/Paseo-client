@@ -53,9 +53,6 @@ struct PaseoSidebar: View {
     @Environment(\.toast) var toast
     /// R5's drawer, for the ⌘K hook: the sidebar owns the Search sheet.
     @Environment(\.shellDrawer) private var shellDrawer
-    /// False while the drawer shows the sidebar itself (H4 §2). The usage footer refreshes on
-    /// that edge — a commit, not a drag frame.
-    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
     /// Upstream refreshes its reports on an interval only while the summary is on screen and the
     /// app is visible (`packages/app/src/usage/queries.ts:182-197`), so the app's own phase is one
     /// of the two facts that start and stop the poll.
@@ -112,13 +109,9 @@ struct PaseoSidebar: View {
         // the host itself and the app coming back to the front decide when a load is worth asking
         // for. The store's minute throttle keeps a foreground flip from re-asking at once.
         .task(id: usageLoadKey) { await loadUsage() }
-        // While the summary is on screen and the app is visible, ask again every five minutes
-        // (Upstream: packages/app/src/usage/queries.ts:39, 182-197).
-        .task(id: usagePollKey) { await pollUsage() }
-        .onChange(of: isSurfaceObscured) { _, obscured in
-            guard !obscured else { return }
-            Task { await loadUsage() }
-        }
+        // The drawer flag and the five-minute poll live in a child that reads them, so a drawer motion
+        // never re-evaluates this body (W1, rule 7).
+        .background { SidebarUsageDriver(session: session, showUsage: showUsageInSidebar) { await loadUsage() } }
         .onChange(of: addProjectRequest) { _, _ in
             consumeAddProjectRequest()
         }
@@ -313,26 +306,6 @@ struct PaseoSidebar: View {
         "\(showUsageInSidebar)|\(session.hostUsage.isSupported)|\(session.serverInfo?.serverId ?? "")|\(scenePhase)"
     }
 
-    /// The facts that start and stop the interval poll: the toggle, the host's capability, the
-    /// drawer showing the summary and the app being in front.
-    private var usagePollKey: String {
-        "\(showUsageInSidebar)|\(session.hostUsage.isSupported)|\(isSurfaceObscured)|\(scenePhase)"
-    }
-
-    /// Upstream's `refetchInterval` (queries.ts:36-39, 182-197): five minutes, and only while the
-    /// summary is on screen and the app is visible. Replies are not forced — the daemon decides
-    /// whether its provider cache is stale.
-    private func pollUsage() async {
-        guard showUsageInSidebar, session.hostUsage.isSupported, !isSurfaceObscured,
-            scenePhase == .active
-        else { return }
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(HostUsageStore.automaticPollInterval))
-            guard !Task.isCancelled else { return }
-            _ = await session.hostUsage.load(forceRefresh: false)
-        }
-    }
-
     /// The state-driven load: turning the toggle on, or a `server_info` that finally reports
     /// support, loads the footer without reopening the drawer. The throttle also covers a second
     /// trigger while one load is in flight.
@@ -471,4 +444,41 @@ enum PaseoSidebarSheet: Identifiable {
 }
 
 
+
+
+/// Reads the drawer's `\.isSurfaceObscured` in its own body (W1): the sidebar used to read it itself, so
+/// every drawer motion re-evaluated the whole directory body to learn one `Bool`. This child owns the two
+/// things that depend on it: reloading the usage footer when the drawer shows the sidebar (H4 §2: a
+/// commit, not a drag frame) and the five-minute poll that runs only while the summary is on screen and
+/// the app is in front (Upstream: packages/app/src/usage/queries.ts:36-39, 182-197).
+private struct SidebarUsageDriver: View {
+    let session: HostSession
+    let showUsage: Bool
+    let load: () async -> Void
+
+    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .task(
+                id: "\(showUsage)|\(session.hostUsage.isSupported)|\(isSurfaceObscured)|\(scenePhase)"
+            ) { await poll() }
+            .onChange(of: isSurfaceObscured) { _, obscured in
+                guard !obscured else { return }
+                Task { await load() }
+            }
+    }
+
+    private func poll() async {
+        guard showUsage, session.hostUsage.isSupported, !isSurfaceObscured, scenePhase == .active
+        else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(HostUsageStore.automaticPollInterval))
+            guard !Task.isCancelled else { return }
+            _ = await session.hostUsage.load(forceRefresh: false)
+        }
+    }
+}
 #endif

@@ -6,16 +6,31 @@ counters, an optional sampling profiler) and prints one aggregated line per seco
 which `applog` returns (windows for a five-minute scenario fit in the 300-line tail). Everything in
 `W1-findings.md` was found and verified that way. Three things the gate cannot give, in order of value:
 
-## 1. A Release simulator install (the one that matters)
+## 1. A Release simulator install (written: `install-release`, needs deploying)
 
 `install <ref>` builds Debug. Debug SwiftUI is several times slower (no specialisation, no inlining), so
 absolute stalls and hitches in the findings are inflated and a "zero hitches" budget cannot be signed off on
 them. Counts and ratios are valid; the verdict on a phone is not.
 
-Proposed verb: `install <ref> release`, the same checkout and the same `PaseoClient` scheme with
-`-configuration Release` (`SWIFT_COMPILATION_MODE=wholemodule`, signing off), installed on the test
-simulator. Argument pattern: the second word is exactly `release` or absent. No other change to the
-forced-command model. (`ipa` already builds Release for devices, so the build settings exist.)
+`Tools/build-gate/build-gate` on this branch now has `install-release <ref>`: the same checkout, scheme and
+simulator as `install`, with `-configuration Release` (so `SWIFT_COMPILATION_MODE=wholemodule`, `-O`), signing
+off, its own derived-data folder `~/build-derived-data-release` (`clean` removes it too), installed on the test
+simulator. One argument, the same pattern as `install`; `GATE_VERSION` is 4. Nothing else in the forced-command
+model changed.
+
+**What the owner must do on the Mac** (the script on the Mac is a copy, not the repo file):
+
+1. On the Mac, as the admin account, from a clone of this repo at `foundation` (or this branch):
+   `git pull` then copy the script over the forced command's target. Find it with
+   `grep -n command= /Users/claude/.ssh/authorized_keys` (the `command="..."` path is the installed script);
+   then `sudo cp Tools/build-gate/build-gate <that path> && sudo chown claude:staff <that path> && sudo chmod 755 <that path>`
+   (keep the owner and mode the old file had: `ls -l` it first).
+2. Check: `ssh -i <key> claude@host.orb.internal ping` prints `gate v4`.
+3. First use: `install-release foundation` (a cold Release build is slower than the Debug one; the cap is 1500 s).
+   Then `launch -paseo-perf` and run the scenarios exactly as for Debug; compare the `VERDICT` lines.
+
+The Release build is not stripped of `-paseo-perf`: the instrument is compiled in every configuration and off
+by default.
 
 ## 2. `xctrace` on the app process (optional)
 

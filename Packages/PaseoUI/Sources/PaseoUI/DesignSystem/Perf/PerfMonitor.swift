@@ -252,7 +252,7 @@
         }
 
         private static func pairs(_ counts: [String: Int]) -> String {
-            counts.sorted { $0.value > $1.value }.prefix(8)
+            counts.sorted { $0.value > $1.value }.prefix(16)
                 .map { "\($0.key):\($0.value)" }.joined(separator: ",")
         }
     }
