@@ -71,6 +71,7 @@ struct TranscriptView: View {
     /// A ceiling, so a layout that never converges cannot loop.
     @State private var openPinCount = 0
     @State private var openNudgedHeight: CGFloat = -1
+    @State private var previousHeight: CGFloat = -1
     /// The oldest turn mounted (W1). Opening a long conversation used to hand the lazy stack every
     /// turn: it estimated the content, landed on an estimated bottom, built about a hundred markdown
     /// pieces in one pass (1.4 to 2.3 s) and then re-built them as the estimate corrected. Only the
@@ -539,6 +540,13 @@ struct TranscriptView: View {
             return
         }
         guard metrics.contentHeight > metrics.visibleHeight else { return }
+        // Already seated at this content height, and only the insets moved (the composer growing or
+        // the keyboard): the open is over, and the follow rules own the bottom from here.
+        if openNudgedHeight == metrics.contentHeight, metrics.contentHeight == previousHeight {
+            openPin = false
+            return
+        }
+        previousHeight = metrics.contentHeight
         if metrics.distanceFromBottom <= Self.followSlack {
             PaseoPerf.count("openpin.atEnd")
             // A jump of thousands of points leaves the stack without rows under the final offset until
