@@ -112,6 +112,11 @@ public struct ShellView: View {
                 session.hostSettings.startPresence(
                     focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
                 session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
+                // The directory load used to start from the sidebar's `onAppear`; the sidebar now mounts after
+                // the first frame (`DeferredSidebarMount`), so the shell asks.
+                if !session.workspaceDirectory.hasLoaded, session.workspaceDirectory.error == nil {
+                    Task { await session.workspaceDirectory.refresh() }
+                }
                 restoreStartupScreen()
                 ComposerWarmup.scheduleOnce()
                 handleNotificationTarget()
@@ -191,7 +196,7 @@ public struct ShellView: View {
 
     private var sidebar: AnyView {
         root(
-            PaseoSidebar(
+            DeferredSidebarMount(content: PaseoSidebar(
                 session: session,
                 selectedAgentId: selectedAgentId,
                 onSelectAgent: { select($0) },
@@ -200,7 +205,7 @@ public struct ShellView: View {
                 currentWorkspaceId: currentWorkspaceId,
                 onDisconnect: onDisconnect,
                 onTogglePanel: { drawer.toggle(.panel) },
-                addProjectRequest: $addProjectRequested))
+                addProjectRequest: $addProjectRequested)))
     }
 
     private var main: AnyView {
@@ -779,6 +784,35 @@ struct EmptyMain: View {
                     .padding(.horizontal, Space.lg)
                     .padding(.bottom, Space.xl)
             }
+        }
+    }
+}
+#endif
+
+#if canImport(UIKit)
+/// The sidebar sits under the conversation card and is not on screen at launch, yet its first creation
+/// (a large generic tree: roll, rows, usage, footer; ten body passes while the session settles) was part
+/// of the cold 550 to 800 ms before the first frame (W1). It mounts two seconds after the shell appears,
+/// or at once when the drawer starts to open, whichever is first.
+struct DeferredSidebarMount<Content: View>: View {
+    let content: Content
+    @Environment(\.isSurfaceObscured) private var obscured
+    @State private var mounted = false
+
+    var body: some View {
+        Group {
+            if mounted {
+                content
+            } else {
+                Color.clear
+            }
+        }
+        .task {
+            try? await Task.sleep(for: .seconds(2))
+            mounted = true
+        }
+        .onChange(of: obscured) { _, isObscured in
+            if !isObscured { mounted = true }
         }
     }
 }
