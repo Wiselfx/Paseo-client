@@ -19,7 +19,15 @@ struct SchedulesListPage: View {
     @State private var deleteRequest: ScheduleSummary?
 
     private var schedules: SchedulesStore { session.schedules }
-    private var knownAgentIds: Set<String> { Set(session.agents.map(\.id)) }
+    /// Built once per pass, and only when a schedule targets an agent: `state` consults it for those
+    /// alone. It used to be rebuilt from every agent for every row.
+    private func knownAgentIds() -> Set<String>? {
+        guard schedules.schedules.contains(where: {
+            if case .agent = $0.target { return true }
+            return false
+        }) else { return nil }
+        return Set(session.agents.map(\.id))
+    }
 
     var body: some View {
         Group {
@@ -86,8 +94,9 @@ struct SchedulesListPage: View {
                 }
             }
             Section {
+                let known = knownAgentIds()
                 ForEach(schedules.schedules) { summary in
-                    row(summary)
+                    row(summary, knownAgentIds: known)
                 }
             }
         }
@@ -97,7 +106,7 @@ struct SchedulesListPage: View {
         .refreshable { await schedules.load() }
     }
 
-    private func row(_ summary: ScheduleSummary) -> some View {
+    private func row(_ summary: ScheduleSummary, knownAgentIds: Set<String>?) -> some View {
         let state = summary.state(now: now, knownAgentIds: knownAgentIds)
         return NavigationLink(value: ClaudeSchedulesView.Route.detail(summary.id)) {
             HStack(spacing: 0) {
