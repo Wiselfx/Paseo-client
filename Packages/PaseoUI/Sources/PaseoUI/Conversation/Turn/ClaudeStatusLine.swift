@@ -147,10 +147,7 @@ struct ClaudeLiveStatusLine: View {
     @Environment(\.isSurfaceObscured) private var isSurfaceObscured
     @Environment(\.scenePhase) private var scenePhase
 
-    /// One timeline drives the clock and the sweep: a 4 Hz `Timer.publish` and a display-rate
-    /// masked sweep were two continuous sources (findings #11, #24). The band's 48 steps don't
-    /// need more than this.
-    private static let tick: TimeInterval = 1.0 / 30.0
+    // One timeline drives the clock and the sweep, at the display rate (120 Hz on ProMotion).
 
     init(turn: Turn) {
         self.turn = turn
@@ -171,7 +168,7 @@ struct ClaudeLiveStatusLine: View {
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: Self.tick, paused: paused)) { context in
+        TimelineView(.animation(paused: paused)) { context in
             line(at: context.date)
                 .onChange(of: context.date) { _, date in advanceActivity(at: date) }
         }

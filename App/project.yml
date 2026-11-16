@@ -62,6 +62,10 @@ targets:
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # ProMotion iPhones: without this key Core Animation (UIKit springs, SwiftUI animations,
+        # display links) is capped at 60 Hz; only system scrolling ran at 120. Everything we draw
+        # asks for 120 explicitly (`FrameRate.promotion`).
+        CADisableMinimumFrameDurationOnPhone: true
         NSLocalNetworkUsageDescription: Paseo connects to the agent daemon on your network.
         NSSpeechRecognitionUsageDescription: Paseo uses on-device speech recognition to dictate into the composer.
         NSMicrophoneUsageDescription: Paseo uses the microphone to dictate into the composer.

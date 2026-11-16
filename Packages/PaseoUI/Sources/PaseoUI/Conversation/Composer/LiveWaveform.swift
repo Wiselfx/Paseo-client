@@ -121,7 +121,7 @@ final class WaveformMeterView: UIView {
     private var lastDraw: CFTimeInterval = 0
     private var lastAccessibilityUpdate: CFTimeInterval = 0
 
-    private static let tickInterval = 1.0 / 30.0
+    private static let tickInterval = 1.0 / 120.0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -203,10 +203,8 @@ final class WaveformMeterView: UIView {
         }
         let target = WaveformTickTarget(view: self)
         let link = CADisplayLink(target: target, selector: #selector(WaveformTickTarget.tick(_:)))
-        // A display link otherwise wakes at the display's full rate: on a 120 Hz iPhone that is
-        // 120 callbacks a second to draw 30 frames, and it keeps ProMotion from idling. The
-        // range caps it at 30; the time guard in `tick` stays as the backstop.
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
+        // The whole app runs at 120 Hz (`FrameRate`); the waveform draws every frame too.
+        link.preferredFrameRateRange = FrameRate.promotion
         link.add(to: .main, forMode: .common)
         self.tickTarget = target
         self.link = link
@@ -229,7 +227,7 @@ final class WaveformMeterView: UIView {
         let now = Date().timeIntervalSince1970
         // Wall-clock instants, not `link.timestamp`: the audio thread stamps pushes with the
         // same clock, and the two must agree for the scroll progress to mean anything.
-        guard lastDraw == 0 || now - lastDraw >= Self.tickInterval else { return }
+        guard lastDraw == 0 || now - lastDraw >= Self.tickInterval * 0.5 else { return }
         lastDraw = now
         draw(at: now)
     }

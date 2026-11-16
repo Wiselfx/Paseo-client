@@ -20,7 +20,6 @@ struct ClaudeWorkGroupCell: View {
     @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
 
     /// The masked sweep's rate: display rate was an offscreen pass per frame (findings #11, #24).
-    static let sweepTick: TimeInterval = 1.0 / 30.0
 
     var opensByDefault: Bool {
         turnIsRunning && group.isActive
@@ -142,7 +141,7 @@ struct ClaudeWorkGroupCell: View {
             if turnIsRunning && group.isActive && !reduceMotion {
                 // A capped rate, not display rate: the masked sweep is an offscreen pass
                 // (findings #11, #24). The band's 48 steps don't need more than this.
-                TimelineView(.animation(minimumInterval: Self.sweepTick)) { context in
+                TimelineView(.animation) { context in
                     summaryRuns(text, Palette.tertiaryInk).overlay(alignment: .leading) {
                         if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: context.date) {
                             summaryRuns(text, Palette.ink)

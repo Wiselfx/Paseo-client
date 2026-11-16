@@ -59,7 +59,7 @@
             started = true
             launchedAt = CACurrentMediaTime()
             let link = CADisplayLink(target: self, selector: #selector(tick(_:)))
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+            link.preferredFrameRateRange = FrameRate.promotion
             link.add(to: .main, forMode: .common)
             self.link = link
             installObservers()

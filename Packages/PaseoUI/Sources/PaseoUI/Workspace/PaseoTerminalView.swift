@@ -486,6 +486,7 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         let target = PaseoTickTarget()
         target.coordinator = self
         let link = CADisplayLink(target: target, selector: #selector(PaseoTickTarget.tick(_:)))
+        link.preferredFrameRateRange = FrameRate.promotion
         link.add(to: .main, forMode: .common)
         flushLink = link
     }
