@@ -124,7 +124,12 @@ struct ClaudeRevealProse: View {
     var body: some View {
         let _ = PaseoPerf.body("RevealProse")
         let _ = PaseoPerf.why(Self.self)
-        let refs = pieceRefs(markdown)
+        // While the turn runs, a trailing fragment that cannot stand on its own (a dangling
+        // joiner, half a flag) waits for the rest of its cluster instead of painting broken
+        // for a frame: the store keeps the full text, only the painted slice holds back.
+        // Upstream `text-reveal.ts`; the policy is `PaseoStore.TextReveal` (tested on Linux).
+        let source = isStreaming ? TextReveal.trimmedForStreaming(markdown) : markdown
+        let refs = pieceRefs(source)
         VStack(alignment: .leading, spacing: theme.blockSpacing) {
             ForEach(refs, id: \.stableIdentity) { ref in
                 switch ref.piece {
@@ -166,9 +171,11 @@ struct ClaudeRevealProse: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
-            primeForHistory()
+            primeForHistory(source)
         }
-        .onChange(of: markdown) { _, newValue in reveal(newValue, refs: refs) }
+        .onChange(of: markdown) { _, newValue in
+            reveal(isStreaming ? TextReveal.trimmedForStreaming(newValue) : newValue, refs: refs)
+        }
         .onChange(of: isStreaming) { _, streaming in
             if !streaming { sweepBoundary = 1 }
         }
