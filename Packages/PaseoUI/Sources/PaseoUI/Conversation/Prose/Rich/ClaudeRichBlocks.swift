@@ -384,11 +384,12 @@ struct RichLinkCard: View {
 
     /// The card's inner width, for decoding the hero at the size it is drawn at.
     private var widthReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear { width = proxy.size.width }
-                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
-        }
+        // `onGeometryChange` on the clear background instead of a `GeometryReader` per card (W1): same
+        // size, delivered at once and on change, written only when it differs.
+        Color.clear
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if width != newWidth { width = newWidth }
+            }
     }
 
     /// Metadata fetches on cheap links only: Low Data Mode gets the text-only row
@@ -648,11 +649,12 @@ struct YouTubeRichCard: View {
     /// The card's inner width, measured on the frame it is actually drawn in. Published only
     /// when it changes; nothing here runs per scroll frame.
     private var widthReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear { width = proxy.size.width }
-                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
-        }
+        // `onGeometryChange` on the clear background instead of a `GeometryReader` per card (W1): same
+        // size, delivered at once and on change, written only when it differs.
+        Color.clear
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if width != newWidth { width = newWidth }
+            }
     }
 
     /// The title strip reads the cache on the first pass (remounts never flash the
@@ -1100,11 +1102,12 @@ struct RichRemoteImage: View {
     /// The card's inner width, for decoding at the size it will be drawn at. Published only
     /// when it actually changes — never per scroll frame.
     private var widthReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear { width = proxy.size.width }
-                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
-        }
+        // `onGeometryChange` on the clear background instead of a `GeometryReader` per card (W1): same
+        // size, delivered at once and on change, written only when it differs.
+        Color.clear
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if width != newWidth { width = newWidth }
+            }
     }
 
     private func retry() {
@@ -1346,11 +1349,12 @@ struct RichLocalImage: View {
     /// The card's inner width, for decoding at the size it will be drawn at. Published only
     /// when it actually changes — never per scroll frame.
     private var widthReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear { width = proxy.size.width }
-                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
-        }
+        // `onGeometryChange` on the clear background instead of a `GeometryReader` per card (W1): same
+        // size, delivered at once and on change, written only when it differs.
+        Color.clear
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if width != newWidth { width = newWidth }
+            }
     }
 
     /// The kept box with the failure line, like the remote card: the reader watched the
@@ -1670,11 +1674,12 @@ struct MermaidCard: View {
 
     /// The card's inner width, for rendering at the real size instead of a guess.
     private var widthReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear { width = proxy.size.width }
-                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
-        }
+        // `onGeometryChange` on the clear background instead of a `GeometryReader` per card (W1): same
+        // size, delivered at once and on change, written only when it differs.
+        Color.clear
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if width != newWidth { width = newWidth }
+            }
     }
 
     /// A refused source shows the source as code, plus the renderer's message as a footer. An
@@ -2060,11 +2065,12 @@ struct RichWebCard: View {
 
     /// The card's inner width, for snapshots at the real size instead of a guess.
     private var widthReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear { width = proxy.size.width }
-                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
-        }
+        // `onGeometryChange` on the clear background instead of a `GeometryReader` per card (W1): same
+        // size, delivered at once and on change, written only when it differs.
+        Color.clear
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if width != newWidth { width = newWidth }
+            }
     }
 
     /// Nil while the live view is (or is about to be) the shown content. A card that will

@@ -471,12 +471,11 @@
                     RoundedRectangle(cornerRadius: Radius.sm).stroke(theme.rule, lineWidth: 0.6)
                 }
                 .background {
-                    GeometryReader { proxy in
-                        Color.clear
-                            .onAppear { tableContentWidths[blockIndex] = proxy.size.width }
-                            .onChange(of: proxy.size.width) { _, newWidth in
-                                tableContentWidths[blockIndex] = newWidth
-                            }
+                    // `onGeometryChange` instead of a `GeometryReader` per table (W1), written on change only.
+                    Color.clear.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                        if tableContentWidths[blockIndex] != newWidth {
+                            tableContentWidths[blockIndex] = newWidth
+                        }
                     }
                 }
             }
