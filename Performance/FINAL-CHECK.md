@@ -63,8 +63,8 @@ H16 store property assigned without compare, in-place `sort` (M04) | H17 file I/
 H20 `.mask/.blur/.shadow/.drawingGroup` in hot code (M18) | H21 `AsyncImage`, `UIImage(data:)` outside a body (M18) | H22 `WKWebView(` outside `Rich/` (M31) | H23 App init doing I/O (M33) |
 H24 `@unchecked Sendable` with no lock in file (M29) | H25 closure literal in `.environment` (M07) | H26 `DragGesture` (M35) | H27 transcript scroll/window code (M21) | H28 store changed, no test changed (M40).
 
-Features that pull in MANUAL items (F01 to F18: observation, lists, text input, media, async, timers, caches, representables, animation,
-stores, JSON, file/Keychain, web views, gestures, text rendering, launch, identity, sheets/menus) are defined in `scripts/fc_checks.py`
+Features that pull in MANUAL items (F01 to F19: observable models, lists, text input, media, async, timers, caches, representables, animation,
+stores, JSON, file/Keychain, web views, gestures, text rendering, launch, identity, sheets/menus, view state reads) are defined in `scripts/fc_checks.py`
 (`FEATURES`); `--self-test` proves each is detected.
 
 ## Self-test and CI

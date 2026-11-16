@@ -1,4 +1,4 @@
-// features: F01 F04 F05
+// features: F04 F05 F19
 // Fixture: GOOD media shapes: width read with onGeometryChange written on change, decoding off the body
 // through ImageIO thumbnails in a function, a task keyed by id.
 import ImageIO

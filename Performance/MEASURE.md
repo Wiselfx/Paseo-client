@@ -6,7 +6,7 @@ Needs the gate (a Mac with the simulator, reached over ssh). Never commit its ho
 ```sh
 export GATE_HOST=claude@<gate-host>      # required; never committed
 export GATE_KEY=/path/to/gate_ed25519    # optional
-export PASEO_PASSWORD=simtest-pass; unset PASEO_WORKSPACE_ID   # stream.sh only (test daemon, pi provider only; never a claude-provider agent)
+export PASEO_PASSWORD=<test-daemon-password>; unset PASEO_WORKSPACE_ID   # stream.sh only (test daemon, pi provider only; never a claude-provider agent)
 ```
 Push your branch first (the gate builds from GitHub).
 

@@ -1,4 +1,4 @@
-// features: F01 F16
+// features: F16 F19
 // Fixture: launch reads nothing slow in init; fonts are registered in one call.
 import SwiftUI
 

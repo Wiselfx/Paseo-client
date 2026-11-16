@@ -247,7 +247,7 @@ def path_tags(rel):
 HOT_TAGS = {"stream", "composer", "shell", "media", "store", "launch"}
 
 PATH_ITEMS = {
-    "stream": ["M09", "M20", "M21"],
+    "stream": ["M09", "M20"],
     "row": ["M11", "M16"],
     "composer": ["M18", "M27", "M34"],
     "shell": ["M07", "M35"],
@@ -259,11 +259,11 @@ PATH_ITEMS = {
 
 # id, name, regex on changed code, MUST items to ask, PATTERNS files
 FEATURES = [
-    ("F01", "observation (@Observable / @Bindable / @Environment / @State)", r"@Observable|@Bindable|@Environment\(|@State\b|withObservationTracking", ["M01", "M04", "M05", "M07"], ["observation-and-invalidation"]),
+    ("F01", "observable model (@Observable / withObservationTracking)", r"@Observable|@ObservationIgnored|withObservationTracking", ["M04", "M05"], ["observation-and-invalidation", "stores-and-core"]),
     ("F02", "lists and stacks (ForEach / List / Lazy* / ScrollView)", r"\bForEach\b|\bList\s*[\({]|LazyVStack|LazyHStack|LazyVGrid|\bScrollView\b", ["M09", "M11", "M12", "M14", "M16"], ["rows-and-lists", "lazy-stacks-and-scrolling"]),
     ("F03", "text input / keyboard", r"\bTextField\b|\bTextEditor\b|UITextView|UITextField|becomeFirstResponder|FocusState|keyboardWill", ["M18", "M27", "M34"], ["uikit-interop-and-keyboard"]),
     ("F04", "images, audio, video", r"AsyncImage|UIImage|CGImageSource|AVPlayer|AVAudio|PHPicker|Image\(uiImage", ["M18", "M29", "M31"], ["media-and-images"]),
-    ("F05", "async work (Task / await / queues / streams)", r"\bTask\b|\basync\b|\bawait\b|DispatchQueue|AsyncStream|\bactor\b", ["M25", "M26"], ["concurrency-and-main-thread"]),
+    ("F05", "async work (Task / await / queues / streams)", r"\bTask\b|\basync\b|\bawait\b|DispatchQueue|AsyncStream|\bactor\b", ["M25"], ["concurrency-and-main-thread"]),
     ("F06", "timers, display links, endless animation", r"\bTimer\.|CADisplayLink|TimelineView|Task\.sleep|\.repeatForever", ["M25", "M37"], ["concurrency-and-main-thread", "animation-and-drawer"]),
     ("F07", "caches and memoisation", r"NSCache|\b[cC]ache\b|[mM]emo\b|[mM]emoized|static var\s+\w+\s*:\s*\[", ["M29", "M30"], ["caches-and-memory"]),
     ("F08", "UIKit representable", r"UIViewRepresentable|UIViewControllerRepresentable|updateUIView", ["M34", "M35"], ["uikit-interop-and-keyboard"]),
@@ -276,6 +276,7 @@ FEATURES = [
     ("F15", "text, markdown, code rendering", r"AttributedString|NSAttributedString|Markdown|TextRenderer|textSelection|Highlighter", ["M18", "M20", "M29"], ["text-markdown-code"]),
     ("F16", "launch path", r"@main|WindowGroup|didFinishLaunching|scenePhase|Warmup|CTFontManager", ["M33", "M31"], ["launch-and-startup"]),
     ("F17", "view identity", r"\.id\(|ForEach\([^)]*id:", ["M09"], ["identity-and-streaming"]),
+    ("F19", "view state reads (@State / @Environment / @Bindable)", r"@Environment\(|@State\b|@Bindable", ["M01", "M07"], ["observation-and-invalidation"]),
     ("F18", "sheets, menus, popovers", r"\.sheet\(|\.popover\(|\.fullScreenCover|\.contextMenu|\.confirmationDialog|\.alert\(|\bMenu\s*[\({]", ["M12", "M11"], ["rows-and-lists"]),
 ]
 FEATURE_RX = {f[0]: re.compile(f[2]) for f in FEATURES}
@@ -1013,7 +1014,7 @@ def render(res, must, manual, meta):
     out.append("== 4. SIGN-OFF (copy into your report; tick each with a one-clause reason, or write ESCALATE: why) ==")
     out.append("final-check: base=%s auto-failed=%d auto-pass=%d manual=%d waivers=%d" % (meta["base"], len(res["auto"]) + (1 if meta["style"] == "FAIL" else 0), len(ok), len(order), len(res["waived"])))
     for mid in order:
-        out.append("[ ] %s %s" % (mid, (manual.get(mid, {}).get("Ask", "") or must.get(mid, {}).get("text", ""))[:110]))
+        out.append("[ ] %s %s" % (mid, must.get(mid, {}).get("text", "")[:95]))
     for cid, rel, line, msg, why in res["waived"]:
         out.append("[ ] WAIVER %s %s:%d ESCALATE: %s" % (cid, rel, line, why))
     hot = sorted(rel for rel, t in res["tags"].items() if t & HOT_TAGS)

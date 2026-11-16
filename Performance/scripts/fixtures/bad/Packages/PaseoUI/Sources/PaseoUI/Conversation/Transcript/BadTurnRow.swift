@@ -1,4 +1,4 @@
-// features: F01 F02 F05 F06 F09 F12 F14 F17
+// features: F02 F05 F06 F09 F12 F14 F17 F19
 // Fixture for final-check --self-test. BAD code on purpose: every `expect:` / `hit:` marker is asserted exactly.
 import SwiftUI
 
