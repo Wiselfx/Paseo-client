@@ -1,46 +1,11 @@
-## What changed
+## What and why
 
-<!-- Link the issue, e.g. Fixes #123. Explain the trigger and resulting behavior. -->
+## Checklist (UI and store changes)
 
-## Visual evidence
+- [ ] `Tools/style-lint/check.sh` passes (R-4 tokens, R-8 performance rules). A new exception needs a reason here and an updated `Tools/style-lint/baseline.txt`.
+- [ ] I read `docs/perf/PERFORMANCE-RULES.md` and nothing I touched breaks a numbered rule (no work in `body`, narrow observation, equatable rows, stable identity, no main-thread IO/decode, bounded caches).
+- [ ] New or changed hot paths (scroll, streaming, typing, open, drawer, media) were run with `-paseo-perf` using `docs/perf/HOWTO.md`; before/after numbers are below, or this change cannot affect them.
+- [ ] Core logic has tests (`swift test` in `Packages/PaseoCore`).
+- [ ] No behaviour, copy or look changed unless this PR says so.
 
-<!-- Required for visual changes. Use neutral content. Upload screenshots into the cells; link recordings below for motion. Include both appearances, or explain why one does not apply. -->
-
-| Appearance | Real-app reference | Recreation before | Recreation after |
-|---|---|---|---|
-| Light | | | |
-| Dark | | | |
-
-**Reference app version:**
-**Reference device / iOS version and build:**
-**Demo device / iOS version and build:**
-**Xcode version and build:**
-**Locale / text size / keyboard / accessibility settings:**
-<!-- Write unknown for metadata you cannot verify. -->
-
-**Motion recordings and measurements:** <!-- Reference, before, after; FPS, duration/easing. Or N/A. -->
-
-## Validation
-
-| Check | Command or CI link | Result |
-|---|---|---|
-| Unit tests | | |
-| Affected UI flow and return/dismiss regression | | |
-| Screenshot comparisons, light and dark | | |
-| Accessibility regression | | |
-
-**Not run / skipped and why:**
-**Fresh simulator check:** <!-- Required for changes involving widgets, installation or system state; otherwise N/A. -->
-**Known differences / remaining TODOs:**
-
-## Review checklist
-
-- [ ] Relevant tests passed; failures/skips and the tested commit are recorded above
-- [ ] Visual evidence includes reference, before and after; motion evidence is included where needed
-- [ ] Snapshot changes are intentional, individually reviewed and explained; no baseline was updated solely to hide a failure
-- [ ] CHANGELOG.md updated under *Unreleased*, with `(visual)` on entries that change how a screen looks
-- [ ] If the public API changed: the `breaking` label is set and `docs/VERSIONING.md` still holds
-- [ ] New screens have `DemoScreen` coverage; relevant fidelity/feature notes are updated
-- [ ] The package stays UI-only; new assets have provenance and uploads contain no personal information
-
-<!-- Maintainer: use docs/REVIEW_GUIDE.md. Green CI can skip simulator suites while private; run CI manually with recording disabled before approving UI changes. -->
+## Performance evidence (if applicable)
