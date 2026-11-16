@@ -953,11 +953,13 @@ struct TranscriptView: View {
                     scrollPosition.scrollTo(id: id, anchor: anchor)
                 }
             },
+            // A programmatic scroll leaves the phase at `.animating` even when it has nothing to move (the
+            // jump runner waited on `.idle` for eight seconds), so only the reader's own motion counts; the
+            // runner sees a programmatic scroll end by the layout holding still.
             isScrolling: { [scrollTrack] in
-                if PaseoPerf.enabled { PaseoPerf.countNamed("jump.phase.\(scrollTrack.phase)") }
                 switch scrollTrack.phase {
-                case .idle: return false
-                default: return true
+                case .interacting, .tracking, .decelerating: return true
+                default: return false
                 }
             },
             nudge: { [scrollTrack] in

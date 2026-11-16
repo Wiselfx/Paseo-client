@@ -37,7 +37,7 @@ import SwiftUI
         var probe: @MainActor (String) -> Probe?
         /// Scroll to a view id. The flag asks for a glide; the runner passes false for the long hops.
         var scrollTo: @MainActor (_ id: String, _ anchor: UnitPoint, _ animated: Bool) -> Void
-        /// A finger, a flick, a deceleration or a programmatic animation owns the scroll view.
+        /// A finger, a flick or a deceleration owns the scroll view: the reader's, which always wins.
         var isScrolling: @MainActor () -> Bool
         /// Moves the offset by a point, which makes the stack look again.
         var nudge: @MainActor () -> Void
