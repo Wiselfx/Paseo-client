@@ -30,8 +30,6 @@ public struct ChatScreen: View {
     /// The composer's focus (E1 §1): a plain flag, because the composer's field is a
     /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
     @State private var composerFocused = false
-    @Environment(\.toast) private var toast
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         session: HostSession, store: ConversationStore, onOpenSidebar: (() -> Void)? = nil,
@@ -52,12 +50,6 @@ public struct ChatScreen: View {
 
     public var body: some View {
         let _ = PaseoPerf.body("ChatScreen")
-        let _ = PaseoPerf.diff(
-            "chat",
-            [
-                ("focused", "\(composerFocused)"), ("reduce", "\(reduceMotion)"),
-                ("toast", toast.map { "\(ObjectIdentifier($0))" } ?? "-"),
-            ])
         // D1 §1: the transcript is the screen's base layer; the chrome floats over it in
         // safe-area bars and the system's scroll edge effect is the only background.
         TranscriptView(store: store, controller: controller)
@@ -96,14 +88,10 @@ public struct ChatScreen: View {
             .modifier(MascotDriver(store: store, session: session, controller: controller))
             .modifier(ChatSheets(store: store, session: session, controller: controller))
             .onAppear {
-                controller.toastCenter = toast
-                controller.reduceMotion = reduceMotion
                 // The user-image manifest loads once, off main: bubbles with history
                 // reserve their image boxes on the first pass instead of jumping.
                 Task { await UserImageCache.shared.ensureManifestLoaded() }
             }
-            .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
-            .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }
     }
 
     // MARK: Chrome
@@ -175,11 +163,19 @@ final class ChatControllerHolder {
 struct ChatOpenURLWiring: ViewModifier {
     let controller: ChatController
     @Environment(\.openURL) private var openURL
+    @Environment(\.toast) private var toast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .environment(\.openURL, controller.fileLinkAction(host: openURL))
-            .onAppear { controller.openURLFromEnvironment = { url in openURL(url) } }
+            .onAppear {
+                controller.openURLFromEnvironment = { url in openURL(url) }
+                controller.toastCenter = toast
+                controller.reduceMotion = reduceMotion
+            }
+            .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
+            .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }
     }
 }
 
