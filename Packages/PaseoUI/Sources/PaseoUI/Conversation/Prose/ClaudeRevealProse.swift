@@ -42,6 +42,13 @@ struct ClaudeRevealProse: View {
     /// delta — lets each delta sweep without re-parsing the previous text.
     @State private var tailStart = -1
     @State private var tailLength = 0
+    /// The paced reveal (upstream `text-reveal.ts`, policy in `PaseoStore.TextReveal`): while
+    /// the turn runs, arrival changes the target and the frame clock below releases the backlog
+    /// proportionally — a burst catches up faster instead of jumping. The store keeps the full
+    /// text; only this painted slice is paced, so copy, find and scroll geometry stay
+    /// consistent with what is on screen. Nil when settled or complete (first sight paints
+    /// whole, the turn's end paints everything). Written only while the backlog moves.
+    @State private var paced: TextRevealState?
 
     /// A trailing rich block or file card fades in like a trailing block: it has no
     /// text range the sweep mask can lean on.
@@ -125,11 +132,18 @@ struct ClaudeRevealProse: View {
     var body: some View {
         let _ = PaseoPerf.body("RevealProse")
         let _ = PaseoPerf.why(Self.self)
-        // While the turn runs, a trailing fragment that cannot stand on its own (a dangling
-        // joiner, half a flag) waits for the rest of its cluster instead of painting broken
-        // for a frame: the store keeps the full text, only the painted slice holds back.
-        // Upstream `text-reveal.ts`; the policy is `PaseoStore.TextReveal` (tested on Linux).
-        let source = isStreaming ? TextReveal.trimmedForStreaming(markdown) : markdown
+        // While the turn runs, the painted slice paces behind arrival: deltas set the target
+        // and the frame clock below releases the backlog, at most once per 60 Hz frame, so a
+        // burst catches up faster instead of jumping (upstream `text-reveal.ts`). First sight
+        // paints whole; the turn's end paints everything. The store keeps the full text.
+        let source: String
+        if isStreaming, let paced {
+            source = TextReveal.visibleText(paced, streaming: true)
+        } else if isStreaming {
+            source = TextReveal.trimmedForStreaming(markdown)
+        } else {
+            source = markdown
+        }
         let refs = pieceRefs(source)
         VStack(alignment: .leading, spacing: theme.blockSpacing) {
             ForEach(refs, id: \.stableIdentity) { ref in
@@ -173,16 +187,57 @@ struct ClaudeRevealProse: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             primeForHistory(source)
+            if isStreaming, paced == nil { paced = TextReveal.begin(markdown) }
         }
         .onChange(of: markdown) { _, newValue in
-            reveal(isStreaming ? TextReveal.trimmedForStreaming(newValue) : newValue, refs: refs)
+            if isStreaming {
+                let next = paced.map { TextReveal.retarget($0, newValue) } ?? TextReveal.begin(newValue)
+                paced = next
+                reveal(TextReveal.visibleText(next, streaming: true), refs: refs)
+            } else {
+                reveal(newValue, refs: refs)
+            }
         }
         .onChange(of: isStreaming) { _, streaming in
-            if !streaming { sweepBoundary = 1 }
+            if !streaming {
+                sweepBoundary = 1
+                paced = nil
+            }
         }
         .task(id: revealTick) {
             guard revealTick > 0 else { return }
             withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { sweepBoundary = 1 }
+        }
+        // The reveal's frame clock (upstream `text-reveal.ts:nextTextRevealFrame`). Keyed on
+        // the streaming flag — not per delta — so one task paces the whole turn; it writes
+        // only while the backlog moves and idles without writing once settled (M05: the one
+        // view that draws the paced text is the one invalidated). Cancelled on disappear.
+        .task(id: isStreaming) {
+            guard isStreaming else { return }
+            let clock = ContinuousClock()
+            var last = clock.now
+            var stampMs = 0.0
+            var previousMs: Double?
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(TextReveal.frameIntervalMs / 1000))
+                guard !Task.isCancelled else { return }
+                let now = clock.now
+                let elapsed = now - last
+                last = now
+                let elapsedMs =
+                    Double(elapsed.components.seconds) * 1000
+                    + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
+                guard elapsedMs > 0 else { continue }
+                stampMs += elapsedMs
+                guard
+                    let frame = TextReveal.nextFrame(
+                        previousFrameAtMs: previousMs, timestampMs: stampMs),
+                    let current = paced
+                else { continue }
+                previousMs = frame.frameAtMs
+                let next = TextReveal.advance(current, elapsedMs: frame.elapsedMs)
+                if next.revealed != current.revealed { paced = next }
+            }
         }
     }
 
