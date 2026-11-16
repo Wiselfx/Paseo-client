@@ -63,7 +63,7 @@ struct MascotDriver: ViewModifier {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(1))
                     guard !Task.isCancelled else { return }
-                    controller.mascot.tick(now: Date())
+                    controller.tickMascot()
                 }
             }
     }
@@ -71,13 +71,25 @@ struct MascotDriver: ViewModifier {
     /// True while the mascot's own clock has work to do: on stage, waking, or counting down to
     /// sleep. Once it is asleep only an event can move it, so the ticker stops (P3).
     private var ticking: Bool {
-        controller.mascot.state != .sleeping && !isSurfaceObscured
+        controller.mascotState != .sleeping && !isSurfaceObscured
     }
 }
 
 extension ChatController {
+    /// Advances the machine's clock (expiring moments, falling asleep).
+    func tickMascot() {
+        mascot.tick(now: Date())
+        publishMascotState()
+    }
+
+    /// Publishes the crab's state to the views only when it changed.
+    func publishMascotState() {
+        if mascotState != mascot.state { mascotState = mascot.state }
+    }
+
     func feedMascot(_ event: MascotEvent) {
         mascot.handle(event)
+        publishMascotState()
     }
 
     /// Runs once, when the conversation's first load is ready (UX spec §4.4): baselines the
@@ -176,7 +188,7 @@ extension ChatController {
 /// The crab, feet on the composer card's top edge, flush with its right edge, above the card.
 /// 104 × 72 pt of art; only the resting body takes touches.
 ///
-/// **Reads:** `controller.mascot.state`, `controller.showCostBubble`, `store.contextUsage` (only
+/// **Reads:** `controller.mascotState`, `controller.showCostBubble`, `store.contextUsage` (only
 /// while the bubble is open).
 struct MascotCrab: View {
     @Bindable var controller: ChatController
@@ -187,7 +199,7 @@ struct MascotCrab: View {
 
     var body: some View {
         if mascotEnabled {
-            ComposerCrab(state: controller.mascot.state)
+            ComposerCrab(state: controller.mascotState)
                 // Long-press opens the cost bubble (M17); tap stays the poke.
                 .onLongPressGesture(minimumDuration: 0.35) { controller.showCostBubble = true }
                 .overlay(alignment: .topTrailing) {

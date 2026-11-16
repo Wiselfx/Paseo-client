@@ -205,7 +205,11 @@ struct TranscriptJump: Equatable {
     let voiceEngine = VoiceAudioEngine()
 
     // The mascot's machine and its one-shot baselines.
-    var mascot = MascotStateMachine()
+    /// The machine's memory (last activity, queued moments). Not observed: a keystroke feeds it
+    /// `.userActivity`, and assigning a tracked struct notified every reader on every key (W1). The
+    /// views read `mascotState`, which is written only when the crab's state really changes.
+    @ObservationIgnored var mascot = MascotStateMachine()
+    var mascotState: MascotState = .idle
     var showCostBubble = false
     var signalledToolFailureIds: Set<String> = []
     var compactionOpen = false
