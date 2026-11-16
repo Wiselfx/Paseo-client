@@ -161,8 +161,7 @@ struct ScheduleDetailPage: View {
             detail: agentId.map { "Agent ID: \($0)" })
         if let agentId,
             let workspaceId = session.agents.first(where: { $0.id == agentId })?.workspaceId,
-            let workspace = session.workspaceDirectory.groups.flatMap(\.workspaces)
-                .first(where: { $0.id == workspaceId })
+            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
         {
             infoRow("Workspace", value: workspace.name, detail: workspace.cwd)
         }
