@@ -1006,6 +1006,10 @@ struct TranscriptView: View {
         // At the end within the content's own gap (no composer or keyboard inset in it, J3 §3): the
         // inset-including distance is the composer's height at rest, never within the follow slack.
         let atEnd = scrollTrack.distanceFromContentBottom <= Self.endMargin
+        if PaseoPerf.enabled {
+            PaseoPerf.countNamed(
+                "find.open.dcb\(Int(scrollTrack.distanceFromContentBottom)).db\(Int(scrollTrack.distanceFromBottom)).co\(Int(scrollTrack.contentOffset)).ch\(Int(scrollTrack.contentHeight))")
+        }
         controller.find.anchorSeq =
             atEnd
             ? nil
