@@ -91,6 +91,11 @@ public struct ChatScreen: View {
                 // The user-image manifest loads once, off main: bubbles with history
                 // reserve their image boxes on the first pass instead of jumping.
                 Task { await UserImageCache.shared.ensureManifestLoaded() }
+                // The shared web view for diagrams and SVG cards starts now, not mid-scroll (W1).
+                Task { @MainActor in
+                    await Task.yield()
+                    RichWebSnapshotRenderer.shared.prewarm()
+                }
             }
     }
 
