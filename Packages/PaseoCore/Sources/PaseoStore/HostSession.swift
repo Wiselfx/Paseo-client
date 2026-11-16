@@ -689,7 +689,13 @@ public final class ConversationStore: Identifiable {
 
     public private(set) var phase: LoadPhase = .loading
     // M8c: settable inside the module so ConversationFeatures can apply optimistic updates.
-    public internal(set) var agent: AgentSnapshot?
+    public internal(set) var agent: AgentSnapshot? {
+        didSet { if agent?.workspaceId != workspaceId { workspaceId = agent?.workspaceId } }
+    }
+    /// The workspace the agent lives in, written only when it changes (W1). The shell reads this for the
+    /// sidebar and the panel; reading `agent` itself made every agent update (status, activity stamps)
+    /// re-run the shell's body and everything it builds.
+    public private(set) var workspaceId: String?
     public private(set) var timeline = TimelineState()
     /// `TurnBuilder.turns(from: timeline.rows, activeTurnId: activeTurnId)`, kept in sync.
     public private(set) var turns: [Turn] = []

@@ -273,7 +273,7 @@ public struct ShellView: View {
     /// Both the panel and "mention in chat" follow the workspace on screen, conversation or
     /// draft (audit C #1).
     private var currentWorkspaceId: String? {
-        conversation?.agent?.workspaceId ?? draft?.workspaceId
+        conversation?.workspaceId ?? draft?.workspaceId
     }
 
     // MARK: Mention in chat
