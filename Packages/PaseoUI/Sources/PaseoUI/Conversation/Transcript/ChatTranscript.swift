@@ -913,8 +913,10 @@ struct TranscriptView: View {
         let role = jump.role
         // Where the match sits in a message taller than the screen: the message rests so the match,
         // not its middle, is in view (upstream scrolls to the match's own rect, `viewport.web.ts`).
-        let fraction = FindNavigation.text(of: target, in: store.turns).flatMap {
-            FindNavigation.occurrenceFraction(of: store.search.query, in: $0, last: jump.backward)
+        let fraction = FindNavigation.text(of: target, in: store.turns).flatMap { text in
+            text.count > FindNavigation.longMessage
+                ? FindNavigation.occurrenceFraction(of: store.search.query, in: text, last: jump.backward)
+                : nil
         }
         jumper.run(
             .init(
@@ -924,12 +926,7 @@ struct TranscriptView: View {
                     FindNavigation.target(in: store.turns, seq: seq, role: role)
                         .map { "row:\($0.rowSeqEnd)" }
                 },
-                rowAnchor: { [scrollTrack] in
-                    guard role == .assistant, let fraction,
-                        (scrollTrack.turnHeight(of: turnId) ?? 0) > scrollTrack.visibleHeight * 0.8
-                    else { return .center }
-                    return UnitPoint(x: 0.5, y: fraction)
-                }),
+                rowAnchor: { fraction.map { UnitPoint(x: 0.5, y: $0) } ?? .center }),
             hooks: jumpHooks(onLanded: { [controller] in
                 controller.flash(target.rowSeqEnd)
             }))
@@ -968,8 +965,8 @@ struct TranscriptView: View {
     /// when they were following the tail), so closing find after the matches moved them can bring them
     /// back, and the bar appearing does not move the conversation.
     private func restoreFindAnchor() {
-        let atEnd = controller.isFollowing && scrollTrack.distanceFromBottom <= Self.followSlack
-        controller.find.anchor = atEnd ? nil : scrollTrack.lastTrackedTurn
+        let atEnd = scrollTrack.distanceFromBottom <= Self.followSlack
+        controller.find.anchor = atEnd ? nil : scrollTrack.turnAtViewportTop()
         controller.find.moved = false
     }
 
@@ -1202,7 +1199,21 @@ final class TranscriptScrollTrack: @unchecked Sendable {
         topVisibleSeq = seq
     }
 
-    /// The content offset of a mounted turn, for the jump lead. Nil when it was never laid out.
+    /// The mounted turn under the top of the viewport (the one whose bottom is the first below the
+    /// offset). O(mounted turns), asked once when find opens; nil when nothing is measured yet.
+    func turnAtViewportTop() -> String? {
+        var best: (bottom: CGFloat, id: String)?
+        for id in visibleTurnIds {
+            guard let offset = turnOffsets[id], let height = turnHeights[id] else { continue }
+            let bottom = offset + height
+            guard bottom > contentOffset + 1 else { continue }
+            if let current = best, current.bottom <= bottom { continue }
+            best = (bottom, id)
+        }
+        return best?.id
+    }
+
+    /// The content offset of a mounted turn. Nil when it was never laid out.
     func offset(of id: String) -> CGFloat? { turnOffsets[id] }
 }
 

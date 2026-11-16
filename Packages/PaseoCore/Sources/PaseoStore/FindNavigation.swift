@@ -19,6 +19,10 @@ public enum FindNavigation {
         }
     }
 
+    /// A message longer than this (characters) is taller than a screen: it rests where its match is
+    /// (`occurrenceFraction`) rather than at its middle.
+    public static let longMessage = 800
+
     /// Steps `index` by `delta` through `count` matches, wrapping at both ends (upstream
     /// `navigate`: `(index + locations.length) % locations.length`). Zero when nothing matched.
     public static func wrapped(_ index: Int, delta: Int, count: Int) -> Int {
