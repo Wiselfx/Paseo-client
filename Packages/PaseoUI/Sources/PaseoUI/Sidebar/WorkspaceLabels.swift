@@ -152,11 +152,13 @@ extension PaseoSidebar {
     }
 
     /// Resolved definitions for a workspace's raw names. Names the catalog doesn't know (or a
-    /// catalog that hasn't loaded) still render with the neutral fallback color.
-    func labelDefinitions(for workspace: WorkspaceDescriptor) -> [WorkspaceLabelDefinition] {
+    /// catalog that hasn't loaded) still render with the neutral fallback color. The catalog is
+    /// read once per directory pass and handed in (`SidebarDerivations.labelCatalog`).
+    func labelDefinitions(
+        for workspace: WorkspaceDescriptor, catalog: [WorkspaceLabelDefinition]
+    ) -> [WorkspaceLabelDefinition] {
         let names = workspace.labels ?? []
         guard !names.isEmpty else { return [] }
-        let catalog = labelCatalog
         return names.map { name in
             if let known = catalog.first(where: {
                 $0.name.caseInsensitiveCompare(name) == .orderedSame
@@ -212,57 +214,28 @@ extension PaseoSidebar {
         let current = labelFilter.trimmingCharacters(in: .whitespacesAndNewlines)
         labelFilter = current.caseInsensitiveCompare(name) == .orderedSame ? "" : name
     }
+}
 
-    // MARK: Row meta line
+/// Up to two chips, then "+N". Low emphasis; reading priority sits with the branch and
+/// status, labels come after them.
+struct WorkspaceLabelChips: View {
+    let definitions: [WorkspaceLabelDefinition]
 
-    /// Up to two chips, then "+N". Low emphasis; reading priority sits with the branch and
-    /// status, labels come after them.
-    @ViewBuilder func labelChips(for workspace: WorkspaceDescriptor) -> some View {
-        let defs = labelDefinitions(for: workspace)
-        if !defs.isEmpty {
-            let shown = Array(defs.prefix(2))
+    var body: some View {
+        if !definitions.isEmpty {
+            let shown = Array(definitions.prefix(2))
             HStack(spacing: 4) {
                 ForEach(shown, id: \.name) { label in
                     WorkspaceLabelChip(label: label)
                 }
-                if defs.count > shown.count {
-                    let extra = defs.count - shown.count
+                if definitions.count > shown.count {
+                    let extra = definitions.count - shown.count
                     Text("+\(PaseoFormat.integer(extra))")
                         .font(.paseo(.caption2, weight: .medium))
                         .foregroundStyle(Palette.captionInk)
                         .accessibilityLabel("\(extra) more labels")
                 }
             }
-        }
-    }
-
-    // MARK: Context menu
-
-    /// The labels submenu on a workspace row: checkmark for assignments, "New label…" to mint
-    /// one (and assign it) in place.
-    @ViewBuilder func labelsSubmenu(for workspace: WorkspaceDescriptor) -> some View {
-        let catalog = labelCatalog
-        if catalog.isEmpty {
-            Text("No labels yet")
-        }
-        ForEach(catalog, id: \.name) { label in
-            Button {
-                Haptics.selection()
-                toggleLabel(label, on: workspace)
-            } label: {
-                HStack(spacing: 8) {
-                    WorkspaceLabelDot(color: label.color)
-                    Text(label.name)
-                    Spacer(minLength: 12)
-                    if isLabelAssigned(label, on: workspace) {
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-        }
-        Divider()
-        Button("New label…", systemImage: "plus") {
-            sheet = .newLabel(workspace)
         }
     }
 }

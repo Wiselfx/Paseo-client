@@ -61,8 +61,6 @@ struct PaseoSidebar: View {
     var body: some View {
         let _ = PaseoPerf.body("Sidebar")
         let _ = PaseoPerf.why(Self.self)
-        // Derived once per evaluation and shared by the directory and every row (P5 #3).
-        let derivations = sidebarDerivations()
         let chrome = VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Paseo")
@@ -77,7 +75,8 @@ struct PaseoSidebar: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     navigation
-                    directory(derivations: derivations)
+                    // Reads the agent and workspace lists in its own body (R-1).
+                    SidebarDirectoryHost(sidebar: self)
                         .padding(.horizontal, 20)
                 }
                 .padding(.bottom, 12)
