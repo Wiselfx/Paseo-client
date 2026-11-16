@@ -145,13 +145,41 @@
         }
         public var body: some View {
             let _ = PaseoPerf.body("Markdown")
-            blocks(document.blocks).foregroundStyle(theme.foreground)
-                .onGeometryChange(for: CGFloat.self) {
-                    $0.size.width
-                } action: {
-                    tableViewport = $0
-                }
-                .sheet(item: $expandedCode) { item in
+            withCodeSheet(withTableReader(blocks(document.blocks).foregroundStyle(theme.foreground)))
+                .environment(
+                    \.openURL,
+                    OpenURLAction { url in
+                        if let local = MarkdownAction.decodePresentationURL(url) {
+                            onAction(local)
+                        } else {
+                            onAction(.openLink(url))
+                        }
+                        return .handled
+                    })
+        }
+        /// The table viewport-width reader, hosted only when the document holds a table
+        /// (nested quotes and lists included). Only tables read `tableViewport`: plain prose
+        /// pieces mount no geometry reader (W8). The state persists across the branch, so a
+        /// streamed tail gaining its first table keeps the width it already reported.
+        @ViewBuilder private func withTableReader<Content: View>(_ content: Content) -> some View {
+            if document.hasTable {
+                content
+                    .onGeometryChange(for: CGFloat.self) {
+                        $0.size.width
+                    } action: {
+                        tableViewport = $0
+                    }
+            } else {
+                content
+            }
+        }
+
+        /// The expand-code sheet host, mounted only when the document holds a fenced code
+        /// block — or while an expansion is open, so a rewrite that removes the fence cannot
+        /// strand or slam the sheet. Plain prose pieces mount no sheet host (W8).
+        @ViewBuilder private func withCodeSheet<Content: View>(_ content: Content) -> some View {
+            if document.hasCode || expandedCode != nil {
+                content.sheet(item: $expandedCode) { item in
                     VStack(spacing: 30) {
                         ZStack {
                             Text(item.language.map { $0.prefix(1).uppercased() + $0.dropFirst() + " code" } ?? "Code")
@@ -174,17 +202,11 @@
                     }.padding(16).background(Palette.background).presentationDetents([.large])
                         .presentationDragIndicator(.hidden)
                 }
-                .environment(
-                    \.openURL,
-                    OpenURLAction { url in
-                        if let local = MarkdownAction.decodePresentationURL(url) {
-                            onAction(local)
-                        } else {
-                            onAction(.openLink(url))
-                        }
-                        return .handled
-                    })
+            } else {
+                content
+            }
         }
+
         // Quotes and lists call back into `blocks`, so the opaque type would be defined in
         // terms of itself; one `AnyView` per container level breaks the cycle while every leaf
         // block keeps its concrete type.

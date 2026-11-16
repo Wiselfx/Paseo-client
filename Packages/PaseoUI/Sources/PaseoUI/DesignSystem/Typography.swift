@@ -152,17 +152,14 @@ enum Typography {
             ? ClaudeFontResources.jetBrainsMono : nil
     }()
 
-    /// The registered base face of `family`, or `nil` when only the system face is available.
-    static func baseName(_ family: TextRole.Face) -> String? {
-        switch family {
-        case .serif: serifName
-        case .sans: sansName
-        case .mono: monoName
-        }
-    }
+    /// The app reads in Apple's own faces: New York (serif), SF Pro (sans) and SF Mono (mono), through
+    /// the system font API (`scaledSystem`). They are free to use on Apple platforms, need no font
+    /// files or registration, size optically by themselves and follow Dynamic Type. No bundled family
+    /// is chosen, so this answers nil for every family (the bundled files stay in the repo, unused).
+    static func baseName(_ family: TextRole.Face) -> String? { nil }
 
     /// The serif face name the Markdown theme wants, resolved once.
-    static let resolvedSerifName: String = serifName ?? ClaudeFontResources.newsreader
+    static let resolvedSerifName: String = ClaudeFontResources.newsreader
 
     private struct Key: Hashable {
         let role: TextRole
@@ -207,10 +204,11 @@ enum Typography {
     /// The fallback face, scaled through `UIFontMetrics` so the role's size survives.
     static func scaledSystem(
         size: CGFloat, relativeTo style: Font.TextStyle, design: UIFontDescriptor.SystemDesign,
-        weight: Font.Weight
+        weight: Font.Weight, italic: Bool = false
     ) -> Font {
         let system = UIFont.systemFont(ofSize: size, weight: weight.uiWeight)
-        let descriptor = system.fontDescriptor.withDesign(design) ?? system.fontDescriptor
+        var descriptor = system.fontDescriptor.withDesign(design) ?? system.fontDescriptor
+        if italic { descriptor = descriptor.withSymbolicTraits(.traitItalic) ?? descriptor }
         let face = UIFont(descriptor: descriptor, size: size)
         return Font(UIFontMetrics(forTextStyle: style.uiTextStyle).scaledFont(for: face))
     }
@@ -220,17 +218,15 @@ enum Typography {
     /// for the role's text style, so `adjustsFontForContentSizeCategory` keeps working.
     static func uiFont(_ role: TextRole, weight: Font.Weight = .regular) -> UIFont {
         let resolvedWeight = role.bakedWeight ?? weight
-        let face = ProseFaceTable.face(role.face, weight: resolvedWeight, italic: false)
+        let system = UIFont.systemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
         let base: UIFont
-        if let named = UIFont(name: face.postScriptName, size: role.size) {
-            base = named
-        } else {
-            switch role.face {
-            case .sans, .serif:
-                base = UIFont.systemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
-            case .mono:
-                base = UIFont.monospacedSystemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
-            }
+        switch role.face {
+        case .sans:
+            base = system
+        case .serif:
+            base = system.fontDescriptor.withDesign(.serif).map { UIFont(descriptor: $0, size: role.size) } ?? system
+        case .mono:
+            base = UIFont.monospacedSystemFont(ofSize: role.size, weight: resolvedWeight.uiWeight)
         }
         return UIFontMetrics(forTextStyle: role.relativeTo.uiTextStyle).scaledFont(for: base)
     }
@@ -329,11 +325,11 @@ enum ProseFonts {
             } else {
                 switch face {
                 case .serif:
-                    font = Typography.scaledSystem(size: size, relativeTo: style, design: .serif, weight: weight)
+                    font = Typography.scaledSystem(size: size, relativeTo: style, design: .serif, weight: weight, italic: italic)
                 case .sans:
-                    font = Typography.scaledSystem(size: size, relativeTo: style, design: .default, weight: weight)
+                    font = Typography.scaledSystem(size: size, relativeTo: style, design: .default, weight: weight, italic: italic)
                 case .mono:
-                    font = Typography.scaledSystem(size: size, relativeTo: style, design: .monospaced, weight: weight)
+                    font = Typography.scaledSystem(size: size, relativeTo: style, design: .monospaced, weight: weight, italic: italic)
                 }
             }
             cache[key] = font

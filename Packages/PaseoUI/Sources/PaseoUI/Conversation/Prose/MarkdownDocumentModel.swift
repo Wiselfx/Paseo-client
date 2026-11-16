@@ -6,6 +6,13 @@ import PaseoStore
 public struct MarkdownDocumentModel: Equatable, Sendable {
     public let source: String
     public var blocks: [MarkdownBlock]
+    /// Whether any block — nested quotes and lists included — is a table. Gates the
+    /// per-piece viewport-width reader, which only tables read (W8): plain prose
+    /// pieces mount no geometry reader. Derived from `blocks`, so not part of `==`.
+    public let hasTable: Bool
+    /// Whether any block is a fenced code block. Gates the per-piece expand sheet
+    /// host (W8). Derived from `blocks`, so not part of `==`.
+    public let hasCode: Bool
     /// Per-table content versions, by block index (Phase C §9.1): a hash of the
     /// table's cell text, computed once per parse and memoised with the cached
     /// document. The layout remeasures when it changes (streamed text grows with
@@ -18,6 +25,9 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
             MarkdownBlock.convert)
         blocks = parsed
         tableVersions = Self.tableVersions(for: parsed)
+        let flags = Self.contentFlags(for: parsed)
+        hasTable = flags.hasTable
+        hasCode = flags.hasCode
     }
 
     /// J2: authored destinations the app's environment must handle itself — a local file
@@ -30,11 +40,40 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
         }
         blocks = parsed
         tableVersions = Self.tableVersions(for: parsed)
+        let flags = Self.contentFlags(for: parsed)
+        hasTable = flags.hasTable
+        hasCode = flags.hasCode
     }
     public init(source: String, blocks: [MarkdownBlock]) {
         self.source = source
         self.blocks = blocks
         tableVersions = Self.tableVersions(for: blocks)
+        let flags = Self.contentFlags(for: blocks)
+        hasTable = flags.hasTable
+        hasCode = flags.hasCode
+    }
+
+    /// Which presenting hosts a document needs, in one O(blocks) walk of the parsed
+    /// tree (nested quotes and lists included). Runs once per parse — the result is
+    /// cached with the document — never per body pass.
+    private static func contentFlags(for blocks: [MarkdownBlock]) -> (hasTable: Bool, hasCode: Bool) {
+        var hasTable = false
+        var hasCode = false
+        func visit(_ blocks: [MarkdownBlock]) {
+            for block in blocks {
+                switch block {
+                case .table: hasTable = true
+                case .code: hasCode = true
+                case .quote(let children): visit(children)
+                case .list(_, let items):
+                    for item in items { visit(item.blocks) }
+                default: break
+                }
+                if hasTable, hasCode { return }
+            }
+        }
+        visit(blocks)
+        return (hasTable, hasCode)
     }
 
     private static func tableVersions(for blocks: [MarkdownBlock]) -> [Int: Int] {

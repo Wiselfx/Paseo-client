@@ -95,6 +95,7 @@ struct TranscriptView: View {
     @State private var stableViewportWidth: CGFloat = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.shellDrawer) private var shellDrawer
 
     var body: some View {
@@ -148,6 +149,9 @@ struct TranscriptView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 openPin = false
             }
+            // Remembered heights load with the conversation (one small read): the first layout
+            // pass already pre-sizes settled turns instead of estimating them (W8).
+            .onAppear { scrollTrack.heightMemory.merge(TurnHeightStore.load()) }
             // Fix the window's head as soon as there is something to window, so a turn appended at
             // the tail never slides it.
             .onChange(of: store.turns.isEmpty) { _, empty in
@@ -241,7 +245,7 @@ struct TranscriptView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Self.turnSpacing) {
-                        turns
+                        turnRows(columnWidth: column)
                         pendingPermissionCards
                         resolvedPermissionLines
                         backgroundWorkRow
@@ -410,6 +414,9 @@ struct TranscriptView: View {
             let seq = all[target].firstRowSeq
         else { return false }
         windowStartSeq = seq
+        // Same warm-up as a jump: the newly mounted turns parse before they lay out (W8).
+        ProseWarmup.startForMessages(
+            all[target..<current].flatMap(ProseWarmup.proseTexts(of:)), home: store.agent?.cwd)
         return true
     }
 
@@ -425,9 +432,14 @@ struct TranscriptView: View {
         guard start < current, all.indices.contains(start), let seq = all[start].firstRowSeq
         else { return }
         windowStartSeq = seq
+        // Warm the window the jump is about to show — the target plus the lead above it,
+        // which is what the reader sees first — so its split, parse and highlight are cached
+        // before the rows build (W8). Bounded: at most `windowLead` + 1 turns, one task.
+        ProseWarmup.startForMessages(
+            all[start...index].flatMap(ProseWarmup.proseTexts(of:)), home: store.agent?.cwd)
     }
 
-    @ViewBuilder private var turns: some View {
+    @ViewBuilder private func turnRows(columnWidth: CGFloat) -> some View {
         // One read of the tail id, before the loop: a turn never scans the list to know it is last.
         let lastId = store.turns.last?.id
         // Find inputs are computed per row only while find is open; otherwise both are nil and no
@@ -438,6 +450,12 @@ struct TranscriptView: View {
         // capabilities change, not per turn, and `TurnRow` compares it (E3 §2).
         let availability = controller.actions.availability
         ForEach(windowedTurns) { turn in
+            // The remembered laid-out height pre-sizes the row (W8): the stack's first estimate
+            // is the real height instead of a guess, so the open re-seat converges in one pass.
+            // A miss reads nil and the row measures itself, exactly as before. The hint is not a
+            // TurnRow input: it never invalidates the row, and the row's identity is untouched.
+            let hint = scrollTrack.heightMemory.height(
+                for: heightFingerprint(for: turn, width: columnWidth))
             TurnRow(
                 turn: turn,
                 availability: availability,
@@ -450,6 +468,7 @@ struct TranscriptView: View {
             )
             .equatable()
             .id(turn.id)
+            .frame(minHeight: hint.map { CGFloat($0) } ?? 0)
             .onAppear {
                 scrollTrack.turnAppeared(turn.id, seq: turn.firstRowSeq)
                 reportReadingPosition()
@@ -473,6 +492,7 @@ struct TranscriptView: View {
             } action: { height in
                 scrollTrack.turnHeightChanged(turn.id, height: height)
                 updateRunway(turnId: turn.id, height: height)
+                recordTurnHeight(turn: turn, height: height, hint: hint, width: columnWidth)
             }
         }
     }
@@ -600,6 +620,7 @@ struct TranscriptView: View {
         followIfAtEnd()
         decideBackToEnd()
         closeRunwayAtRest()
+        revealAtRest()
     }
 
     /// The follow state machine (D1 §3). While the finger is down it may only turn follow off,
@@ -743,6 +764,32 @@ struct TranscriptView: View {
         }
     }
 
+    /// The remembered-height key for a turn's row: the timeline epoch, the turn and its row
+    /// range, the prose column bucket and the Dynamic Type size — everything that changes its
+    /// laid-out height, and nothing else. Every input is O(1) in chat size. A key that matches
+    /// names identical content (settled turns are append-only), so a miss just measures.
+    private func heightFingerprint(for turn: Turn, width: CGFloat) -> String {
+        TurnHeightMemory.fingerprint(
+            epoch: store.timeline.epoch ?? "", turnId: turn.id,
+            firstRowSeq: turn.firstRowSeq, lastRowSeq: turn.lastRowSeq,
+            columnWidth: Double(width), dynamicType: String(describing: dynamicTypeSize))
+    }
+
+    /// Remember a settled turn's laid-out height for the next open (W8). The running tail is
+    /// never recorded (its content is still arriving); a report its own hint produced is never
+    /// re-recorded (a minHeight-bound report would reinforce itself forever). Recording writes
+    /// plain track memory and a throttled off-main UserDefaults write — never a body — so it
+    /// costs no invalidation (R-1).
+    private func recordTurnHeight(turn: Turn, height: CGFloat, hint: Double?, width: CGFloat) {
+        guard turn.phase != .running, height > 1 else { return }
+        if let hint, Double(height) <= hint + 0.5 { return }
+        let key = heightFingerprint(for: turn, width: width)
+        guard scrollTrack.heightMemory.record(key: key, height: Double(height)) else { return }
+        guard Date().timeIntervalSince(scrollTrack.lastHeightSave) > 5 else { return }
+        scrollTrack.lastHeightSave = Date()
+        TurnHeightStore.save(scrollTrack.heightMemory.persisted)
+    }
+
     /// The tail turn's height moved: the runway follows it downhill, and once the answer fills the
     /// screen the anchor hands over to the follow rules.
     private func updateRunway(turnId: String, height: CGFloat) {
@@ -846,9 +893,18 @@ struct TranscriptView: View {
         // ended with 370 markdown bodies and a 2.6 s stall because the window grew to the whole chat.
         // The distance first: it is O(1), and most scroll frames are nowhere near the top, so the window's
         // start is not looked up on them. Every condition is a pure read; only the order changes.
+        //
+        // Revealing re-seats the offset (`restoreHistoryAnchor` scrolls by the growth), and a programmatic
+        // offset change during a flick stops the flick: the reader felt the scroll pause near the top. So
+        // the slice is revealed well ahead (`revealAhead` screens) and only while nothing owns the scroll
+        // (at rest, or the moment the scroll settles: `revealAtRest`); a reader who gets within
+        // `revealUrgent` screens of the top mid-flick gets it at once, because a blank top is worse.
         guard !openPin, historyAnchor == nil,
-            metrics.distanceFromTop <= metrics.viewportHeight * 1.5, hiddenTurnCount > 0
+            metrics.distanceFromTop <= metrics.viewportHeight * Self.revealAhead, hiddenTurnCount > 0
         else { return false }
+        if scrollHeld, metrics.distanceFromTop > metrics.viewportHeight * Self.revealUrgent {
+            return false
+        }
         historyAnchor = HistoryAnchor(
             contentHeight: metrics.contentHeight, offsetY: metrics.offsetY,
             cursor: store.timeline.startCursor, startedAt: Date(), isWindow: true)
@@ -857,8 +913,29 @@ struct TranscriptView: View {
         return false
     }
 
+    /// Screens from the top at which the next slice of held-back turns is revealed (at rest), and the
+    /// distance inside which it is revealed even while the reader's scroll is moving.
+    static let revealAhead: CGFloat = 4
+    static let revealUrgent: CGFloat = 1
+
+    /// The scroll settled: reveal the next slice now if the reader is within `revealAhead` screens of
+    /// the top, so the slice is mounted before the next flick reaches it and no flick is interrupted.
+    private func revealAtRest() {
+        guard scrollTrack.viewportHeight > 0 else { return }
+        let metrics = ScrollFollowMetrics(
+            distanceFromBottom: scrollTrack.distanceFromBottom,
+            distanceFromContentBottom: scrollTrack.distanceFromContentBottom,
+            distanceFromTop: scrollTrack.contentOffset,
+            contentHeight: scrollTrack.contentHeight, offsetY: scrollTrack.contentOffset,
+            viewportHeight: scrollTrack.viewportHeight, visibleHeight: scrollTrack.visibleHeight)
+        if !revealOlderTurnsIfNeeded(metrics) { loadOlderIfNeeded(metrics) }
+    }
+
     private func loadOlderIfNeeded(_ metrics: ScrollFollowMetrics) {
-        guard metrics.distanceFromTop <= metrics.viewportHeight else { return }
+        // Fetched ahead too: the page is on its way before the top is, so the prepend lands (and the
+        // offset is compensated) while the reader is still screens away. Only once every held-back turn
+        // is mounted, and the fetch itself never touches the scroll.
+        guard metrics.distanceFromTop <= metrics.viewportHeight * Self.revealAhead else { return }
         guard hiddenTurnCount == 0 else { return }
         guard !historyLoadInFlight, store.timeline.hasOlder, !store.isLoadingOlder else { return }
         historyLoadInFlight = true
@@ -1239,6 +1316,12 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     private var turnSeqs: [String: Int] = [:]
     private var turnOffsets: [String: CGFloat] = [:]
     private var turnHeights: [String: CGFloat] = [:]
+    /// Remembered laid-out turn heights (W8): pre-sizes rows at open so the first content
+    /// estimate is right. Plain memory — nothing observes it, so recording a height never
+    /// invalidates a body; lookups in a body pass simply see the latest writes.
+    var heightMemory = TurnHeightMemory()
+    /// The last persisted write, so recording throttles to one UserDefaults write per interval.
+    var lastHeightSave = Date.distantPast
     private var topVisibleTurnId: String?
 
     /// True when some mounted turn overlaps the viewport (content offsets from the geometry callbacks).
@@ -1321,6 +1404,22 @@ final class TranscriptScrollTrack: @unchecked Sendable {
 
     /// The content offset of a mounted turn. Nil when it was never laid out.
     func offset(of id: String) -> CGFloat? { turnOffsets[id] }
+}
+
+/// Persistence for remembered turn heights (W8): one small UserDefaults dictionary
+/// (bounded by `TurnHeightMemory.capacity`), read once per chat open on main, written
+/// on a private serial queue — never per frame, never on the open path (M26).
+private enum TurnHeightStore {
+    private static let key = "paseo.turnHeights.v1"
+    private static let queue = DispatchQueue(label: "paseo.turnHeights", qos: .utility)
+
+    static func load() -> [String: Double] {
+        UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+    }
+
+    static func save(_ snapshot: [String: Double]) {
+        queue.async { UserDefaults.standard.set(snapshot, forKey: key) }
+    }
 }
 
 /// "Back to the end": offered once you are more than a screen from the end of the content
