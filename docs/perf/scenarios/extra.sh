@@ -4,7 +4,7 @@
 #   3 prose / dynamic type   4 code blocks   5 think and work groups   7b link, video, audio cards
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-key="${GATE_KEY:-/home/paseo/.ssh/paseo_build_ed25519}"; host="${GATE_HOST:-claude@host.orb.internal}"
+key="${GATE_KEY:-/home/paseo/.ssh/paseo_build_ed25519}"; host="${GATE_HOST:?set GATE_HOST to the gate login, e.g. claude@<gate-host>}"
 g() { ssh -i "$key" -o BatchMode=yes "$host" "$@" >/dev/null; }
 scroll="scroll down | scroll down | scroll down | scroll down | scroll down | scroll down | scroll up | scroll up | scroll up | scroll up | scroll up | scroll up | wait 1"
 for size in ax5 xs m; do g "textsize $size"; g "do wait 3"; "$here/perf-run.sh" --keep "3-prose-textsize-$size" "$scroll" | tail -1; done

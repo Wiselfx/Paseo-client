@@ -4,11 +4,11 @@
 #
 #   perf-run.sh [--keep] <name> "<do steps separated by |>"   (no --keep: relaunch with -paseo-perf first)
 #
-# Env: GATE_KEY (default /home/paseo/.ssh/paseo_build_ed25519), GATE_HOST (default claude@host.orb.internal).
+# Env: GATE_KEY (default /home/paseo/.ssh/paseo_build_ed25519), GATE_HOST (required, the gate login).
 # The numbers come from the app itself (PerfMonitor); this script only drives and reads.
 set -euo pipefail
 key="${GATE_KEY:-/home/paseo/.ssh/paseo_build_ed25519}"
-host="${GATE_HOST:-claude@host.orb.internal}"
+host="${GATE_HOST:?set GATE_HOST to the gate login, e.g. claude@<gate-host>}"
 gate() { ssh -i "$key" -o BatchMode=yes "$host" "$@"; }
 
 keep=0
