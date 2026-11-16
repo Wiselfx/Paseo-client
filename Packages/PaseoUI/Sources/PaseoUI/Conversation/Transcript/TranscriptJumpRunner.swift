@@ -72,13 +72,17 @@ import SwiftUI
         }
     }
 
-    /// A tick every 100 ms, at most 80 of them: a layout that never settles cannot loop (rule 14).
+    /// A tick every 100 ms, at most 120 of them: a layout that never settles cannot loop (rule 14).
     static let tickInterval: Duration = .milliseconds(100)
-    static let maxTicks = 80
+    static let maxTicks = 120
     /// Looks at an unchanged layout before it is trusted (the stack measures rows over several frames).
     static let stableLooks = 2
     /// The most times the turn is asked for again, and the row aimed at: a bound, not a goal.
-    static let maxTurnAims = 10
+    static let maxTurnAims = 12
+    /// Ticks to wait before asking for the turn again while it has not appeared: a state change (the
+    /// window growing, a fetched window merging) needs a layout before the id exists, and a cold layout of
+    /// tall turns takes several hundred milliseconds.
+    static let reaskAfter = 4
     static let maxRowAims = 2
     /// Extra aims allowed while `isReached` says no.
     static let maxReachAims = 6
@@ -109,7 +113,8 @@ import SwiftUI
         var rowAims = 0
         var stable = 0
         var lastKey: [Int] = []
-        for _ in 0..<maxTicks {
+        var lastTurnAimTick = -reaskAfter
+        for tick in 0..<maxTicks {
             // Always after a pause: the state change that started the jump (the window, a turn opening
             // for the match) lays out before the first look.
             try? await Task.sleep(for: tickInterval)
@@ -123,11 +128,13 @@ import SwiftUI
                 // Not built, or built and not measured yet: ask for the turn (instant: a long glide is
                 // what leaves the stack without rows).
                 stable = 0
+                guard tick - lastTurnAimTick >= reaskAfter else { continue }
                 guard turnAims < maxTurnAims else {
                     PaseoPerf.mark("jump.gaveUp.unmounted")
                     break
                 }
                 turnAims += 1
+                lastTurnAimTick = tick
                 PaseoPerf.count("jump.turnAim.unmounted")
                 if turnAims > 3 { hooks.nudge() }
                 hooks.scrollTo(target.turnId, .top, false)
@@ -138,11 +145,13 @@ import SwiftUI
             guard probe.isInView else {
                 // Built but off screen (the estimate was off): aim again from here.
                 stable = 0
+                guard tick - lastTurnAimTick >= reaskAfter else { continue }
                 guard turnAims < maxTurnAims else {
                     PaseoPerf.mark("jump.gaveUp.offscreen")
                     break
                 }
                 turnAims += 1
+                lastTurnAimTick = tick
                 PaseoPerf.count("jump.turnAim.offscreen")
                 if turnAims > 3 { hooks.nudge() }
                 hooks.scrollTo(target.turnId, .top, false)
