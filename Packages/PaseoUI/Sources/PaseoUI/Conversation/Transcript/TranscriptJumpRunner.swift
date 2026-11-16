@@ -107,6 +107,7 @@ import SwiftUI
             try? await Task.sleep(for: tickInterval)
             guard !Task.isCancelled else { return }
             if hooks.isScrolling() {
+                PaseoPerf.count("jump.wait.scrolling")
                 stable = 0
                 continue
             }
@@ -133,7 +134,10 @@ import SwiftUI
                 hooks.scrollTo(target.turnId, .top, false)
                 continue
             }
-            guard stable >= stableLooks else { continue }
+            guard stable >= stableLooks else {
+                PaseoPerf.count("jump.wait.unstable")
+                continue
+            }
             // The turn is in view and the layout has held: aim at the row inside it. Twice, the second a
             // no-op unless something above the row finished measuring after the first.
             let row = target.rowId()
