@@ -63,6 +63,21 @@ public enum FindNavigation {
         return nil
     }
 
+    /// The next stop on the way to a turn the lazy stack will not build when asked for it directly (its
+    /// estimate of a far id is off by whole turns, and asking again lands in the same wrong place): the
+    /// turn `step` places from the nearest turn the stack has built, toward the target. The estimate of
+    /// a turn a few places from one that has been measured is good, so each hop lands near its stop and
+    /// the target is built within a few hops. Nil when the target is within `step` of a built turn (ask
+    /// for it directly) or nothing has been built.
+    public static func hopTarget(targetIndex: Int, builtIndices: [Int], step: Int = 4) -> Int? {
+        guard step > 0, let nearest = builtIndices.min(by: {
+            abs($0 - targetIndex) < abs($1 - targetIndex)
+        }) else { return nil }
+        let distance = targetIndex - nearest
+        guard abs(distance) > step else { return nil }
+        return nearest + (distance > 0 ? step : -step)
+    }
+
     /// The first turn index the transcript's window must start at so that the turn at `target` is
     /// mounted with `lead` turns of context above it. The window only ever grows toward older turns
     /// here (a smaller start index is older).

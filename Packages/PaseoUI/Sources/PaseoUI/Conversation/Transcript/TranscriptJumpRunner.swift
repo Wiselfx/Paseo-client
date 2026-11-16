@@ -33,6 +33,9 @@ import SwiftUI
         /// the content is at the bottom; a find row: its measured frame holds the match under the
         /// viewport). The runner aims again, a few times, while this says no.
         var isReached: @MainActor () -> Bool = { true }
+        /// False for a target that is one real id the stack always knows (the end marker): no turn to
+        /// approach, the id is aimed at directly until `isReached` says it arrived.
+        var approaches = true
         /// The first aim at the row glides (the row is inside the turn just reached). The end marker of a
         /// tall last turn is thousands of points away, so it does not.
         var glides = true
@@ -42,6 +45,9 @@ import SwiftUI
     struct Hooks {
         /// The lazy stack has built this turn (its `onAppear` ran and its `onDisappear` has not).
         var isMounted: @MainActor (String) -> Bool
+        /// The next turn to ask for on the way to `turnId` when asking for it directly has not built it
+        /// (`FindNavigation.hopTarget`). Nil: ask for the turn itself.
+        var hop: @MainActor (_ turnId: String) -> String?
         /// Where the turn really is (measured by its own geometry callback, not estimated), and the
         /// viewport's own numbers. Nil until the turn has been measured.
         var probe: @MainActor (String) -> Probe?
@@ -82,7 +88,7 @@ import SwiftUI
     /// Looks at an unchanged layout before it is trusted (the stack measures rows over several frames).
     static let stableLooks = 2
     /// The most times the turn is asked for again, and the row aimed at: a bound, not a goal.
-    static let maxTurnAims = 12
+    static let maxTurnAims = 24
     /// Ticks to wait before asking for the turn again while it has not appeared: a state change (the
     /// window growing, a fetched window merging) needs a layout before the id exists, and a cold layout of
     /// tall turns takes several hundred milliseconds.
@@ -132,9 +138,16 @@ import SwiftUI
                 stable = 0
                 continue
             }
-            guard hooks.isMounted(turnId), let probe = hooks.probe(turnId) else {
+            let measured: Probe?
+            if target.approaches {
+                measured = hooks.isMounted(turnId) ? hooks.probe(turnId) : nil
+            } else {
+                measured = hooks.probe(turnId)
+            }
+            guard let probe = measured else {
                 // Not built, or built and not measured yet: ask for the turn (instant: a long glide is
-                // what leaves the stack without rows).
+                // what leaves the stack without rows). When asking for it directly has not built it, go
+                // there in hops from the nearest turn the stack has built.
                 stable = 0
                 guard tick - lastTurnAimTick >= reaskAfter else { continue }
                 guard turnAims < maxTurnAims else {
@@ -145,12 +158,17 @@ import SwiftUI
                 lastTurnAimTick = tick
                 PaseoPerf.count("jump.turnAim.unmounted")
                 if turnAims > 3 { hooks.nudge() }
-                hooks.scrollTo(turnId, .top, false)
+                if turnAims > 1, let stop = hooks.hop(turnId) {
+                    PaseoPerf.count("jump.hop")
+                    hooks.scrollTo(stop, .top, false)
+                } else {
+                    hooks.scrollTo(turnId, .top, false)
+                }
                 continue
             }
             if probe.layoutKey == lastKey { stable += 1 } else { stable = 0 }
             lastKey = probe.layoutKey
-            guard probe.isInView else {
+            guard !target.approaches || probe.isInView else {
                 // Built but off screen (the estimate was off): aim again from here.
                 stable = 0
                 guard tick - lastTurnAimTick >= reaskAfter else { continue }

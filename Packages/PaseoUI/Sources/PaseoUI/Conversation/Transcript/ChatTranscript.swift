@@ -963,6 +963,13 @@ struct TranscriptView: View {
                 }
                 return scrollTrack.visibleTurnIds.contains(id)
             },
+            hop: { [scrollTrack, store] id in
+                let all = store.turns
+                guard let target = all.firstIndex(where: { $0.id == id }) else { return nil }
+                let built = all.indices.filter { scrollTrack.visibleTurnIds.contains(all[$0].id) }
+                return FindNavigation.hopTarget(targetIndex: target, builtIndices: built)
+                    .map { all[$0].id }
+            },
             probe: { [scrollTrack] id in
                 guard scrollTrack.visibleHeight > 0 else { return nil }
                 // A built turn whose geometry callback has not reported (or was dropped with a re-built
@@ -1005,11 +1012,7 @@ struct TranscriptView: View {
     private func restoreFindAnchor() {
         // At the end within the content's own gap (no composer or keyboard inset in it, J3 §3): the
         // inset-including distance is the composer's height at rest, never within the follow slack.
-        let atEnd = scrollTrack.distanceFromContentBottom <= Self.endMargin
-        if PaseoPerf.enabled {
-            PaseoPerf.countNamed(
-                "find.open.dcb\(Int(scrollTrack.distanceFromContentBottom)).db\(Int(scrollTrack.distanceFromBottom)).co\(Int(scrollTrack.contentOffset)).ch\(Int(scrollTrack.contentHeight))")
-        }
+        let atEnd = controller.isFollowing || scrollTrack.distanceFromContentBottom <= Self.endMargin
         controller.find.anchorSeq =
             atEnd
             ? nil
@@ -1042,15 +1045,14 @@ struct TranscriptView: View {
             // The end marker is the real last row (the open re-seat lands on it the same way).
             jumper.run(
                 .init(
-                    turnId: { [store] in store.turns.last?.id }, rowId: { "bottom" },
-                    rowAnchor: { .bottom },
+                    turnId: { "bottom" }, rowId: { "bottom" }, rowAnchor: { .bottom },
                     // The content's own gap to the viewport's bottom, with no inset in it (J3 §3), so the
                     // keyboard going down while the jump runs cannot move the answer. The marker rests at
                     // the bottom edge with the stack's 20 pt padding under it: at the end within a margin.
                     isReached: { [scrollTrack] in
                         scrollTrack.distanceFromContentBottom <= Self.endMargin
                     },
-                    glides: false),
+                    approaches: false, glides: false),
                 hooks: jumpHooks(onLanded: { [controller] in controller.isFollowing = true }))
         }
     }

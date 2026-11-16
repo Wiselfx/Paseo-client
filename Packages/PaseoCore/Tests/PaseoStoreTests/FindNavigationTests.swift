@@ -167,5 +167,19 @@ import PaseoProtocol
         #expect(FindNavigation.firstTurnIndex(endingAtOrAfter: 46, in: after) == nil)
         #expect(FindNavigation.firstTurnIndex(endingAtOrAfter: 0, in: after) == 0)
     }
+
+    // MARK: Hops
+
+    @Test func aFarTargetIsReachedInHopsFromTheNearestBuiltTurn() {
+        // Built turns 30 and 31; the target is 5: hop to 26 (4 from 30), then from 26 to 22, and so on.
+        #expect(FindNavigation.hopTarget(targetIndex: 5, builtIndices: [30, 31]) == 26)
+        #expect(FindNavigation.hopTarget(targetIndex: 5, builtIndices: [26, 30]) == 22)
+        // Toward a later turn.
+        #expect(FindNavigation.hopTarget(targetIndex: 40, builtIndices: [2, 3]) == 7)
+        // Close enough to ask for it directly, or nothing built.
+        #expect(FindNavigation.hopTarget(targetIndex: 8, builtIndices: [5]) == nil)
+        #expect(FindNavigation.hopTarget(targetIndex: 9, builtIndices: [5]) == nil)
+        #expect(FindNavigation.hopTarget(targetIndex: 9, builtIndices: []) == nil)
+    }
 }
 
