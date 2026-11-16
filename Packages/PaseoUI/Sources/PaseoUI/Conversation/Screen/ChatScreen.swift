@@ -263,7 +263,7 @@ struct UserActivityWiring: ViewModifier {
                 guard phase != .active else { return }
                 controller.dictation.stop(keepingDraft: true)
                 // M15: voice mode stops cleanly in the background (mic + wake lock off).
-                controller.voiceEngine.stopCapture()
+                controller.voiceEngineIfCreated?.stopCapture()
                 if controller.session.voiceSession.isVoiceMode {
                     Task { await controller.session.voiceSession.stop() }
                 }

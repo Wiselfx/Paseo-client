@@ -735,7 +735,7 @@ struct ComposerView: View {
             state: primaryState,
             isEnabled: primaryIsEnabled,
             isMuted: voice?.isMuted ?? false,
-            waveform: controller?.voiceEngine.waveform,
+            waveform: primaryState == .voiceActive ? controller?.voiceEngine.waveform : nil,
             reduceMotion: reduceMotion,
             onTap: primaryTap,
             onQueue: onQueue)
@@ -1759,10 +1759,12 @@ struct ComposerVoiceWiring: ViewModifier {
         var body: some View {
             content
                 .task {
-                    bind()
                     // The composer can appear while the lane is already waiting; `.onChange`
-                    // never fires for the initial value.
-                    if voice.isThinkingToneExpected { controller.voiceEngine.startThinkingTone() }
+                    // never fires for the initial value. The engine is built only when voice needs it.
+                    if voice.isThinkingToneExpected {
+                        bind()
+                        controller.voiceEngine.startThinkingTone()
+                    }
                     // Same reason: capture is started from the same place the callbacks are
                     // bound, so a composer opened on a live lane still records (D2 §4).
                     if voice.isVoiceMode { await startCapture() }
@@ -1786,7 +1788,7 @@ struct ComposerVoiceWiring: ViewModifier {
                 }
                 .onChange(of: voice.isMuted) { _, muted in
                     // Muting clears the meter, like the store's own telemetry reset.
-                    if muted { controller.voiceEngine.meter.reset() }
+                    if muted { controller.voiceEngineIfCreated?.meter.reset() }
                 }
                 .onChange(of: voice.phase) { _, phase in
                     VoiceLog.log.info(
@@ -1799,7 +1801,7 @@ struct ComposerVoiceWiring: ViewModifier {
                     case .listening:
                         Task { await startCapture() }
                     default:
-                        controller.voiceEngine.stopCapture()
+                        controller.voiceEngineIfCreated?.stopCapture()
                         UIApplication.shared.isIdleTimerDisabled = false
                     }
                 }
@@ -1810,6 +1812,7 @@ struct ComposerVoiceWiring: ViewModifier {
                         VoiceLog.log.info(
                             "reply: first \(chunk.data.count)-byte chunk (\(chunk.format, privacy: .public))")
                     }
+                    bind()
                     controller.voiceEngine.enqueue(chunk) { ok in
                         if ok {
                             voice.didPlayChunk(id: chunk.id)
@@ -1819,21 +1822,22 @@ struct ComposerVoiceWiring: ViewModifier {
                     }
                 }
                 .onChange(of: voice.playbackStopRequested) { _, _ in
-                    controller.voiceEngine.stopPlayback()
+                    controller.voiceEngineIfCreated?.stopPlayback()
                 }
                 // M15: the thinking tone (upstream `reconcileCue`): only while the lane is waiting
                 // for a reply and the daemon hears no speech. Timing lives in the engine.
                 .onChange(of: voice.isThinkingToneExpected) { _, expected in
                     if expected {
+                        bind()
                         controller.voiceEngine.startThinkingTone()
                     } else {
-                        controller.voiceEngine.stopThinkingTone()
+                        controller.voiceEngineIfCreated?.stopThinkingTone()
                     }
                 }
                 .onDisappear {
                     Task { await voice.stop() }
-                    controller.voiceEngine.stopThinkingTone()
-                    controller.voiceEngine.stopCapture()
+                    controller.voiceEngineIfCreated?.stopThinkingTone()
+                    controller.voiceEngineIfCreated?.stopCapture()
                     UIApplication.shared.isIdleTimerDisabled = false
                 }
         }
@@ -1854,6 +1858,7 @@ struct ComposerVoiceWiring: ViewModifier {
 
         private func startCapture() async {
             guard voice.isVoiceMode else { return }
+            bind()
             do {
                 try await controller.voiceEngine.requestMicPermission()
                 try await controller.voiceEngine.startCapture()

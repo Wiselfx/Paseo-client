@@ -202,7 +202,17 @@ struct TranscriptJump: Equatable {
 
     // Dictation and realtime voice.
     var dictation = DictationController()
-    let voiceEngine = VoiceAudioEngine()
+    /// Built when voice mode or the thinking tone first needs it (W1): creating it loads the audio
+    /// frameworks (`AVAudioFormat`) and ran for every chat opened, though most never use voice.
+    /// Teardown paths use `voiceEngineIfCreated` so they never build one just to stop it.
+    @ObservationIgnored private var voiceEngineStorage: VoiceAudioEngine?
+    var voiceEngine: VoiceAudioEngine {
+        if let voiceEngineStorage { return voiceEngineStorage }
+        let engine = VoiceAudioEngine()
+        voiceEngineStorage = engine
+        return engine
+    }
+    var voiceEngineIfCreated: VoiceAudioEngine? { voiceEngineStorage }
 
     // The mascot's machine and its one-shot baselines.
     /// The machine's memory (last activity, queued moments). Not observed: a keystroke feeds it
