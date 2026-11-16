@@ -7,17 +7,22 @@ import UIKit
 /// `transform` and `alpha` on the layer tree and evaluates no body.
 struct ShellContainer: UIViewControllerRepresentable {
     let drawer: ShellDrawer
+    /// The roots are assigned again only when this changes (`ShellView.rootsKey`).
+    let rootsKey: ShellRootsKey
     let sidebar: AnyView
     let main: AnyView
     let panel: AnyView
 
     func makeUIViewController(context: Context) -> ShellContainerController {
         let controller = ShellContainerController(drawer: drawer)
+        controller.rootsKey = rootsKey
         controller.setRoots(sidebar: sidebar, main: main, panel: panel)
         return controller
     }
 
     func updateUIViewController(_ controller: ShellContainerController, context: Context) {
+        guard controller.rootsKey != rootsKey else { return }
+        controller.rootsKey = rootsKey
         controller.setRoots(sidebar: sidebar, main: main, panel: panel)
     }
 }
@@ -46,6 +51,8 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
     private var mainRoot: AnyView = AnyView(EmptyView())
     private var panelRoot: AnyView = AnyView(EmptyView())
     private var rootsChanged = true
+    /// The key the current roots were built for (`ShellView.rootsKey`).
+    var rootsKey: ShellRootsKey?
     private var mainObscured = false
     private var sidebarObscured = true
     private var panelVisible = false

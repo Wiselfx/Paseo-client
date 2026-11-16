@@ -15,6 +15,25 @@ extension EnvironmentValues {
     }
 }
 
+/// See `ShellView.rootsKey`.
+struct ShellRootsKey: Equatable {
+    let session: ObjectIdentifier
+    let selectedAgentId: String?
+    let conversation: ObjectIdentifier?
+    let draft: ObjectIdentifier?
+    let homeSettled: Bool
+    let panelTerminalId: String?
+    let workspaceId: String?
+    let directoryLoaded: Bool
+    let directoryFailed: Bool
+    let dynamicTypeSize: DynamicTypeSize
+    let reduceMotion: Bool
+    let codeSizeStep: Int
+    let pureBlack: Bool
+    let accent: ClaudeAccent
+    let hostSwitch: ObjectIdentifier?
+}
+
 /// The app after connecting: a drawer of workspaces and their agents on the left, the selected
 /// agent's conversation in the middle, and the workspace panel pushed over both from the right
 /// edge. The three surfaces are `UIView`s inside one UIKit container (`ShellContainer`), which
@@ -86,7 +105,8 @@ public struct ShellView: View {
                 ("codeStep", "\(codeSizeStep)"), ("black", "\(pureBlack)"), ("accent", "\(accent)"),
                 ("notifTarget", "\(notificationTarget != nil)"), ("deep", "\(deepLinkTarget != nil)"),
             ])
-        ShellContainer(drawer: drawer, sidebar: sidebar, main: main, panel: panel)
+        ShellContainer(
+            drawer: drawer, rootsKey: rootsKey, sidebar: sidebar, main: main, panel: panel)
             .ignoresSafeArea()
             .toastHost(toastCenter)
             .background {
@@ -157,6 +177,26 @@ public struct ShellView: View {
                 .foregroundStyle(Palette.ink)
                 .tint(Palette.ink)
         )
+    }
+
+    /// Everything the three roots are built from that can differ between two passes of this body.
+    /// The container assigns new roots only when this changes (W1): the body also runs when an
+    /// environment closure the app re-creates (`notificationPermissionAction`) or a binding counts as
+    /// changed, which re-assigned all three hosting controllers' roots and re-ran the whole sidebar,
+    /// the chat screen and the composer at the first keyboard focus (about 220 ms in Release). The
+    /// closures the roots capture act on `@State` storage and stable objects, so an unchanged key
+    /// means the old roots are still right.
+    private var rootsKey: ShellRootsKey {
+        ShellRootsKey(
+            session: ObjectIdentifier(session), selectedAgentId: selectedAgentId,
+            conversation: conversation.map { ObjectIdentifier($0) },
+            draft: draft.map { ObjectIdentifier($0) }, homeSettled: homeSettled,
+            panelTerminalId: panelTerminalId, workspaceId: currentWorkspaceId,
+            directoryLoaded: session.workspaceDirectory.hasLoaded,
+            directoryFailed: session.workspaceDirectory.error != nil,
+            dynamicTypeSize: dynamicTypeSize, reduceMotion: reduceMotion,
+            codeSizeStep: codeSizeStep, pureBlack: pureBlack, accent: accent,
+            hostSwitch: hostSwitch.map { ObjectIdentifier($0) })
     }
 
     private var sidebar: AnyView {
