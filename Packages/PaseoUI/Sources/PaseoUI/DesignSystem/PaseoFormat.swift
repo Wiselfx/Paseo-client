@@ -8,7 +8,39 @@ enum PaseoFormat {
     /// A sent message's time, as upstream shows it under a user message: today "3:00 PM" (the device's
     /// 12 h / 24 h choice), the previous six calendar days "Wednesday 3:00 PM", older "14 May 2026, 3:00 PM".
     /// Upstream: `packages/app/src/utils/time.ts:128-158`.
-    static func messageTimestamp(_ date: Date, now: Date = Date()) -> String {
+    ///
+    /// Remembered per (message time, day) (W1): `Date.formatted` builds a format style per call and each
+    /// user bubble asked on every body pass; the answer changes only with the locale, the 12 h / 24 h
+    /// setting or the day, and the notifications below clear the memory for those.
+    @MainActor static func messageTimestamp(_ date: Date, now: Date = Date()) -> String {
+        _ = timestampInvalidation
+        let key = TimestampKey(date: date, day: Calendar.current.startOfDay(for: now))
+        if let cached = timestampCache[key] { return cached }
+        let text = messageTimestampUncached(date, now: now)
+        if timestampCache.count >= 512 { timestampCache.removeAll(keepingCapacity: true) }
+        timestampCache[key] = text
+        return text
+    }
+
+    private struct TimestampKey: Hashable {
+        let date: Date
+        let day: Date
+    }
+
+    @MainActor private static var timestampCache: [TimestampKey: String] = [:]
+
+    @MainActor private static let timestampInvalidation: [NSObjectProtocol] = {
+        [
+            NSLocale.currentLocaleDidChangeNotification, NSNotification.Name.NSSystemTimeZoneDidChange,
+            NSNotification.Name.NSCalendarDayChanged,
+        ].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { PaseoFormat.timestampCache.removeAll() }
+            }
+        }
+    }()
+
+    private static func messageTimestampUncached(_ date: Date, now: Date) -> String {
         let calendar = Calendar.current
         let time = date.formatted(date: .omitted, time: .shortened)
         let days = calendar.dateComponents(
