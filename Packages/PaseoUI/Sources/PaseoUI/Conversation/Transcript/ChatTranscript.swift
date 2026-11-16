@@ -949,7 +949,15 @@ struct TranscriptView: View {
                     let y = frame.minY + frame.height * (fraction ?? 0.5)
                     return y > 0 && y < scrollTrack.viewportHeight
                 },
-                verifies: true),
+                verifies: true,
+                correction: { [findRows, scrollTrack] in
+                    guard let frame = findRows.frame(of: target.rowSeqEnd) else { return nil }
+                    // Where the match should rest: the anchor's place in the visible area under the header
+                    // (about 100 pt of chrome sits above it).
+                    let anchorY = fraction ?? 0.5
+                    let resting = 100 + anchorY * scrollTrack.visibleHeight
+                    return frame.minY + frame.height * anchorY - resting
+                }),
             hooks: jumpHooks(onLanded: { [controller] in
                 controller.flash(target.rowSeqEnd)
             }))
@@ -1001,6 +1009,7 @@ struct TranscriptView: View {
                 default: return false
                 }
             },
+            scrollToOffset: { y in scrollPosition.scrollTo(y: max(y, 0)) },
             nudge: { [scrollTrack] in
                 PaseoPerf.count("jump.nudge")
                 scrollPosition.scrollTo(y: max(scrollTrack.contentOffset - 2, 0))

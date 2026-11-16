@@ -40,6 +40,10 @@ import SwiftUI
         /// looks again half a second after it first says yes, because a row that finishes measuring late
         /// (a long message, an image) moves the match after the aim.
         var verifies = false
+        /// How far (points, positive = scroll down) the row's measured position is from where it should rest,
+        /// when the transcript knows it. A re-aim after the first two id aims missed moves the offset by this
+        /// much (a hop of at most a few screens, on a measured frame) instead of asking for the id again.
+        var correction: @MainActor () -> CGFloat? = { nil }
         /// The first aim at the row glides (the row is inside the turn just reached). The end marker of a
         /// tall last turn is thousands of points away, so it does not.
         var glides = true
@@ -59,6 +63,8 @@ import SwiftUI
         var scrollTo: @MainActor (_ id: String, _ anchor: UnitPoint, _ animated: Bool) -> Void
         /// A finger, a flick or a deceleration owns the scroll view: the reader's, which always wins.
         var isScrolling: @MainActor () -> Bool
+        /// Scrolls to a content offset (instant). Only used for the measured correction above.
+        var scrollToOffset: @MainActor (_ y: CGFloat) -> Void
         /// Moves the offset by a point, which makes the stack look again.
         var nudge: @MainActor () -> Void
         /// Reached: the row is under the viewport. Called once; also when the runner gives up, so the
@@ -211,6 +217,11 @@ import SwiftUI
                 PaseoPerf.count("jump.rowAim")
                 stable = 0
                 confirmed = 0
+                if rowAims > maxRowAims, let delta = target.correction() {
+                    PaseoPerf.count("jump.correction")
+                    hooks.scrollToOffset(probe.contentOffset + delta)
+                    continue
+                }
                 hooks.scrollTo(row ?? turnId, row == nil ? .top : target.rowAnchor(), target.glides && rowAims == 1)
                 continue
             }
