@@ -50,6 +50,20 @@ struct ClaudeRevealProse: View {
     /// whole, the turn's end paints everything). Written only while the backlog moves.
     @State private var paced: TextRevealState?
 
+    /// What this update paints. While the turn runs, the slice paces behind arrival: deltas
+    /// set the target and the frame clock below releases the backlog, at most once per 60 Hz
+    /// frame, so a burst catches up faster instead of jumping (upstream `text-reveal.ts`).
+    /// First sight paints whole; the turn's end paints everything. The store keeps the full text.
+    private func paintedSource(markdown: String, isStreaming: Bool, paced: TextRevealState?) -> String {
+        if isStreaming, let paced {
+            return TextReveal.visibleText(paced, streaming: true)
+        }
+        if isStreaming {
+            return TextReveal.trimmedForStreaming(markdown)
+        }
+        return markdown
+    }
+
     /// A trailing rich block or file card fades in like a trailing block: it has no
     /// text range the sweep mask can lean on.
     private func matchesBlockOrFile(_ piece: RichPiece) -> Bool {
@@ -132,18 +146,7 @@ struct ClaudeRevealProse: View {
     var body: some View {
         let _ = PaseoPerf.body("RevealProse")
         let _ = PaseoPerf.why(Self.self)
-        // While the turn runs, the painted slice paces behind arrival: deltas set the target
-        // and the frame clock below releases the backlog, at most once per 60 Hz frame, so a
-        // burst catches up faster instead of jumping (upstream `text-reveal.ts`). First sight
-        // paints whole; the turn's end paints everything. The store keeps the full text.
-        let source: String
-        if isStreaming, let paced {
-            source = TextReveal.visibleText(paced, streaming: true)
-        } else if isStreaming {
-            source = TextReveal.trimmedForStreaming(markdown)
-        } else {
-            source = markdown
-        }
+        let source = paintedSource(markdown: markdown, isStreaming: isStreaming, paced: paced)
         let refs = pieceRefs(source)
         VStack(alignment: .leading, spacing: theme.blockSpacing) {
             ForEach(refs, id: \.stableIdentity) { ref in
