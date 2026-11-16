@@ -115,7 +115,10 @@ import SwiftUI
                 // Not built, or built and not measured yet: ask for the turn (instant: a long glide is
                 // what leaves the stack without rows).
                 stable = 0
-                guard turnAims < maxTurnAims else { break }
+                guard turnAims < maxTurnAims else {
+                    PaseoPerf.mark("jump.gaveUp.unmounted")
+                    break
+                }
                 turnAims += 1
                 PaseoPerf.count("jump.turnAim.unmounted")
                 if turnAims > 3 { hooks.nudge() }
@@ -127,7 +130,10 @@ import SwiftUI
             guard probe.isInView else {
                 // Built but off screen (the estimate was off): aim again from here.
                 stable = 0
-                guard turnAims < maxTurnAims else { break }
+                guard turnAims < maxTurnAims else {
+                    PaseoPerf.mark("jump.gaveUp.offscreen")
+                    break
+                }
                 turnAims += 1
                 PaseoPerf.count("jump.turnAim.offscreen")
                 if turnAims > 3 { hooks.nudge() }

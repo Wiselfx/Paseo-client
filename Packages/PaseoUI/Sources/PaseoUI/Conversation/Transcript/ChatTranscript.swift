@@ -954,6 +954,7 @@ struct TranscriptView: View {
                 }
             },
             isScrolling: { [scrollTrack] in
+                if PaseoPerf.enabled { PaseoPerf.countNamed("jump.phase.\(scrollTrack.phase)") }
                 switch scrollTrack.phase {
                 case .idle: return false
                 default: return true
