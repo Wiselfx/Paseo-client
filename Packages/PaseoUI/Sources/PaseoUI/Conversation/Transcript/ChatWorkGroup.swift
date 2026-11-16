@@ -19,8 +19,6 @@ struct ClaudeWorkGroupCell: View {
     @Environment(\.claudeProcessCap) private var processCap
     @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
 
-    /// The masked sweep's rate: display rate was an offscreen pass per frame (findings #11, #24).
-
     var opensByDefault: Bool {
         turnIsRunning && group.isActive
             && ChatDisplayMode(rawValue: chatDisplay) != .collapseToolCalls
