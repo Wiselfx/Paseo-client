@@ -559,7 +559,7 @@ struct WorkspaceFileViewer: View {
 
     @ViewBuilder private func textView(_ file: FileExplorerFile) -> some View {
         if let render, case .text(let text, let highlighted, let lines) = render.payload {
-            WorkspaceCodeView(text: text, highlighted: highlighted, lines: lines)
+            WorkspaceCodeView(text: text, highlighted: highlighted, lines: lines).equatable()
         } else if render == nil {
             LoadingState()
         } else {
@@ -677,7 +677,7 @@ struct WorkspaceFileViewer: View {
         if let render, case .text(let modelText, let highlighted, let lines) = render.payload,
             modelText == text
         {
-            WorkspaceCodeView(text: modelText, highlighted: highlighted, lines: lines)
+            WorkspaceCodeView(text: modelText, highlighted: highlighted, lines: lines).equatable()
         } else {
             WorkspaceCodeView(text: text, highlighted: nil, lines: text.splitLines())
         }
@@ -1037,7 +1037,13 @@ private extension String {
 /// A file's text, monospaced, with the syntax theme in force, a line-number gutter, horizontal
 /// scroll for long lines and selection. Files over 500 lines render lazy line rows; smaller files
 /// keep one selectable `Text`, as before.
-struct WorkspaceCodeView: View {
+struct WorkspaceCodeView: View, Equatable {
+    /// R-2: the viewer re-runs for toasts, reveal and copy state; an unchanged document (same text, same
+    /// highlighting) skips this body and the whole-file `AttributedString` it builds.
+    nonisolated static func == (lhs: WorkspaceCodeView, rhs: WorkspaceCodeView) -> Bool {
+        lhs.text == rhs.text && lhs.highlighted == rhs.highlighted
+    }
+
     /// The plain source, kept for the copy path and for the long-file rows.
     let text: String
     /// The highlighted whole document; nil for long files (highlighter cap) and raw source.
