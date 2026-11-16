@@ -82,8 +82,8 @@ struct TranscriptView: View {
     @State private var afterWindowGrowth: (() -> Void)?
     /// True once find or a jump needed an older turn: the whole conversation is in the stack from then on.
     @State private var windowDisabled = false
-    static let windowSize = 8
-    static let windowStep = 8
+    static let windowSize = 16
+    static let windowStep = 12
     /// The send runway (D1 §2). One `@State`, written on layout, never per scroll frame.
     @State private var runway = SendRunway()
     /// The transcript's height with the keyboard down (E3b). Rich media and the process cap read
