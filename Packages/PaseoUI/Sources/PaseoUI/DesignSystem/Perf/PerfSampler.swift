@@ -27,6 +27,9 @@
             var samples = 0
             var leaf: [String: Int] = [:]
             var own: [String: Int] = [:]
+            /// The eight innermost frames with a name, leaf first: who calls the leaf (a protocol
+            /// conformance lookup, a `mach_msg` wait) is the part a fix needs.
+            var stack: [String: Int] = [:]
         }
 
         /// The wake the main thread is inside, or 0 when it sleeps. Written by `PerfMonitor`.
@@ -173,10 +176,19 @@
                 if chain.count == 3 { break }
             }
             let ownName: String? = chain.isEmpty ? nil : chain.joined(separator: " < ")
+            var path: [String] = []
+            for address in frames {
+                let name = symbol(for: address).name
+                guard name != "?", path.last != name else { continue }
+                path.append(String(name.prefix(34)))
+                if path.count == 8 { break }
+            }
+            let stackName = path.joined(separator: " < ")
             collected.withLock { histogram in
                 histogram.samples += 1
                 histogram.leaf[leaf, default: 0] += 1
                 if let ownName { histogram.own[ownName, default: 0] += 1 }
+                histogram.stack[stackName, default: 0] += 1
             }
         }
     }

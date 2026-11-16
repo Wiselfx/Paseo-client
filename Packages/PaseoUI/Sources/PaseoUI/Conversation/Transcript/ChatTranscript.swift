@@ -97,6 +97,7 @@ struct TranscriptView: View {
 
     var body: some View {
         let _ = PaseoPerf.body("Transcript")
+        let _ = PaseoPerf.why(Self.self)
         content
             // A turn arrived. If you just sent it, the runway opens and it glides to the top.
             .onChange(of: store.turns.last?.id) { old, id in
