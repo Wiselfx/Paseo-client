@@ -21,16 +21,15 @@
         public static let jetBrainsMonoItalic = "JetBrainsMono-Italic"
 
         private static let registration: Void = {
-            for name in [
+            // One call, one round trip to the font daemon, instead of nine; it runs before the first frame.
+            let urls = [
                 "InterVariable", "InterVariable-Italic",
                 "Newsreader", "Newsreader-Italic",
                 "JetBrainsMonoVariable", "JetBrainsMonoItalicVariable",
                 "AnthropicSansWebText", "AnthropicSerifWebText", "AnthropicMonoWeb",
-            ] {
-                if let url = Bundle.module.url(forResource: name, withExtension: "ttf") {
-                    CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-                }
-            }
+            ].compactMap { Bundle.module.url(forResource: $0, withExtension: "ttf") }
+            guard !urls.isEmpty else { return }
+            CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
         }()
 
         public static func register() { _ = registration }
