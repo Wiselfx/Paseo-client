@@ -31,7 +31,6 @@ public struct ChatScreen: View {
     /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
     @State private var composerFocused = false
     @Environment(\.toast) private var toast
-    @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
@@ -86,7 +85,7 @@ public struct ChatScreen: View {
             .tint(Palette.ink)
             // File links in prose and in your bubbles (`paseo-file://…`) open the file viewer;
             // ordinary links fall through to the host's handler unchanged.
-            .environment(\.openURL, controller.fileLinkAction(host: openURL))
+            .modifier(ChatOpenURLWiring(controller: controller))
             .environment(\.chatActions, controller.actions)
             .environment(\.richActions, controller.richActions)
             .modifier(
@@ -99,7 +98,6 @@ public struct ChatScreen: View {
             .onAppear {
                 controller.toastCenter = toast
                 controller.reduceMotion = reduceMotion
-                controller.openURLFromEnvironment = { url in openURL(url) }
                 // The user-image manifest loads once, off main: bubbles with history
                 // reserve their image boxes on the first pass instead of jumping.
                 Task { await UserImageCache.shared.ensureManifestLoaded() }
@@ -168,6 +166,20 @@ final class ChatControllerHolder {
         let controller = withObservationTracking({ make() }, onChange: {})
         built = controller
         return controller
+    }
+}
+
+/// Reads `\.openURL` in its own body (W1). `ChatScreen` read it itself, and the value is rebuilt by the
+/// hosting controller whenever the input session changes, so every keystroke re-ran the screen's body
+/// (21 runs a window with no input of its own changing). Here only this modifier re-evaluates.
+struct ChatOpenURLWiring: ViewModifier {
+    let controller: ChatController
+    @Environment(\.openURL) private var openURL
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.openURL, controller.fileLinkAction(host: openURL))
+            .onAppear { controller.openURLFromEnvironment = { url in openURL(url) } }
     }
 }
 
