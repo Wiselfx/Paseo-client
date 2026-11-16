@@ -1038,7 +1038,7 @@ struct TranscriptView: View {
             : scrollTrack.turnAtViewportTop().flatMap { id in
                 store.turns.first { $0.id == id }?.firstRowSeq
             }
-        controller.find.moved = false
+        if controller.find.moved { controller.find.moved = false }
     }
 
     /// Find closed: if stepping through matches moved the reader, back to the turn they were on, or to
@@ -1072,7 +1072,9 @@ struct TranscriptView: View {
                         scrollTrack.distanceFromContentBottom <= Self.endMargin
                     },
                     approaches: false, verifies: true, glides: false),
-                hooks: jumpHooks(onLanded: { [controller] in controller.isFollowing = true }))
+                hooks: jumpHooks(onLanded: { [controller] in
+                    if !controller.isFollowing { controller.isFollowing = true }
+                }))
         }
     }
 
@@ -1083,8 +1085,8 @@ struct TranscriptView: View {
     private func jumpToTurn(_ id: String) {
         openPin = false
         // Jumping backwards releases the tail-follow, like M7b.
-        controller.isFollowing = false
-        controller.anchoringToAnswer = false
+        if controller.isFollowing { controller.isFollowing = false }
+        if controller.anchoringToAnswer { controller.anchoringToAnswer = false }
         let all = store.turns
         // The row's position in the timeline, or the turn's first row for a turn id: ids move when an
         // older page prepends rows to a partial turn, positions do not.
