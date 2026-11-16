@@ -132,3 +132,49 @@ Within the run-to-run range the two builds are equal for typing; Release is some
 - **Target "0 stalls over 16 ms typing 40 chars": not met.** What would be needed: the first-focus cold cost needs the transcript not to re-measure on keyboard show (pin the transcript's layout to a keyboard-independent height, as `stableViewportHeight` already does for caps) and the per-key UIKit layout wait needs `UITextView` TextKit 1 vs 2 and language-identification settings tested one at a time (`writingToolsBehavior`, `inlinePredictionType`, `spellCheckingType`), each of which is a visible behaviour change and needs the owner's decision; none was changed.
 
 **B. New session (Release, sidebar open first, 3 runs).** Open: 6 hitches [6..9], worst frame 115 ms [101..139], stall max 98 ms [70..122]. Open plus focus: 7 hitches [6..7], worst frame 329 ms [327..343], stall max 337 ms [335..353]. The focus part is the same first-focus cold cost as above (the draft composer is the same view); the open's 98 ms is view construction of the draft page. Not fixed: the named candidates (asset-catalog lookups in `DraftChatView.workspaceLine`, `dictationDeniedBanner`) are inside windows dominated by cold conformance lookups, and no change to them was measured to help; the keyboard prewarm did not help either. Needs a per-view span run in Release (spans around `DraftChatView` pieces) to attribute the 98 ms.
+
+
+## Seventh pass: fixes by reading and sampling (Release, single runs per fix; 3-run confirmation where noted)
+
+Method change: fix first, one sampled run to name a cause, one run per batch to confirm. Two things found
+that change how every earlier number must be read (rules 22 and 23):
+- **The instrument cost what it measured.** `PaseoPerf.diff` in `ShellView.body` string-interpolated environment
+  values through `Mirror` on each pass (45 of 110 samples in the first-focus window were `swift_conformsToProtocol`
+  under `ShellView.body`), and each fit-memo hit re-ran `sizeThatFits`. Both removed; the "cold protocol
+  conformance" story of the sixth pass was partly this.
+- **AXe is not free.** The first interaction after a launch initialises the accessibility validation machinery in the
+  app (`AXValidationManager`, `AXCoreUtilities` conformance lookups: sampled in the new-session open and the
+  first tap). A throwaway `ui reading` step before the measured action absorbs it: the tap-window stall fell
+  from 117 to 140 ms to under 28 ms (single run). The remaining ~340 ms is the first software keyboard show (UIKit keyboard
+  views, render server, IOSurface allocation, `RBSAssertion` XPC, key-command walk), present with AX warm.
+
+| # | Area | Cause (evidence) | Fix | Before -> after (Release) |
+| --- | --- | --- | --- | --- |
+| 7.1 | Typing: `ChatScreen`/`Composer` bodies per key | `_printChanges`: `ChatScreen: ConversationStore.draft changed`. A `Binding(get: store.draft)` built in `ChatScreen.body` is evaluated by SwiftUI when it compares `ComposerView`'s inputs, which charged the draft read to the screen | `ComposerView` reads and writes the text itself (`text`, `textBinding` inside its body) | `ChatScreen` body per key 1 -> 0, `Composer` 1 per key; stalls per key 18 to 25 ms -> max 20 ms over 16 keys (single run) |
+| 7.2 | Typing: mascot | `feedMascot(.userActivity)` per key assigned the tracked `mascot` struct and notified the crab and the ticker | machine `@ObservationIgnored`, `mascotState` written on change | removes one notification per key |
+| 7.3 | First focus: shell cascade | `ShellView` re-ran at focus (non-comparable env closures and bindings count as changed) and re-assigned all three hosting roots: `Sidebar`, `SidebarRoll`, `ChatScreen`, `Composer` bodies in the focus window | `ShellRootsKey`; `ShellContainer` assigns roots only when the key changed | focus window bodies `Shell,Sidebar,SidebarRoll,ChatScreen,Composer` -> `Shell` (cheap) then `Composer,Transcript`; stalls 140+77+48 ms before the keyboard frame -> 120 (AX) + 46 |
+| 7.4 | Shell dependency on the whole agent | `currentWorkspaceId` read `conversation.agent`; every agent update re-ran the shell | `ConversationStore.workspaceId`, written only on change (Core test `ConversationWorkspaceIdTests`) | shell body no longer follows agent updates |
+| 7.5 | Long-chat open: URL scan | sampler: 179 of 949 samples in `nextHTTPScheme`/`scanBareImageURLs`/`youtubeHits` under `ConversationMediaIndex.update` on main; `text[i...].count` per character is O(n^2) | `httpSchemeLength` walks at most 8 characters; `nextCaseInsensitive` bounded | removes the quadratic term (message-length dependent) |
+| 7.6 | Long-chat open: media index | the index of every assistant message ran in `updateTurns` on main though only the media sheet reads it | built when asked (`mediaIndex` getter, incremental) | removes a full-conversation scan from the open |
+| 7.7 | Long-chat open / rich media: web view | `WKWebView.init` (100 to 700 ms) landed inside the open or the first rich card | prewarm starts when the open re-seat ends (+1 s), fallback 8 s | rich-media scroll, 8 steps: 5 hitches, stall max 41 ms -> 1 hitch, 27.7 ms (single run) |
+| 7.8 | Chat open: voice engine | `VoiceAudioEngine()` (AVAudioFormat, AVFAudio load) in every `ChatController.init` | built on first use (`voiceEngineIfCreated` for teardown) | ~8 of 245 samples at open |
+| 7.9 | Bodies | `PaseoDate.parse` (FormatStyle) per agent per sidebar pass and per user bubble; `messageTimestamp` two format styles per bubble body; `DictationController` allocated per `ComposerView` init | caches; lazy holder (Core test `PaseoDateCacheTests`) | micro, on every sidebar pass and bubble |
+| 7.10 | Open re-seat | stayed armed until the keyboard moved the insets, then scrolled inside the keyboard's first frame | disarms 0.8 s after convergence and on `keyboardWillShow` | no `openpin.fire` in the focus window when the chat is idle |
+
+**Long-chat open (65 000 pt chat), 3 cold launches, largest single stall:** 762 / 781 / 1249 ms before this
+pass's open-path fixes (build before 7.6/7.7) and 1101 / 796 / 773 ms after: no measurable change within the
+range. What dominates is SwiftUI's first render of ~44 `Markdown` bodies (`DynamicPropertyCache.fields`,
+`makeViewList` conformance lookups per view type, UITextView-backed inline-code paragraphs
+`ClaudeSelectableInlineCode`, TextKit shaping). A smaller turn window (8/8) was tried and made some opens 2.5 to
+4 s (more re-seat passes): **reverted**. Left: a cheaper first render of inline-code paragraphs (a SwiftUI `Text`
+path with the same selection behaviour) is the next structural step; it changes a text engine and was not done
+blind.
+
+**First composer focus:** after 7.3 and the AX finding the app-controlled part is gone; ~340 ms remains and is
+UIKit's first keyboard presentation. A word-tagger/language-identifier warm-up off main (`NLTagger`,
+`NLLanguageRecognizer`) was tried and did not move it (reverted); an invisible keyboard prewarm does not exist
+(a visible one would flash).
+
+**Not verified on a phone / not done:** media pipeline review (downsampling, caches) and the rich-block
+`GeometryReader`s were read but not changed; the new-session open (98 ms) is dominated by the AX/first-view cost
+above and was not reduced further; drawer settle unchanged (3 hitches, stall max 16 ms).

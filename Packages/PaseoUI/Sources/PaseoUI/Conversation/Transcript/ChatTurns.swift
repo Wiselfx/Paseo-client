@@ -140,6 +140,7 @@ struct ClaudeTurnView: View {
 
     var body: some View {
         let _ = PaseoPerf.body("TurnView")
+        let _ = PaseoPerf.why(Self.self)
         if showsCollapsedTurn {
             collapsedTurn
         } else {
@@ -635,6 +636,7 @@ struct TurnRow: View, Equatable {
 
     var body: some View {
         let _ = PaseoPerf.body("TurnRow")
+        let _ = PaseoPerf.why(Self.self)
         ClaudeTurnView(
             turn: turn,
             onMarkdown: actions.markdown,

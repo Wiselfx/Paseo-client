@@ -541,6 +541,7 @@ struct ClaudeProse: View {
 
     var body: some View {
         let _ = PaseoPerf.body("Prose")
+        let _ = PaseoPerf.why(Self.self)
         ClaudeRevealProse(
             markdown: markdown, theme: Self.theme(), onAction: onAction,
             isStreaming: isStreaming,

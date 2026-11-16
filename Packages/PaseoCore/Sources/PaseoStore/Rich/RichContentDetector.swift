@@ -887,9 +887,8 @@ func nextCaseInsensitive(_ text: Substring, _ needle: String, from start: Substr
     let firstLower = String(first).lowercased()
     while i < text.endIndex {
         if String(text[i]).lowercased() == firstLower {
-            let candidate = text[i...]
-            if candidate.count >= lowered.count,
-               candidate.prefix(lowered.count).lowercased() == lowered {
+            let candidate = text[i...].prefix(lowered.count)
+            if candidate.count == lowered.count, candidate.lowercased() == lowered {
                 return i
             }
         }
@@ -1061,16 +1060,42 @@ func scanBareImageURLs(in segment: Substring, into blocks: inout [RichContentBlo
 func nextHTTPScheme(_ text: Substring, from start: Substring.Index) -> Substring.Index? {
     var i = start
     while i < text.endIndex {
-        let rest = text[i...]
-        if rest.count >= 7,
-           rest.prefix(7).lowercased() == "http://"
-            || (rest.count >= 8 && rest.prefix(8).lowercased() == "https://") {
+        // Only an `h` can open the scheme; the full check walks at most 8 characters (W1: this used
+        // `text[i...].count` per character, O(n^2) over a message, and ran for every message of a
+        // conversation on main when its turns loaded).
+        if let ascii = text[i].asciiValue, ascii | 0x20 == 0x68, httpSchemeLength(text, at: i) > 0 {
             return i
         }
         i = text.index(after: i)
     }
     return nil
 }
+
+/// 7 for a case-insensitive `http://` at `index`, 8 for `https://`, else 0. Walks at most 8 characters.
+func httpSchemeLength(_ text: Substring, at index: Substring.Index) -> Int {
+    var i = index
+    var matched = 0
+    for expected in httpSchemeHead {
+        guard i < text.endIndex, let ascii = text[i].asciiValue, ascii | 0x20 == expected else { return 0 }
+        matched += 1
+        i = text.index(after: i)
+    }
+    // `http` so far; `s` is optional, then `://`.
+    var length = matched
+    if i < text.endIndex, let ascii = text[i].asciiValue, ascii | 0x20 == 0x73 {
+        length += 1
+        i = text.index(after: i)
+    }
+    for expected in httpSchemeTail {
+        guard i < text.endIndex, text[i].asciiValue == expected else { return 0 }
+        length += 1
+        i = text.index(after: i)
+    }
+    return length
+}
+
+private let httpSchemeHead: [UInt8] = [0x68, 0x74, 0x74, 0x70]  // h t t p
+private let httpSchemeTail: [UInt8] = [0x3A, 0x2F, 0x2F]  // : / /
 
 private func isBareURLChar(_ char: Character) -> Bool {
     // BARE_URL_RE `[^\s<>)\]]+`
@@ -1151,10 +1176,7 @@ private func isYouTubeURLChar(_ char: Character) -> Bool {
 }
 
 private func isSchemeLength(_ text: Substring, at index: Substring.Index) -> Int {
-    let rest = text[index...]
-    if rest.count >= 7, rest.prefix(7).lowercased() == "http://" { return 7 }
-    if rest.count >= 8, rest.prefix(8).lowercased() == "https://" { return 8 }
-    return 0
+    httpSchemeLength(text, at: index)
 }
 
 private func isValidSubdomainLabel(_ label: Substring) -> Bool {

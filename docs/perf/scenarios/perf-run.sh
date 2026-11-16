@@ -4,7 +4,8 @@
 #
 #   perf-run.sh [--keep] <name> "<do steps separated by |>"   (no --keep: relaunch with -paseo-perf first)
 #
-# Env: GATE_KEY (default /home/paseo/.ssh/paseo_build_ed25519), GATE_HOST (required, the gate login).
+# Env: PERF_ARGS (launch arguments, comma-separated; default -paseo-perf; add -paseo-perf-sample for a
+# profile, -paseo-perf-changes for SwiftUI's reasons), GATE_KEY (default /home/paseo/.ssh/paseo_build_ed25519), GATE_HOST (required, the gate login).
 # The numbers come from the app itself (PerfMonitor); this script only drives and reads.
 set -euo pipefail
 key="${GATE_KEY:-/home/paseo/.ssh/paseo_build_ed25519}"
@@ -16,7 +17,7 @@ if [ "${1:-}" = "--keep" ]; then keep=1; shift; fi
 name="${1:?scenario name}"; steps="${2:?do steps}"
 
 if [ "$keep" -eq 0 ]; then
-  gate "launch -paseo-perf" >/dev/null
+  gate "launch ${PERF_ARGS:--paseo-perf}" >/dev/null
   gate "do wait 8" >/dev/null   # let the launch settle; its windows are not part of the scenario
 fi
 # The Mac's own clock (the shot name carries it) marks where the scenario starts, so windows printed

@@ -27,6 +27,9 @@
             var samples = 0
             var leaf: [String: Int] = [:]
             var own: [String: Int] = [:]
+            /// The eight innermost frames with a name, leaf first: who calls the leaf (a protocol
+            /// conformance lookup, a `mach_msg` wait) is the part a fix needs.
+            var stack: [String: Int] = [:]
         }
 
         /// The wake the main thread is inside, or 0 when it sleeps. Written by `PerfMonitor`.
@@ -173,10 +176,27 @@
                 if chain.count == 3 { break }
             }
             let ownName: String? = chain.isEmpty ? nil : chain.joined(separator: " < ")
+            // The leaf, then the frames above it that are not the Swift runtime's own plumbing
+            // (casts, conformance lookups, metadata): who asked for the work, not how it ran.
+            var path: [String] = [String(leaf.prefix(40))]
+            for address in frames.dropFirst() {
+                let name = symbol(for: address).name
+                guard name != "?", path.last != name else { continue }
+                if name.hasPrefix("_ZL") || name.hasPrefix("_ZN5swift") || name.hasPrefix("swift_")
+                    || name.hasPrefix("tryCast") || name.hasPrefix("mach_msg") || name.hasPrefix("_pthread")
+                    || name.hasPrefix("dyld") || name.hasPrefix("_dispatch") || name.hasPrefix("__")
+                {
+                    continue
+                }
+                path.append(String(name.prefix(36)))
+                if path.count == 9 { break }
+            }
+            let stackName = path.joined(separator: " < ")
             collected.withLock { histogram in
                 histogram.samples += 1
                 histogram.leaf[leaf, default: 0] += 1
                 if let ownName { histogram.own[ownName, default: 0] += 1 }
+                histogram.stack[stackName, default: 0] += 1
             }
         }
     }

@@ -5,6 +5,12 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// Builds a `DictationController` when first asked.
+@MainActor
+final class LazyDictation {
+    lazy var controller = DictationController()
+}
+
 /// What the composer is writing into.
 enum ComposerMode {
     /// An open agent: the text is `store.draft`, and send goes through the conversation.
@@ -34,7 +40,29 @@ struct ComposerView: View {
     /// Draft mode: the shell creates the agent and swaps its conversation in (D2 §3).
     let onSubmit: ((DraftSubmission) -> Void)?
 
-    @Binding var text: String
+    /// The composer's text, read and written through the store the mode names. Not a `Binding`
+    /// handed in by the parent (W1): a binding whose getter reads the draft, created in the parent's body
+    /// is evaluated by SwiftUI when it compares the view's inputs, which made `store.draft` a
+    /// dependency of `ChatScreen.body` and re-ran the screen, the composer and the bars on every
+    /// keystroke. Here the read happens in this view's own body only.
+    private var text: String {
+        get {
+            switch mode {
+            case .conversation: store?.draft ?? ""
+            case .draft(let draft): draft.text
+            }
+        }
+        nonmutating set {
+            switch mode {
+            case .conversation: store?.draft = newValue
+            case .draft(let draft): draft.text = newValue
+            }
+        }
+    }
+
+    private var textBinding: Binding<String> {
+        Binding(get: { text }, set: { text = $0 })
+    }
     /// The composer's focus. A plain `Bool`, not `@FocusState`: nothing SwiftUI-focusable is
     /// bound to it (`ComposerTextView` is a `UITextView`), and SwiftUI drops writes to a
     /// `FocusState` with no view bound to it — which is what resigned the field on every
@@ -49,7 +77,10 @@ struct ComposerView: View {
     @State private var stashedTray: [ComposerAttachmentItem] = []
     @State private var uploadPumpRunning = false
     @State private var localAttachmentError: String?
-    @State private var draftDictation = DictationController()
+    /// The draft's own dictation, built on first use (W1): `State(initialValue:)` runs its argument on
+    /// every parent pass, and a conversation never touches this one.
+    @State private var draftDictationHolder = LazyDictation()
+    private var draftDictation: DictationController { draftDictationHolder.controller }
     @State private var showDraftControls = false
     @State private var showDraftFullScreen = false
 
@@ -80,8 +111,6 @@ struct ComposerView: View {
         self.controller = controller
         self.draftHost = nil
         self.onSubmit = nil
-        self._text = Binding(
-            get: { store.draft }, set: { store.draft = $0 })
         self._focused = focused
     }
 
@@ -95,13 +124,12 @@ struct ComposerView: View {
         self.controller = nil
         self.draftHost = session
         self.onSubmit = onSubmit
-        self._text = Binding(
-            get: { draft.text }, set: { draft.text = $0 })
         self._focused = focused
     }
 
     var body: some View {
         let _ = PaseoPerf.body("Composer")
+        let _ = PaseoPerf.why(Self.self)
         VStack(alignment: .leading, spacing: 6) {
             if !isDraft {
                 slashMenu
@@ -371,7 +399,7 @@ struct ComposerView: View {
         }
         .fullScreenCover(isPresented: fullScreenComposerBinding) {
             FullScreenComposer(
-                draft: $text,
+                draft: textBinding,
                 isRunning: store?.isRunning ?? false
             ) { send() }
         }
@@ -450,7 +478,7 @@ struct ComposerView: View {
         // the ink tint, the placeholder, the grow-to-cap height and the focus binding are all
         // applied there; ⌘↩ still belongs to the send button.
         ComposerTextView(
-            text: $text,
+            text: textBinding,
             isFocused: $focused,
             placeholder: placeholder,
             lineLimit: composerFieldLineLimit,
@@ -707,7 +735,7 @@ struct ComposerView: View {
             state: primaryState,
             isEnabled: primaryIsEnabled,
             isMuted: voice?.isMuted ?? false,
-            waveform: controller?.voiceEngine.waveform,
+            waveform: primaryState == .voiceActive ? controller?.voiceEngine.waveform : nil,
             reduceMotion: reduceMotion,
             onTap: primaryTap,
             onQueue: onQueue)
@@ -1731,10 +1759,12 @@ struct ComposerVoiceWiring: ViewModifier {
         var body: some View {
             content
                 .task {
-                    bind()
                     // The composer can appear while the lane is already waiting; `.onChange`
-                    // never fires for the initial value.
-                    if voice.isThinkingToneExpected { controller.voiceEngine.startThinkingTone() }
+                    // never fires for the initial value. The engine is built only when voice needs it.
+                    if voice.isThinkingToneExpected {
+                        bind()
+                        controller.voiceEngine.startThinkingTone()
+                    }
                     // Same reason: capture is started from the same place the callbacks are
                     // bound, so a composer opened on a live lane still records (D2 §4).
                     if voice.isVoiceMode { await startCapture() }
@@ -1758,7 +1788,7 @@ struct ComposerVoiceWiring: ViewModifier {
                 }
                 .onChange(of: voice.isMuted) { _, muted in
                     // Muting clears the meter, like the store's own telemetry reset.
-                    if muted { controller.voiceEngine.meter.reset() }
+                    if muted { controller.voiceEngineIfCreated?.meter.reset() }
                 }
                 .onChange(of: voice.phase) { _, phase in
                     VoiceLog.log.info(
@@ -1771,7 +1801,7 @@ struct ComposerVoiceWiring: ViewModifier {
                     case .listening:
                         Task { await startCapture() }
                     default:
-                        controller.voiceEngine.stopCapture()
+                        controller.voiceEngineIfCreated?.stopCapture()
                         UIApplication.shared.isIdleTimerDisabled = false
                     }
                 }
@@ -1782,6 +1812,7 @@ struct ComposerVoiceWiring: ViewModifier {
                         VoiceLog.log.info(
                             "reply: first \(chunk.data.count)-byte chunk (\(chunk.format, privacy: .public))")
                     }
+                    bind()
                     controller.voiceEngine.enqueue(chunk) { ok in
                         if ok {
                             voice.didPlayChunk(id: chunk.id)
@@ -1791,21 +1822,22 @@ struct ComposerVoiceWiring: ViewModifier {
                     }
                 }
                 .onChange(of: voice.playbackStopRequested) { _, _ in
-                    controller.voiceEngine.stopPlayback()
+                    controller.voiceEngineIfCreated?.stopPlayback()
                 }
                 // M15: the thinking tone (upstream `reconcileCue`): only while the lane is waiting
                 // for a reply and the daemon hears no speech. Timing lives in the engine.
                 .onChange(of: voice.isThinkingToneExpected) { _, expected in
                     if expected {
+                        bind()
                         controller.voiceEngine.startThinkingTone()
                     } else {
-                        controller.voiceEngine.stopThinkingTone()
+                        controller.voiceEngineIfCreated?.stopThinkingTone()
                     }
                 }
                 .onDisappear {
                     Task { await voice.stop() }
-                    controller.voiceEngine.stopThinkingTone()
-                    controller.voiceEngine.stopCapture()
+                    controller.voiceEngineIfCreated?.stopThinkingTone()
+                    controller.voiceEngineIfCreated?.stopCapture()
                     UIApplication.shared.isIdleTimerDisabled = false
                 }
         }
@@ -1826,6 +1858,7 @@ struct ComposerVoiceWiring: ViewModifier {
 
         private func startCapture() async {
             guard voice.isVoiceMode else { return }
+            bind()
             do {
                 try await controller.voiceEngine.requestMicPermission()
                 try await controller.voiceEngine.startCapture()

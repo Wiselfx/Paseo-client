@@ -56,6 +56,11 @@ rules=(
   $'perf-body-ipc\tisSourceTypeAvailable\tstatic let'
   # Rule 4: a content id built from a changing value tears the subtree down per change.
   $'perf-id-count\t\\.id\\(.*\\.(count|text|length)\\b'
+  # Rule 18: a binding whose getter reads a store, built in a parent body, becomes a dependency of the
+  # parent (SwiftUI evaluates it when it compares the child's inputs): the child reads the store itself.
+  $'perf-binding-store-get\tget: \\{ (store|draft|controller)\\.[A-Za-z.]+ \\}'
+  # Rule 19: `rest.count` / `candidate.count` on a suffix of a string inside a scan loop is O(n) per step.
+  $'perf-suffix-count\t(rest|candidate)\\.count >= '
 )
 
 tmp="$(mktemp)"

@@ -50,6 +50,7 @@ public struct ChatScreen: View {
 
     public var body: some View {
         let _ = PaseoPerf.body("ChatScreen")
+        let _ = PaseoPerf.why(Self.self)
         // D1 §1: the transcript is the screen's base layer; the chrome floats over it in
         // safe-area bars and the system's scroll edge effect is the only background.
         TranscriptView(store: store, controller: controller)
@@ -91,9 +92,13 @@ public struct ChatScreen: View {
                 // The user-image manifest loads once, off main: bubbles with history
                 // reserve their image boxes on the first pass instead of jumping.
                 Task { await UserImageCache.shared.ensureManifestLoaded() }
-                // The shared web view for diagrams and SVG cards starts now, not mid-scroll (W1).
+                // The shared web view for diagrams and SVG cards starts before the first card needs it,
+                // not mid-scroll (W1). `WKWebView.init` blocks the main thread while WebKit's content
+                // process launches (100 to 700 ms), so the transcript starts it when its open is over
+                // (`TranscriptView`, `openPin` ending); this is only the fallback for a chat whose open
+                // never ends (a conversation shorter than the screen).
                 Task { @MainActor in
-                    await Task.yield()
+                    try? await Task.sleep(for: .seconds(8))
                     RichWebSnapshotRenderer.shared.prewarm()
                 }
             }
@@ -259,7 +264,7 @@ struct UserActivityWiring: ViewModifier {
                 guard phase != .active else { return }
                 controller.dictation.stop(keepingDraft: true)
                 // M15: voice mode stops cleanly in the background (mic + wake lock off).
-                controller.voiceEngine.stopCapture()
+                controller.voiceEngineIfCreated?.stopCapture()
                 if controller.session.voiceSession.isVoiceMode {
                     Task { await controller.session.voiceSession.stop() }
                 }

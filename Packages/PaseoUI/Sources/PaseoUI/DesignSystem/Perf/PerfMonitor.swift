@@ -220,6 +220,10 @@
                     let hot =
                         "t=\(Self.seconds(now - launchedAt)) samples=\(histogram.samples) own=\(top(histogram.own)) leaf=\(top(histogram.leaf))"
                     PaseoPerf.log.notice("perf.hot \(hot, privacy: .public)")
+                    for (rank, entry) in histogram.stack.sorted(by: { $0.value > $1.value }).prefix(3).enumerated() {
+                        let line = "t=\(Self.seconds(now - launchedAt)) #\(rank) \(entry.value)x \(entry.key)"
+                        PaseoPerf.log.notice("perf.stack \(line, privacy: .public)")
+                    }
                 }
             #endif
         }

@@ -132,6 +132,43 @@ finding says so and names the cause; a change that makes a budgeted scenario wor
 17. **Every perf change carries its before and after** (the commit subject, `W1: <what> (<before> ->
     <after>)`, and a line in `W1-findings.md`). A fix without a number is a guess.
 
+18. **A parent never builds a binding whose getter reads a store.** SwiftUI evaluates a `Binding` when it
+    compares a child's inputs, and the read is charged to the parent's body. A binding reading the draft,
+    created in `ChatScreen.body`, made the draft a dependency of the whole screen: `ChatScreen`, `Composer`
+    and the bars re-ran on every keystroke. Pattern: the child takes the store and reads/writes it itself
+    (`ComposerView.text`, `textBinding` built inside its own body). Lint: `perf-binding-store-get`.
+
+19. **A big body does not read a re-created closure just to forward it.** Environment values that are
+    closures (`notificationPermissionAction`) and bindings count as changed whenever the environment is
+    re-delivered, so `ShellView.body` ran at the first composer focus and re-assigned all three hosting
+    roots (sidebar, chat, panel). Pattern: gate the downstream work on a value key that holds only what the
+    roots are built from (`ShellRootsKey`, compared in `ShellContainer.updateUIViewController`).
+
+20. **Do not assign a tracked struct on every event.** `controller.mascot.handle(.userActivity)` ran per
+    keystroke and notified every reader of `mascot` though the crab did not change. Pattern: keep the
+    machine `@ObservationIgnored`, publish the one value views draw (`mascotState`) only when it changes.
+
+21. **Scans over message text are O(n), and what only a sheet needs is built when the sheet asks.**
+    `nextHTTPScheme` took `text[i...].count` per character (O(n^2) per message) and ran for every message of
+    a conversation on main in `updateTurns` while a chat opened (179 of 949 samples). Never call `count` on
+    a suffix inside a scan loop; build derived indexes lazily (`ConversationStore.mediaIndex`). Parsing the
+    same ISO stamp again and again belongs in a cache (`PaseoDate.parse`), so does a per-bubble format
+    (`PaseoFormat.messageTimestamp`). Lint: `perf-suffix-count`.
+
+22. **The instrument must not cost what it measures.** The shell's `diff` interpolated environment values
+    through `Mirror` on every pass (45 of 110 samples in the first-focus window were
+    `swift_conformsToProtocol` under `ShellView.body`), and every fit-memo hit re-ran `sizeThatFits`. Before
+    believing a "cold conformance lookup" stack, check that its caller is not `PaseoPerf`. Probes are removed
+    when the cause is found.
+
+23. **Read simulator numbers against what drives it.** AXe works through the accessibility server: the first
+    interaction after a launch initialises `AXValidationManager` / `AXCoreUtilities` in the app (protocol
+    conformance lookups for every UIKit class: about 110 to 140 ms at the first tap and again at the first
+    new view). Absorb it with a throwaway `ui reading` step before the measured action; a phone with
+    VoiceOver off pays none of it. The first software keyboard show (about 340 ms in the Release simulator:
+    UIKit's keyboard views, the render server, the key-command walk) is the system's, and no invisible
+    prewarm was found for it.
+
 ## Keeping it true
 
 - Run `Tools/style-lint/style-lint.sh` and read the `perf-*` lines; new hits need a reason or a fix.

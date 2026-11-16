@@ -17,6 +17,16 @@ Both are launch arguments, off by default, compiled into every configuration (De
   layout timing (a long chat once opened blank only with it running), so use it to find a cause, **never
   to take a number**.
 
+- `-paseo-perf-changes`: SwiftUI's own reason for a body run (`_printChanges`: "@self, _text changed", or the
+  Observation key path that was read) for the views that call `PaseoPerf.why(Self.self)` after `PaseoPerf.body`
+  (ChatScreen, Composer, Transcript, Shell, Sidebar, TurnRow ...). stdout/stderr go to the log as `perf.why`
+  lines. This named the real cause of "ChatScreen runs per key" in one run. Fields that cannot be compared
+  (closures, bindings) are printed as changed whenever the view runs for any reason: read the line for the
+  one Observation key path.
+- `perf.stack` lines (with `-paseo-perf-sample`): the three hottest stacks per window, leaf first, then the
+  frames above it with the Swift runtime plumbing skipped. Look for who called the leaf.
+- `PERF_ARGS="-paseo-perf,-paseo-perf-sample"` selects the launch arguments of `perf-run.sh` (default `-paseo-perf`).
+
 Launch (via the gate): `launch -paseo-perf` or `launch -paseo-perf,-paseo-perf-sample` (comma separated, no
 spaces).
 
@@ -132,6 +142,12 @@ tapxy 420 500 | wait 2` repeated.
    `PERFORMANCE-RULES.md` / `W1-findings.md`. Leave the simulator on a normal connected screen.
 
 ## 5. Tips, tricks, traps
+
+- **AXe warms the accessibility machinery in the app on its first query.** Start a measured script with
+  `ui reading | wait 3` or the first tap/new view carries 100 to 140 ms of `AXValidationManager` work that a phone
+  does not have.
+- **The instrument can be the load.** Strings built for `diff`/probes, per-hit re-checks: if a stack's caller is
+  `PaseoPerf` or `Mirror`, remove the probe first.
 
 What lies:
 - **Debug numbers**: inflated and shaped differently (protocol-conformance lookups dominate); under the
