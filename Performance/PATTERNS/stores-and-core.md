@@ -4,6 +4,7 @@ Rules: PF-20, PF-25, PF-32, PF-33, PF-21. MUST: M04, M05, M26, M30, M40. Checks:
 `@Observable` setters notify even for an equal value. Repeated snapshots (pushes, polls, reconnects) are the normal case.
 
 ## 1. Write only on change (`W3`, `WorkspaceDirectory`, `CheckoutStore`, `TerminalsStore`, `HostUsageStore`)
+Per-step UI flags are the same rule, checked by C49/M42: see [hot-paths-and-indexing.md](hot-paths-and-indexing.md) section 4.
 BAD:
 ```swift
 workspaces[index] = workspace                  // a push that repeats what we hold notifies every reader of `workspaces`

@@ -16,7 +16,7 @@ FIX PATTERN. Numbers are the Debug simulator's unless marked Release. History: [
 | <a id="pf-19"></a>PF-19 | A big body does not read a re-created closure/binding just to forward it; gate on a value key. | first focus re-ran sidebar, chat, composer (~220 ms Release) | H25, M07 | `ShellRootsKey` |
 | <a id="pf-20"></a>PF-20 | Do not assign a tracked struct on every event. | mascot `handle(.userActivity)` per key notified readers | M05 | `@ObservationIgnored` + `mascotState` on change |
 | <a id="pf-24"></a>PF-24 | Read lists in a child, not in the page that owns the chrome. | every agent update re-ran header, footer, sheets | C24, H14, M01 | `SidebarDirectoryHost` |
-| <a id="pf-25"></a>PF-25 | An `@Observable` setter always notifies: write only on change; sort into a copy. | repeated snapshots re-ran sidebar | H16, M04 | [stores](PATTERNS/stores-and-core.md) |
+| <a id="pf-25"></a>PF-25 | An `@Observable` setter always notifies: write only on change; sort into a copy. | repeated snapshots re-ran sidebar; find's per-step flags re-ran the transcript | C49, H16, M04, M42 | [stores](PATTERNS/stores-and-core.md), [hot paths](PATTERNS/hot-paths-and-indexing.md) |
 | <a id="pf-39"></a>PF-39 | `@Observable` only: no `ObservableObject`/`@Published`/`@StateObject`. | any change re-runs every reader | C45, M06 | `@Observable` |
 
 ## Identity, rows, lists
@@ -34,9 +34,9 @@ FIX PATTERN. Numbers are the Debug simulator's unless marked Release. History: [
 | --- | --- | --- | --- | --- |
 | <a id="pf-6"></a>PF-6 | No synchronous system call, formatter, regex or coder construction in a body. | `isSourceTypeAvailable` 1 to 2.3 ms per pass | C08, C09, H06, M15 | `static let`, memo |
 | <a id="pf-8"></a>PF-8 | Memoise derived structures where used. | 3 splits per delta (reveal writes 4 `@State`) | C19, H05, M16 | `PieceMemo`, `ProseCache` |
-| <a id="pf-9"></a>PF-9 | Per-frame and per-token work is O(1) in the content. | `rich.pieces` grew 1 to 3 ms over a reply | M18, M20 | tail-only updates |
+| <a id="pf-9"></a>PF-9 | Per-frame and per-token work is O(1) in the content. | `rich.pieces` grew 1 to 3 ms over a reply | H29, M18, M20 | [hot paths](PATTERNS/hot-paths-and-indexing.md) |
 | <a id="pf-16"></a>PF-16 | No IPC in a hot callback; cache and refresh by notification. | `hasImages` round trip in `canPerformAction` | C09, M27 | `PasteboardImageState` |
-| <a id="pf-21"></a>PF-21 | Scans over message text are O(n); derived indexes are lazy. | `text[i...].count` per char: 179 of 949 samples | C47, M17 | `httpSchemeLength`, lazy `mediaIndex` |
+| <a id="pf-21"></a>PF-21 | Scans over message text are O(n); derived indexes are lazy; finding one index must not build every index. | `text[i...].count` per char: 179 of 949 samples; find's hop rebuilt an index array per tick | C47, C48, H29, M17, M41 | `httpSchemeLength`, lazy `mediaIndex`, [hot paths](PATTERNS/hot-paths-and-indexing.md) |
 | <a id="pf-26"></a>PF-26 | A page owning text-field state re-evaluates per key: memoise what it sorts/filters; compile regexes once. | files page re-sorted per alert keystroke | H05, M16 | `FileListMemo`, `static let` |
 | <a id="pf-27"></a>PF-27 | Do not build a lookup once per row. | `Set(agents.map(\.id))` read by every schedule row | H05, M16, `perf-agents-set-in-view` | once per pass |
 
@@ -56,7 +56,7 @@ FIX PATTERN. Numbers are the Debug simulator's unless marked Release. History: [
 | <a id="pf-31"></a>PF-31 | Caches are bounded by count AND cost, locked if touched off main, keyed as the view keys. | evict-all at 64 entries; warm-up filled caches off main | C20, H12, H24, M28, M29 | `ProseCache`, [cache template](TEMPLATES/cache.swift.md) |
 | <a id="pf-32"></a>PF-32 | Encode and write off main on a serial queue; coalesce. | draft JSON+disk write per key on main | H17, M26 | `DraftFileWriter` |
 | <a id="pf-33"></a>PF-33 | Open conversations/streams are bounded (6 recent + busy). | every chat kept its store and live stream for the session | H18, M30 | `retainedConversationLimit` |
-| <a id="pf-36"></a>PF-36 | Tasks, timers, animations have an owner and a visibility gate; `.task(id:)`, cancel on disappear. | crab/sweeps competed with drawer drag; panel loaded while closed | C15, C17, H08, H09, H10, M23 to M25, M37 | [concurrency](PATTERNS/concurrency-and-main-thread.md) |
+| <a id="pf-36"></a>PF-36 | Tasks, timers, animations have an owner and a visibility gate; `.task(id:)`, cancel on disappear; a Task started from a method keeps its handle. | crab/sweeps competed with drawer drag; panel loaded while closed; find's fetch outlived a close | C15, C17, H08, H09, H10, H30, M23 to M25, M37 | [concurrency](PATTERNS/concurrency-and-main-thread.md), [hot paths](PATTERNS/hot-paths-and-indexing.md) |
 
 ## Objects, launch, UIKit
 | ID | Requirement | WHY | CHECK | FIX |

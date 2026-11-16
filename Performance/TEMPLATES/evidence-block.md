@@ -3,7 +3,7 @@
 ```text
 Performance evidence
 - final-check: base=<ref (sha)>  auto-failed=0  auto-pass=<n>  manual=<n ticked>  escalations=<k>   (paste the SIGN-OFF block below)
-- measure: REQUIRED | not required (<one clause: which skip-list entry>)
+- measure: REQUIRED | not required (<one clause: which skip-list entry>) | unmeasured, handed to manager (<argument; bound: n; test: file>)
 - build: Release (install-release <branch>)  |  Debug (counts only; say why)
 - script: <scenario name + gate do steps>   chat: <the test chat>   runs: 3 cold   app-start window excluded: yes
 - idle floor (same build): hitches <med [min..max]>  stall max <ms>

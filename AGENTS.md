@@ -51,8 +51,10 @@ These rules (PLAN §1, R-1…R-7) govern every line of UI code. Reviews check th
   MANUAL line ticked with a one-clause reason, or `ESCALATE:`). Keep `Performance/MUST.md` open while coding and re-read its section A
   before reporting. Small-model agents follow `Performance/FINAL-CHECK.md` with no further judgement, and use
   `Performance/DECISION-TREES.md` when adding a row, store, cache, task, animation or anything in the transcript, composer or shell. A perf
-  change carries its before and after (`Performance/MEASURE.md`, `Performance/TEMPLATES/evidence-block.md`). The script guarantees only
-  exact patterns (CI runs it plus `--self-test`); timing and semantics are yours. `docs/perf/` is the raw history.
+  change carries its before and after (`Performance/MEASURE.md`, `Performance/TEMPLATES/evidence-block.md`); if it cannot be measured,
+  `unmeasured, handed to manager` with its argument, bound and test is the evidence. The script guarantees only exact patterns (CI runs
+  it plus `--self-test`); timing and semantics are yours. Paste the verdict line it prints from `--signoff`
+  (`VERDICT: DONE` / `DONE WITH ESCALATIONS (k)` / `NOT DONE (reason)`) and every `ESCALATE:`/`BLOCKED:` line. `docs/perf/` is the raw history.
 - **Copy.** Sentence case for our own labels; "host" is the user-facing noun ("daemon" only in
   troubleshooting or a command name); never invent copy — keep the existing string or port
   upstream's `en.ts` verbatim.

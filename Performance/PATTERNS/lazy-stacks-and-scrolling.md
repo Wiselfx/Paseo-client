@@ -25,6 +25,9 @@ Ends on composer focus, `keyboardWillShow`, a finger, a send, a find/jump, live 
 BAD: end it because "only the insets moved" (a tall saved draft then left the chat blank) or on a timer (it ended at an estimated end).
 
 ## 4. Long programmatic jumps (PF-15; D07)
+
+Inside a jump, the window start and the nearest built row are lookups, not scans: `FindNavigation.firstTurnIndex` (binary
+search) and `nearestIndex` (outward search), [hot-paths-and-indexing.md](hot-paths-and-indexing.md) sections 1 and 2.
 A jump of tens of thousands of points leaves the realised rows at the old offset until a real scroll event: blank. Scroll in bounded hops, or mount a window around the target first.
 Find and the outline jump now go through `TranscriptJumpRunner` (W4): scroll to the turn id, hop from the nearest built turn when it will not build, aim the row id once the measured turn is under the viewport and the layout holds, verify with the row's measured frame, correct by that measured offset. See `docs/perf/W1-findings.md` (W4).
 Find-in-chat variants tried and reverted before that: turn id first then row then nudge (`64605f6`); outline glide (`ed90b93`). Both landed blank.
