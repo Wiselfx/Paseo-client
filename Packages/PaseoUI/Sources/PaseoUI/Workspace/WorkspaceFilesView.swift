@@ -106,6 +106,34 @@ private enum FileSort: String, CaseIterable {
     }
 }
 
+/// The sorted, filtered rows of one listing, remembered between passes. The page re-evaluates for
+/// every `@State` it owns (the name prompt's text field writes one per keystroke); sorting hundreds of
+/// entries with locale-aware compares on each of those passes was pure waste (R-1). Valid while the
+/// entries, the hidden toggle and the sort key are what they were.
+@MainActor private final class FileListMemo {
+    private var entries: [FileExplorerEntry]?
+    private var showHidden = false
+    private var sort = FileSort.name
+    private var result: [FileExplorerEntry] = []
+
+    func visible(
+        _ entries: [FileExplorerEntry], showHidden: Bool, sort: FileSort,
+        build: () -> [FileExplorerEntry]
+    ) -> [FileExplorerEntry] {
+        if let cached = self.entries, self.showHidden == showHidden, self.sort == sort,
+            cached == entries
+        {
+            return result
+        }
+        let built = build()
+        self.entries = entries
+        self.showHidden = showHidden
+        self.sort = sort
+        result = built
+        return built
+    }
+}
+
 /// One directory's rows: the back row when nested, then folders first and files after (the store
 /// sorts), pull-to-refresh, and calm loading / empty / error states.
 private struct WorkspaceFilesDirectoryList: View {
@@ -143,6 +171,7 @@ private struct WorkspaceFilesDirectoryList: View {
     /// The flash-highlighted row (workspace-relative path), if any; clears after a beat.
     @State private var revealedRow: String?
     @State private var revealHandled: String?
+    @State private var listMemo = FileListMemo()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.toast) private var toast
     /// "Mention in chat" from a row's long-press; nil disables the action.
@@ -323,7 +352,9 @@ private struct WorkspaceFilesDirectoryList: View {
             .padding(.horizontal, Space.lg)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .success(let entries):
-            let visible = sortedVisible(entries)
+            let visible = listMemo.visible(
+                entries, showHidden: showHidden, sort: currentSort
+            ) { sortedVisible(entries) }
             if visible.isEmpty {
                 emptyView
             } else {
