@@ -883,7 +883,7 @@ struct ClaudeHighlightedCode: View {
     }
 
     var body: some View {
-        Text(highlighted ?? AttributedString(content))
+        Text(highlighted ?? CodeHighlightMirror.value(code: content, language: language, theme: syntaxTheme) ?? AttributedString(content))
             .font(theme.codeFont)
             .foregroundStyle(theme.foreground)
             .task(id: requestKey) {
