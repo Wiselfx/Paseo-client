@@ -1007,13 +1007,22 @@ struct TranscriptJump: Equatable {
         store.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// A send puts the reader back at the end and the transcript follows the reply as it streams.
+    /// Upstream `agent-stream/bottom-anchor-controller.ts`: a `message-sent` request is
+    /// `sticky-bottom` (`deriveModeForLocalRequest`), and a user scroll detaches it (`beginUserScroll`)
+    /// until a gesture ends at the end (`endUserScroll`). The old top-anchored runway is not used.
+    private func stickToEndForSend() {
+        if anchoringToAnswer { anchoringToAnswer = false }
+        if !isFollowing { isFollowing = true }
+        jumpToEndRequest += 1
+    }
+
     /// Called by the composer after it has checked `canSend`. Behaviour is the send button's
     /// (steer/queue/interrupt) choice.
     func send(behavior: String? = nil, attachments: [AgentAttachment]) {
         dictation.stop(keepingDraft: true)
         DraftStore.shared.markSent(DraftKey.agent(store.agentId))
-        anchoringToAnswer = true
-        isFollowing = false
+        stickToEndForSend()
         Haptics.send()
         // Capture the text before the hop: the store clears the draft as it sends.
         let text = trimmedDraft
@@ -1040,8 +1049,7 @@ struct TranscriptJump: Equatable {
 
     /// Sends text the reader chose to queue from the timeline.
     func sendText(_ text: String) {
-        anchoringToAnswer = true
-        isFollowing = false
+        stickToEndForSend()
         Haptics.send()
         Task { [weak self] in
             await self?.store.send(text)
@@ -1072,8 +1080,7 @@ struct TranscriptJump: Equatable {
         var next: MessageQueue.QueuedMessage?
         composerQueue.mutate(store.agentId) { next = $0.dequeueNext(isIdle: true) }
         guard let next else { return }
-        anchoringToAnswer = true
-        isFollowing = false
+        stickToEndForSend()
         Task { [weak self] in
             guard let self else { return }
             await self.store.send(next.text)

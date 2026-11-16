@@ -471,7 +471,9 @@ struct ClaudeUserBubble: View {
         .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: sentImages.count)
             // UX-SPEC §4.1 (amended): the user bubble is 17 pt with 4 pt line spacing.
             .font(.paseo(.body))
-            .foregroundStyle(Palette.ink)
+            .foregroundStyle(Palette.onUserBubble)
+            // Links in your bubble read in the bubble's own text colour: the link blue would vanish on blue.
+            .tint(Palette.onUserBubble)
             .lineSpacing(4)
             .padding(.horizontal, 16)
             .padding(.vertical, Space.md)

@@ -146,7 +146,7 @@ struct ComposerPrimaryButton: View {
     /// stop stay ink; unavailable is the neutral plate (E2 §2.3).
     private var fill: Color {
         switch state {
-        case .send, .voiceActive: Palette.accent
+        case .send, .voiceActive: Palette.sendFill
         case .unavailable: Palette.chip
         case .voice, .stop: Palette.ink
         }

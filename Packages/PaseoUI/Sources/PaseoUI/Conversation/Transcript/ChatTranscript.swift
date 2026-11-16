@@ -303,8 +303,11 @@ struct TranscriptView: View {
                     endScrollRequested()
                 }
                 .onChange(of: controller.jumpToEndRequest) { _, _ in
+                    // The end marker is a real row: `scrollTo(edge:)` targets a lazy stack's estimated
+                    // bottom and can land short or blank in a long chat.
+                    openPin = false
                     withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
-                        scrollPosition.scrollTo(edge: .bottom)
+                        scrollPosition.scrollTo(id: "bottom", anchor: .bottom)
                     }
                 }
                 .onAppear { reportReadingPosition() }
@@ -623,11 +626,13 @@ struct TranscriptView: View {
         revealAtRest()
     }
 
-    /// The follow state machine (D1 §3). While the finger is down it may only turn follow off,
-    /// when the reader drags away from the end; turning it back on belongs to the settle.
+    /// The follow state machine (D1 §3). A finger on the transcript ends the follow at once, wherever it
+    /// is, so streamed growth never moves the rows under it (upstream `beginUserScroll`: "the gesture
+    /// owns the viewport, so following stops until it ends"). Turning it back on belongs to the settle,
+    /// and only for a gesture that ends at the end (`followIfAtEnd`; upstream `endUserScroll`: "a release
+    /// above the end, or with output that arrived below it during the gesture, stays detached").
     private func releaseFollowWhileDragging(_ metrics: ScrollFollowMetrics) {
         guard case .interacting = scrollTrack.phase else { return }
-        guard metrics.distanceFromBottom > Self.followSlack else { return }
         if controller.isFollowing { controller.isFollowing = false }
         if controller.anchoringToAnswer { controller.anchoringToAnswer = false }
     }

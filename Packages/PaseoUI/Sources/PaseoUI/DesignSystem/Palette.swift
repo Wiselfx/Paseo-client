@@ -259,13 +259,44 @@ enum Palette {
             $0.userInterfaceStyle == .dark
                 ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 0, alpha: 0.10)
         })
-    /// #F0EFEC light / translucent white 6 % dark (OCU §12.7).
+    /// Your bubble. Paseo: iMessage blue (#007AFF light / #0A84FF dark, Apple's system blue), the same
+    /// blue as the send button. Claude: #F0EFEC light / translucent white 6 % dark (OCU §12.7).
     static let userBubble = Color(
-        uiColor: UIColor {
-            $0.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.06)
-                : UIColor(red: 240 / 255, green: 239 / 255, blue: 236 / 255, alpha: 1)
+        uiColor: UIColor { traits in
+            let dark = traits.userInterfaceStyle == .dark
+            switch traits[AccentTrait.self] {
+            case .paseo:
+                return dark
+                    ? UIColor(red: 10 / 255, green: 132 / 255, blue: 255 / 255, alpha: 1)
+                    : UIColor(red: 0, green: 122 / 255, blue: 255 / 255, alpha: 1)
+            case .claude:
+                return dark
+                    ? UIColor(white: 1, alpha: 0.06)
+                    : UIColor(red: 240 / 255, green: 239 / 255, blue: 236 / 255, alpha: 1)
+            }
         })
+    /// Text on your bubble: white on Paseo's blue, the ink on Claude's plate.
+    static let onUserBubble = Color(
+        uiColor: UIColor { traits in
+            if traits[AccentTrait.self] == .paseo { return .white }
+            return traits.userInterfaceStyle == .dark
+                ? UIColor(red: 240 / 255, green: 239 / 255, blue: 236 / 255, alpha: 1)
+                : UIColor(red: 11 / 255, green: 11 / 255, blue: 11 / 255, alpha: 1)
+        })
+    /// The send button (and live voice, the same morphing button): iMessage blue in Paseo, the clay in
+    /// Claude.
+    static var sendFill: Color {
+        Color(uiColor: UIColor { traits in
+            switch traits[AccentTrait.self] {
+            case .claude:
+                return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
+            case .paseo:
+                return traits.userInterfaceStyle == .dark
+                    ? UIColor(red: 10 / 255, green: 132 / 255, blue: 255 / 255, alpha: 1)
+                    : UIColor(red: 0, green: 122 / 255, blue: 255 / 255, alpha: 1)
+            }
+        })
+    }
     /// `--dsh-claude-chip`, the hover/pressed plate. The selected sidebar row reads through this
     /// token; on the darker #F4F3EF canvas the plate steps down to 0.93 so the pill stays visible
     /// (was 0.965 on #F9F9F7).
