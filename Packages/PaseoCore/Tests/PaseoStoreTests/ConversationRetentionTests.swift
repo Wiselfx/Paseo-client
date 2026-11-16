@@ -73,9 +73,11 @@ struct ConversationRetentionTests {
         session.retainedConversationLimit = 2
         for id in ["a1", "a2", "a3"] { _ = session.conversation(for: id) }
 
-        let settled = await eventually {
-            guard let last = client.requests(SetAgentTimelineSubscriptionRequest.self).last else { return false }
-            return Set(last.agentIds) == ["a2", "a3"]
+        // Each request goes out from its own task, so arrival order is not guaranteed under load:
+        // look for the request the third open computed (a1 already evicted) instead of the last one.
+        let settled = await eventually(timeout: .seconds(5)) {
+            client.requests(SetAgentTimelineSubscriptionRequest.self)
+                .contains { Set($0.agentIds) == ["a2", "a3"] }
         }
         #expect(settled)
     }
