@@ -874,14 +874,6 @@ struct TranscriptView: View {
             afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
             return
         }
-        // Stepping through matches is a jump to the turn that holds the match, through the same path
-        // the outline rail uses: it leaves follow mode, leads most of the way instantly and glides the
-        // last stretch, which is what makes the lazy stack build the rows on the way (an instant jump
-        // of thousands of points landed on an unbuilt, blank region). The row is inside the turn.
-        if let index = turnIndex(forSeq: seq) {
-            jumpToTurn(store.turns[index].id, proxy: proxy)
-            return
-        }
         centreRow(seq, animated: animated, proxy: proxy)
     }
 
