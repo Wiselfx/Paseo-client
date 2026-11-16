@@ -41,7 +41,7 @@ struct ComposerView: View {
     let onSubmit: ((DraftSubmission) -> Void)?
 
     /// The composer's text, read and written through the store the mode names. Not a `Binding`
-    /// handed in by the parent (W1): a `Binding(get: { store.draft })` created in the parent's body
+    /// handed in by the parent (W1): a binding whose getter reads the draft, created in the parent's body
     /// is evaluated by SwiftUI when it compares the view's inputs, which made `store.draft` a
     /// dependency of `ChatScreen.body` and re-ran the screen, the composer and the bars on every
     /// keystroke. Here the read happens in this view's own body only.
