@@ -155,6 +155,7 @@ public final class HostSession {
     /// The store for one agent's conversation. Same instance for the same id while it is open.
     /// Opening subscribes the session to that agent's live stream.
     public func conversation(for agentId: String) -> ConversationStore {
+        touchConversation(agentId)
         if let existing = conversations[agentId] { return existing }
 
         let store = ConversationStore(agentId: agentId, client: client)
@@ -164,10 +165,56 @@ public final class HostSession {
         store.update(serverInfo: serverInfo)
         conversations[agentId] = store
         timelineCoalescers[agentId] = TimelineCommitCoalescer(store: store)
+        evictIdleConversations()
         sendSubscription()
 
         Task { await store.load() }
         return store
+    }
+
+    // MARK: Conversation retention
+
+    /// How many of the most recently used conversations stay open (store, timeline, live
+    /// subscription) beyond the ones that are busy. Every chat ever opened used to stay for the
+    /// whole session: its timeline in memory and its stream decoded and applied for as long as the
+    /// app ran. A closed one reloads from the daemon like a first open; its draft lives in
+    /// `DraftStore`, and a conversation with unsent text is never closed.
+    public var retainedConversationLimit = 6
+
+    /// Agent ids in order of use, most recent last. Bounded by the limit plus the busy ones.
+    private var conversationUse: [String] = []
+
+    private func touchConversation(_ agentId: String) {
+        if conversationUse.last == agentId { return }
+        conversationUse.removeAll { $0 == agentId }
+        conversationUse.append(agentId)
+    }
+
+    /// Closes the conversations nobody needs: not among the most recently used, not the one the
+    /// presence heartbeat or the attention center says is on screen, and not busy. Runs when a new
+    /// store is created, never on a re-selection.
+    private func evictIdleConversations() {
+        guard conversations.count > retainedConversationLimit else { return }
+        var keep = Set(conversationUse.suffix(retainedConversationLimit))
+        if let focused = hostSettings.focusedAgentId { keep.insert(focused) }
+        if let focused = attention.focusedAgentId { keep.insert(focused) }
+        for (agentId, store) in conversations
+        where !keep.contains(agentId) && !Self.isBusy(store) {
+            timelineCoalescers[agentId]?.flush()
+            conversationUse.removeAll { $0 == agentId }
+            closeConversation(agentId, resubscribe: false)
+        }
+        // Ids of conversations that were closed by the caller no longer count as recent.
+        conversationUse.removeAll { conversations[$0] == nil && !keep.contains($0) }
+    }
+
+    /// Work a closed store would lose: a running turn, a question waiting for the user, text not
+    /// yet sent, a send whose answer is pending or unknown, an upload.
+    private static func isBusy(_ store: ConversationStore) -> Bool {
+        store.isRunning || !store.pendingPermissions.isEmpty
+            || !store.draft.isEmpty || store.sendOutcomeUnknown
+            || store.uploads.isUploading
+            || store.timeline.rows.reversed().prefix(16).contains(where: \.isPending)
     }
 
     /// The checkout store for one open workspace. Same instance for the same id while it is open.
@@ -200,9 +247,13 @@ public final class HostSession {
 
     /// Call when the conversation screen goes away. Unsubscribes its stream; the store is dropped.
     public func closeConversation(_ agentId: String) {
+        closeConversation(agentId, resubscribe: true)
+    }
+
+    private func closeConversation(_ agentId: String, resubscribe: Bool) {
         timelineCoalescers.removeValue(forKey: agentId)
         guard conversations.removeValue(forKey: agentId) != nil else { return }
-        sendSubscription()
+        if resubscribe { sendSubscription() }
     }
 
     /// Re-fetches the agent list (pull to refresh).
