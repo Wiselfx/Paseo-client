@@ -1,0 +1,20 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fs.file.subscribe.response",
+    "payload": {
+      "subscriptionId": "00000000-0000-0000-0000-000000000000",
+      "initial": {
+        "status": "ready",
+        "cwd": "/tmp/fixture-git/scratch-repo",
+        "path": "README.md",
+        "size": 29,
+        "modifiedAt": "2026-11-08T23:13:53.976Z",
+        "revision": "53:17937167:29:1794179633976605233",
+        "kind": "text",
+        "mimeType": "text/plain"
+      },
+      "requestId": "t11-9"
+    }
+  }
+}

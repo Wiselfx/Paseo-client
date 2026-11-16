@@ -1,0 +1,319 @@
+import Foundation
+import PaseoKit
+import PaseoProtocol
+
+/// Test double for `DaemonClient`. Records every request, answers from per-type handlers and lets
+/// a test push daemon events and connection states in order.
+final class FakeDaemonClient: DaemonClient, @unchecked Sendable {
+    enum FakeError: Error, Sendable, Equatable {
+        case noHandler(String)
+        case unexpectedResponse(String)
+    }
+
+    typealias FetchAgentsHandler =
+        @Sendable (FetchAgentsRequest) async throws -> FetchAgentsRequest.Response
+    typealias FetchTimelineHandler =
+        @Sendable (FetchAgentTimelineRequest) async throws -> FetchAgentTimelineRequest.Response
+    typealias SendMessageHandler =
+        @Sendable (SendAgentMessageRequest) async throws -> SendAgentMessageRequest.Response
+    typealias CancelHandler =
+        @Sendable (CancelAgentRequest) async throws -> CancelAgentRequest.Response
+    typealias SubscriptionHandler =
+        @Sendable (SetAgentTimelineSubscriptionRequest) async throws -> SetAgentTimelineSubscriptionRequest.Response
+    typealias ListTerminalsHandler =
+        @Sendable (ListTerminalsRequest) async throws -> ListTerminalsRequest.Response
+    typealias CreateTerminalHandler =
+        @Sendable (CreateTerminalRequest) async throws -> CreateTerminalRequest.Response
+    typealias SubscribeTerminalHandler =
+        @Sendable (SubscribeTerminalRequest) async throws -> SubscribeTerminalRequest.Response
+    typealias KillTerminalHandler =
+        @Sendable (KillTerminalRequest) async throws -> KillTerminalRequest.Response
+    typealias CaptureTerminalHandler =
+        @Sendable (CaptureTerminalRequest) async throws -> CaptureTerminalRequest.Response
+    typealias ListScriptsHandler =
+        @Sendable (ListWorkspaceScriptsRequest) async throws -> ListWorkspaceScriptsRequest.Response
+    typealias StartScriptHandler =
+        @Sendable (StartWorkspaceScriptRequest) async throws -> StartWorkspaceScriptRequest.Response
+    typealias StopScriptHandler =
+        @Sendable (StopWorkspaceScriptRequest) async throws -> StopWorkspaceScriptRequest.Response
+    typealias GenericHandler = @Sendable (any PaseoRequest) async throws -> Any
+
+    let events: AsyncStream<DaemonEvent>
+    let states: AsyncStream<ConnectionState>
+    private let eventContinuation: AsyncStream<DaemonEvent>.Continuation
+    private let stateContinuation: AsyncStream<ConnectionState>.Continuation
+
+    private let lock = NSLock()
+    private var recorded: [any PaseoRequest] = []
+    private var recordedMessages: [any PaseoOutboundMessage] = []
+    private var sentBinary: [Data] = []
+    /// Test hook invoked right before a binary frame is recorded. Lets a test block the
+    /// upload mid-stream (e.g. to cancel it deterministically).
+    var onBinarySend: (@Sendable (Data) async throws -> Void)?
+    /// Whether this fake's socket can carry inbound binary frames. The fallback test turns it
+    /// off; every other test keeps the real transports' answer.
+    private var receiveBinaryFrames = true
+    private var fetchAgentsHandler: FetchAgentsHandler?
+    private var fetchTimelineHandler: FetchTimelineHandler?
+    private var sendMessageHandler: SendMessageHandler?
+    private var cancelHandler: CancelHandler?
+    private var subscriptionHandler: SubscriptionHandler?
+    private var listTerminalsHandler: ListTerminalsHandler?
+    private var createTerminalHandler: CreateTerminalHandler?
+    private var subscribeTerminalHandler: SubscribeTerminalHandler?
+    private var killTerminalHandler: KillTerminalHandler?
+    private var captureTerminalHandler: CaptureTerminalHandler?
+    private var listScriptsHandler: ListScriptsHandler?
+    private var startScriptHandler: StartScriptHandler?
+    private var stopScriptHandler: StopScriptHandler?
+    /// Every outbound fire-and-forget message, in order (`terminal_input`, subscribes, …).
+    var messages: [any PaseoOutboundMessage] { locked { recordedMessages } }
+    /// Type-erased handlers for request types added after the original fake. Keyed by wire type.
+    /// Checked before the named handlers, so a new wire type needs no change to this file's API.
+    private var genericHandlers: [String: GenericHandler] = [:]
+
+    init() {
+        let (events, eventContinuation) = AsyncStream<DaemonEvent>.makeStream(bufferingPolicy: .unbounded)
+        let (states, stateContinuation) = AsyncStream<ConnectionState>.makeStream(bufferingPolicy: .unbounded)
+        self.events = events
+        self.states = states
+        self.eventContinuation = eventContinuation
+        self.stateContinuation = stateContinuation
+    }
+
+    // MARK: Handlers
+
+    func onFetchAgents(_ handler: @escaping FetchAgentsHandler) {
+        locked { fetchAgentsHandler = handler }
+    }
+
+    func onFetchTimeline(_ handler: @escaping FetchTimelineHandler) {
+        locked { fetchTimelineHandler = handler }
+    }
+
+    func onSendMessage(_ handler: @escaping SendMessageHandler) {
+        locked { sendMessageHandler = handler }
+    }
+
+    func onCancel(_ handler: @escaping CancelHandler) {
+        locked { cancelHandler = handler }
+    }
+
+    func onSetSubscription(_ handler: @escaping SubscriptionHandler) {
+        locked { subscriptionHandler = handler }
+    }
+
+    func onListTerminals(_ handler: @escaping ListTerminalsHandler) {
+        locked { listTerminalsHandler = handler }
+    }
+
+    func onCreateTerminal(_ handler: @escaping CreateTerminalHandler) {
+        locked { createTerminalHandler = handler }
+    }
+
+    func onSubscribeTerminal(_ handler: @escaping SubscribeTerminalHandler) {
+        locked { subscribeTerminalHandler = handler }
+    }
+
+    func onKillTerminal(_ handler: @escaping KillTerminalHandler) {
+        locked { killTerminalHandler = handler }
+    }
+
+    func onCaptureTerminal(_ handler: @escaping CaptureTerminalHandler) {
+        locked { captureTerminalHandler = handler }
+    }
+
+    func onListScripts(_ handler: @escaping ListScriptsHandler) {
+        locked { listScriptsHandler = handler }
+    }
+
+    func onStartScript(_ handler: @escaping StartScriptHandler) {
+        locked { startScriptHandler = handler }
+    }
+
+    func onStopScript(_ handler: @escaping StopScriptHandler) {
+        locked { stopScriptHandler = handler }
+    }
+
+    /// Answers any `PaseoRequest` type by its wire name. Checked before the named handlers, so a
+    /// new wire type needs no change to this file's existing API.
+    func onSend<R: PaseoRequest>(
+        _ type: R.Type = R.self, _ handler: @escaping @Sendable (R) async throws -> R.Response
+    ) {
+        on(R.self, handler)
+    }
+
+    /// Answers any request type without extending the switch below. Takes precedence over the
+    /// built-in handlers when both exist.
+    func on<R: PaseoRequest>(_ type: R.Type, _ handler: @escaping @Sendable (R) async throws -> R.Response) {
+        let key = R.type
+        locked {
+            genericHandlers[key] = { any in
+                guard let request = any as? R else { throw FakeError.unexpectedResponse(key) }
+                return try await handler(request)
+            }
+        }
+    }
+
+    // MARK: Pushing traffic
+
+    func push(_ event: DaemonEvent) {
+        eventContinuation.yield(event)
+    }
+
+    func push(_ state: ConnectionState) {
+        stateContinuation.yield(state)
+    }
+
+    func finish() {
+        eventContinuation.finish()
+        stateContinuation.finish()
+    }
+
+    // MARK: Recorded requests
+
+    var requests: [any PaseoRequest] { locked { recorded } }
+    /// Every binary frame sent, in order.
+    var binaryMessages: [Data] { locked { sentBinary } }
+
+    func requests<R: PaseoRequest>(_ type: R.Type) -> [R] {
+        requests.compactMap { $0 as? R }
+    }
+
+    // MARK: DaemonClient
+
+    var canReceiveBinaryFrames: Bool { locked { receiveBinaryFrames } }
+
+    func setCanReceiveBinaryFrames(_ value: Bool) {
+        locked { receiveBinaryFrames = value }
+    }
+
+    func initiate<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> InitiatedResponse<R> {
+        let requestId = request.requestId.isEmpty ? UUID().uuidString : request.requestId
+        var copy = request
+        copy.requestId = requestId
+        locked { recorded.append(copy) }
+        let sent = copy
+
+        return InitiatedResponse(requestId: requestId) { [self] in
+            let response = try await self.handle(request: sent)
+            return response
+        }
+    }
+
+    private func handle<R: PaseoRequest>(request: R) async throws -> R.Response {
+        if let handler = locked({ genericHandlers[R.type] }) {
+            let value = try await handler(request)
+            guard let typed = value as? R.Response else {
+                throw FakeError.unexpectedResponse(R.type)
+            }
+            return typed
+        }
+
+        switch request {
+        case let request as FetchAgentsRequest:
+            guard let handler = locked({ fetchAgentsHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as FetchAgentTimelineRequest:
+            guard let handler = locked({ fetchTimelineHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as SendAgentMessageRequest:
+            guard let handler = locked({ sendMessageHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as CancelAgentRequest:
+            guard let handler = locked({ cancelHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as SetAgentTimelineSubscriptionRequest:
+            guard let handler = locked({ subscriptionHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as ListTerminalsRequest:
+            guard let handler = locked({ listTerminalsHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as CreateTerminalRequest:
+            guard let handler = locked({ createTerminalHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as SubscribeTerminalRequest:
+            guard let handler = locked({ subscribeTerminalHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as KillTerminalRequest:
+            guard let handler = locked({ killTerminalHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as CaptureTerminalRequest:
+            guard let handler = locked({ captureTerminalHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as ListWorkspaceScriptsRequest:
+            guard let handler = locked({ listScriptsHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as StartWorkspaceScriptRequest:
+            guard let handler = locked({ startScriptHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        case let request as StopWorkspaceScriptRequest:
+            guard let handler = locked({ stopScriptHandler }) else { throw FakeError.noHandler(R.type) }
+            let response = try await handler(request)
+            guard let typed = response as? R.Response else { throw FakeError.unexpectedResponse(R.type) }
+            return typed
+
+        default:
+            throw FakeError.noHandler(R.type)
+        }
+    }
+
+    func send<M: PaseoOutboundMessage>(_ message: M) async throws {
+        locked { recordedMessages.append(message) }
+    }
+
+    func send<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> R.Response {
+        try await initiate(request, timeout: timeout).value()
+    }
+
+    func send(binary: Data) async throws {
+        if let onBinarySend {
+            try await onBinarySend(binary)
+        }
+        locked { sentBinary.append(binary) }
+    }
+
+    // MARK: Helpers
+
+    private func locked<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+}

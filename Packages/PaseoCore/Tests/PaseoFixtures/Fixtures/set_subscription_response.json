@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent.timeline.set_subscription.response",
+    "payload": {
+      "agentIds": [
+        "1c51ee58-765c-4f8d-bf27-7009338b361e"
+      ],
+      "requestId": "sub",
+      "subscriptionId": "bd9d4708-76a5-4d62-8ddb-81458284b440"
+    }
+  }
+}

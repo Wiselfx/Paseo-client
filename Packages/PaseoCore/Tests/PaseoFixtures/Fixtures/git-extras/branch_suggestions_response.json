@@ -1,0 +1,23 @@
+{
+  "type": "session",
+  "message": {
+    "type": "branch_suggestions_response",
+    "payload": {
+      "branches": [
+        "feature/t11"
+      ],
+      "branchDetails": [
+        {
+          "name": "feature/t11",
+          "committerDate": 1794179598,
+          "hasLocal": true,
+          "hasRemote": true,
+          "localAhead": 0,
+          "localBehind": 0
+        }
+      ],
+      "error": null,
+      "requestId": "t11-3"
+    }
+  }
+}

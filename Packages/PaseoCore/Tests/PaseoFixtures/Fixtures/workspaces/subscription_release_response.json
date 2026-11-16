@@ -1,0 +1,10 @@
+{
+  "type": "session",
+  "message": {
+    "type": "subscription.release.response",
+    "payload": {
+      "requestId": "t7-12",
+      "subscriptionId": "00000000-0000-0000-0000-000000000000"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout_pr_status_response",
+    "payload": {
+      "cwd": "/tmp/fixture-git/scratch-repo",
+      "status": null,
+      "githubFeaturesEnabled": false,
+      "authState": "no_remote",
+      "error": null,
+      "requestId": "t11-1"
+    }
+  }
+}

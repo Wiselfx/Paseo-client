@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "project.remove.response",
+    "payload": {
+      "requestId": "t7-14",
+      "projectId": "prj_2ec6cf6153016267",
+      "accepted": true,
+      "removedWorkspaceIds": [],
+      "error": null
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "type": "session",
+  "message": {
+    "type": "script_status_update",
+    "payload": {
+      "workspaceId": "wks_7f451d74b177f13a",
+      "scripts": [
+        {
+          "scriptName": "fixture",
+          "type": "script",
+          "hostname": "fixture",
+          "port": null,
+          "proxyUrl": null,
+          "lifecycle": "running",
+          "health": null,
+          "exitCode": null,
+          "terminalId": "6a842610-800a-4fd3-871c-56561b3a29c3"
+        }
+      ]
+    }
+  }
+}

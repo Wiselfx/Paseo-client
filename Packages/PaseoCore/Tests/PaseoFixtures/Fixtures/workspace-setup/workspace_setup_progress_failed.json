@@ -1,0 +1,40 @@
+{
+  "_comment": "Hand-written fixture, NOT captured traffic: mirrors WorkspaceSetupProgressMessageSchema at messages.ts:4695-4712. Do not regenerate from the daemon.",
+  "type": "session",
+  "message": {
+    "type": "workspace_setup_progress",
+    "payload": {
+      "subscriptionId": "subs_fixture_m210",
+      "workspaceId": "wks_FIXTURE",
+      "status": "failed",
+      "detail": {
+        "type": "worktree_setup",
+        "worktreePath": "/tmp/fixture-sandbox/.paseo/worktrees/m210-fixture",
+        "branchName": "fixture/setup-line",
+        "log": "npm ci\nnpm ERR! missing script: build\n",
+        "commands": [
+          {
+            "index": 1,
+            "command": "npm ci",
+            "cwd": "/tmp/fixture-sandbox/.paseo/worktrees/m210-fixture",
+            "log": "added 41 packages, audited 42 packages in 1s\n",
+            "status": "completed",
+            "exitCode": 0,
+            "durationMs": 1200
+          },
+          {
+            "index": 2,
+            "command": "npm run build",
+            "cwd": "/tmp/fixture-sandbox/.paseo/worktrees/m210-fixture",
+            "log": "npm ERR! missing script: build\n",
+            "status": "failed",
+            "exitCode": 1,
+            "durationMs": 140
+          }
+        ],
+        "truncated": false
+      },
+      "error": "Command exited with code 1"
+    }
+  }
+}

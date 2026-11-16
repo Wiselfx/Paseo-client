@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "project.icon.get.response",
+    "payload": {
+      "projectId": "prj_FIXTURE",
+      "icon": null,
+      "error": null,
+      "requestId": "m211-4"
+    }
+  },
+  "_comment": "Captured from the sandbox for M2.11, then scrubbed: projectId -> prj_FIXTURE."
+}

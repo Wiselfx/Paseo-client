@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_permission_resolved",
+    "payload": {
+      "agentId": "e02d8100-d528-4dae-ad00-88d911bc3777",
+      "requestId": "15c699f603e8fca9",
+      "resolution": {
+        "behavior": "allow"
+      }
+    }
+  }
+}

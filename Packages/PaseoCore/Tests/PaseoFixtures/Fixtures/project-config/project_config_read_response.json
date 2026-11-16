@@ -1,0 +1,15 @@
+{
+  "type": "session",
+  "message": {
+    "type": "read_project_config_response",
+    "payload": {
+      "requestId": "m211-0",
+      "repoRoot": "/fixture-sandbox",
+      "ok": true,
+      "config": null,
+      "revision": null,
+      "hasUncommittedWorktreeSetupChanges": false
+    }
+  },
+  "_comment": "Captured from the sandbox for M2.11, then scrubbed: path -> /fixture-sandbox, projectIds -> *_FIXTURE, mtimeMs replaced. The sandbox's paseo.json was deleted after capture."
+}

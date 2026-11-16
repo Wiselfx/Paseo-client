@@ -1,0 +1,34 @@
+{
+  "type": "session",
+  "message": {
+    "type": "write_project_config_response",
+    "payload": {
+      "requestId": "m211-1",
+      "repoRoot": "/fixture-sandbox",
+      "ok": true,
+      "config": {
+        "worktree": {
+          "setup": [
+            "echo fixture-setup-ran"
+          ],
+          "teardown": [
+            "echo fixture-teardown-ran"
+          ]
+        },
+        "scripts": {
+          "fixture-script": {
+            "type": "service",
+            "command": "echo fixture-script-ran",
+            "port": 4173
+          }
+        }
+      },
+      "revision": {
+        "mtimeMs": 1700000000000,
+        "size": 273
+      },
+      "hasUncommittedWorktreeSetupChanges": true
+    }
+  },
+  "_comment": "Captured from the sandbox for M2.11, then scrubbed: path -> /fixture-sandbox, projectIds -> *_FIXTURE, mtimeMs replaced. The sandbox's paseo.json was deleted after capture."
+}

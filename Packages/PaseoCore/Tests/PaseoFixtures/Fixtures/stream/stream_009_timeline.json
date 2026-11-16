@@ -1,0 +1,35 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_stream",
+    "payload": {
+      "agentId": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+      "event": {
+        "type": "timeline",
+        "provider": "opencode",
+        "item": {
+          "type": "tool_call",
+          "callId": "functions.grep:4",
+          "name": "grep",
+          "detail": {
+            "type": "search",
+            "query": "weather",
+            "toolName": "grep",
+            "content": "Found 1 matches\n/tmp/fixture-sandbox/README.md:\n  Line 3: A tiny weather logger.\n",
+            "numFiles": 0
+          },
+          "metadata": {
+            "matches": 1,
+            "truncated": false
+          },
+          "status": "completed",
+          "error": null
+        },
+        "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70"
+      },
+      "timestamp": "2026-11-08T21:03:05.282Z",
+      "seq": 16,
+      "epoch": "da097735-b51a-4cf4-9a64-cc6aaa2e96c5"
+    }
+  }
+}

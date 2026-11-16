@@ -1,0 +1,8 @@
+Packages/PaseoUI/Sources/PaseoUI/Conversation/Composer/CameraCapture.swift perf-body-ipc 1
+Packages/PaseoUI/Sources/PaseoUI/Conversation/Prose/ClaudeMarkdownView.swift system-font 2
+Packages/PaseoUI/Sources/PaseoUI/Conversation/Prose/FilePathLinks.swift typography-instance 1
+Packages/PaseoUI/Sources/PaseoUI/Conversation/Transcript/ChatTurns.swift perf-id-seqEnd 4
+Packages/PaseoUI/Sources/PaseoUI/Schedules/ScheduleDetailPage.swift perf-agents-set-in-view 1
+Packages/PaseoUI/Sources/PaseoUI/Schedules/ScheduleDetailPage.swift perf-groups-in-view 1
+Packages/PaseoUI/Sources/PaseoUI/Schedules/ScheduleEditorPage.swift perf-groups-in-view 2
+Packages/PaseoUI/Sources/PaseoUI/Schedules/SchedulesListPage.swift perf-agents-set-in-view 1

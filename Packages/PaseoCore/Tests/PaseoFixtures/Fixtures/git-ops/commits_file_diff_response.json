@@ -1,0 +1,68 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout.commits.file_diff.response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "sha": "ab3b806a42f4fb13c9884e65ab499b8e95eecad8",
+      "path": "README.md",
+      "file": {
+        "path": "README.md",
+        "isNew": true,
+        "isDeleted": false,
+        "additions": 3,
+        "deletions": 0,
+        "hunks": [
+          {
+            "oldStart": 0,
+            "oldCount": 0,
+            "newStart": 1,
+            "newCount": 3,
+            "lines": [
+              {
+                "type": "header",
+                "content": "@@ -0,0 +1,3 @@"
+              },
+              {
+                "type": "add",
+                "content": "# Weather station",
+                "tokens": [
+                  {
+                    "text": "#",
+                    "style": "heading meta"
+                  },
+                  {
+                    "text": " Weather station",
+                    "style": "heading"
+                  }
+                ]
+              },
+              {
+                "type": "add",
+                "content": "",
+                "tokens": [
+                  {
+                    "text": "",
+                    "style": null
+                  }
+                ]
+              },
+              {
+                "type": "add",
+                "content": "A tiny weather logger.",
+                "tokens": [
+                  {
+                    "text": "A tiny weather logger.",
+                    "style": null
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "error": null,
+      "requestId": "t15-1"
+    }
+  }
+}

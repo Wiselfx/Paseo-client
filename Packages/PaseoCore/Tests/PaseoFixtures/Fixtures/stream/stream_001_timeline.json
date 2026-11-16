@@ -1,0 +1,23 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_stream",
+    "payload": {
+      "agentId": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+      "event": {
+        "type": "timeline",
+        "provider": "opencode",
+        "item": {
+          "type": "user_message",
+          "text": "Think briefly first. Then: list the files here, read convert.py, add a function f_to_c(f) to convert.py, run python3 -c 'from convert import *; print(f_to_c(212))' to check it, and search the folder for the word weather. Finish with a short markdown summary that has a small table, a python code block, and a link to https://en.wikipedia.org/wiki/Fahrenheit .",
+          "messageId": "fixture-msg-1",
+          "clientMessageId": "fixture-msg-1"
+        },
+        "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70"
+      },
+      "timestamp": "2026-11-08T21:02:57.839Z",
+      "seq": 8,
+      "epoch": "da097735-b51a-4cf4-9a64-cc6aaa2e96c5"
+    }
+  }
+}

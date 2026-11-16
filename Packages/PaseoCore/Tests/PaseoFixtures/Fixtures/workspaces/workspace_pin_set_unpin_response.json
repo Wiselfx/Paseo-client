@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.pin.set.response",
+    "payload": {
+      "requestId": "unpin-sandbox",
+      "workspaceId": "wks_6adc97aa7e1e49e3",
+      "accepted": true,
+      "pinnedAt": null,
+      "error": null
+    }
+  }
+}

@@ -1,0 +1,123 @@
+# Source of truth for the Xcode project. Regenerate after editing:
+#   cd App && xcodegen generate
+# All code lives in Packages/; this target only composes features.
+name: PaseoClient
+options:
+  bundleIdPrefix: com.wiselfx
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+packages:
+  PaseoCore:
+    path: ../Packages/PaseoCore
+  PaseoUI:
+    path: ../Packages/PaseoUI
+targets:
+  # Phase E G15: the widgets + controls extension. Built but NOT shipped: it is not
+  # embedded in the app (no dependency from PaseoClient, no embed phase), the app
+  # target gains no entitlement and no capability, so the default IPA is unchanged
+  # (D1). See the turn-on list in docs/research/14-rich-ui-plan-full.md §3.
+  PaseoWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PaseoWidgets
+    info:
+      path: PaseoWidgets/Info.plist
+    entitlements:
+      path: PaseoWidgets/PaseoWidgets.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wiselfx.paseoclient.PaseoWidgets
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+  PaseoClient:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - Resources
+    dependencies:
+      - package: PaseoCore
+        product: PaseoStore
+      - package: PaseoUI
+        product: PaseoUI
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Paseo
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        # The static launch screen paints the launch background: the same colour as
+        # `Palette.background`, so the very first frame does not flash the system's white / black
+        # before `LaunchSkeleton` draws (H4 §1). The asset cannot read the app's Pure black trait,
+        # so Pure black starts from the dark canvas (#151515) and steps to #000 with the shell.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # ProMotion iPhones: without this key Core Animation (UIKit springs, SwiftUI animations,
+        # display links) is capped at 60 Hz; only system scrolling ran at 120. Everything we draw
+        # asks for 120 explicitly (`FrameRate.promotion`).
+        CADisableMinimumFrameDurationOnPhone: true
+        NSLocalNetworkUsageDescription: Paseo connects to the agent daemon on your network.
+        NSSpeechRecognitionUsageDescription: Paseo uses on-device speech recognition to dictate into the composer.
+        NSMicrophoneUsageDescription: Paseo uses the microphone to dictate into the composer.
+        # G3: the viewer saves only the image you explicitly choose.
+        NSPhotoLibraryAddUsageDescription: Paseo saves images you choose to your photo library.
+        # Upstream wording (en.ts pairing.scan.cameraPermissionBody).
+        NSCameraUsageDescription: Allow camera access to scan the pairing QR code from your daemon.
+        # M20: `paseo://` deep links (agent / workspace / open-project routes). Pairing links
+        # carry their offer in a fragment and never require a custom scheme, but upstream also
+        # accepts `paseo://...#offer=`.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.wiselfx.paseoclient
+            CFBundleURLSchemes: [paseo]
+        # The daemon is reached by IP or Tailscale name over plain ws:// on a private network.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wiselfx.paseoclient
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
+  PaseoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - PaseoUITests
+    dependencies:
+      - target: PaseoClient
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wiselfx.paseoclient.UITests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+schemes:
+  PaseoClient:
+    build:
+      targets:
+        PaseoClient: all
+  PaseoWidgets:
+    build:
+      targets:
+        PaseoWidgets: all
+  PaseoUITests:
+    build:
+      targets:
+        PaseoClient: all
+        PaseoUITests: [test]
+    test:
+      targets:
+        - PaseoUITests

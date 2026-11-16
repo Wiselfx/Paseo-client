@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "send_agent_message_response",
+    "payload": {
+      "requestId": "send-attachments",
+      "agentId": "a8c4fa13-5874-4077-98f9-bce6de7f610e",
+      "accepted": true,
+      "error": null
+    }
+  }
+}

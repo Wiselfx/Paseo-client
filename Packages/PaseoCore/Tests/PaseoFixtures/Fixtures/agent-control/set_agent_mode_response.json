@@ -1,0 +1,16 @@
+{
+  "type": "session",
+  "message": {
+    "type": "set_agent_mode_response",
+    "payload": {
+      "requestId": "mode",
+      "agentId": "e02d8100-d528-4dae-ad00-88d911bc3777",
+      "accepted": true,
+      "error": null,
+      "notice": {
+        "type": "warning",
+        "message": "Change approval mode once the current turn ends"
+      }
+    }
+  }
+}

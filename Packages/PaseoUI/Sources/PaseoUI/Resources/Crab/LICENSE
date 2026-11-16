@@ -1,0 +1,10 @@
+Crab artwork notice: the pixel crab (Clawd) is a character of Anthropic, and
+all rights in it remain with Anthropic. `crab-laptop-body.png` and
+`crab-laptop-ink.png` are frames of Claude Code's own animation; the remaining
+sheets in this directory are drawn by the DSH project after that character (by
+`scripts/draw-crab.py`). These files are **not** covered by the MIT license of
+the DSH project. DSH is an unofficial fan work, not affiliated with or endorsed
+by Anthropic.
+
+Copied for a personal, unofficial fan app. See docs/research/06-dsh-ux-spec.md
+§4 and docs/research/08-dsh-live-observation.md §7 for the provenance.

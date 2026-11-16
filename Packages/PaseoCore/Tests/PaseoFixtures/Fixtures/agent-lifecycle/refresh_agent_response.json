@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "status",
+    "payload": {
+      "status": "agent_refreshed",
+      "agentId": "00000000-0000-0000-0000-000000000001",
+      "requestId": "m7e-12",
+      "timelineSize": 2
+    }
+  }
+}

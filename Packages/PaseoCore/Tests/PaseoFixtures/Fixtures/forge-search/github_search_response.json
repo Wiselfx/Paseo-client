@@ -1,0 +1,31 @@
+{
+  "type": "session",
+  "message": {
+    "type": "github_search_response",
+    "payload": {
+      "requestId": "fixture-github-1",
+      "items": [
+        {
+          "kind": "pr",
+          "number": 42,
+          "title": "Fix the flaky test",
+          "url": "https://example.invalid/sandbox/fixture/pull/42",
+          "state": "open",
+          "body": "The sandbox suite flakes on rerun.",
+          "labels": ["bug"]
+        },
+        {
+          "kind": "github-issue",
+          "number": 7,
+          "title": "Document the sandbox flow",
+          "url": "https://example.invalid/sandbox/fixture/issues/7",
+          "state": "open",
+          "body": null,
+          "labels": []
+        }
+      ],
+      "featuresEnabled": true,
+      "error": null
+    }
+  }
+}

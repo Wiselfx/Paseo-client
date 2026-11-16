@@ -1,0 +1,25 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout_status_response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "isGit": true,
+      "repoRoot": "/tmp/fixture-sandbox",
+      "mainRepoRoot": null,
+      "currentBranch": "main",
+      "isDirty": true,
+      "baseRef": "main",
+      "baseRefExact": "main",
+      "aheadBehind": null,
+      "upstreamRef": null,
+      "aheadOfOrigin": null,
+      "behindOfOrigin": null,
+      "hasRemote": false,
+      "remoteUrl": null,
+      "isPaseoOwnedWorktree": false,
+      "error": null,
+      "requestId": "t7-3"
+    }
+  }
+}

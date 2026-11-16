@@ -1,0 +1,156 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agent_response",
+    "payload": {
+      "requestId": "fetch-allow",
+      "agent": {
+        "id": "e02d8100-d528-4dae-ad00-88d911bc3777",
+        "provider": "omp",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_430057899aa09f0e",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinkingOptionId": "low",
+        "effectiveThinkingOptionId": "low",
+        "runtimeInfo": {
+          "provider": "omp",
+          "sessionId": "01a1bd32-719c-7711-9b6d-60686720e7f9",
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "thinkingOptionId": "low",
+          "modeId": "ask"
+        },
+        "createdAt": "2026-11-08T22:06:02.381Z",
+        "updatedAt": "2026-11-08T22:06:07.888Z",
+        "lastUserMessageAt": "2026-11-08T22:06:06.466Z",
+        "status": "running",
+        "activeTurn": {
+          "turnId": "e7486a10-fa22-4da1-896f-1ce6401820cf",
+          "startedAt": "2026-11-08T22:06:06.466Z"
+        },
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true,
+          "supportsSessionListing": true,
+          "supportsDynamicModes": true,
+          "supportsMcpServers": true,
+          "supportsReasoningStream": true,
+          "supportsToolInvocations": true,
+          "supportsRewindConversation": true,
+          "supportsRewindFiles": false,
+          "supportsRewindBoth": false,
+          "supportsNativePaseoTools": true
+        },
+        "currentModeId": "ask",
+        "availableModes": [
+          {
+            "id": "full",
+            "label": "Full Access",
+            "description": "Launches OMP with yolo approval mode so tools run without prompts.",
+            "icon": "ShieldOff",
+            "colorTier": "dangerous",
+            "isUnattended": true
+          },
+          {
+            "id": "write",
+            "label": "Write Approval",
+            "description": "Launches OMP with write approval mode — reads are free, writes require approval.",
+            "icon": "ShieldAlert",
+            "colorTier": "moderate"
+          },
+          {
+            "id": "ask",
+            "label": "Always Ask",
+            "description": "Launches OMP with always-ask approval mode for write and exec tools.",
+            "icon": "ShieldCheck",
+            "colorTier": "safe"
+          }
+        ],
+        "features": [
+          {
+            "type": "toggle",
+            "id": "fast_mode",
+            "label": "Fast",
+            "icon": "zap",
+            "value": false
+          }
+        ],
+        "pendingPermissions": [
+          {
+            "id": "15c699f603e8fca9",
+            "provider": "omp",
+            "name": "OMP select",
+            "kind": "question",
+            "title": "Allow tool: bash\nCommand: echo t6-allow",
+            "input": {
+              "questions": [
+                {
+                  "question": "Allow tool: bash\nCommand: echo t6-allow",
+                  "header": "Response",
+                  "options": [
+                    {
+                      "label": "Approve"
+                    },
+                    {
+                      "label": "Approve bash for this session"
+                    },
+                    {
+                      "label": "Deny"
+                    }
+                  ],
+                  "multiSelect": false
+                }
+              ]
+            },
+            "metadata": {
+              "extensionUiMethod": "select",
+              "answerHeader": "Response"
+            }
+          }
+        ],
+        "persistence": {
+          "provider": "omp",
+          "sessionId": "01a1bd32-719c-7711-9b6d-60686720e7f9",
+          "nativeHandle": "/tmp/fixture-sandbox/.fixture-session.jsonl",
+          "metadata": {
+            "cwd": "/tmp/fixture-sandbox",
+            "bridgedTools": [],
+            "model": "opencode-go/deepseek-v4.1-flash",
+            "thinkingOptionId": "low",
+            "modeId": "ask"
+          }
+        },
+        "title": "Reply with the single word: ready",
+        "labels": {
+          "paseo.fixture": "t6-agent-control"
+        },
+        "archivedAt": null,
+        "lastUsage": {
+          "inputTokens": 0,
+          "cachedInputTokens": 0,
+          "outputTokens": 0,
+          "totalCostUsd": 0,
+          "contextWindowMaxTokens": 1000000,
+          "contextWindowUsedTokens": 13084
+        },
+        "requiresAttention": false,
+        "attentionReason": null,
+        "attentionTimestamp": null
+      },
+      "project": {
+        "projectKey": "prj_9f675e179792b526",
+        "projectName": "fixture-sandbox",
+        "workspaceName": "Reply with ready",
+        "checkout": {
+          "cwd": "/tmp/fixture-sandbox",
+          "currentBranch": "main",
+          "remoteUrl": null,
+          "worktreeRoot": "/tmp/fixture-sandbox",
+          "isGit": true,
+          "isPaseoOwnedWorktree": false,
+          "mainRepoRoot": null
+        }
+      },
+      "error": null
+    }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agents_response",
+    "payload": {
+      "requestId": "agents-created",
+      "entries": [
+        {
+          "agent": {
+            "id": "e02d8100-d528-4dae-ad00-88d911bc3777",
+            "provider": "omp",
+            "cwd": "/tmp/fixture-sandbox",
+            "workspaceId": "wks_430057899aa09f0e",
+            "model": "opencode-go/deepseek-v4.1-flash",
+            "thinkingOptionId": null,
+            "effectiveThinkingOptionId": "high",
+            "runtimeInfo": {
+              "provider": "omp",
+              "sessionId": "01a1bd32-719c-7711-9b6d-60686720e7f9",
+              "model": "opencode-go/deepseek-v4.1-flash",
+              "thinkingOptionId": "high",
+              "modeId": "ask"
+            },
+            "createdAt": "2026-11-08T22:06:02.381Z",
+            "updatedAt": "2026-11-08T22:06:02.388Z",
+            "lastUserMessageAt": null,
+            "status": "running",
+            "activeTurn": {
+              "turnId": "549ba5b2-3381-49c6-8963-581e8c1179b3",
+              "startedAt": "2026-11-08T22:06:02.388Z"
+            },
+            "capabilities": {
+              "supportsStreaming": true,
+              "supportsSessionPersistence": true,
+              "supportsSessionListing": true,
+              "supportsDynamicModes": true,
+              "supportsMcpServers": true,
+              "supportsReasoningStream": true,
+              "supportsToolInvocations": true,
+              "supportsRewindConversation": true,
+              "supportsRewindFiles": false,
+              "supportsRewindBoth": false,
+              "supportsNativePaseoTools": true
+            },
+            "currentModeId": "ask",
+            "availableModes": [
+              {
+                "id": "full",
+                "label": "Full Access",
+                "description": "Launches OMP with yolo approval mode so tools run without prompts.",
+                "icon": "ShieldOff",
+                "colorTier": "dangerous",
+                "isUnattended": true
+              },
+              {
+                "id": "write",
+                "label": "Write Approval",
+                "description": "Launches OMP with write approval mode — reads are free, writes require approval.",
+                "icon": "ShieldAlert",
+                "colorTier": "moderate"
+              },
+              {
+                "id": "ask",
+                "label": "Always Ask",
+                "description": "Launches OMP with always-ask approval mode for write and exec tools.",
+                "icon": "ShieldCheck",
+                "colorTier": "safe"
+              }
+            ],
+            "features": [
+              {
+                "type": "toggle",
+                "id": "fast_mode",
+                "label": "Fast",
+                "icon": "zap",
+                "value": false
+              }
+            ],
+            "pendingPermissions": [],
+            "persistence": {
+              "provider": "omp",
+              "sessionId": "01a1bd32-719c-7711-9b6d-60686720e7f9",
+              "nativeHandle": "/tmp/fixture-sandbox/.fixture-session.jsonl",
+              "metadata": {
+                "cwd": "/tmp/fixture-sandbox",
+                "bridgedTools": [],
+                "model": "opencode-go/deepseek-v4.1-flash",
+                "modeId": "ask"
+              }
+            },
+            "title": "Reply with the single word: ready",
+            "labels": {
+              "paseo.fixture": "t6-agent-control"
+            },
+            "archivedAt": null,
+            "requiresAttention": false,
+            "attentionReason": null,
+            "attentionTimestamp": null
+          },
+          "project": {
+            "projectKey": "prj_9f675e179792b526",
+            "projectName": "fixture-sandbox",
+            "workspaceName": "Reply with the single word: ready",
+            "checkout": {
+              "cwd": "/tmp/fixture-sandbox",
+              "currentBranch": "main",
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-sandbox",
+              "isGit": true,
+              "isPaseoOwnedWorktree": false,
+              "mainRepoRoot": null
+            }
+          }
+        }
+      ],
+      "pageInfo": {
+        "nextCursor": null,
+        "prevCursor": null,
+        "hasMore": false
+      }
+    }
+  }
+}

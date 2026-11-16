@@ -1,0 +1,34 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_stream",
+    "payload": {
+      "agentId": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+      "event": {
+        "type": "timeline",
+        "provider": "opencode",
+        "item": {
+          "type": "tool_call",
+          "callId": "functions.shell:0",
+          "name": "shell",
+          "detail": {
+            "type": "shell",
+            "command": "ls -la",
+            "output": "total 8\ndrwxr-xr-x 1 root root    46 Nov  8 21:02 .\ndrwxrwxrwt 1 root root 19820 Nov  8 21:02 ..\ndrwxr-xr-x 1 root root    82 Nov  8 21:02 .git\n-rw-r--r-- 1 root root    42 Nov  8 21:02 README.md\n-rw-r--r-- 1 root root    41 Nov  8 21:02 convert.py\n"
+          },
+          "metadata": {
+            "status": "completed",
+            "truncated": false,
+            "exit": 0
+          },
+          "status": "completed",
+          "error": null
+        },
+        "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70"
+      },
+      "timestamp": "2026-11-08T21:02:58.711Z",
+      "seq": 10,
+      "epoch": "da097735-b51a-4cf4-9a64-cc6aaa2e96c5"
+    }
+  }
+}

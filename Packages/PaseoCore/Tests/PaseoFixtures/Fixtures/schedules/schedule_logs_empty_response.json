@@ -1,0 +1,11 @@
+{
+  "type": "session",
+  "message": {
+    "type": "schedule/logs/response",
+    "payload": {
+      "requestId": "logs-empty",
+      "runs": [],
+      "error": null
+    }
+  }
+}

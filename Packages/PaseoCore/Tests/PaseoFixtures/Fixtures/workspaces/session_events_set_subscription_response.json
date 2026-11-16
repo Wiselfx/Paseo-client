@@ -1,0 +1,10 @@
+{
+  "type": "session",
+  "message": {
+    "type": "session.events.set_subscription.response",
+    "payload": {
+      "requestId": "t7-0",
+      "subscriptionId": "00000000-0000-0000-0000-000000000000"
+    }
+  }
+}

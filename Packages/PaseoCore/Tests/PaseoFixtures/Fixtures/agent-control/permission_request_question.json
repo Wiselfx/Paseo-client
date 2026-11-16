@@ -1,0 +1,40 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_permission_request",
+    "payload": {
+      "agentId": "e02d8100-d528-4dae-ad00-88d911bc3777",
+      "request": {
+        "id": "15c699f603e8fca9",
+        "provider": "omp",
+        "name": "OMP select",
+        "kind": "question",
+        "title": "Allow tool: bash\nCommand: echo t6-allow",
+        "input": {
+          "questions": [
+            {
+              "question": "Allow tool: bash\nCommand: echo t6-allow",
+              "header": "Response",
+              "options": [
+                {
+                  "label": "Approve"
+                },
+                {
+                  "label": "Approve bash for this session"
+                },
+                {
+                  "label": "Deny"
+                }
+              ],
+              "multiSelect": false
+            }
+          ]
+        },
+        "metadata": {
+          "extensionUiMethod": "select",
+          "answerHeader": "Response"
+        }
+      }
+    }
+  }
+}

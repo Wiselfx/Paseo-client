@@ -1,0 +1,288 @@
+#if canImport(UIKit)
+import Charts
+import PaseoStore
+import SwiftUI
+
+/// Usage, in two layers: a calm overview on top (DSH home figures, rolled up from the agent
+/// list's `lastUsage` — see `UsageOverviewBuilder`), then every account the host reports
+/// quota windows for, with pull to refresh re-asking the host (`forceRefresh`).
+struct ClaudeUsageReportsSheet: View {
+    let session: HostSession
+
+    /// The figures, computed once when the sheet appears and never in `body` (H4, R-1): rolling
+    /// the agent list up parses a date and walks a model map per agent, and the sheet stays on
+    /// screen while agents stream. The sheet owns this view's identity, so one value per open is
+    /// right: it is a this-launch rollup, and pull to refresh re-asks the host, not the rollup.
+    @State private var overview: UsageOverview?
+
+    var body: some View {
+        SheetScaffold("Usage", detents: .large) {
+            Group {
+                if session.hostUsage.reports.isEmpty && (overview?.sessions ?? 0) == 0 {
+                    emptyState
+                } else {
+                    List {
+                        if let overview {
+                            overviewCard(overview)
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .listRowInsets(
+                                    EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        }
+                        ForEach(session.hostUsage.reports) { report in
+                            usageCard(report)
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        }
+                    }
+                    .listStyle(.plain)
+                    .refreshable { await refresh() }
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+        .task {
+            // Before the load's round trip finishes, so the first frame that draws the list
+            // already has the overview card: no second layout of the sheet.
+            if overview == nil {
+                overview = UsageOverviewBuilder.compute(agents: session.agents)
+            }
+            if case .idle = session.hostUsage.phase {
+                _ = await session.hostUsage.load(forceRefresh: false)
+            }
+        }
+    }
+
+    // MARK: Empty / loading states
+
+    @ViewBuilder private var emptyState: some View {
+        switch session.hostUsage.phase {
+        case .loading, .idle:
+            // Upstream `providerUsage.loading` (en.ts:2248).
+            LoadingState("Loading usage...")
+        case .failed(let message):
+            EmptyState(
+                // Upstream `providerUsage.errorTitle` and `retry` (en.ts:2250-2253).
+                title: "Unable to load usage",
+                message: message,
+                // The list — and its pull to refresh — is not drawn in this state, so this is the
+                // only way back.
+                action: (title: "Try again", run: { Task { await refresh() } })
+            )
+            .padding(24)
+        case .ready:
+            // Upstream `providerUsage.empty` (en.ts:2251).
+            EmptyState(title: "No usage data")
+        }
+    }
+
+    // MARK: Overview (DSH home figures)
+
+    /// The six stat cells, the 14-day token chart and the per-model split, from the agent
+    /// list's `lastUsage` (DSH's session-list fallback). A figure no source can answer is a
+    /// dash, not a zero. Takes the rollup as a value: only `body` decides when it is computed.
+    private func overviewCard(_ overview: UsageOverview) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Overview")
+                .font(.paseo(.callout, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+            LazyVGrid(
+                columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+                spacing: 12
+            ) {
+                statCell(label: "Sessions", value: "\(overview.sessions)")
+                statCell(label: "Messages", value: "—")
+                statCell(label: "Total tokens", value: Self.compactTokens(overview.tokens))
+                statCell(label: "Active days", value: "\(overview.activeDays)")
+                statCell(label: "Peak hour", value: overview.peakHourLabel ?? "—")
+                statCell(label: "Favorite model", value: overview.favoriteModel ?? "—")
+            }
+            if overview.tokens > 0 {
+                Text("Tokens by day")
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
+                Chart(overview.days, id: \.date) { day in
+                    BarMark(
+                        x: .value("Day", day.date, unit: .day),
+                        y: .value("Tokens", day.tokens))
+                        .foregroundStyle(Palette.ink.opacity(0.85))
+                }
+                .chartXAxis { AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                    AxisGridLine()
+                    AxisValueLabel(format: .dateTime.month())
+                } }
+                .frame(height: 110)
+                .accessibilityLabel("Tokens by day, last 14 days")
+                .accessibilityValue(Self.compactTokens(overview.tokens) + " tokens total")
+                if !overview.models.isEmpty {
+                    Text("Tokens by model")
+                        .font(.paseo(.footnote, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
+                    Chart(overview.models.prefix(6), id: \.model) { model in
+                        BarMark(
+                            x: .value("Model", model.model),
+                            y: .value("Tokens", model.tokens))
+                            .foregroundStyle(Palette.ink.opacity(0.85))
+                    }
+                    .frame(height: 110)
+                    .accessibilityLabel("Tokens by model")
+                    .accessibilityValue(Self.compactTokens(overview.tokens) + " tokens total")
+                }
+                if let fun = UsageBooks.funLine(forTokens: overview.tokens) {
+                    Text(fun)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.secondaryInk)
+                }
+            } else {
+                Text("No usage yet.")
+                    .font(.paseo(.callout))
+                    .foregroundStyle(Palette.secondaryInk)
+            }
+        }
+        .padding(16)
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
+    }
+
+    private func statCell(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.paseo(.caption2))
+                .foregroundStyle(Palette.secondaryInk)
+            Text(value)
+                .monospacedDigit()
+                .font(.paseo(.headline))
+                .foregroundStyle(Palette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    static func compactTokens(_ value: Int) -> String {
+        if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
+        if value >= 1_000 { return String(format: "%.1fk", Double(value) / 1_000) }
+        return "\(value)"
+    }
+
+    // MARK: A report
+
+    /// One account's card. Every figure and sentence comes from `UsageModel.resolve` — the
+    /// current outcome owns the messages, the last successful fetch owns the values and the
+    /// freshness (Upstream: `packages/app/src/usage/card.tsx:37-169`, `model.ts:208-239`).
+    private func usageCard(_ report: UsageReportEntry) -> some View {
+        // One clock and one read per card: the header, the rows and their balances all come from
+        // the same values, so nothing is recomputed a second later in the same body.
+        let now = Date()
+        let content = UsageModel.resolve(report, now: now)
+        let balances = content.balances.map {
+            UsageModel.display($0, retained: content.retained, now: now)
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            usageCardHeader(report, content: content, now: now)
+            if !content.messages.isEmpty {
+                // Upstream's problem sentences, verbatim (copy.ts:8-19).
+                Text(content.messages.joined(separator: "\n"))
+                    .font(.paseo(.footnote))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(content.windows) { window in
+                windowRow(window, retained: content.retained, now: now)
+            }
+            ForEach(balances) { balance in
+                infoRow(balance.label, value: balance.amountText)
+            }
+            ForEach(content.details) { detail in
+                infoRow(detail.label, value: detail.value)
+            }
+        }
+        .padding(16)
+        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
+    }
+
+    private func usageCardHeader(_ report: UsageReportEntry, content: UsageReportContent, now: Date)
+        -> some View
+    {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Text(report.sourceLabel)
+                    .font(.paseo(.callout, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
+                if let account = report.accountLabel {
+                    Text(account)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.captionInk)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                if let plan = content.planLabel {
+                    Text(plan)
+                        .font(.paseo(.caption2, weight: .semibold))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Palette.chip, in: .capsule)
+                }
+            }
+            // Upstream `timing.updated` / `lastUpdated` / `noSuccessfulUpdate`
+            // (en.ts:2282-2284, card.tsx:255-280): the last successful fetch, never a failed one.
+            Text(UsageFormat.freshness(content.successfulAt, retained: content.retained, now: now))
+                .font(.paseo(.caption2))
+                .foregroundStyle(Palette.captionInk)
+        }
+    }
+
+    // MARK: Window row
+
+    /// One window: upstream's label, the share the preference shows, upstream's countdown and the
+    /// exact reset time, with the same meter size as every other usage surface
+    /// (Upstream: `packages/app/src/usage/window-bar.tsx:44-136`, `reset-line.tsx:8-31`).
+    private func windowRow(_ window: ProviderUsageWindow, retained: Bool, now: Date) -> some View {
+        let display = UsageModel.display(window, as: .used, retained: retained, now: now)
+        let reset = [display.countdown, display.exactTime].compactMap { $0 }
+            .joined(separator: " · ")
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Text(display.label)
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.ink)
+                Spacer(minLength: 8)
+                Text(display.value)
+                    .monospacedDigit()
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(display.percent == nil ? Palette.secondaryInk : Palette.ink)
+                Text(reset)
+                    .font(.paseo(.caption2))
+                    .foregroundStyle(display.isAtRisk ? Palette.warning : Palette.secondaryInk)
+                    .lineLimit(1)
+            }
+            ClaudeUsageBar(
+                percent: display.percent ?? 0, width: SidebarMetrics.usageDetailMeterWidth)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: Small pieces
+
+    private func infoRow(_ label: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.paseo(.footnote))
+                .foregroundStyle(Palette.secondaryInk)
+            Spacer(minLength: 8)
+            Text(value)
+                .monospacedDigit()
+                .font(.paseo(.footnote, weight: .medium))
+                .foregroundStyle(Palette.ink)
+        }
+    }
+
+    private func refresh() async {
+        _ = await session.hostUsage.load(forceRefresh: true)
+    }
+
+    static func compact(_ value: Double) -> String {
+        PaseoFormat.compact(value)
+    }
+}
+#endif

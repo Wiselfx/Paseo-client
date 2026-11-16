@@ -1,0 +1,16 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.label.assignment.set.response",
+    "payload": {
+      "requestId": "assign1",
+      "label": {
+        "name": "M2.12 capture label",
+        "color": "teal"
+      },
+      "workspaceLabels": [
+        "M2.12 capture label"
+      ]
+    }
+  }
+}

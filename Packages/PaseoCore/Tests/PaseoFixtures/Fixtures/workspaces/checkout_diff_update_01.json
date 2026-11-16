@@ -1,0 +1,59 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout_diff_update",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "files": [
+        {
+          "path": "convert.py",
+          "isNew": false,
+          "isDeleted": false,
+          "additions": 3,
+          "deletions": 0,
+          "hunks": [
+            {
+              "oldStart": 3,
+              "oldCount": 3,
+              "newStart": 3,
+              "newCount": 6,
+              "lines": [
+                {
+                  "type": "header",
+                  "content": "@@ -3,3 +3,6 @@"
+                },
+                {
+                  "type": "context",
+                  "content": ""
+                },
+                {
+                  "type": "context",
+                  "content": "def f_to_c(f):"
+                },
+                {
+                  "type": "context",
+                  "content": "    return (f - 32) * 5 / 9"
+                },
+                {
+                  "type": "add",
+                  "content": ""
+                },
+                {
+                  "type": "add",
+                  "content": "def kelvin_to_c(k):"
+                },
+                {
+                  "type": "add",
+                  "content": "    return k - 273.15"
+                }
+              ]
+            }
+          ],
+          "status": "ok"
+        }
+      ],
+      "error": null,
+      "subscriptionId": "00000000-0000-0000-0000-000000000000"
+    }
+  }
+}

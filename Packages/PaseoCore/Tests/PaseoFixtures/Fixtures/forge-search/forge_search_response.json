@@ -1,0 +1,35 @@
+{
+  "type": "session",
+  "message": {
+    "type": "forge.search.response",
+    "payload": {
+      "requestId": "fixture-forge-1",
+      "items": [
+        {
+          "kind": "change_request",
+          "forge": "github",
+          "number": 42,
+          "title": "Fix the flaky test",
+          "url": "https://example.invalid/sandbox/fixture/pull/42",
+          "state": "open",
+          "body": "The sandbox suite flakes on rerun.",
+          "labels": ["bug"],
+          "projectPath": "sandbox/fixture",
+          "baseRefName": "main",
+          "headRefName": "fix-flaky"
+        },
+        {
+          "kind": "issue",
+          "number": 7,
+          "title": "Document the sandbox flow",
+          "url": "https://example.invalid/sandbox/fixture/issues/7",
+          "state": "open",
+          "body": null,
+          "labels": []
+        }
+      ],
+      "authState": "authenticated",
+      "error": null
+    }
+  }
+}

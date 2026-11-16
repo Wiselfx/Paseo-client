@@ -1,0 +1,11 @@
+{
+  "type": "session",
+  "message": {
+    "type": "schedule/delete/response",
+    "payload": {
+      "requestId": "delete",
+      "scheduleId": "a9bffe73",
+      "error": null
+    }
+  }
+}

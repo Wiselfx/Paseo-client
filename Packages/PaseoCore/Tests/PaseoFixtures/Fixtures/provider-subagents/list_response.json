@@ -1,0 +1,55 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent.provider_subagents.list.response",
+    "payload": {
+      "requestId": "req_provider_subagents_list",
+      "parentAgentId": "agent_parent_fixture",
+      "subagents": [
+        {
+          "createdAt": "2026-11-10T07:39:21.770Z",
+          "cwd": null,
+          "description": "Fixture task one",
+          "id": "toolu_fixture_1",
+          "parentAgentId": "agent_parent_fixture",
+          "parentSubagentId": null,
+          "provider": "claude",
+          "status": "completed",
+          "subtitle": "general-purpose · Low · 12.4k tokens",
+          "title": "general-purpose",
+          "toolCallId": "toolu_fixture_1",
+          "updatedAt": "2026-11-10T07:39:24.186Z"
+        },
+        {
+          "createdAt": "2026-11-10T10:48:46.636Z",
+          "cwd": null,
+          "description": "Fixture task two",
+          "id": "toolu_fixture_2",
+          "parentAgentId": "agent_parent_fixture",
+          "parentSubagentId": null,
+          "provider": "claude",
+          "status": "completed",
+          "subtitle": "Explore · Medium · 34.1k tokens",
+          "title": "Explore",
+          "toolCallId": "toolu_fixture_2",
+          "updatedAt": "2026-11-10T10:54:07.993Z"
+        },
+        {
+          "createdAt": "2026-11-11T14:50:33.512Z",
+          "cwd": null,
+          "description": "Fixture task three",
+          "id": "toolu_fixture_3",
+          "parentAgentId": "agent_parent_fixture",
+          "parentSubagentId": null,
+          "provider": "claude",
+          "status": "running",
+          "subtitle": "general-purpose · Medium · 15.3k tokens",
+          "title": "general-purpose",
+          "toolCallId": "toolu_fixture_3",
+          "updatedAt": "2026-11-11T14:54:56.085Z"
+        }
+      ],
+      "error": null
+    }
+  }
+}

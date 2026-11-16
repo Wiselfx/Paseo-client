@@ -1,0 +1,7 @@
+{
+  "opcode": 6,
+  "slot": 2,
+  "payloadBase64": "eyJyb3dzIjoyNCwiY29scyI6ODAsInJldGFpbmVkSGlzdG9yeUxpbmVzIjowfQ==",
+  "payloadLength": 46,
+  "payloadText": "{\"rows\":24,\"cols\":80,\"retainedHistoryLines\":0}"
+}

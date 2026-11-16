@@ -1,0 +1,20 @@
+{
+  "type": "session",
+  "message": {
+    "type": "project.add.response",
+    "payload": {
+      "requestId": "t7-13",
+      "project": {
+        "projectId": "prj_2ec6cf6153016267",
+        "projectKey": "host:srv_FIXTURE:/tmp/fixture-git/new-project",
+        "projectDisplayName": "new-project",
+        "projectCustomName": null,
+        "projectCustomIconRevision": null,
+        "projectIconRevision": "automatic:none:v1",
+        "projectRootPath": "/tmp/fixture-git/new-project",
+        "projectKind": "non_git"
+      },
+      "error": null
+    }
+  }
+}

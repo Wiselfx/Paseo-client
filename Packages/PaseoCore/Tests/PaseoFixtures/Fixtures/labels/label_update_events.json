@@ -1,0 +1,48 @@
+{
+  "type": "events",
+  "events": [
+    {
+      "type": "session",
+      "message": {
+        "type": "workspace.label.update",
+        "payload": {
+          "kind": "upsert",
+          "label": {
+            "name": "M2.12 capture label",
+            "color": "teal"
+          },
+          "generation": "fixture-generation",
+          "seq": 1
+        }
+      }
+    },
+    {
+      "type": "session",
+      "message": {
+        "type": "workspace.label.update",
+        "payload": {
+          "kind": "upsert",
+          "label": {
+            "name": "M2.12 capture renamed",
+            "color": "sky"
+          },
+          "previousName": "M2.12 capture label",
+          "generation": "fixture-generation",
+          "seq": 2
+        }
+      }
+    },
+    {
+      "type": "session",
+      "message": {
+        "type": "workspace.label.update",
+        "payload": {
+          "kind": "remove",
+          "name": "M2.12 capture renamed",
+          "generation": "fixture-generation",
+          "seq": 3
+        }
+      }
+    }
+  ]
+}

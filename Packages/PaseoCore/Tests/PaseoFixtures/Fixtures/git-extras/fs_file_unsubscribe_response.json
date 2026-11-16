@@ -1,0 +1,10 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fs.file.unsubscribe.response",
+    "payload": {
+      "subscriptionId": "00000000-0000-0000-0000-000000000000",
+      "requestId": "t11-10"
+    }
+  }
+}

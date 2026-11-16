@@ -1,0 +1,73 @@
+{
+  "_comment": "Hand-written fixture, NOT captured traffic: the sandbox has no GitHub PR. Written to match packages/protocol/src/messages.ts:6150-6179 and the item schemas at :6100-6147. Do not regenerate from the daemon.",
+  "type": "session",
+  "message": {
+    "type": "pull_request_timeline_response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "prNumber": 12,
+      "items": [
+        {
+          "id": "review-1",
+          "kind": "review",
+          "author": "alice",
+          "authorUrl": "https://example.test/alice",
+          "avatarUrl": null,
+          "body": "Overall direction is good; one flaky test worries me.",
+          "createdAt": 1730976000000,
+          "url": "https://example.test/pr/12#pullrequestreview-1",
+          "reviewState": "approved"
+        },
+        {
+          "id": "comment-1",
+          "kind": "comment",
+          "author": "alice",
+          "authorUrl": "https://example.test/alice",
+          "avatarUrl": null,
+          "body": "Could you bump the timeout here?",
+          "createdAt": 1730976060000,
+          "url": "https://example.test/pr/12#discussion_r1",
+          "reviewId": "review-1",
+          "threadId": "thread-1",
+          "location": {
+            "path": "Packages/PaseoCore/Sources/PaseoStore/TimelineState.swift",
+            "line": 42,
+            "isOutdated": false
+          }
+        },
+        {
+          "id": "comment-2",
+          "kind": "comment",
+          "author": "bob",
+          "authorUrl": "https://example.test/bob",
+          "avatarUrl": null,
+          "body": "Agreed — and can we add a regression test?",
+          "createdAt": 1730976090000,
+          "url": "https://example.test/pr/12#discussion_r2",
+          "reviewId": "review-1",
+          "threadId": "thread-1"
+        },
+        {
+          "id": "comment-3",
+          "kind": "comment",
+          "author": "carol",
+          "authorUrl": "https://example.test/carol",
+          "avatarUrl": null,
+          "body": "Ship it.",
+          "createdAt": 1730976120000,
+          "url": "https://example.test/pr/12#issuecomment-1"
+        },
+        {
+          "id": "mystery-1",
+          "kind": "emoji_reaction",
+          "createdAt": 1730976150000
+        }
+      ],
+      "truncated": false,
+      "error": null,
+      "requestId": "t17-fixture",
+      "githubFeaturesEnabled": true,
+      "authState": "authenticated"
+    }
+  }
+}

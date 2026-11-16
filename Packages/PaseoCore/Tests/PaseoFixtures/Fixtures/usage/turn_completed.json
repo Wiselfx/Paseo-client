@@ -1,0 +1,11 @@
+{
+  "type": "turn_completed",
+  "provider": "opencode",
+  "turnId": "eea87f84-25e6-47bd-89d8-137ef81ba04c",
+  "usage": {
+    "inputTokens": 79621,
+    "cachedInputTokens": 227072,
+    "outputTokens": 501,
+    "totalCostUsd": 0
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "type": "session",
+  "message": {
+    "type": "get_daemon_config_response",
+    "payload": {
+      "requestId": "config",
+      "config": {
+        "relay": {
+          "enabled": true,
+          "requireProtectedSecurity": false
+        },
+        "mcp": {
+          "enabled": true,
+          "injectIntoAgents": true
+        },
+        "hostnames": [],
+        "cors": {
+          "allowedOrigins": [
+            "https://app.paseo.sh"
+          ]
+        },
+        "trustedProxies": [
+          "loopback"
+        ],
+        "git": {
+          "maxProcessesPerSecond": 64,
+          "maxProcessConcurrency": 8
+        },
+        "app": {
+          "baseUrl": "https://app.paseo.sh"
+        },
+        "usage": {
+          "enabled": true
+        },
+        "browserTools": {
+          "enabled": false
+        },
+        "providers": {
+          "opencode": {
+            "enabled": true
+          },
+          "copilot": {
+            "enabled": false
+          },
+          "codex": {
+            "enabled": false
+          },
+          "claude": {
+            "enabled": true,
+            "env": {
+              "IS_SANDBOX": "1"
+            }
+          },
+          "antigravity": {
+            "enabled": false
+          },
+          "muse": {
+            "enabled": false
+          },
+          "pi": {
+            "enabled": true
+          },
+          "omp": {
+            "enabled": true
+          }
+        },
+        "metadataGeneration": {
+          "providers": []
+        },
+        "autoArchiveAfterMerge": false,
+        "enableTerminalAgentHooks": false,
+        "idleRuntimeCleanup": true,
+        "resumeOnStartup": false,
+        "resumePrompt": "Resume working.",
+        "appendSystemPrompt": "",
+        "skills": {
+          "selection": {
+            "mode": "custom",
+            "skills": [
+              "paseo",
+              "paseo-advisor",
+              "paseo-committee",
+              "paseo-handoff"
+            ]
+          }
+        },
+        "pluginsEnabled": true,
+        "plugins": {
+          "paseo-pi": {
+            "source": "directory",
+            "path": "/paseo-pi",
+            "enabled": true
+          }
+        },
+        "features": {
+          "dictation": {
+            "enabled": true,
+            "stt": {
+              "provider": "local",
+              "model": "parakeet-tdt-110m-en-int8"
+            }
+          },
+          "voiceMode": {
+            "enabled": true,
+            "stt": {
+              "provider": "local",
+              "model": "parakeet-tdt-110m-en-int8"
+            },
+            "tts": {
+              "provider": "local",
+              "model": "piper-en-us-libritts-r"
+            }
+          }
+        },
+        "envOverrides": {}
+      }
+    }
+  }
+}

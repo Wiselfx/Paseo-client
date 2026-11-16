@@ -1,0 +1,120 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_update",
+    "payload": {
+      "kind": "upsert",
+      "agent": {
+        "id": "e02d8100-d528-4dae-ad00-88d911bc3777",
+        "provider": "omp",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_430057899aa09f0e",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "thinkingOptionId": "low",
+        "effectiveThinkingOptionId": "low",
+        "runtimeInfo": {
+          "provider": "omp",
+          "sessionId": "01a1bd32-719c-7711-9b6d-60686720e7f9",
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "thinkingOptionId": "low",
+          "modeId": "ask"
+        },
+        "createdAt": "2026-11-08T22:06:02.381Z",
+        "updatedAt": "2026-11-08T22:06:14.672Z",
+        "lastUserMessageAt": "2026-11-08T22:06:10.538Z",
+        "status": "idle",
+        "activeTurn": null,
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true,
+          "supportsSessionListing": true,
+          "supportsDynamicModes": true,
+          "supportsMcpServers": true,
+          "supportsReasoningStream": true,
+          "supportsToolInvocations": true,
+          "supportsRewindConversation": true,
+          "supportsRewindFiles": false,
+          "supportsRewindBoth": false,
+          "supportsNativePaseoTools": true
+        },
+        "currentModeId": "ask",
+        "availableModes": [
+          {
+            "id": "full",
+            "label": "Full Access",
+            "description": "Launches OMP with yolo approval mode so tools run without prompts.",
+            "icon": "ShieldOff",
+            "colorTier": "dangerous",
+            "isUnattended": true
+          },
+          {
+            "id": "write",
+            "label": "Write Approval",
+            "description": "Launches OMP with write approval mode — reads are free, writes require approval.",
+            "icon": "ShieldAlert",
+            "colorTier": "moderate"
+          },
+          {
+            "id": "ask",
+            "label": "Always Ask",
+            "description": "Launches OMP with always-ask approval mode for write and exec tools.",
+            "icon": "ShieldCheck",
+            "colorTier": "safe"
+          }
+        ],
+        "features": [
+          {
+            "type": "toggle",
+            "id": "fast_mode",
+            "label": "Fast",
+            "icon": "zap",
+            "value": false
+          }
+        ],
+        "pendingPermissions": [],
+        "persistence": {
+          "provider": "omp",
+          "sessionId": "01a1bd32-719c-7711-9b6d-60686720e7f9",
+          "nativeHandle": "/tmp/fixture-sandbox/.fixture-session.jsonl",
+          "metadata": {
+            "cwd": "/tmp/fixture-sandbox",
+            "bridgedTools": [],
+            "model": "opencode-go/deepseek-v4.1-flash",
+            "thinkingOptionId": "low",
+            "modeId": "ask"
+          }
+        },
+        "title": "T6 probe agent",
+        "labels": {
+          "paseo.fixture": "t6-agent-control"
+        },
+        "archivedAt": null,
+        "lastUsage": {
+          "inputTokens": 16252,
+          "cachedInputTokens": 16256,
+          "outputTokens": 63,
+          "totalCostUsd": 0.002524368,
+          "contextWindowMaxTokens": 1000000,
+          "contextWindowUsedTokens": 16306
+        },
+        "requiresAttention": false,
+        "attentionReason": null,
+        "attentionTimestamp": null
+      },
+      "project": {
+        "projectKey": "prj_9f675e179792b526",
+        "projectName": "fixture-sandbox",
+        "workspaceName": "Reply with ready",
+        "checkout": {
+          "cwd": "/tmp/fixture-sandbox",
+          "currentBranch": "main",
+          "remoteUrl": null,
+          "worktreeRoot": "/tmp/fixture-sandbox",
+          "isGit": true,
+          "isPaseoOwnedWorktree": false,
+          "mainRepoRoot": null
+        }
+      }
+    }
+  }
+}

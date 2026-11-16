@@ -1,0 +1,36 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout_status_update",
+    "payload": {
+      "cwd": "/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+      "isGit": true,
+      "repoRoot": "/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+      "mainRepoRoot": "/tmp/fixture-sandbox",
+      "currentBranch": "fixture-t7-worktree-1794176306106",
+      "isDirty": true,
+      "baseRef": "main",
+      "baseRefExact": "refs/heads/main",
+      "aheadBehind": {
+        "ahead": 0,
+        "behind": 0
+      },
+      "upstreamRef": null,
+      "aheadOfOrigin": null,
+      "behindOfOrigin": null,
+      "hasRemote": false,
+      "remoteUrl": null,
+      "isPaseoOwnedWorktree": true,
+      "error": null,
+      "requestId": "subscription:/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+      "prStatus": {
+        "cwd": "/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7",
+        "status": null,
+        "githubFeaturesEnabled": false,
+        "authState": "no_remote",
+        "error": null,
+        "requestId": "subscription:/tmp/fixture-home/.paseo/worktrees/fixture-wt/fixture-t7"
+      }
+    }
+  }
+}

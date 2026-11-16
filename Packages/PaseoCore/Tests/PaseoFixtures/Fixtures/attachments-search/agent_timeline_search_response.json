@@ -1,0 +1,25 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent.timeline.search.response",
+    "payload": {
+      "requestId": "search",
+      "agentId": "a8c4fa13-5874-4077-98f9-bce6de7f610e",
+      "epoch": "3213d602-fd6a-4deb-8692-c000cab972a1",
+      "locations": [
+        {
+          "seq": 1,
+          "role": "user",
+          "count": 1
+        },
+        {
+          "seq": 7,
+          "role": "assistant",
+          "count": 1
+        }
+      ],
+      "nextCursor": null,
+      "error": null
+    }
+  }
+}

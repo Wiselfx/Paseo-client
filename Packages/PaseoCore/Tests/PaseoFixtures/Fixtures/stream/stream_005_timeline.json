@@ -1,0 +1,42 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent_stream",
+    "payload": {
+      "agentId": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+      "event": {
+        "type": "timeline",
+        "provider": "opencode",
+        "item": {
+          "type": "tool_call",
+          "callId": "functions.edit:2",
+          "name": "edit",
+          "detail": {
+            "type": "edit",
+            "filePath": "/tmp/fixture-sandbox/convert.py",
+            "oldString": "def c_to_f(c):\n    return c * 9 / 5 + 32",
+            "newString": "def c_to_f(c):\n    return c * 9 / 5 + 32\n\ndef f_to_c(f):\n    return (f - 32) * 5 / 9"
+          },
+          "metadata": {
+            "files": [
+              {
+                "file": "convert.py",
+                "patch": "Index: convert.py\n===================================================================\n--- convert.py\n+++ convert.py\n@@ -1,2 +1,5 @@\n def c_to_f(c):\n     return c * 9 / 5 + 32\n+\n+def f_to_c(f):\n+    return (f - 32) * 5 / 9\n",
+                "status": "modified",
+                "additions": 3,
+                "deletions": 0
+              }
+            ],
+            "truncated": false
+          },
+          "status": "completed",
+          "error": null
+        },
+        "turnId": "47c9ec71-6933-42d8-b8c9-8984cc788c70"
+      },
+      "timestamp": "2026-11-08T21:03:01.957Z",
+      "seq": 12,
+      "epoch": "da097735-b51a-4cf4-9a64-cc6aaa2e96c5"
+    }
+  }
+}

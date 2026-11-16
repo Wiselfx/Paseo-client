@@ -1,0 +1,11 @@
+{
+  "_comment": "Hand-written fixture, NOT captured traffic: subscription.release.response shape at messages.ts:3407-3411. Do not regenerate from the daemon.",
+  "type": "session",
+  "message": {
+    "type": "subscription.release.response",
+    "payload": {
+      "requestId": "m210-fixture-release",
+      "subscriptionId": "subs_fixture_m210"
+    }
+  }
+}

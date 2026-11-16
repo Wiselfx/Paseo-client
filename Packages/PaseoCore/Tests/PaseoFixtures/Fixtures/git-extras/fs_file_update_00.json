@@ -1,0 +1,19 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fs.file.update",
+    "payload": {
+      "subscriptionId": "00000000-0000-0000-0000-000000000000",
+      "version": {
+        "status": "ready",
+        "cwd": "/tmp/fixture-git/scratch-repo",
+        "path": "README.md",
+        "size": 42,
+        "modifiedAt": "2026-11-08T23:13:54.782Z",
+        "revision": "53:17937167:42:1794179634782604566",
+        "kind": "text",
+        "mimeType": "text/plain"
+      }
+    }
+  }
+}

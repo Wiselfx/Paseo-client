@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "agent.provider_subagents.list.response",
+    "payload": {
+      "requestId": "subagents",
+      "parentAgentId": "a8c4fa13-5874-4077-98f9-bce6de7f610e",
+      "subagents": [],
+      "error": null
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.base_branch.set.response",
+    "payload": {
+      "requestId": "base-sandbox",
+      "workspaceId": "wks_6adc97aa7e1e49e3",
+      "accepted": false,
+      "baseRef": null,
+      "error": "Workspace is not a Paseo worktree"
+    }
+  }
+}

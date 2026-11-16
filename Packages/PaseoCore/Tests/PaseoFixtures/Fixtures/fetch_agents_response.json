@@ -1,0 +1,121 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agents_response",
+    "payload": {
+      "requestId": "agents",
+      "entries": [
+        {
+          "agent": {
+            "id": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-sandbox",
+            "workspaceId": "wks_6adc97aa7e1e49e3",
+            "model": "opencode/inkling-2-small-free",
+            "thinkingOptionId": null,
+            "effectiveThinkingOptionId": "default",
+            "runtimeInfo": {
+              "provider": "opencode",
+              "sessionId": "ses_e43076a6fffeatOqWZtnt3gQa6",
+              "model": "opencode/inkling-2-small-free",
+              "thinkingOptionId": "default",
+              "modeId": "build"
+            },
+            "createdAt": "2026-11-08T21:02:50.312Z",
+            "updatedAt": "2026-11-08T21:03:06.592Z",
+            "lastUserMessageAt": "2026-11-08T21:02:57.839Z",
+            "status": "idle",
+            "activeTurn": null,
+            "capabilities": {
+              "supportsStreaming": true,
+              "supportsSessionPersistence": true,
+              "supportsSessionListing": true,
+              "supportsDynamicModes": true,
+              "supportsMcpServers": true,
+              "supportsReasoningStream": true,
+              "supportsToolInvocations": true,
+              "supportsRewindBoth": true,
+              "supportsRewindConversation": false,
+              "supportsRewindFiles": false
+            },
+            "currentModeId": "build",
+            "availableModes": [
+              {
+                "id": "build",
+                "label": "Build",
+                "description": "The default agent. Executes tools based on configured permissions."
+              },
+              {
+                "id": "plan",
+                "label": "Plan",
+                "description": "Read-only agent for exploring the codebase and planning work before implementation."
+              }
+            ],
+            "features": [
+              {
+                "type": "toggle",
+                "id": "auto_accept",
+                "label": "Auto-accept",
+                "value": false
+              }
+            ],
+            "pendingPermissions": [],
+            "persistence": {
+              "provider": "opencode",
+              "sessionId": "ses_e43076a6fffeatOqWZtnt3gQa6",
+              "nativeHandle": "ses_e43076a6fffeatOqWZtnt3gQa6",
+              "metadata": {
+                "provider": "opencode",
+                "cwd": "/tmp/fixture-sandbox",
+                "model": "opencode/inkling-2-small-free",
+                "title": "fixture sandbox",
+                "openCodeRuntimeNotices": [
+                  {
+                    "major": 2,
+                    "timestamp": "2026-11-08T21:02:50.312Z"
+                  }
+                ]
+              }
+            },
+            "title": "fixture sandbox",
+            "labels": {
+              "paseo.parent-agent-id": "00000000-0000-4000-8000-000000000001",
+              "paseo.open-agent-tab.cid_dd8d8d5ba4d34c73a3f1f795d49fb975": "true"
+            },
+            "archivedAt": null,
+            "lastUsage": {
+              "inputTokens": 19341,
+              "cachedInputTokens": 111488,
+              "outputTokens": 236,
+              "totalCostUsd": 0,
+              "contextWindowMaxTokens": 1048576,
+              "contextWindowUsedTokens": 19165
+            },
+            "requiresAttention": false,
+            "attentionReason": null,
+            "attentionTimestamp": null
+          },
+          "project": {
+            "projectKey": "prj_9f675e179792b526",
+            "projectName": "fixture-sandbox",
+            "workspaceName": "fixture sandbox",
+            "checkout": {
+              "cwd": "/tmp/fixture-sandbox",
+              "currentBranch": null,
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-sandbox",
+              "isGit": true,
+              "isPaseoOwnedWorktree": false,
+              "mainRepoRoot": null
+            }
+          }
+        }
+      ],
+      "pageInfo": {
+        "nextCursor": null,
+        "prevCursor": null,
+        "hasMore": false
+      }
+    }
+  }
+}

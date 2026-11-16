@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.pin.set.response",
+    "payload": {
+      "requestId": "pin-sandbox",
+      "workspaceId": "wks_6adc97aa7e1e49e3",
+      "accepted": true,
+      "pinnedAt": "2026-11-09T07:28:56.888Z",
+      "error": null
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace_setup_status_response",
+    "payload": {
+      "requestId": "m210-fixture",
+      "workspaceId": "wks_FIXTURE",
+      "snapshot": null
+    }
+  },
+  "_comment": "Captured from the sandbox, then scrubbed: ids, request ids and paths replaced with fixture values. Snapshot is null because the sandbox workspace has no setup script configured."
+}

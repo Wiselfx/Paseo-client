@@ -1,0 +1,13 @@
+{
+  "type": "session",
+  "message": {
+    "type": "project.rename.response",
+    "payload": {
+      "requestId": "rename-mutations-clear",
+      "projectId": "prj_95a546782d9f329f",
+      "accepted": true,
+      "customName": null,
+      "error": null
+    }
+  }
+}

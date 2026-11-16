@@ -1,0 +1,307 @@
+{
+  "type": "session",
+  "message": {
+    "type": "list_provider_models_response",
+    "payload": {
+      "provider": "omp",
+      "models": [
+        {
+          "provider": "omp",
+          "id": "opencode-go/beam-free",
+          "label": "Beam Free",
+          "description": "opencode-go/beam-free",
+          "metadata": {
+            "provider": "opencode-go",
+            "modelId": "beam-free"
+          },
+          "thinkingOptions": [
+            {
+              "id": "auto",
+              "label": "Auto",
+              "description": "OMP picks the effort each turn"
+            },
+            {
+              "id": "low",
+              "label": "Low",
+              "description": "Faster reasoning",
+              "isDefault": true
+            },
+            {
+              "id": "medium",
+              "label": "Medium",
+              "description": "Balanced reasoning"
+            },
+            {
+              "id": "high",
+              "label": "High",
+              "description": "Deeper reasoning"
+            },
+            {
+              "id": "xhigh",
+              "label": "XHigh",
+              "description": "Extra-high reasoning"
+            },
+            {
+              "id": "max",
+              "label": "Max",
+              "description": "Maximum reasoning"
+            }
+          ],
+          "defaultThinkingOptionId": "low"
+        },
+        {
+          "provider": "omp",
+          "id": "opencode-go/deepseek-v4.1-flash",
+          "label": "DeepSeek V4.1 Flash",
+          "description": "opencode-go/deepseek-v4.1-flash",
+          "metadata": {
+            "provider": "opencode-go",
+            "modelId": "deepseek-v4.1-flash"
+          },
+          "thinkingOptions": [
+            {
+              "id": "auto",
+              "label": "Auto",
+              "description": "OMP picks the effort each turn"
+            },
+            {
+              "id": "minimal",
+              "label": "Minimal",
+              "description": "Light reasoning",
+              "isDefault": true
+            },
+            {
+              "id": "low",
+              "label": "Low",
+              "description": "Faster reasoning"
+            },
+            {
+              "id": "high",
+              "label": "High",
+              "description": "Deeper reasoning"
+            },
+            {
+              "id": "max",
+              "label": "Max",
+              "description": "Maximum reasoning"
+            }
+          ],
+          "defaultThinkingOptionId": "minimal"
+        },
+        {
+          "provider": "omp",
+          "id": "opencode-go/glm-5.3-flash",
+          "label": "GLM-5.3-Flash",
+          "description": "opencode-go/glm-5.3-flash",
+          "metadata": {
+            "provider": "opencode-go",
+            "modelId": "glm-5.3-flash"
+          },
+          "thinkingOptions": [
+            {
+              "id": "auto",
+              "label": "Auto",
+              "description": "OMP picks the effort each turn"
+            },
+            {
+              "id": "minimal",
+              "label": "Minimal",
+              "description": "Light reasoning",
+              "isDefault": true
+            },
+            {
+              "id": "low",
+              "label": "Low",
+              "description": "Faster reasoning"
+            },
+            {
+              "id": "high",
+              "label": "High",
+              "description": "Deeper reasoning"
+            },
+            {
+              "id": "max",
+              "label": "Max",
+              "description": "Maximum reasoning"
+            }
+          ],
+          "defaultThinkingOptionId": "minimal"
+        },
+        {
+          "provider": "omp",
+          "id": "opencode-go/crouton-alpha-free",
+          "label": "Crouton Alpha Free",
+          "description": "opencode-go/crouton-alpha-free",
+          "metadata": {
+            "provider": "opencode-go",
+            "modelId": "crouton-alpha-free"
+          },
+          "thinkingOptions": [
+            {
+              "id": "auto",
+              "label": "Auto",
+              "description": "OMP picks the effort each turn"
+            },
+            {
+              "id": "minimal",
+              "label": "Minimal",
+              "description": "Light reasoning",
+              "isDefault": true
+            },
+            {
+              "id": "low",
+              "label": "Low",
+              "description": "Faster reasoning"
+            },
+            {
+              "id": "medium",
+              "label": "Medium",
+              "description": "Balanced reasoning"
+            },
+            {
+              "id": "high",
+              "label": "High",
+              "description": "Deeper reasoning"
+            },
+            {
+              "id": "xhigh",
+              "label": "XHigh",
+              "description": "Extra-high reasoning"
+            }
+          ],
+          "defaultThinkingOptionId": "minimal"
+        },
+        {
+          "provider": "omp",
+          "id": "opencode-go/hy4",
+          "label": "Hy4",
+          "description": "opencode-go/hy4",
+          "metadata": {
+            "provider": "opencode-go",
+            "modelId": "hy4"
+          },
+          "thinkingOptions": [
+            {
+              "id": "auto",
+              "label": "Auto",
+              "description": "OMP picks the effort each turn"
+            },
+            {
+              "id": "high",
+              "label": "High",
+              "description": "Deeper reasoning",
+              "isDefault": true
+            }
+          ],
+          "defaultThinkingOptionId": "high"
+        },
+        {
+          "provider": "omp",
+          "id": "opencode-go/iceman-contributor-free",
+          "label": "Iceman Contributor Free",
+          "description": "opencode-go/iceman-contributor-free",
+          "metadata": {
+            "provider": "opencode-go",
+            "modelId": "iceman-contributor-free"
+          },
+          "thinkingOptions": [
+            {
+              "id": "auto",
+              "label": "Auto",
+              "description": "OMP picks the effort each turn"
+            },
+            {
+              "id": "off",
+              "label": "Off",
+              "description": "No extra reasoning"
+            },
+            {
+              "id": "minimal",
+              "label": "Minimal",
+              "description": "Light reasoning"
+            },
+            {
+              "id": "low",
+              "label": "Low",
+              "description": "Faster reasoning"
+            },
+            {
+              "id": "medium",
+              "label": "Medium",
+              "description": "Balanced reasoning",
+              "isDefault": true
+            },
+            {
+              "id": "high",
+              "label": "High",
+              "description": "Deeper reasoning"
+            },
+            {
+              "id": "xhigh",
+              "label": "XHigh",
+              "description": "Extra-high reasoning"
+            },
+            {
+              "id": "max",
+              "label": "Max",
+              "description": "Maximum reasoning"
+            }
+          ],
+          "defaultThinkingOptionId": "medium"
+        },
+        {
+          "provider": "omp",
+          "id": "llama.cpp/ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit",
+          "label": "Ornith-1.5-35B-A3B-uncensored-MLX-4bit",
+          "description": "llama.cpp/ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit",
+          "metadata": {
+            "provider": "llama.cpp",
+            "modelId": "ressl/Ornith-1.5-35B-A3B-uncensored-MLX-4bit"
+          },
+          "thinkingOptions": [
+            {
+              "id": "auto",
+              "label": "Auto",
+              "description": "OMP picks the effort each turn"
+            },
+            {
+              "id": "minimal",
+              "label": "Minimal",
+              "description": "Light reasoning",
+              "isDefault": true
+            },
+            {
+              "id": "low",
+              "label": "Low",
+              "description": "Faster reasoning"
+            },
+            {
+              "id": "medium",
+              "label": "Medium",
+              "description": "Balanced reasoning"
+            },
+            {
+              "id": "high",
+              "label": "High",
+              "description": "Deeper reasoning"
+            },
+            {
+              "id": "xhigh",
+              "label": "XHigh",
+              "description": "Extra-high reasoning"
+            },
+            {
+              "id": "max",
+              "label": "Max",
+              "description": "Maximum reasoning"
+            }
+          ],
+          "defaultThinkingOptionId": "minimal"
+        }
+      ],
+      "error": null,
+      "fetchedAt": "2026-11-08T22:01:47.467Z",
+      "requestId": "models"
+    }
+  }
+}

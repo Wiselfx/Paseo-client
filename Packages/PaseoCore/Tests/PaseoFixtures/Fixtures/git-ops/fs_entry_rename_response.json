@@ -1,0 +1,14 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fs.entry.rename.response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "path": ".t15-fixture/scratch.txt",
+      "renamedPath": ".t15-fixture/renamed.txt",
+      "success": true,
+      "error": null,
+      "requestId": "t15-5"
+    }
+  }
+}

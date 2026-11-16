@@ -1,0 +1,25 @@
+{
+  "type": "session",
+  "message": {
+    "type": "checkout_status_response",
+    "payload": {
+      "cwd": "/tmp/fixture-git/scratch-repo",
+      "isGit": true,
+      "repoRoot": "/tmp/fixture-git/scratch-repo",
+      "mainRepoRoot": null,
+      "currentBranch": "main",
+      "isDirty": false,
+      "baseRef": "main",
+      "baseRefExact": "main",
+      "aheadBehind": null,
+      "upstreamRef": "refs/remotes/origin/main",
+      "aheadOfOrigin": 0,
+      "behindOfOrigin": 0,
+      "hasRemote": true,
+      "remoteUrl": "/tmp/fixture-git/scratch-remote.git",
+      "isPaseoOwnedWorktree": false,
+      "error": null,
+      "requestId": "t7-15"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "session",
+  "message": {
+    "type": "push.unregister.response",
+    "payload": {
+      "requestId": "push-unregister"
+    }
+  }
+}

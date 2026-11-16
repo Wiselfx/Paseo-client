@@ -1,0 +1,10 @@
+{
+  "type": "session",
+  "message": {
+    "type": "usage.list_reports.response",
+    "payload": {
+      "requestId": "t16-reports",
+      "error": null
+    }
+  }
+}

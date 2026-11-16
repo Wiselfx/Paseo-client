@@ -1,0 +1,18 @@
+{
+  "type": "session",
+  "message": {
+    "type": "file.upload.response",
+    "payload": {
+      "requestId": "t12-upload",
+      "file": {
+        "type": "uploaded_file",
+        "id": "upload_909c100b-d191-4c76-9bdc-c76dd3972cbc",
+        "fileName": "t12-fixture-upload.txt",
+        "mimeType": "text/plain",
+        "size": 48,
+        "path": "/tmp/fixture-sandbox/t12-fixture-upload.txt"
+      },
+      "error": null
+    }
+  }
+}

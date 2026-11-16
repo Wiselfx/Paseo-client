@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: PaseoCore (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and test
+        working-directory: Packages/PaseoCore
+        run: swift test
+
+  lint:
+    name: Style and performance rules (R-4, R-8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check for new violations
+        run: Tools/style-lint/check.sh
+      - name: Performance framework self-test
+        run: Performance/scripts/final-check.sh --self-test
+      - name: Performance final check on the changed files (pull requests)
+        if: github.event_name == 'pull_request'
+        run: |
+          Performance/scripts/final-check.sh "origin/${{ github.base_ref }}"

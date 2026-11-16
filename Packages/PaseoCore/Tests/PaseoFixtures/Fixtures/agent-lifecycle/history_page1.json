@@ -1,0 +1,83 @@
+{
+  "type": "session",
+  "message": {
+    "type": "fetch_agent_history_response",
+    "payload": {
+      "requestId": "m7e-10",
+      "entries": [
+        {
+          "agent": {
+            "id": "00000000-0000-0000-0000-000000000002",
+            "provider": "omp",
+            "cwd": "/tmp/fixture-sandbox",
+            "workspaceId": "wks_fixture",
+            "model": "opencode-go/deepseek-v4.1-flash",
+            "thinkingOptionId": null,
+            "effectiveThinkingOptionId": "high",
+            "runtimeInfo": {
+              "provider": "omp",
+              "sessionId": "sandbox-session",
+              "model": "opencode-go/deepseek-v4.1-flash",
+              "thinkingOptionId": "high",
+              "modeId": "full"
+            },
+            "createdAt": "2026-11-09T08:20:13.801Z",
+            "updatedAt": "2026-11-09T08:20:16.904Z",
+            "lastUserMessageAt": "2026-11-09T08:20:13.851Z",
+            "status": "closed",
+            "capabilities": {
+              "supportsStreaming": false,
+              "supportsSessionPersistence": true,
+              "supportsDynamicModes": false,
+              "supportsMcpServers": false,
+              "supportsReasoningStream": false,
+              "supportsToolInvocations": true,
+              "supportsRewindConversation": false,
+              "supportsRewindFiles": false,
+              "supportsRewindBoth": false
+            },
+            "currentModeId": "full",
+            "availableModes": [],
+            "pendingPermissions": [],
+            "persistence": {
+              "provider": "omp",
+              "sessionId": "sandbox-session",
+              "nativeHandle": "/tmp/fixture-sandbox/sandbox-session.jsonl",
+              "metadata": {
+                "cwd": "/tmp/fixture-sandbox",
+                "bridgedTools": [],
+                "model": "opencode-go/deepseek-v4.1-flash",
+                "modeId": "full"
+              }
+            },
+            "title": "fixture agent B",
+            "requiresAttention": false,
+            "attentionReason": null,
+            "attentionTimestamp": null,
+            "archivedAt": "2026-11-09T08:20:16.904Z",
+            "labels": {}
+          },
+          "project": {
+            "projectKey": "prj_fixture",
+            "projectName": "fixture-sandbox",
+            "workspaceName": "Reply with ready",
+            "checkout": {
+              "cwd": "/tmp/fixture-sandbox",
+              "currentBranch": "main",
+              "remoteUrl": null,
+              "worktreeRoot": "/tmp/fixture-sandbox",
+              "isGit": true,
+              "isPaseoOwnedWorktree": false,
+              "mainRepoRoot": null
+            }
+          }
+        }
+      ],
+      "pageInfo": {
+        "nextCursor": "eyJzb3J0IjpbeyJrZXkiOiJ1cGRhdGVkX2F0IiwiZGlyZWN0aW9uIjoiZGVzYyJ9XSwidmFsdWVzIjp7InVwZGF0ZWRfYXQiOjE3OTQyMTI0MTY5MDR9LCJpZCI6IjQwMzg0NWNjLTNjNjUtNDE0My1iNzJlLWQ2NGM3ZDk4OTRiOCJ9",
+        "prevCursor": null,
+        "hasMore": true
+      }
+    }
+  }
+}

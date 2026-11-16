@@ -1,0 +1,24 @@
+{
+  "type": "session",
+  "message": {
+    "type": "file_explorer_response",
+    "payload": {
+      "cwd": "/tmp/fixture-sandbox",
+      "path": "convert.py",
+      "mode": "file",
+      "directory": null,
+      "file": {
+        "path": "convert.py",
+        "kind": "text",
+        "encoding": "utf-8",
+        "content": "def c_to_f(c):\n    return c * 9 / 5 + 32\n\ndef f_to_c(f):\n    return (f - 32) * 5 / 9\n\ndef kelvin_to_c(k):\n    return k - 273.15\n",
+        "mimeType": "text/plain",
+        "size": 128,
+        "modifiedAt": "2026-11-08T22:02:39.057Z",
+        "revision": "53:17816116:128:1794175359057975682"
+      },
+      "error": null,
+      "requestId": "t7-7"
+    }
+  }
+}

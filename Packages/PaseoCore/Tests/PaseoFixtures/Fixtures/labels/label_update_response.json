@@ -1,0 +1,14 @@
+{
+  "type": "session",
+  "message": {
+    "type": "workspace.label.update.response",
+    "payload": {
+      "requestId": "update1",
+      "label": {
+        "name": "M2.12 capture renamed",
+        "color": "sky"
+      },
+      "affectedWorkspaceCount": 1
+    }
+  }
+}

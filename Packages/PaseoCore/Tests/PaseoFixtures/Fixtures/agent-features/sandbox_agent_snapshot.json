@@ -1,0 +1,81 @@
+{
+  "id": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+  "provider": "opencode",
+  "cwd": "/tmp/fixture-sandbox",
+  "workspaceId": "wks_sandbox",
+  "model": "opencode/inkling-2-small-free",
+  "thinkingOptionId": null,
+  "effectiveThinkingOptionId": "default",
+  "runtimeInfo": {
+    "provider": "opencode",
+    "sessionId": "sandbox-session",
+    "model": "opencode/inkling-2-small-free",
+    "thinkingOptionId": "default",
+    "modeId": "build"
+  },
+  "createdAt": "2026-11-08T21:02:50.312Z",
+  "updatedAt": "2026-11-09T07:18:02.729Z",
+  "lastUserMessageAt": "2026-11-09T07:17:58.842Z",
+  "status": "idle",
+  "activeTurn": null,
+  "capabilities": {
+    "supportsStreaming": true,
+    "supportsSessionPersistence": true,
+    "supportsSessionListing": true,
+    "supportsDynamicModes": true,
+    "supportsMcpServers": true,
+    "supportsReasoningStream": true,
+    "supportsToolInvocations": true,
+    "supportsRewindBoth": true,
+    "supportsRewindConversation": false,
+    "supportsRewindFiles": false
+  },
+  "currentModeId": "build",
+  "availableModes": [
+    {
+      "id": "build",
+      "label": "Build",
+      "description": "The default agent. Executes tools based on configured permissions."
+    },
+    {
+      "id": "plan",
+      "label": "Plan",
+      "description": "Read-only agent for exploring the codebase and planning work before implementation."
+    }
+  ],
+  "features": [
+    {
+      "type": "toggle",
+      "id": "auto_accept",
+      "label": "Auto-accept",
+      "value": false
+    }
+  ],
+  "pendingPermissions": [],
+  "persistence": {
+    "provider": "opencode",
+    "sessionId": "sandbox-session",
+    "nativeHandle": "sandbox-session",
+    "metadata": {
+      "provider": "opencode",
+      "cwd": "/tmp/fixture-sandbox",
+      "model": "opencode/inkling-2-small-free",
+      "title": "fixture sandbox",
+      "modeId": "build"
+    }
+  },
+  "title": "fixture sandbox",
+  "labels": {},
+  "archivedAt": null,
+  "lastUsage": {
+    "inputTokens": 59513,
+    "cachedInputTokens": 227072,
+    "outputTokens": 496,
+    "totalCostUsd": 0,
+    "contextWindowMaxTokens": 1048576,
+    "contextWindowUsedTokens": 20100
+  },
+  "requiresAttention": true,
+  "attentionReason": "finished",
+  "attentionTimestamp": "2026-11-09T07:18:02.728Z"
+}

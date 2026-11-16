@@ -1,0 +1,102 @@
+{
+  "type": "session",
+  "message": {
+    "type": "wait_for_finish_response",
+    "payload": {
+      "requestId": "rewind-wait",
+      "status": "idle",
+      "final": {
+        "id": "1c51ee58-765c-4f8d-bf27-7009338b361e",
+        "provider": "opencode",
+        "cwd": "/tmp/fixture-sandbox",
+        "workspaceId": "wks_6adc97aa7e1e49e3",
+        "model": "opencode/inkling-2-small-free",
+        "thinkingOptionId": null,
+        "effectiveThinkingOptionId": "default",
+        "runtimeInfo": {
+          "provider": "opencode",
+          "sessionId": "ses_e43076a6fffeatOqWZtnt3gQa6",
+          "model": "opencode/inkling-2-small-free",
+          "thinkingOptionId": "default",
+          "modeId": "build"
+        },
+        "createdAt": "2026-11-08T21:02:50.312Z",
+        "updatedAt": "2026-11-09T07:42:18.298Z",
+        "lastUserMessageAt": "2026-11-09T07:42:10.660Z",
+        "status": "idle",
+        "activeTurn": null,
+        "capabilities": {
+          "supportsStreaming": true,
+          "supportsSessionPersistence": true,
+          "supportsSessionListing": true,
+          "supportsDynamicModes": true,
+          "supportsMcpServers": true,
+          "supportsReasoningStream": true,
+          "supportsToolInvocations": true,
+          "supportsRewindBoth": true,
+          "supportsRewindConversation": false,
+          "supportsRewindFiles": false
+        },
+        "currentModeId": "build",
+        "availableModes": [
+          {
+            "id": "build",
+            "label": "Build",
+            "description": "The default agent. Executes tools based on configured permissions."
+          },
+          {
+            "id": "plan",
+            "label": "Plan",
+            "description": "Read-only agent for exploring the codebase and planning work before implementation."
+          }
+        ],
+        "features": [
+          {
+            "type": "toggle",
+            "id": "auto_accept",
+            "label": "Auto-accept",
+            "value": false
+          }
+        ],
+        "pendingPermissions": [],
+        "persistence": {
+          "provider": "opencode",
+          "sessionId": "ses_e43076a6fffeatOqWZtnt3gQa6",
+          "nativeHandle": "ses_e43076a6fffeatOqWZtnt3gQa6",
+          "metadata": {
+            "provider": "opencode",
+            "cwd": "/tmp/fixture-sandbox",
+            "model": "opencode/inkling-2-small-free",
+            "title": "fixture sandbox",
+            "openCodeRuntimeNotices": [
+              {
+                "major": 2,
+                "timestamp": "2026-11-08T21:02:50.312Z"
+              }
+            ],
+            "modeId": "build"
+          }
+        },
+        "title": "fixture sandbox",
+        "labels": {
+          "paseo.parent-agent-id": "c172fd94-f86d-4f84-99eb-fba5e48a5151",
+          "paseo.open-agent-tab.cid_dd8d8d5ba4d34c73a3f1f795d49fb975": "true"
+        },
+        "archivedAt": null,
+        "lastUsage": {
+          "inputTokens": 79668,
+          "cachedInputTokens": 247168,
+          "outputTokens": 506,
+          "totalCostUsd": 0,
+          "contextWindowMaxTokens": 1048576,
+          "contextWindowUsedTokens": 20185
+        },
+        "requiresAttention": true,
+        "attentionReason": "finished",
+        "attentionTimestamp": "2026-11-09T07:42:12.168Z"
+      },
+      "error": null,
+      "lastMessage": "ok"
+    }
+  }
+}
