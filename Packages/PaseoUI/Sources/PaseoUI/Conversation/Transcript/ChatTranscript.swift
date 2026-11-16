@@ -861,19 +861,6 @@ struct TranscriptView: View {
             afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
             return
         }
-        // A row anchor inside a lazy row that is not built yet is not findable; the turn's own id is
-        // (it is the `ForEach` id). Go to the turn first, then centre the row on the next pass, when
-        // the stack has built it (W1: a find step did nothing before this).
-        if let index = turnIndex(forSeq: seq) {
-            proxy.scrollTo(store.turns[index].id, anchor: .top)
-            afterWindowGrowth = {
-                centreRow(seq, animated: animated, proxy: proxy)
-                // A long programmatic jump leaves the stack without rows under the new offset until
-                // the visible rect changes (the same blank as opening a long chat): nudge by a point.
-                afterWindowGrowth = { scrollPosition.scrollTo(y: scrollTrack.contentOffset + 1) }
-            }
-            return
-        }
         centreRow(seq, animated: animated, proxy: proxy)
     }
 
