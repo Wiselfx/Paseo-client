@@ -471,12 +471,11 @@
                     RoundedRectangle(cornerRadius: Radius.sm).stroke(theme.rule, lineWidth: 0.6)
                 }
                 .background {
-                    GeometryReader { proxy in
-                        Color.clear
-                            .onAppear { tableContentWidths[blockIndex] = proxy.size.width }
-                            .onChange(of: proxy.size.width) { _, newWidth in
-                                tableContentWidths[blockIndex] = newWidth
-                            }
+                    // `onGeometryChange` instead of a `GeometryReader` per table (W1), written on change only.
+                    Color.clear.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                        if tableContentWidths[blockIndex] != newWidth {
+                            tableContentWidths[blockIndex] = newWidth
+                        }
                     }
                 }
             }
@@ -617,24 +616,33 @@
                 columns: columns)
         }
 
+        /// A paragraph, heading or table cell. One SwiftUI `Text` for every paragraph (W1): inline code used to
+        /// be a `UIViewRepresentable` `UITextView` with its own TextKit 1 stack per paragraph (creation,
+        /// `sizeThatFits`, an attributed string rebuilt per pass; the dominant first-render cost of a long
+        /// chat). The pill behind inline code is drawn by `InlineCodeRenderer`, selection is
+        /// `.textSelection`, links go through the environment's `openURL`, exactly like the paragraphs
+        /// without code always did. The renderer is attached only when the paragraph has code.
         @ViewBuilder private func inline(
             _ content: [MarkdownInline], font: Font? = nil, alignment: MarkdownColumnAlignment = .left
         ) -> some View {
+            let frameAlignment: Alignment =
+                alignment == .right ? .trailing : alignment == .center ? .center : .leading
             if content.contains(where: \.containsInlineCode) {
-                ClaudeSelectableInlineCode(
-                    content: content, font: font ?? theme.bodyFont, theme: theme,
-                    alignment: alignment == .right ? .right : alignment == .center ? .center : .left, onAction: onAction
-                )
-                .equatable()
-            } else {
                 inlineText(content, font: font ?? theme.bodyFont)
                     .textRenderer(InlineCodeRenderer(background: Palette.inlineCodeFill))
                     .lineSpacing(theme.lineSpacing).textSelection(.enabled)
+                    .multilineTextAlignment(textAlignment(alignment))
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(
-                        maxWidth: .infinity,
-                        alignment: alignment == .right ? .trailing : alignment == .center ? .center : .leading)
+                    .frame(maxWidth: .infinity, alignment: frameAlignment)
+            } else {
+                inlineText(content, font: font ?? theme.bodyFont)
+                    .lineSpacing(theme.lineSpacing).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: frameAlignment)
             }
+        }
+        private func textAlignment(_ alignment: MarkdownColumnAlignment) -> TextAlignment {
+            alignment == .right ? .trailing : alignment == .center ? .center : .leading
         }
         /// First paint is plain mono in ink; the highlighted tokens swap in from the actor with the
         /// same font and metrics, so there is no layout jump (R9 §1).

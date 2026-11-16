@@ -178,3 +178,14 @@ UIKit's first keyboard presentation. A word-tagger/language-identifier warm-up o
 **Not verified on a phone / not done:** media pipeline review (downsampling, caches) and the rich-block
 `GeometryReader`s were read but not changed; the new-session open (98 ms) is dominated by the AX/first-view cost
 above and was not reduced further; drawer settle unchanged (3 hitches, stall max 16 ms).
+
+## Eighth pass (owner decisions after pass 7)
+
+| # | Area | Change | Result |
+| --- | --- | --- | --- |
+| 8.1 | Prose engine | Paragraphs, headings and table cells with inline code are one SwiftUI `Text` with the existing `InlineCodeRenderer` pill; `ClaudeSelectableInlineCode` (a `UITextView` + TextKit 1 stack per paragraph) deleted. Plain paragraphs no longer carry the renderer. | Verified in the Release simulator: pills draw, links tappable, long-press selects a word with handles and the Copy / Look Up / Translate menu, layout unchanged in lists. Long-chat open (3 cold launches) still 0.8 to 1.1 s worst stall: the text engine was not the dominant cost. |
+| 8.2 | Blank open | Pre-existing intermittent blank long-chat open (seen on the pass-6 build too: 2 of 4 launches with 2 text rows). Added a guard: if turns exist and no mounted turn overlaps the viewport, change the offset by 2 pt (alternating with an edge scroll) up to four times. The timed disarm of the re-seat added in pass 7 was removed (it could end the pin at an estimated end). | not verified to fix the blank (the blank reproduces about 1 launch in 3); needs a device check |
+| 8.3 | Card width readers | 8 `GeometryReader`s (link, YouTube, image, gallery, web, file cards, markdown tables) replaced by `onGeometryChange` on a clear background, written on change only | rich-media scroll renders correctly (screenshot checked) |
+| 8.4 | Warm-up | `ComposerWarmup` at idle (2 s after the shell appears): `ComposerUITextView` created and laid out once off window, 20 SF Symbols, highlighter engines for both themes (off main) | first focus keyboard frame unchanged (~390 ms, system) |
+| 8.5 | New-session open | **Not an app cost**: with AXe's accessibility initialisation absorbed by a prior `ui reading`, the open is one 17.7 ms stall and 1 hitch (sampled run: `perf.hot samples=6`). The earlier 98 to 141 ms was `AXValidationManager` / `UIAccessibilitySafeCategory` class initialisation. | |
+| 8.6 | Media pipeline | Read end to end: it already downsamples with `CGImageSourceCreateThumbnailAtIndex` (`ImageDownsampler`, `ShouldCacheImmediately`, width-exact), decodes in the pipeline actor and detached tasks, has `NSCache` with count and cost limits and memory-warning eviction, a failure memo, coalesced requests (`detach`), revision-validated disk keys, off-main poster and waveform work. No change made beyond 8.3: nothing in it showed on a sampled stall. | |

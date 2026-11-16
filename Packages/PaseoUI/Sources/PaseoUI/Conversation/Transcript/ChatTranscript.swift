@@ -106,6 +106,24 @@ struct TranscriptView: View {
                 beginRunway(for: id)
             }
             .onChange(of: store.isRunning) { _, _ in openPin = false }
+            // Blank guard (W1): a long chat can open with the lazy stack holding no rows under its final
+            // offset until the visible rect changes (reproduced on plain launches; the open nudge covers most
+            // cases, not all). If turns exist, the viewport has a height and nothing has mounted after a
+            // moment, move the offset by two points (invisible) and look again.
+            .task(id: store.turns.isEmpty) {
+                guard !store.turns.isEmpty else { return }
+                for (attempt, delay) in [0.8, 1.0, 1.5, 2.5].enumerated() {
+                    try? await Task.sleep(for: .seconds(delay))
+                    guard !Task.isCancelled, !scrollHeld else { return }
+                    guard !scrollTrack.hasTurnInViewport, scrollTrack.visibleHeight > 0 else { return }
+                    PaseoPerf.count("blank.nudge")
+                    if attempt % 2 == 0 {
+                        scrollPosition.scrollTo(y: max(scrollTrack.contentOffset - 2, 0))
+                    } else {
+                        scrollPosition.scrollTo(edge: .bottom)
+                    }
+                }
+            }
             // The open is over: the first quiet moment of this conversation. The shared web view starts
             // here (a second later, so the last layout pass is done), not inside the open (W1).
             .onChange(of: openPin) { _, pinned in
@@ -565,18 +583,6 @@ struct TranscriptView: View {
                 openNudgedHeight = metrics.contentHeight
                 PaseoPerf.count("openpin.nudge")
                 scrollPosition.scrollTo(y: max(metrics.offsetY - 2, 0))
-                // The open ends on a later geometry pass at this height, and a chat that has settled
-                // produces none: the pin then stayed armed until the keyboard moved the insets, and
-                // its re-seat (`scrollTo(edge: .bottom)`) ran inside the keyboard's first frame (W1).
-                // Nothing moved for a moment, still at the end: the layout has converged.
-                let nudgedHeight = metrics.contentHeight
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(0.8))
-                    guard openPin, scrollTrack.contentHeight == nudgedHeight,
-                        scrollTrack.distanceFromBottom <= Self.followSlack, !scrollHeld
-                    else { return }
-                    openPin = false
-                }
             } else {
                 // Nudged at this height and still at the end on a later pass: the open is done.
                 openPin = false
@@ -1083,6 +1089,19 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     private var turnOffsets: [String: CGFloat] = [:]
     private var turnHeights: [String: CGFloat] = [:]
     private var topVisibleTurnId: String?
+
+    /// True when some mounted turn overlaps the viewport (content offsets from the geometry callbacks).
+    /// A lazy stack can hold rows that are mounted but nowhere near the offset it landed on: blank.
+    var hasTurnInViewport: Bool {
+        let top = contentOffset
+        let bottom = contentOffset + visibleHeight
+        for id in visibleTurnIds {
+            guard let offset = turnOffsets[id] else { return true }
+            let height = turnHeights[id] ?? 1
+            if offset < bottom && offset + height > top { return true }
+        }
+        return false
+    }
 
     func turnAppeared(_ id: String, seq: Int?) {
         visibleTurnIds.insert(id)

@@ -584,11 +584,12 @@ struct RichSVGCard: View {
 
     /// The card's inner width, for rendering the drawing at its real size instead of a guess.
     private var widthReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear { width = proxy.size.width }
-                .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
-        }
+        // `onGeometryChange` on the clear background instead of a `GeometryReader` per card (W1): same
+        // size, delivered at once and on change, written only when it differs.
+        Color.clear
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if width != newWidth { width = newWidth }
+            }
     }
 
     /// Nil until the width is known: a render at a guessed width would only be thrown away.
