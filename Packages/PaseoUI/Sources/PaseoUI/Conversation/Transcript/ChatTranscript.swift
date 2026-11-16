@@ -95,6 +95,7 @@ struct TranscriptView: View {
     @State private var stableViewportWidth: CGFloat = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.shellDrawer) private var shellDrawer
 
     var body: some View {
@@ -148,6 +149,9 @@ struct TranscriptView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 openPin = false
             }
+            // Remembered heights load with the conversation (one small read): the first layout
+            // pass already pre-sizes settled turns instead of estimating them (W8).
+            .onAppear { scrollTrack.heightMemory.merge(TurnHeightStore.load()) }
             // Fix the window's head as soon as there is something to window, so a turn appended at
             // the tail never slides it.
             .onChange(of: store.turns.isEmpty) { _, empty in
@@ -241,7 +245,7 @@ struct TranscriptView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Self.turnSpacing) {
-                        turns
+                        turnRows(columnWidth: column)
                         pendingPermissionCards
                         resolvedPermissionLines
                         backgroundWorkRow
@@ -427,7 +431,7 @@ struct TranscriptView: View {
         windowStartSeq = seq
     }
 
-    @ViewBuilder private var turns: some View {
+    @ViewBuilder private func turnRows(columnWidth: CGFloat) -> some View {
         // One read of the tail id, before the loop: a turn never scans the list to know it is last.
         let lastId = store.turns.last?.id
         // Find inputs are computed per row only while find is open; otherwise both are nil and no
@@ -438,6 +442,12 @@ struct TranscriptView: View {
         // capabilities change, not per turn, and `TurnRow` compares it (E3 §2).
         let availability = controller.actions.availability
         ForEach(windowedTurns) { turn in
+            // The remembered laid-out height pre-sizes the row (W8): the stack's first estimate
+            // is the real height instead of a guess, so the open re-seat converges in one pass.
+            // A miss reads nil and the row measures itself, exactly as before. The hint is not a
+            // TurnRow input: it never invalidates the row, and the row's identity is untouched.
+            let hint = scrollTrack.heightMemory.height(
+                for: heightFingerprint(for: turn, width: columnWidth))
             TurnRow(
                 turn: turn,
                 availability: availability,
@@ -450,6 +460,7 @@ struct TranscriptView: View {
             )
             .equatable()
             .id(turn.id)
+            .frame(minHeight: hint.map(CGFloat.init) ?? 0)
             .onAppear {
                 scrollTrack.turnAppeared(turn.id, seq: turn.firstRowSeq)
                 reportReadingPosition()
@@ -473,6 +484,7 @@ struct TranscriptView: View {
             } action: { height in
                 scrollTrack.turnHeightChanged(turn.id, height: height)
                 updateRunway(turnId: turn.id, height: height)
+                recordTurnHeight(turn: turn, height: height, hint: hint, width: columnWidth)
             }
         }
     }
@@ -741,6 +753,32 @@ struct TranscriptView: View {
         withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
             proxy.scrollTo(turnId, anchor: .top)
         }
+    }
+
+    /// The remembered-height key for a turn's row: the timeline epoch, the turn and its row
+    /// range, the prose column bucket and the Dynamic Type size — everything that changes its
+    /// laid-out height, and nothing else. Every input is O(1) in chat size. A key that matches
+    /// names identical content (settled turns are append-only), so a miss just measures.
+    private func heightFingerprint(for turn: Turn, width: CGFloat) -> String {
+        TurnHeightMemory.fingerprint(
+            epoch: store.timeline.epoch ?? "", turnId: turn.id,
+            firstRowSeq: turn.firstRowSeq, lastRowSeq: turn.lastRowSeq,
+            columnWidth: Double(width), dynamicType: String(describing: dynamicTypeSize))
+    }
+
+    /// Remember a settled turn's laid-out height for the next open (W8). The running tail is
+    /// never recorded (its content is still arriving); a report its own hint produced is never
+    /// re-recorded (a minHeight-bound report would reinforce itself forever). Recording writes
+    /// plain track memory and a throttled off-main UserDefaults write — never a body — so it
+    /// costs no invalidation (R-1).
+    private func recordTurnHeight(turn: Turn, height: CGFloat, hint: Double?, width: CGFloat) {
+        guard turn.phase != .running, height > 1 else { return }
+        if let hint, Double(height) <= hint + 0.5 { return }
+        let key = heightFingerprint(for: turn, width: width)
+        guard scrollTrack.heightMemory.record(key: key, height: Double(height)) else { return }
+        guard Date().timeIntervalSince(scrollTrack.lastHeightSave) > 5 else { return }
+        scrollTrack.lastHeightSave = Date()
+        TurnHeightStore.save(scrollTrack.heightMemory.persisted)
     }
 
     /// The tail turn's height moved: the runway follows it downhill, and once the answer fills the
@@ -1239,6 +1277,12 @@ final class TranscriptScrollTrack: @unchecked Sendable {
     private var turnSeqs: [String: Int] = [:]
     private var turnOffsets: [String: CGFloat] = [:]
     private var turnHeights: [String: CGFloat] = [:]
+    /// Remembered laid-out turn heights (W8): pre-sizes rows at open so the first content
+    /// estimate is right. Plain memory — nothing observes it, so recording a height never
+    /// invalidates a body; lookups in a body pass simply see the latest writes.
+    var heightMemory = TurnHeightMemory()
+    /// The last persisted write, so recording throttles to one UserDefaults write per interval.
+    var lastHeightSave = Date.distantPast
     private var topVisibleTurnId: String?
 
     /// True when some mounted turn overlaps the viewport (content offsets from the geometry callbacks).
@@ -1321,6 +1365,22 @@ final class TranscriptScrollTrack: @unchecked Sendable {
 
     /// The content offset of a mounted turn. Nil when it was never laid out.
     func offset(of id: String) -> CGFloat? { turnOffsets[id] }
+}
+
+/// Persistence for remembered turn heights (W8): one small UserDefaults dictionary
+/// (bounded by `TurnHeightMemory.capacity`), read once per chat open on main, written
+/// on a private serial queue — never per frame, never on the open path (M26).
+private enum TurnHeightStore {
+    private static let key = "paseo.turnHeights.v1"
+    private static let queue = DispatchQueue(label: "paseo.turnHeights", qos: .utility)
+
+    static func load() -> [String: Double] {
+        UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+    }
+
+    static func save(_ snapshot: [String: Double]) {
+        queue.async { UserDefaults.standard.set(snapshot, forKey: key) }
+    }
 }
 
 /// "Back to the end": offered once you are more than a screen from the end of the content
