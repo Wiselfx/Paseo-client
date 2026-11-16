@@ -29,6 +29,11 @@ struct ClaudeRevealProse: View {
     static let sweepRamp: CGFloat = 0.18
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    /// The frame clock runs only for a live turn in the active scene: backgrounding stops
+    /// the ticks (upstream's clock is rAF-driven, so a hidden tab stops free of charge).
+    /// Keyed into `.task(id:)` below, so a phase flip restarts the task with a fresh key.
+    private var pacingActive: Bool { isStreaming && scenePhase == .active }
     /// The agent's working directory (J2): `![a](~/shots/a.png)` and `[doc](docs/a.pdf)`
     /// resolve against it. Read here, in the leaf body, once per markdown change (R-1).
     @Environment(\.richActions) private var richActions
@@ -212,11 +217,12 @@ struct ClaudeRevealProse: View {
             withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { sweepBoundary = 1 }
         }
         // The reveal's frame clock (upstream `text-reveal.ts:nextTextRevealFrame`). Keyed on
-        // the streaming flag — not per delta — so one task paces the whole turn; it writes
-        // only while the backlog moves and idles without writing once settled (M05: the one
-        // view that draws the paced text is the one invalidated). Cancelled on disappear.
-        .task(id: isStreaming) {
-            guard isStreaming else { return }
+        // the live-and-active flag — not per delta — so one task paces the whole turn; it
+        // writes only while the backlog moves and idles without writing once settled (M05:
+        // the one view that draws the paced text is the one invalidated). Cancelled on
+        // disappear; backgrounding stops it, foregrounding resumes it into the backlog.
+        .task(id: pacingActive) {
+            guard pacingActive else { return }
             let clock = ContinuousClock()
             var last = clock.now
             var stampMs = 0.0
