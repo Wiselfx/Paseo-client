@@ -124,8 +124,7 @@ enum PaseoTerminalFont {
     }
 
     static func current() -> UIFont {
-        UIFont(name: ClaudeFontResources.anthropicMono, size: size())
-            ?? UIFont.monospacedSystemFont(ofSize: size(), weight: .regular)
+        UIFont.monospacedSystemFont(ofSize: size(), weight: .regular)
     }
 }
 
