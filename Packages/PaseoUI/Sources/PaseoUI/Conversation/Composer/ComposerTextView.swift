@@ -407,13 +407,14 @@ final class ComposerUITextView: UITextView {
     /// UIKit hides Paste while the pasteboard holds nothing the text view can take; an image is
     /// something this field can take (D2 §2).
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if action == #selector(paste(_:)), UIPasteboard.general.hasImages { return true }
+        PaseoPerf.count("composer.canPerform")
+        if action == #selector(paste(_:)), PasteboardImageState.shared.hasImages { return true }
         return super.canPerformAction(action, withSender: sender)
     }
 
     override func paste(_ sender: Any?) {
         let pasteboard = UIPasteboard.general
-        guard pasteboard.hasImages else {
+        guard PasteboardImageState.shared.hasImages else {
             super.paste(sender)
             return
         }
@@ -428,3 +429,29 @@ final class ComposerUITextView: UITextView {
     }
 }
 #endif
+
+
+/// Whether the pasteboard holds images, asked once and refreshed when it can have changed (W1).
+/// `UIPasteboard.hasImages` is a round trip to the pasteboard daemon, and UIKit asks
+/// `canPerformAction(paste:)` repeatedly while the field is edited and the composer body asked it on
+/// every pass: the sampled keystroke windows were waiting in `mach_msg` under `canPerformAction`.
+@MainActor
+final class PasteboardImageState {
+    static let shared = PasteboardImageState()
+    private var cached: Bool?
+
+    var hasImages: Bool {
+        if let cached { return cached }
+        let value = UIPasteboard.general.hasImages
+        cached = value
+        return value
+    }
+
+    private init() {
+        for name in [UIPasteboard.changedNotification, UIApplication.didBecomeActiveNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { PasteboardImageState.shared.cached = nil }
+            }
+        }
+    }
+}
