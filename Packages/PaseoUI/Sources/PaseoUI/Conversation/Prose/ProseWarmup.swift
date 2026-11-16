@@ -16,18 +16,32 @@ enum ProseWarmup {
     static func startForOpen(store: ConversationStore, limit: Int) {
         var texts: [String] = []
         for turn in store.turns.suffix(limit).reversed() {
-            for segment in turn.segments.reversed() {
-                guard case .prose(let row) = segment, case .assistantMessage(let message) = row.item
-                else { continue }
-                texts.append(message.text)
-            }
+            texts.append(contentsOf: proseTexts(of: turn))
         }
+        startForMessages(texts, home: store.agent?.cwd)
+    }
+
+    /// Starts the warm-up for an explicit message list — a jump's target window, so its
+    /// split, parse and highlight are warm before the rows build (W8). Same fire-and-forget
+    /// shape as the open: short-lived, bounded by the caller's window, self-cancelling.
+    @MainActor
+    static func startForMessages(_ texts: [String], home: String?) {
         guard !texts.isEmpty else { return }
-        let home = store.agent?.cwd
         let dark = currentUserInterfaceIsDark()
         Task.detached(priority: .userInitiated) {
             await warm(texts: texts, home: home, dark: dark)
         }
+    }
+
+    /// The assistant prose texts of one turn, newest first.
+    static func proseTexts(of turn: Turn) -> [String] {
+        var texts: [String] = []
+        for segment in turn.segments.reversed() {
+            guard case .prose(let row) = segment, case .assistantMessage(let message) = row.item
+            else { continue }
+            texts.append(message.text)
+        }
+        return texts
     }
 
     @MainActor

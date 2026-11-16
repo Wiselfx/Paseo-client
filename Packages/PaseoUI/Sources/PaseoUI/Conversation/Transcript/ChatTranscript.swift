@@ -414,6 +414,9 @@ struct TranscriptView: View {
             let seq = all[target].firstRowSeq
         else { return false }
         windowStartSeq = seq
+        // Same warm-up as a jump: the newly mounted turns parse before they lay out (W8).
+        ProseWarmup.startForMessages(
+            all[target..<current].flatMap(ProseWarmup.proseTexts(of:)), home: store.agent?.cwd)
         return true
     }
 
@@ -429,6 +432,11 @@ struct TranscriptView: View {
         guard start < current, all.indices.contains(start), let seq = all[start].firstRowSeq
         else { return }
         windowStartSeq = seq
+        // Warm the window the jump is about to show — the target plus the lead above it,
+        // which is what the reader sees first — so its split, parse and highlight are cached
+        // before the rows build (W8). Bounded: at most `windowLead` + 1 turns, one task.
+        ProseWarmup.startForMessages(
+            all[start...index].flatMap(ProseWarmup.proseTexts(of:)), home: store.agent?.cwd)
     }
 
     @ViewBuilder private func turnRows(columnWidth: CGFloat) -> some View {
