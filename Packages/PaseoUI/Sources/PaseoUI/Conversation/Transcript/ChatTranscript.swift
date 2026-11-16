@@ -21,15 +21,12 @@ struct TranscriptView: View {
     let controller: ChatController
 
     /// Turn-nav motion constants, ported from DSH's `turn-nav.ts` / `turn-nav.css`.
-    static let glideLead: CGFloat = 480
     /// The gap between rows in the transcript's stack, and the runway's arithmetic depends on it.
     static let turnSpacing: CGFloat = 27
     /// What the stack itself keeps under the tail turn: the row gap before the end marker, the
     /// marker itself and the bottom padding. The runway is the empty room you can see, so it must
     /// not count them (D1 §2).
     static let runwaySlack: CGFloat = turnSpacing + 1 + 20
-    /// The glide's duration (`easeScrollFor`'s short glide).
-    static let glideDuration: TimeInterval = 0.3
     /// The landing line's fade (`turn-nav.css:155-194`).
     static let landingDuration: TimeInterval = 1.4
     /// How long the rail stays up after the last scroll frame.
@@ -53,10 +50,11 @@ struct TranscriptView: View {
     /// The turn a jump just landed on, for the landing line; nil once its fade is done.
     @State private var landingTurnId: String?
     @State private var landingStartedAt = Date()
-    /// The second half of a glide-lead: the instant lead has landed, so the rest glides.
-    @State private var pendingGlide: PendingGlide?
-    /// A jump to a row that had never been laid out, measuring its offset before leading.
-    @State private var pendingLeadJump: PendingLeadJump?
+    /// Brings a row that may be far away into view in steps that each run on a settled layout: find,
+    /// the outline rail, a media item and closing find (`TranscriptJumpRunner`).
+    @State private var jumper = TranscriptJumpRunner()
+    /// Where the current find match's row is (it reports its own frame while it is the match).
+    @State private var findRows = FindRowProbe()
     /// The last throttled reading-position / rail tick, so a scroll frame does O(1) work.
     @State private var lastRailTick = Date.distantPast
     /// True while a finger, a flick or the deceleration owns the transcript. A plain `Bool`
@@ -77,13 +75,17 @@ struct TranscriptView: View {
     /// newest `windowSize` turns are in the stack; scrolling toward the top reveals `windowStep` more
     /// (the same anchor that undoes a prepended history page keeps the reader's line), and a jump or a
     /// find match in an older turn reveals it first. Nil until the first turns arrive.
-    @State private var windowStartId: String?
-    /// Work waiting for a window growth to lay out: run by the next geometry pass.
-    @State private var afterWindowGrowth: (() -> Void)?
-    /// True once find or a jump needed an older turn: the whole conversation is in the stack from then on.
-    @State private var windowDisabled = false
+    ///
+    /// Held as a position in the timeline (the first row's seq of the oldest mounted turn), never as a turn
+    /// id: a turn's id is its first row's id, so an older page prepending rows to a partial turn at the edge
+    /// of a loaded window changes it, and a window keyed by the old id silently fell back to the newest 16
+    /// turns while a find or jump was on its way to an older one.
+    @State private var windowStartSeq: Int?
     static let windowSize = 16
     static let windowStep = 12
+    /// Turns mounted above a find or jump target when the window grows to reach it, so the reader can
+    /// look up from the match without the window growing again at once.
+    static let windowLead = 8
     /// The send runway (D1 §2). One `@State`, written on layout, never per scroll frame.
     @State private var runway = SendRunway()
     /// The transcript's height with the keyboard down (E3b). Rich media and the process cap read
@@ -149,12 +151,14 @@ struct TranscriptView: View {
             // Fix the window's head as soon as there is something to window, so a turn appended at
             // the tail never slides it.
             .onChange(of: store.turns.isEmpty) { _, empty in
-                if !empty, windowStartId == nil, let first = windowedTurns.first {
-                    windowStartId = first.id
+                if !empty, windowStartSeq == nil, let first = windowedTurns.first {
+                    windowStartSeq = first.firstRowSeq
                 }
             }
             .onAppear {
-                if windowStartId == nil, let first = windowedTurns.first { windowStartId = first.id }
+                if windowStartSeq == nil, let first = windowedTurns.first {
+                    windowStartSeq = first.firstRowSeq
+                }
             }
             // The anchor's job is done. At the anchor this trims nothing; if the reader scrolled
             // away while the answer ran, the idle rule already removed the room below the screen.
@@ -252,6 +256,8 @@ struct TranscriptView: View {
                     .coordinateSpace(name: TranscriptScrollTrack.contentSpace)
                 }
                 .environment(\.richProseWidth, column)
+                .environment(\.findRowProbe, findRows)
+                .coordinateSpace(name: TranscriptScrollTrack.viewportSpace)
                 .scrollPosition($scrollPosition)
                 .scrollDismissesKeyboard(.interactively)
                 // Opening the conversation lands at the bottom; growth at the tail keeps it
@@ -271,18 +277,23 @@ struct TranscriptView: View {
                 }
                 .overlay(alignment: .trailing) { outlineRail }
                 .onChange(of: controller.find.isOpen) { _, isOpen in
-                    if isOpen { windowDisabled = true; openPin = false }
-                    if isOpen { restoreFindAnchor() } else { restoreScroll(proxy: proxy) }
+                    if isOpen {
+                        openPin = false
+                        restoreFindAnchor()
+                    } else {
+                        jumper.cancel()
+                        restoreScroll()
+                    }
                 }
                 .onChange(of: controller.find.jump) { _, jump in
                     guard let jump else { return }
                     controller.find.jump = nil
-                    scrollToRow(jump.seq, animated: jump.animated, proxy: proxy)
+                    scrollToMatch(jump)
                 }
                 .onChange(of: controller.pendingJump) { _, jump in
                     guard let jump else { return }
                     controller.pendingJump = nil
-                    jumpToTurn(jump.id, proxy: proxy)
+                    jumpToTurn(jump.id)
                 }
                 .onChange(of: controller.endScrollRequest) { _, _ in
                     endScrollRequested()
@@ -372,48 +383,48 @@ struct TranscriptView: View {
 
     /// The turns the stack holds: from the window's first turn to the newest.
     private var windowedTurns: ArraySlice<Turn> {
-        let all = store.turns
-        if windowDisabled { return all[...] }
-        if let id = windowStartId, let index = all.firstIndex(where: { $0.id == id }) {
-            return all[index...]
-        }
-        return all.suffix(Self.windowSize)
+        store.turns[windowStartIndex...]
     }
 
     /// Turns older than the window, still in the store.
-    private var hiddenTurnCount: Int {
-        if windowDisabled { return 0 }
+    private var hiddenTurnCount: Int { windowStartIndex }
+
+    /// The index of the window's first turn in `store.turns`: the first turn that ends at or after the
+    /// window's start position, else the newest `windowSize` turns.
+    private var windowStartIndex: Int {
         let all = store.turns
-        guard let id = windowStartId, let index = all.firstIndex(where: { $0.id == id }) else {
-            return max(all.count - Self.windowSize, 0)
+        if let start = windowStartSeq,
+            let index = FindNavigation.firstTurnIndex(endingAtOrAfter: start, in: all)
+        {
+            return index
         }
-        return index
+        return max(all.count - Self.windowSize, 0)
     }
 
-    /// The turn that holds `seq`, or the latest turn that starts at or before it (a match whose row was
-    /// merged into a neighbour, or whose own row is not in a turn yet).
-    private func turnIndex(forSeq seq: Int) -> Int? {
+    /// Moves the window start back by `count` turns.
+    private func growWindow(by count: Int) -> Bool {
         let all = store.turns
-        return all.firstIndex(where: { $0.containsRow(seqEnd: seq) })
-            ?? all.lastIndex(where: { ($0.firstRowSeq ?? Int.max) <= seq })
-    }
-
-    /// Moves the window start back by `count` turns (or to the turn holding `seq` / `id`).
-    private func growWindow(by count: Int? = nil, toInclude id: String? = nil, seq: Int? = nil) -> Bool {
-        let all = store.turns
-        let current: Int
-        if let start = windowStartId, let index = all.firstIndex(where: { $0.id == start }) {
-            current = index
-        } else {
-            current = max(all.count - Self.windowSize, 0)
-        }
-        var target = current
-        if let count { target = max(current - count, 0) }
-        if let id, let index = all.firstIndex(where: { $0.id == id }) { target = min(target, index) }
-        if let seq, let index = turnIndex(forSeq: seq) { target = min(target, index) }
-        guard target < current, all.indices.contains(target) else { return false }
-        windowStartId = all[target].id
+        let current = windowStartIndex
+        let target = max(current - count, 0)
+        guard target < current, all.indices.contains(target),
+            let seq = all[target].firstRowSeq
+        else { return false }
+        windowStartSeq = seq
         return true
+    }
+
+    /// Mounts the turn at `index` with `windowLead` turns above it when it is older than the window
+    /// (find and the rail's jumps reach turns the window holds back). The window stays a suffix of the
+    /// conversation, so the tail, the runway and the end marker are untouched; only a target older
+    /// than the window grows it, and only to reach the target, never to the whole conversation.
+    private func mountTurn(at index: Int) {
+        let all = store.turns
+        let current = windowStartIndex
+        let start = FindNavigation.windowStart(
+            forTurnAt: index, currentStart: current, lead: Self.windowLead)
+        guard start < current, all.indices.contains(start), let seq = all[start].firstRowSeq
+        else { return }
+        windowStartSeq = seq
     }
 
     @ViewBuilder private var turns: some View {
@@ -421,7 +432,7 @@ struct TranscriptView: View {
         let lastId = store.turns.last?.id
         // Find inputs are computed per row only while find is open; otherwise both are nil and no
         // turn scans its rows.
-        let findSeq = controller.find.isOpen ? controller.findSeq : nil
+        let findSeq = controller.find.isOpen ? controller.find.rowSeq : nil
         let flashSeq = controller.find.isOpen ? controller.find.flash : nil
         // One read of the turn-action value for every row: it changes when the agent or host
         // capabilities change, not per turn, and `TurnRow` compares it (E3 §2).
@@ -507,6 +518,7 @@ struct TranscriptView: View {
             transcriptHeight = metrics.viewportHeight
         }
         scrollTrack.contentOffset = metrics.offsetY
+        scrollTrack.viewportHeight = metrics.viewportHeight
         scrollTrack.distanceFromBottom = metrics.distanceFromBottom
         scrollTrack.distanceFromContentBottom = metrics.distanceFromContentBottom
         scrollTrack.contentHeight = metrics.contentHeight
@@ -516,30 +528,6 @@ struct TranscriptView: View {
         }
         openRunwayIfPossible(proxy: proxy)
         repinOpen(metrics)
-        if let run = afterWindowGrowth {
-            afterWindowGrowth = nil
-            run()
-        }
-        // The second half of a glide-lead: the instant jump has landed, so the last stretch
-        // glides (DSH `turn-nav.ts:412-474`).
-        if let glide = pendingGlide {
-            pendingGlide = nil
-            withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
-                proxy.scrollTo(glide.id, anchor: .top)
-            }
-        }
-        // A jump to a row that had never been laid out measured its offset by landing on it; take
-        // the last stretch back, then glide from there.
-        if let pending = pendingLeadJump {
-            pendingLeadJump = nil
-            let targetY = scrollTrack.offset(of: pending.id) ?? metrics.offsetY
-            let distance = targetY - pending.fromOffset
-            guard abs(distance) > Self.glideLead else { return }
-            let leadY = targetY - (distance > 0 ? Self.glideLead : -Self.glideLead)
-            pendingGlide = PendingGlide(id: pending.id)
-            scrollPosition.scrollTo(y: leadY)
-            return
-        }
         // A prepended page moved the content down by its own height; put the reader back before
         // anything else reacts to the new offsets.
         if restoreHistoryAnchor(metrics) { return }
@@ -845,6 +833,8 @@ struct TranscriptView: View {
 
     /// How close to the end counts as "at the end" (D1 §3).
     static let followSlack: CGFloat = 8
+    /// How far from the end a jump to the end marker may rest and still have arrived.
+    static let endMargin: CGFloat = 48
 
     /// Older history loads itself: no "Load earlier" row and no button. While the top of the
     /// transcript is within about one screen of the viewport, the next page is fetched; the
@@ -902,92 +892,227 @@ struct TranscriptView: View {
         return false
     }
 
-    /// A step in find: the row's own view id, centred.
-    private func scrollToRow(_ seq: Int, animated: Bool, proxy: ScrollViewProxy) {
-        // A match can be in a turn the window holds back. Find and jumps are the rare, deliberate
-        // moves: mount every turn first (the stack then behaves exactly as it did before the window),
-        // and run the scroll on the next geometry pass, once the rows exist.
+    // MARK: Find and jumps
+
+    /// A step in find: resolve the located message to its row against the turns held, fetch its window
+    /// when it is not held (upstream `load(epoch, seq)`), mount its turn, and bring the row to the
+    /// centre. Upstream `chat-find/model.ts` `navigate` and `viewport.web.ts` `reveal`.
+    private func scrollToMatch(_ jump: FindJump) {
+        // Stepping through matches is reading, not following the tail; the open re-seat is over too.
         openPin = false
-        if !windowDisabled {
-            windowDisabled = true
-            afterWindowGrowth = { scrollToRow(seq, animated: animated, proxy: proxy) }
+        controller.isFollowing = false
+        controller.anchoringToAnswer = false
+        guard let target = FindNavigation.target(in: store.turns, seq: jump.seq, role: jump.role) else {
+            Task {
+                // One window fetch, then once more; a message that still is not there is skipped.
+                guard await store.loadTimelineWindow(aroundSeq: jump.seq),
+                    FindNavigation.target(in: store.turns, seq: jump.seq, role: jump.role) != nil
+                else {
+                    controller.find.rowSeq = nil
+                    return
+                }
+                scrollToMatch(jump)
+            }
             return
         }
-        centreRow(seq, animated: animated, proxy: proxy)
-    }
-
-    private func centreRow(_ seq: Int, animated: Bool, proxy: ScrollViewProxy) {
-        if animated {
-            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                proxy.scrollTo("row:\(seq)", anchor: .center)
-            }
-        } else {
-            proxy.scrollTo("row:\(seq)", anchor: .center)
+        controller.find.rowSeq = target.rowSeqEnd
+        controller.find.moved = true
+        findRows.reset()
+        mountTurn(at: target.turnIndex)
+        let seq = jump.seq
+        let role = jump.role
+        // Where the match sits in a message taller than the screen: the message rests so the match,
+        // not its middle, is in view (upstream scrolls to the match's own rect, `viewport.web.ts`).
+        let fraction = FindNavigation.text(of: target, in: store.turns).flatMap { text in
+            text.count > FindNavigation.longMessage
+                ? FindNavigation.occurrenceFraction(of: store.search.query, in: text, last: jump.backward)
+                : nil
         }
+        jumper.run(
+            .init(
+                turnId: { [store] in
+                    FindNavigation.target(in: store.turns, seq: seq, role: role)
+                        .map { store.turns[$0.turnIndex].id }
+                },
+                rowId: { [store] in
+                    // The row can have streamed on since: resolve it again for its current id.
+                    FindNavigation.target(in: store.turns, seq: seq, role: role)
+                        .map { "row:\($0.rowSeqEnd)" }
+                },
+                rowAnchor: { fraction.map { UnitPoint(x: 0.5, y: $0) } ?? .center },
+                // Arrived when the match's own point of the row is under the viewport (the row reports
+                // its frame while it is the current match). A row that has not reported has not arrived.
+                isReached: { [findRows, scrollTrack] in
+                    // The match's own point of the row, in the viewport's space (where it is on screen
+                    // now): between the top of the viewport and its bottom edge, which is under the composer.
+                    guard let frame = findRows.frame(of: target.rowSeqEnd) else { return false }
+                    let y = frame.minY + frame.height * (fraction ?? 0.5)
+                    return y > 0 && y < scrollTrack.viewportHeight
+                },
+                verifies: true,
+                correction: { [findRows, scrollTrack] in
+                    guard let frame = findRows.frame(of: target.rowSeqEnd) else { return nil }
+                    // Where the match should rest: the anchor's place in the visible area under the header
+                    // (about 100 pt of chrome sits above it).
+                    let anchorY = fraction ?? 0.5
+                    let resting = 100 + anchorY * scrollTrack.visibleHeight
+                    return frame.minY + frame.height * anchorY - resting
+                }),
+            hooks: jumpHooks(onLanded: { [controller] in
+                controller.flash(target.rowSeqEnd)
+            }))
     }
 
-    /// Find opened mid-conversation: keep the reader where they were (anchoring to the topmost
-    /// mounted turn), so the bar appearing does not move the conversation.
+    /// The transcript's side of a jump: the scroll position, the stack's mounted turns and the screen.
+    private func jumpHooks(onLanded: @escaping @MainActor () -> Void) -> TranscriptJumpRunner.Hooks {
+        .init(
+            isMounted: { [scrollTrack] id in scrollTrack.visibleTurnIds.contains(id) },
+            hop: { [scrollTrack, store] id in
+                let all = store.turns
+                guard let target = all.firstIndex(where: { $0.id == id }) else { return nil }
+                let built = all.indices.filter { scrollTrack.visibleTurnIds.contains(all[$0].id) }
+                return FindNavigation.hopTarget(targetIndex: target, builtIndices: built)
+                    .map { all[$0].id }
+            },
+            probe: { [scrollTrack] id in
+                guard scrollTrack.visibleHeight > 0 else { return nil }
+                // A built turn whose geometry callback has not reported (or was dropped with a re-built
+                // view) counts as under the viewport: the aim at its row is what tells, and the layout key
+                // still has to hold still.
+                let offset = scrollTrack.offset(of: id) ?? scrollTrack.contentOffset
+                return .init(
+                    turnOffset: offset, turnHeight: scrollTrack.turnHeight(of: id) ?? 1,
+                    contentOffset: scrollTrack.contentOffset, visibleHeight: scrollTrack.visibleHeight,
+                    contentHeight: scrollTrack.contentHeight)
+            },
+            scrollTo: { [scrollTrack] id, requested, animated in
+                // `ScrollPosition` is a value: asking for the id it already holds changes nothing, so a
+                // second aim at a row the first one missed did nothing at all (the match stayed a screen
+                // away through every re-aim). The horizontal anchor does not matter in a vertical scroll
+                // view, so it alternates by a thousandth to make each aim a new request.
+                scrollTrack.aimParity.toggle()
+                let anchor = UnitPoint(x: requested.x + (scrollTrack.aimParity ? 0.001 : 0), y: requested.y)
+                if animated {
+                    withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
+                        scrollPosition.scrollTo(id: id, anchor: anchor)
+                    }
+                } else {
+                    scrollPosition.scrollTo(id: id, anchor: anchor)
+                }
+            },
+            // A programmatic scroll leaves the phase at `.animating` even when it has nothing to move (the
+            // jump runner waited on `.idle` for eight seconds), so only the reader's own motion counts; the
+            // runner sees a programmatic scroll end by the layout holding still.
+            isScrolling: { [scrollTrack] in
+                switch scrollTrack.phase {
+                case .interacting, .tracking, .decelerating: return true
+                default: return false
+                }
+            },
+            scrollToOffset: { y in scrollPosition.scrollTo(y: max(y, 0)) },
+            nudge: { [scrollTrack] in
+                PaseoPerf.count("jump.nudge")
+                scrollPosition.scrollTo(y: max(scrollTrack.contentOffset - 2, 0))
+            },
+            landed: onLanded)
+    }
+
+    /// Find opened mid-conversation: remember where the reader was (the turn they were on, or the end
+    /// when they were following the tail), so closing find after the matches moved them can bring them
+    /// back, and the bar appearing does not move the conversation.
     private func restoreFindAnchor() {
-        controller.find.anchor = scrollTrack.lastTrackedTurn
-    }
-
-    /// Find closed: back to the turn the reader was on, or to the end.
-    private func restoreScroll(proxy: ScrollViewProxy) {
-        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-            if let anchor = controller.find.anchor,
-                store.turns.contains(where: { $0.id == anchor })
-            {
-                proxy.scrollTo(anchor, anchor: .top)
-            } else {
-                proxy.scrollTo("bottom", anchor: .bottom)
+        // At the end within the content's own gap (no composer or keyboard inset in it, J3 §3): the
+        // inset-including distance is the composer's height at rest, never within the follow slack.
+        let atEnd = controller.isFollowing || scrollTrack.distanceFromContentBottom <= Self.endMargin
+        controller.find.anchorSeq =
+            atEnd
+            ? nil
+            : scrollTrack.turnAtViewportTop().flatMap { id in
+                store.turns.first { $0.id == id }?.firstRowSeq
             }
+        controller.find.moved = false
+    }
+
+    /// Find closed: if stepping through matches moved the reader, back to the turn they were on, or to
+    /// the end. A find that never scrolled leaves the reader where they are.
+    private func restoreScroll() {
+        guard controller.find.moved else { return }
+        controller.find.moved = false
+        let all = store.turns
+        guard !all.isEmpty else { return }
+        if let seq = controller.find.anchorSeq,
+            let index = FindNavigation.firstTurnIndex(endingAtOrAfter: seq, in: all)
+        {
+            mountTurn(at: index)
+            jumper.run(
+                .init(
+                    turnId: { [store] in
+                        FindNavigation.firstTurnIndex(endingAtOrAfter: seq, in: store.turns)
+                            .map { store.turns[$0].id }
+                    },
+                    rowId: { nil }, rowAnchor: { .top }),
+                hooks: jumpHooks(onLanded: {}))
+        } else {
+            // The end marker is the real last row (the open re-seat lands on it the same way).
+            jumper.run(
+                .init(
+                    turnId: { "bottom" }, rowId: { "bottom" }, rowAnchor: { .bottom },
+                    // The content's own gap to the viewport's bottom, with no inset in it (J3 §3), so the
+                    // keyboard going down while the jump runs cannot move the answer. The marker rests at
+                    // the bottom edge with the stack's 20 pt padding under it: at the end within a margin.
+                    isReached: { [scrollTrack] in
+                        scrollTrack.distanceFromContentBottom <= Self.endMargin
+                    },
+                    approaches: false, verifies: true, glides: false),
+                hooks: jumpHooks(onLanded: { [controller] in controller.isFollowing = true }))
         }
     }
 
-    /// Jumps the transcript to `id` (a turn view id). Reduce Motion jumps without animation.
-    ///
-    /// Long jumps use DSH's glide-lead (`turn-nav.ts:412-474`): go most of the way instantly, then
-    /// glide the last `glideLead` points, so the reader is not left waiting on a whole-distance
-    /// animation. Short jumps just glide.
-    private func jumpToTurn(_ id: String, proxy: ScrollViewProxy) {
-        // See `scrollToRow`: an older turn may be held back by the window.
+    /// Jumps the transcript to a prompt or media row: `id` is `row:<seqEnd>` (or a turn id). The turn is
+    /// mounted first when the window holds it back, then `TranscriptJumpRunner` goes to it in steps
+    /// (a turn's rows are only known to the stack once the turn is built). Reduce Motion jumps without
+    /// the glide (`Motion.resolved`).
+    private func jumpToTurn(_ id: String) {
         openPin = false
-        if !windowDisabled {
-            windowDisabled = true
-            afterWindowGrowth = { jumpToTurn(id, proxy: proxy) }
-            return
-        }
         // Jumping backwards releases the tail-follow, like M7b.
         controller.isFollowing = false
+        controller.anchoringToAnswer = false
+        let all = store.turns
+        // The row's position in the timeline, or the turn's first row for a turn id: ids move when an
+        // older page prepends rows to a partial turn, positions do not.
+        let seq: Int?
+        let rowId: String?
+        if id.hasPrefix("row:"), let rowSeq = Int(id.dropFirst(4)) {
+            seq = rowSeq
+            rowId = id
+        } else {
+            seq = all.first { $0.id == id }?.firstRowSeq
+            rowId = nil
+        }
+        let indexOfTurn: @MainActor ([Turn]) -> Int? = { turns in
+            guard let seq else { return nil }
+            return turns.firstIndex(where: { $0.containsRow(seqEnd: seq) })
+                ?? turns.lastIndex(where: { ($0.firstRowSeq ?? Int.max) <= seq })
+        }
+        guard let index = indexOfTurn(all) else {
+            PaseoPerf.mark("jump.noTurn")
+            return
+        }
+        mountTurn(at: index)
+        let turnId = all[index].id
         // A jump back into the conversation is a deliberate move toward reading: the header
         // comes back. Forward jumps never change it (H2 §3).
-        if let targetY = scrollTrack.offset(of: id), targetY < scrollTrack.contentOffset {
+        if let targetY = scrollTrack.offset(of: turnId), targetY < scrollTrack.contentOffset {
+            revealHeader()
+        } else if !scrollTrack.visibleTurnIds.contains(turnId) {
             revealHeader()
         }
-        showLandingLine(for: id)
-        guard !reduceMotion else {
-            proxy.scrollTo(id, anchor: .top)
-            return
-        }
-        guard let targetY = scrollTrack.offset(of: id) else {
-            // A row that has never been laid out has no offset to lead from: jump instantly to
-            // measure it, then take the last stretch back and glide (the geometry handler
-            // finishes the jump).
-            pendingLeadJump = PendingLeadJump(id: id, fromOffset: scrollTrack.contentOffset)
-            proxy.scrollTo(id, anchor: .top)
-            return
-        }
-        let distance = targetY - scrollTrack.contentOffset
-        guard abs(distance) > Self.glideLead else {
-            withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
-                proxy.scrollTo(id, anchor: .top)
-            }
-            return
-        }
-        let leadY = targetY - (distance > 0 ? Self.glideLead : -Self.glideLead)
-        pendingGlide = PendingGlide(id: id)
-        scrollPosition.scrollTo(y: leadY)
+        showLandingLine(for: turnId)
+        jumper.run(
+            .init(
+                turnId: { [store] in indexOfTurn(store.turns).map { store.turns[$0].id } },
+                rowId: { rowId }, rowAnchor: { .top }),
+            hooks: jumpHooks(onLanded: {}))
     }
 
     /// The landed turn's wayfinding line: a 2 pt ink rule over its first row, fading in and out
@@ -1064,9 +1189,16 @@ struct TranscriptView: View {
 final class TranscriptScrollTrack: @unchecked Sendable {
     /// The named space the transcript's content is measured in, for the jump lead.
     static let contentSpace = "paseo.transcript.content"
+    /// The scroll view's own frame (it does not scroll): a row's frame in it is where the row is on
+    /// screen right now, whatever the stack's estimates above it did since the row last laid out.
+    static let viewportSpace = "paseo.transcript.viewport"
 
     var visibleTurnIds: Set<String> = []
     var lastTrackedTurn: String?
+    /// Alternates on every programmatic aim at an id (see the jump hooks' `scrollTo`).
+    var aimParity = false
+    /// The scroll view's own height (bounds), from the last scroll frame.
+    var viewportHeight: CGFloat = 0
     /// The viewport's content offset, updated once per scroll frame (O(1)).
     var contentOffset: CGFloat = 0
     /// The current scroll phase. A plain field: nothing observes it, so a scroll frame that only
@@ -1163,7 +1295,21 @@ final class TranscriptScrollTrack: @unchecked Sendable {
         topVisibleSeq = seq
     }
 
-    /// The content offset of a mounted turn, for the jump lead. Nil when it was never laid out.
+    /// The mounted turn under the top of the viewport (the one whose bottom is the first below the
+    /// offset). O(mounted turns), asked once when find opens; nil when nothing is measured yet.
+    func turnAtViewportTop() -> String? {
+        var best: (bottom: CGFloat, id: String)?
+        for id in visibleTurnIds {
+            guard let offset = turnOffsets[id], let height = turnHeights[id] else { continue }
+            let bottom = offset + height
+            guard bottom > contentOffset + 1 else { continue }
+            if let current = best, current.bottom <= bottom { continue }
+            best = (bottom, id)
+        }
+        return best?.id
+    }
+
+    /// The content offset of a mounted turn. Nil when it was never laid out.
     func offset(of id: String) -> CGFloat? { turnOffsets[id] }
 }
 
@@ -1229,18 +1375,6 @@ struct BackToEndPressStyle: ButtonStyle {
                 Motion.feedback.resolved(reduceMotion: reduceMotion),
                 value: configuration.isPressed)
     }
-}
-
-/// The second half of a glide-lead: the instant jump has landed, so the last stretch glides.
-struct PendingGlide: Equatable {
-    var id: String
-}
-
-/// A jump to a row that had never been laid out: jump instantly to measure its offset, then take
-/// the last stretch back and glide from there.
-struct PendingLeadJump: Equatable {
-    var id: String
-    var fromOffset: CGFloat
 }
 
 /// DSH's landing line: a 2 pt ink rule over the turn a jump just landed on, fading in and out
@@ -1312,20 +1446,4 @@ private struct ResolvedPermissionLines: View {
     }
 }
 
-/// The timeline position of a turn's first row, for the outline's reading-position report. A turn
-/// without a leading user message (rewinds, streamed tails) starts at its first segment row.
-extension Turn {
-    var firstRowSeq: Int? {
-        if let row = userMessage { return row.seqStart }
-        for segment in segments {
-            switch segment {
-            case .work(let group):
-                if let row = group.rows.first { return row.seqStart }
-            case .prose(let row), .todo(let row), .notice(let row):
-                return row.seqStart
-            }
-        }
-        return nil
-    }
-}
 #endif

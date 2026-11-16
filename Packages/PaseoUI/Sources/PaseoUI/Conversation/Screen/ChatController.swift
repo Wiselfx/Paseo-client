@@ -96,8 +96,20 @@ struct TurnActionAvailability: Sendable, Equatable {
     var index = 0
     /// The seqEnd whose row flashes after a step.
     var flash: Int?
-    /// The turn the reader was nearest when find opened; closing restores it.
+    /// The row of the current match, resolved by the transcript against the loaded turns (the
+    /// located seq can be a message that has streamed on since). Its turn is held open and drawn
+    /// as the match. Nil when the match is not loaded or find is closed.
+    var rowSeq: Int?
+    /// Stepping scrolled the transcript during this find session: closing find then returns the reader.
+    /// Survives `reset()` like `anchor`; the transcript clears it once it has acted.
+    var moved = false
+    /// The turn the reader was nearest when find opened (nil: they were at the end); closing restores
+    /// it when stepping moved them. Survives `reset()`: the transcript reads it after the close.
     var anchor: String?
+    /// The same place as a timeline position (the first row's seq of that turn): a turn's id is its first
+    /// row's id, which changes when an older page prepends rows to a partial turn, a position does not.
+    /// Set by the transcript when find opens; nil: the reader was at the end.
+    var anchorSeq: Int?
     /// A scroll the transcript owes after a step or a search result. Cleared by the transcript.
     var jump: FindJump?
     var task: Task<Void, Never>?
@@ -108,15 +120,19 @@ struct TurnActionAvailability: Sendable, Equatable {
         query = ""
         index = 0
         flash = nil
-        anchor = nil
+        rowSeq = nil
         jump = nil
     }
 }
 
-/// One pending find scroll: the row's seqEnd and whether to animate it.
+/// One pending find scroll: the located message (the daemon's `seq` and `role`), resolved to a row by
+/// the transcript against the turns it holds.
 struct FindJump: Equatable {
     var seq: Int
-    var animated: Bool
+    var role: AgentTimelineSearchRequest.Role
+    /// Stepped backward: the last occurrence in the message is the one to show (upstream
+    /// `navigate`: `occurrence = direction === 1 ? 0 : -1`).
+    var backward: Bool
 }
 
 /// A recorded jump intent: the transcript performs the scroll (it owns the scroll handles).
@@ -805,26 +821,28 @@ struct TranscriptJump: Equatable {
         store.search.clear()
     }
 
-    /// The seqEnd of the match currently on screen; nil when the results are empty.
-    var findSeq: Int? {
+    /// The match currently on screen; nil when the results are empty.
+    var findLocation: AgentTimelineSearchRequest.Location? {
         let locations = store.search.locations
         guard find.index < locations.count else { return nil }
-        return locations[find.index].seq
+        return locations[find.index]
     }
 
+    /// Steps to the next or previous match and wraps at both ends (upstream `chat-find/model.ts`
+    /// `navigate`: `(index + length) % length`). Stepping is reading, so the tail is let go.
     func stepFind(_ delta: Int) {
         let count = store.search.locations.count
         guard count > 0 else { return }
-        let next = min(max(0, find.index + delta), count - 1)
-        guard next != find.index else { return }
-        find.index = next
-        requestFindScroll(animated: true)
+        find.index = FindNavigation.wrapped(find.index, delta: delta, count: count)
+        requestFindScroll(backward: delta < 0)
     }
 
-    func requestFindScroll(animated: Bool) {
-        guard let seq = findSeq else { return }
-        flash(seq)
-        find.jump = FindJump(seq: seq, animated: animated)
+    /// Asks the transcript to bring the current match into view. A repeat of the same match (one
+    /// result, or a step after the reader scrolled away) scrolls again.
+    func requestFindScroll(backward: Bool = false) {
+        guard let location = findLocation else { return }
+        isFollowing = false
+        find.jump = FindJump(seq: location.seq, role: location.role, backward: backward)
     }
 
     func flash(_ seq: Int) {
@@ -849,7 +867,7 @@ struct TranscriptJump: Equatable {
             guard !Task.isCancelled, let self else { return }
             await self.store.search.search(trimmed)
             self.find.index = 0
-            self.requestFindScroll(animated: true)
+            self.requestFindScroll()
         }
     }
 
@@ -860,7 +878,11 @@ struct TranscriptJump: Equatable {
     func jumpToPrompt(_ seq: Int) {
         isFollowing = false
         Task { [weak self] in
-            guard let self, let rowId = await self.store.jump(toPromptSeq: seq) else { return }
+            guard let self else { return }
+            guard let rowId = await self.store.jump(toPromptSeq: seq) else {
+                PaseoPerf.mark("jump.fetchFailed")
+                return
+            }
             self.pendingJump = TranscriptJump(id: rowId)
         }
     }

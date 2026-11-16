@@ -11,12 +11,10 @@ static let windowSize = 16      // do not change without a measurement (8/8 made
 static let windowStep = 12
 private var windowedTurns: ArraySlice<Turn> {
     let all = store.turns
-    if windowDisabled { return all[...] }
-    if let id = windowStartId, let index = all.firstIndex(where: { $0.id == id }) { return all[index...] }
-    return all.suffix(Self.windowSize)
+    store.turns[windowStartIndex...]   // windowStartIndex: first turn ending at/after windowStartSeq (a timeline position, never a turn id)
 }
 ```
-Older turns reveal 12 at a time on scroll with the history anchor; find and jumps reveal everything first. Not while the re-seat settles (PF-28, `dbfda10`: the window had grown to the whole chat, 370 bodies, 2.6 s).
+Older turns reveal 12 at a time on scroll with the history anchor; find and jumps grow the window only to the target (8 turns of lead, `mountTurn(at:)`), never to the whole chat. The start is a seq because a turn id (its first row's id) changes when an older page prepends rows to a partial turn. Not while the re-seat settles (PF-28, `dbfda10`: the window had grown to the whole chat, 370 bodies, 2.6 s).
 
 ## 2. Re-seat on a real row, not the estimated edge (`c07b6a0`; content 33k to 48k -> 13.5k to 17.8k pt; stalls 1232/1431 -> 513 to 830 ms)
 BAD: `scrollPosition.scrollTo(edge: .bottom)`: targets the estimated bottom, each re-seat realises rows around a wrong offset (D06).
@@ -28,7 +26,8 @@ BAD: end it because "only the insets moved" (a tall saved draft then left the ch
 
 ## 4. Long programmatic jumps (PF-15; D07)
 A jump of tens of thousands of points leaves the realised rows at the old offset until a real scroll event: blank. Scroll in bounded hops, or mount a window around the target first.
-Find-in-chat variants tried and reverted: turn id first then row then nudge (`64605f6`); outline glide (`ed90b93`). Both landed blank.
+Find and the outline jump now go through `TranscriptJumpRunner` (W4): scroll to the turn id, hop from the nearest built turn when it will not build, aim the row id once the measured turn is under the viewport and the layout holds, verify with the row's measured frame, correct by that measured offset. See `docs/perf/W1-findings.md` (W4).
+Find-in-chat variants tried and reverted before that: turn id first then row then nudge (`64605f6`); outline glide (`ed90b93`). Both landed blank.
 
 If you remember nothing else:
 - A lazy stack gets a window of recent turns, never the whole history; do not touch `windowSize`/`windowStep` without a 3-run measurement.

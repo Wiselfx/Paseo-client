@@ -46,7 +46,27 @@ struct ClaudeTurnView: View {
     @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
 
     var isRunning: Bool { turn.phase == .running }
-    var isExpanded: Bool { userExpanded ?? isRunning }
+    /// The work is shown while it runs, when the reader opened it, and when the current find match lives
+    /// in it (upstream `view.tsx:687`: find reveals a match inside a collapsed turn by opening the turn
+    /// first). A match in the prompt or in the answer needs no opening.
+    var isExpanded: Bool { userExpanded ?? (isRunning || findTargetsWork) }
+
+    /// True when the find match is a row of the work (an assistant message before the answer, a tool
+    /// call, a thought), which the folded turn does not draw.
+    var findTargetsWork: Bool {
+        guard let seq = findTarget else { return false }
+        var segments = turn.segments[...]
+        if case .prose? = segments.last { segments = segments.dropLast() }
+        for segment in segments {
+            switch segment {
+            case .work(let group):
+                if group.rows.contains(where: { $0.seqStart <= seq && seq <= $0.seqEnd }) { return true }
+            case .prose(let row), .todo(let row), .notice(let row):
+                if row.seqStart <= seq, seq <= row.seqEnd { return true }
+            }
+        }
+        return false
+    }
 
     /// The answer stays visible even when the turn folds.
     var finalProse: TimelineRow? {
@@ -295,6 +315,7 @@ struct ClaudeTurnView: View {
         RoundedRectangle(cornerRadius: Radius.md)
             .fill(Palette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
             .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
+            .reportsFindRow(seqEnd, isTarget: findTarget == seqEnd)
     }
 
     var copyText: String {
@@ -407,6 +428,7 @@ struct ClaudeSegmentView: View {
                         RoundedRectangle(cornerRadius: Radius.md)
                             .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
                             .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
+                            .reportsFindRow(row.seqEnd, isTarget: findTarget == row.seqEnd)
                     }
             }
         case .todo:
