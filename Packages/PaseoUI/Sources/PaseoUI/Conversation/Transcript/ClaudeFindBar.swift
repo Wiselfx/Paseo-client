@@ -19,9 +19,11 @@ struct ClaudeFindBar: View {
     @FocusState.Binding var focused: Bool
 
     private var hasResults: Bool { resultCount > 0 }
+    /// The status text, in upstream's words (`en.ts` `paneFind`: `searching`, `noMatches`, `position`).
     private var position: String {
-        guard hasResults else { return "0 of 0" }
-        return "\(currentIndex + 1) of \(resultCount)"
+        if hasResults { return "\(currentIndex + 1) of \(resultCount)" }
+        if isSearching { return "Searching…" }
+        return query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : "No matches"
     }
 
     var body: some View {
@@ -61,12 +63,14 @@ struct ClaudeFindBar: View {
                     .monospacedDigit()
                     .foregroundStyle(Palette.secondaryInk)
                     .lineLimit(1)
-                    .accessibilityLabel("Match \(currentIndex + 1) of \(resultCount)")
+                    .accessibilityLabel(hasResults ? "Match \(currentIndex + 1) of \(resultCount)" : position)
             }
-            stepButton("chevron.up", label: "Previous match", enabled: currentIndex > 0) {
+            // Stepping wraps around (upstream `chat-find/model.ts` `navigate`), so both are live
+            // whenever there is a match.
+            stepButton("chevron.up", label: "Previous match", enabled: hasResults) {
                 onStep(-1)
             }
-            stepButton("chevron.down", label: "Next match", enabled: currentIndex < resultCount - 1) {
+            stepButton("chevron.down", label: "Next match", enabled: hasResults) {
                 onStep(1)
             }
             Button {
