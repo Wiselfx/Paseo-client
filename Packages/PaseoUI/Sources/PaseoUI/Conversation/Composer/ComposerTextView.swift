@@ -455,27 +455,3 @@ final class PasteboardImageState {
         }
     }
 }
-
-
-/// Starts the keyboard machinery once, when a conversation or a draft opens (W1). The first time a
-/// text field takes focus in a launch the keyboard process, the input-mode lists and a pile of
-/// SwiftUI/UIKit metadata are built: 330 to 450 ms on the main thread at the first tap in the composer
-/// (the second focus in the same launch measured 113 ms). A throwaway field is focused and released
-/// inside one run-loop turn, before the first frame that could show it.
-@MainActor
-enum KeyboardPrewarm {
-    private static var done = false
-
-    static func runOnce() {
-        guard !done else { return }
-        done = true
-        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-        guard let window = windows.first(where: \.isKeyWindow) ?? windows.first else { return }
-        let field = UITextField(frame: .zero)
-        window.addSubview(field)
-        field.becomeFirstResponder()
-        field.resignFirstResponder()
-        field.removeFromSuperview()
-    }
-}

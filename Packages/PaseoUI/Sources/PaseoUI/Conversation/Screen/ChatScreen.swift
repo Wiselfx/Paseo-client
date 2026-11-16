@@ -95,7 +95,6 @@ public struct ChatScreen: View {
                 Task { @MainActor in
                     await Task.yield()
                     RichWebSnapshotRenderer.shared.prewarm()
-                    KeyboardPrewarm.runOnce()
                 }
             }
     }
