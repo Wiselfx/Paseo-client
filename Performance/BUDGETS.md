@@ -26,7 +26,7 @@ Other baselines: tap window after an AX warm-up < 28 ms (was 117..140); `perf.ho
 `VERDICT windows= frames= hitches= dropped= longest-gap= worst-frame= stalls>8ms= stall-max= busy-avg= scroll-frames=` sums the printed windows.
 - `windows=0` on an idle scenario is the good answer. Compare **medians of 3 cold runs** (`repeat.sh`) with the baseline above.
 - A difference counts only if it is larger than the run-to-run range of the baseline; inside the range = "no change".
-- Worse than baseline by more than the range = regression: fix it or escalate; never raise a baseline silently.
+- Worse than baseline by more than the range = regression: fix it. Raising the baseline is BLOCKED; a regression you cannot fix goes to the lead as `ESCALATE:`.
 - A hitch is a frame later than 1.5 budgets; a stall is a main-thread wake over 8 ms (`stall8`, `smax`). One-frame budgets are not sign-off-able on the simulator; stalls and counts are.
 
 ## The measurement rule (10 lines)

@@ -19,7 +19,7 @@ struct BadTurnRow: View { // hit: H03
         let formatter = DateFormatter() // expect: C08
         let data = try? Data(contentsOf: url) // expect: C09
         let calendar = Calendar.current // hit: H06
-        let sorted = turn.rows.sorted { $0.a < $1.a } // hit: H05
+        let sorted = store.turns.sorted { $0.a < $1.a } // hit: H05
         let binding = Binding(get: { store.draft }, set: { _ in }) // hit: H02
         VStack {
             Text(text).id("row:\(seqEnd)") // expect: C01
@@ -47,7 +47,7 @@ struct BadTurnRow: View { // hit: H03
         .onChange(of: items.map(\.id)) { _, _ in } // hit: H11
         .environment(\.openAction, { value in handle(value) }) // hit: H25
         .gesture(DragGesture()) // hit: H26
-        withAnimation { flag.toggle() } // expect: C21 // hit: H13
+        withAnimation { flag.toggle() } // expect: C21
         let timer = Timer.publish(every: 1, on: .main, in: .common) // hit: H10
         DispatchQueue.main.async { flag = true } // hit: H08
         print("rendered") // expect: C28

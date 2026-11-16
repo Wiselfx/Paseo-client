@@ -1,95 +1,19 @@
-// features: 
-// Fixture: a 90 line body is only a MANUAL question.
+// features: F19
+// Fixture: a view that reads seven environment values is a MANUAL question (H14); body length alone is
+// not one any more (C24 fails only over 150 lines).
 import SwiftUI
 
-struct MediumBody: View {
-    var body: some View { // hit: H14
-        VStack {
-            Text("line 0")
-            Text("line 1")
-            Text("line 2")
-            Text("line 3")
-            Text("line 4")
-            Text("line 5")
-            Text("line 6")
-            Text("line 7")
-            Text("line 8")
-            Text("line 9")
-            Text("line 10")
-            Text("line 11")
-            Text("line 12")
-            Text("line 13")
-            Text("line 14")
-            Text("line 15")
-            Text("line 16")
-            Text("line 17")
-            Text("line 18")
-            Text("line 19")
-            Text("line 20")
-            Text("line 21")
-            Text("line 22")
-            Text("line 23")
-            Text("line 24")
-            Text("line 25")
-            Text("line 26")
-            Text("line 27")
-            Text("line 28")
-            Text("line 29")
-            Text("line 30")
-            Text("line 31")
-            Text("line 32")
-            Text("line 33")
-            Text("line 34")
-            Text("line 35")
-            Text("line 36")
-            Text("line 37")
-            Text("line 38")
-            Text("line 39")
-            Text("line 40")
-            Text("line 41")
-            Text("line 42")
-            Text("line 43")
-            Text("line 44")
-            Text("line 45")
-            Text("line 46")
-            Text("line 47")
-            Text("line 48")
-            Text("line 49")
-            Text("line 50")
-            Text("line 51")
-            Text("line 52")
-            Text("line 53")
-            Text("line 54")
-            Text("line 55")
-            Text("line 56")
-            Text("line 57")
-            Text("line 58")
-            Text("line 59")
-            Text("line 60")
-            Text("line 61")
-            Text("line 62")
-            Text("line 63")
-            Text("line 64")
-            Text("line 65")
-            Text("line 66")
-            Text("line 67")
-            Text("line 68")
-            Text("line 69")
-            Text("line 70")
-            Text("line 71")
-            Text("line 72")
-            Text("line 73")
-            Text("line 74")
-            Text("line 75")
-            Text("line 76")
-            Text("line 77")
-            Text("line 78")
-            Text("line 79")
-            Text("line 80")
-            Text("line 81")
-            Text("line 82")
-            Text("line 83")
-            Text("line 84")
-        }
+struct ManyEnvBody: View { // hit: H14
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.locale) private var locale
+    @Environment(\.calendar) private var calendar
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    var body: some View {
+        Text("\(colorScheme) \(dynamicTypeSize) \(reduceMotion) \(displayScale) \(locale)")
+            .padding()
     }
 }

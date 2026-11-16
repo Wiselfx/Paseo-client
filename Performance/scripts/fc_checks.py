@@ -203,11 +203,51 @@ class SwiftFile:
         return None
 
 
+def receiver_root(code, dot_index):
+    """(expression, root identifier) of the receiver that ends just before `dot_index`."""
+    j = dot_index
+    while j > 0 and code[j - 1] in " \t":
+        j -= 1
+    start, depth = j, 0
+    while start > 0:
+        ch = code[start - 1]
+        if ch in ")]}":
+            depth += 1
+        elif ch in "([{":
+            if depth == 0:
+                break
+            depth -= 1
+        elif depth == 0 and not (ch.isalnum() or ch in "_."):
+            break
+        start -= 1
+    expr = code[start:j].strip()
+    m = re.match(r"[A-Za-z_]\w*", expr)
+    return expr, (m.group(0) if m else "")
+
+
+def symbol_at(f, i):
+    """The innermost function or computed property name around line i ('' when none)."""
+    for fr in reversed(f.enc[i]):
+        if fr.kind in ("func", "computed"):
+            return fr.name
+    t = f.enclosing_type(i)
+    return t.name if t else ""
+
+
 EVENT_RX = re.compile(
     r"\bTask\b|\.task\b|\bButton\b|\.onTapGesture|\.onLongPressGesture|\.refreshable|\.onChange|\.onReceive|"
     r"\.onSubmit|\baction\s*:|\.swipeActions|DispatchQueue|\.contextMenu|\.confirmationDialog|\.onDisappear")
 STORE_NAMES = re.compile(r"\b(store|draft|controller|session|conversation|model|directory)\b")
 BIG = r"(agents|workspaces|turns|rows|messages|entries|timeline|conversations|files|items|segments|pieces|lines|projects|schedules|terminals)"
+BIG_WORDS = set(BIG.strip("()").split("|"))
+# A collection whose size grows with the conversation, a list or a directory. A scan over one of these is
+# only a question (H05, H29); a scan over a single item (one turn's rows, one message's pieces) never is.
+COLLECTION_ROOTS = BIG_WORDS | {"all", "store", "session", "draft", "model", "controller", "directory",
+                                "conversation", "timeline", "built", "visibleTurnIds", "windowedTurns"}
+ITEM_ROOTS = {"turn", "piece", "row", "segment", "item", "message", "entry", "line", "group", "section",
+              "work", "card", "cell", "agent", "project", "schedule", "terminal", "file", "panel", "tab", "part"}
+MODEL_ROOTS = {"controller", "store", "session", "draft", "model", "directory", "conversation", "transcript"}
+GEO_RX = re.compile(r"onGeometryChange|onScrollGeometryChange|GeometryReader|onPreferenceChange|onScrollPhaseChange")
 
 # --------------------------------------------------------------------------------------------------
 # Path tags and features
@@ -247,14 +287,18 @@ def path_tags(rel):
 HOT_TAGS = {"stream", "composer", "shell", "media", "store", "launch"}
 
 PATH_ITEMS = {
-    "stream": ["M09", "M20"],
-    "row": ["M11", "M16"],
+    "stream": ["M09", "M18", "M20", "M21"],
+    "row": ["M11", "M14", "M16"],
     "composer": ["M18", "M27", "M34"],
-    "shell": ["M07", "M35"],
+    "shell": ["M07", "M18", "M35"],
     "media": ["M18", "M29", "M31"],
-    "store": ["M04", "M26", "M30"],
-    "launch": ["M33", "M31"],
-    "lists": ["M12", "M16"],
+    "store": ["M04", "M05", "M26", "M30"],
+    "launch": ["M31", "M33"],
+    "lists": ["M12", "M16", "M18"],
+    # any file in the two compiled packages: a change can always move per-frame work into a body,
+    # which is the question nothing else asks for every .swift file.
+    "ui": ["M18"],
+    "core": ["M18"],
 }
 
 # id, name, regex on changed code, MUST items to ask, PATTERNS files
@@ -476,6 +520,83 @@ def c47(f):
             yield i, ".count on a suffix is O(n); inside a scan loop it is O(n^2)"
 
 
+def c48(f):  # an array of every index, built per call
+    rx = re.compile(r"\.indices\s*\.\s*(?:filter|map|compactMap|sorted)\b|\.enumerated\(\)\s*\.\s*(?:filter|map|compactMap)\b")
+    for i, c in f.changed_lines():
+        m = rx.search(c)
+        if m:
+            expr, root = receiver_root(c, m.start())
+            yield i, "this materialises every index of `%s` on each call (%s): an O(n) array plus a closure per element. Search outward for the one index you need (FindNavigation.nearestIndex) or resolve it once per store change" % (expr or root, m.group(0).strip())
+
+
+def asserts_value(cond, target):
+    """True/False when `cond` proves the flag's value, None when it says nothing about it."""
+    m = re.search(r"(!\s*)?" + re.escape(target) + r"\s*(?:==\s*(true|false))?", cond)
+    if not m:
+        return None
+    base = True if not m.group(2) else m.group(2) == "true"
+    return (not base) if m.group(1) else base
+
+
+def guarded_flag(f, i, c, target, value):
+    """True when an if/guard proves the flag is the opposite of `value`, so the write changes it."""
+    want = value == "true"
+    # a condition on the same line, or an enclosing if/guard header
+    if re.search(r"\b(if|guard)\b", c) and asserts_value(c, target) not in (None, want):
+        return True
+    if re.search(r"\b(if|guard)\b[^{;]*(!=|==)[^{;]*\{", c):
+        return True
+    for fr in f.frames_at(i):
+        h = fr.header
+        if re.match(r"^\s*(?:if|guard)\b", h):
+            if re.search(r"!=|==", h):
+                return True
+            got = asserts_value(h, target)
+            if got is not None and got != want:
+                return True
+    # a prior guard inside the same function: after it the value is known
+    for fr in f.frames_at(i):
+        if fr.kind != "func":
+            continue
+        for k in range(i - 1, fr.open, -1):
+            if re.search(r"(?<![\w.])" + re.escape(target) + r"\s*=[^=]", f.code[k]):
+                break
+            if re.match(r"^\s*guard\b", f.code[k]):
+                got = asserts_value(f.code[k], target)
+                if got is not None and got != want:
+                    return True
+    return False
+
+
+def c49(f):  # an observed flag written with a literal, not compare-first
+    rx = re.compile(r"(?<![\w.])((?:self|[a-z]\w*(?:\.[a-z]\w*)*)\.)?([a-z]\w*)\s*=\s*(true|false)\b")
+    for i, c in f.changed_lines():
+        if not any(x.kind == "func" for x in f.frames_at(i)):
+            continue
+        if any(x.kind in ("body", "viewscope", "init") for x in f.frames_at(i)):
+            continue
+        if any(x.name in ("updateUIView", "updateUIViewController") for x in f.frames_at(i) if x.kind == "func"):
+            continue  # H15 owns the representable update path
+        for m in rx.finditer(c):
+            recv, prop = (m.group(1) or "").rstrip("."), m.group(2)
+            if re.search(r"\b(?:let|var|case)\s+" + re.escape(prop) + r"\b", c):
+                continue
+            if recv:
+                root = recv.split(".")[0]
+                if root == "self" or root not in MODEL_ROOTS:
+                    continue
+                target = recv + "." + prop
+            else:
+                t = f.enclosing_type(i)
+                if not t or "@Observable" not in t.conforms:
+                    continue
+                target = prop
+            if guarded_flag(f, i, c, target, m.group(3)):
+                continue
+            yield i, "`%s = %s` writes an observed flag with a literal and no compare: every @Observable set notifies its readers even when the value is unchanged. Write `if %s` / `if !%s` around it (Apple: only update when the change is meaningful; C49, M42)" % (target, m.group(3), target, target)
+
+
+
 # --------------------------------------------------------------------------------------------------
 # MANUAL heuristics: a hit is a question with file:line, never a failure.
 # --------------------------------------------------------------------------------------------------
@@ -524,9 +645,21 @@ def h_anyview(f):
             yield i, "AnyView"
 
 
+CHAIN_RX = re.compile(r"\.(sorted|filter|reduce|flatMap|compactMap|map)\b")
+
+
+def chain_hit(c):
+    """(receiver expression, method) for the first chain over a collection on this line, else None."""
+    for m in CHAIN_RX.finditer(c):
+        expr, root = receiver_root(c, m.start())
+        if not root or root in ITEM_ROOTS:
+            continue  # one item's rows or pieces: bounded by the item, not by the conversation
+        if root in COLLECTION_ROOTS or re.search(r"\b(store|session|controller|timeline|conversation|directory)\b", expr):
+            return expr, m.group(1)
+    return None
+
+
 def h_chain(f):
-    rx_big = re.compile(BIG + r"[\w\.\(\)\?]*\.(sorted|filter|reduce|flatMap|compactMap|map|contains\(where|first\(where|firstIndex\(where|lastIndex\(where)\b")
-    rx_any = re.compile(r"\.(sorted|filter|reduce|flatMap)\b|Dictionary\(grouping")
     for i, c in f.changed_lines():
         scope = f.in_scope(i, {"body", "viewscope"})
         if not scope:
@@ -536,8 +669,9 @@ def h_chain(f):
                 continue
         if "static let" in c or re.search(r"[mM]emo|[cC]ache", c) or any(EVENT_RX.search(x.header) for x in f.frames_at(i) if x.kind == "other"):
             continue
-        if rx_any.search(c) or rx_big.search(c):
-            yield i, "collection chain in a view body / computed property"
+        hit = chain_hit(c)
+        if hit:
+            yield i, "sort/filter/map over `%s` in a body or computed property: it is rebuilt on every pass; build it once in the store or a memo (M16)" % hit[0]
 
 
 def h_construct2(f):
@@ -599,15 +733,6 @@ def h_dict_cache(f):
             yield i, "static dictionary with no limit or eviction in this file"
 
 
-def h_anim_hot(f):
-    tags = path_tags(f.rel)
-    if not tags & {"stream", "row", "media", "shell"}:
-        return
-    for i, c in f.changed_lines():
-        if "withAnimation" in c:
-            yield i, "withAnimation in a hot area"
-
-
 def h_env_body(f):
     seen = set()
     for i in sorted(f.changed):
@@ -616,10 +741,7 @@ def h_env_body(f):
             seen.add(id(t))
             n = sum(1 for k in range(t.open, t.end + 1) if "@Environment(" in f.code[k])
             if n >= 7:
-                yield t.open, "%s reads %d environment values" % (t.name, n)
-    for fr in f.frames:
-        if fr.kind == "body" and 80 < fr.end - fr.open + 1 <= 150 and any(fr.open <= x <= fr.end for x in f.changed):
-            yield fr.open, "body is %d lines" % (fr.end - fr.open + 1)
+                yield t.open, "%s reads %d environment values: each one makes it a dependency of every change to them; read each value in the child that draws it (M01)" % (t.name, n)
 
 
 def guarded(f, i, c):
@@ -759,7 +881,138 @@ def h_scrolljump(f):
         return
     for i, c in f.changed_lines():
         if re.search(r"scrollTo\(|\.scrollPosition\(|defaultScrollAnchor|\bwindow(Size|Step)\b", c):
-            yield i, "transcript scroll/window code"
+            yield i, "scroll target or turn window changed: land on a real row id, use bounded hops, and end the re-seat on the reader's action (PATTERNS/lazy-stacks-and-scrolling.md sections 2 to 4, M21)"
+
+
+def scan_calls(c):
+    """Linear scans that return an element or filter a collection (not `prefix`/`drop`, which are O(1))."""
+    for m in re.finditer(r"\.(first|firstIndex|last|lastIndex|contains|allSatisfy|filter)\s*([({])", c):
+        if m.group(2) == "(" and not re.match(r"\s*where\s*:", c[m.end():]):
+            continue
+        yield m
+
+
+def h_scan(f):  # H29: a scan in a helper that a body or a callback may reach
+    seen = {}
+    for i, c in f.changed_lines():
+        if f.in_scope(i, {"body", "viewscope"}):
+            continue  # H05 owns body and view-scope chains
+        for m in scan_calls(c):
+            expr, root = receiver_root(c, m.start())
+            if not root or root in ITEM_ROOTS or root not in COLLECTION_ROOTS:
+                continue
+            if expr.endswith(".indices"):
+                continue  # C48 owns an array built from every index
+            small = re.search(r"\.(?:prefix|suffix)\(\s*(\d+)\s*\)", expr)
+            if small and int(small.group(1)) <= 64:
+                continue  # bounded by a literal: the scan is over at most 64 rows
+            name = symbol_at(f, i)
+            key = (name, root)
+            seen[key] = seen.get(key, 0) + 1
+            if seen[key] > 2:
+                continue
+            yield i, "linear scan of `%s` in `%s`: O(n) on every call. If a body pass, a scroll or geometry callback, or a tick can reach it, binary-search the timeline-ordered array or resolve the index once per store change (FindNavigation.firstTurnIndex). If it runs once per user action, answer M18 with that" % (expr, name)
+
+
+def h_own_task(f):  # H30: a task started from a method with no handle
+    rx = re.compile(r"(?<![\w.])Task(?:\.detached)?(?:\s*\([^)]*\))?\s*\{")
+    for i, c in f.changed_lines():
+        m = rx.search(c)
+        if not m:
+            continue
+        before = c[:m.start()].rstrip()
+        if before.endswith("=") or re.search(r"\breturn$", before):
+            continue
+        frames = [x for x in f.frames_at(i) if not (x.open == i and re.search(r"\bTask\b", x.header))]
+        if not any(x.kind == "func" for x in frames):
+            continue
+        if any(x.kind in ("body", "viewscope", "init") for x in frames):
+            continue
+        if any(x.kind == "other" and EVENT_RX.search(x.header) for x in frames):
+            continue
+        yield i, "`Task` started in `%s` and discarded: if a newer call, a close, or a disappear can supersede it, keep the handle and cancel it (TranscriptJumpRunner.runAfterFetch; TEMPLATES/task.swift.md)" % symbol_at(f, i)
+
+
+def geo_spans(f):
+    """Character spans of geometry callbacks, including the `action:` closure after the value closure
+    (`.onGeometryChange(for:) { ... } action: { ... }` closes the first frame before the second opens)."""
+    full = "\n".join(f.code)
+    starts, pos = [], 0
+    for ln in f.code:
+        starts.append(pos)
+        pos += len(ln) + 1
+    spans = []
+    for m in GEO_RX.finditer(full):
+        b = full.find("{", m.end())
+        if b < 0:
+            continue
+        depth, j, groups = 0, b, 0
+        while j < len(full):
+            if full[j] == "{":
+                depth += 1
+            elif full[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    groups += 1
+                    k = j + 1
+                    while k < len(full) and full[k] in " \t\r\n,":
+                        k += 1
+                    if groups == 1 and full.startswith("action:", k):
+                        j = full.find("{", k)
+                        if j < 0:
+                            break
+                        depth = 0
+                        continue
+                    break
+            j += 1
+        spans.append((b, min(j, len(full) - 1), starts))
+    return [(s, e, st) for s, e, st in spans]
+
+
+def line_in_span(starts, i, span):
+    pos = starts[i]
+    return span[0] <= pos <= span[1]
+
+
+def h_geo_dict(f):  # H31: a dictionary written from a geometry callback
+    dicts = set()
+    for i, c in enumerate(f.code):
+        m = re.match(r"^\s*(?:@\w+\s+)*(?:(?:private|fileprivate|internal|public)(?:\(set\))?\s+)*var\s+(\w+)\s*:\s*\[[^\]]+\]\s*(?:=|$)", c)
+        if m and f.enclosing_type(i) is f.enc[i][-1]:
+            dicts.add(m.group(1))
+    if not dicts:
+        return
+    writers = {}
+    for fr in f.frames:
+        if fr.kind != "func":
+            continue
+        for prop in dicts:
+            for k in range(fr.open, fr.end + 1):
+                if re.search(r"(?:^|[^\w.])%s\s*\[[^\]]*\]\s*=(?!=)" % re.escape(prop), f.code[k]):
+                    writers.setdefault(fr.name, (prop, k))
+                    break
+    if not writers:
+        return
+    spans = geo_spans(f)
+    if not spans:
+        return
+    seen = set()
+    for span in spans:
+        for name, (prop, write_line) in writers.items():
+            call = re.compile(r"(?:^|[^\w])%s\s*\(" % re.escape(name))
+            calls = [j for j in range(len(f.code)) if line_in_span(span[2], j, span) and call.search(f.code[j])]
+            if not calls:
+                continue
+            target = next((j for j in calls if j in f.changed), None)
+            if target is None:
+                if write_line not in f.changed:
+                    continue
+                target = write_line
+            key = (span[0], name)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield target, "`%s` writes the dictionary `%s` from a geometry/scroll callback: a per-frame path must not hash into a growing table; if only the latest report matters keep one slot (FindRowProbe.lastReport), and if per-key data is needed write only when the value changed" % (name, prop)
 
 
 AUTO = {
@@ -783,36 +1036,41 @@ AUTO = {
     "C44": (c44, "M22", "PF-41", "lazy-stacks-and-scrolling", "rejected option"),
     "C45": (c45, "M06", "PF-39", "observation-and-invalidation", "ObservableObject/@Published"),
     "C47": (c47, "M17", "PF-21", "text-markdown-code", ".count on a suffix"),
+    "C48": (c48, "M41", "PF-21", "hot-paths-and-indexing", "an array of every index, built per call"),
+    "C49": (c49, "M42", "PF-25", "hot-paths-and-indexing", "an observed flag written without a compare"),
 }
 
+# (function, MUST item, what to verify: printed once per item; each hit adds the file:line)
 HEUR = {
-    "H01": (h_id_other, "M09", ".id / ForEach id that is not obviously a stable entity id"),
-    "H02": (h_binding_body, "M01", "Binding(get:) reading a store in a body"),
-    "H03": (h_row_noneq, "M11", "Row/Cell view that is not Equatable"),
-    "H04": (h_anyview, "M11", "AnyView in repeated content"),
-    "H05": (h_chain, "M16", "collection chain in a body or computed property"),
-    "H06": (h_construct2, "M18", "costly constructor in a body"),
-    "H07": (h_geometry, "M14", "GeometryReader"),
-    "H08": (h_mainasync, "M25", "DispatchQueue.main hop"),
-    "H09": (h_task, "M25", "Task / .task lifecycle"),
-    "H10": (h_timer, "M37", "timer / display link / endless animation"),
-    "H11": (h_onchange_coll, "M01", "onChange(of:) on a whole collection"),
-    "H12": (h_dict_cache, "M29", "dictionary cache without limit"),
-    "H13": (h_anim_hot, "M37", "withAnimation in a hot area"),
-    "H14": (h_env_body, "M01", "many @Environment reads / large body"),
-    "H15": (h_repr, "M34", "representable update not idempotent / not Equatable"),
-    "H16": (h_store_write, "M04", "store write without write-on-change"),
-    "H17": (h_main_io, "M26", "file I/O on a main-actor type"),
-    "H18": (h_stream, "M30", "unbounded stream buffer"),
-    "H19": (h_lazy, "M12", "non-lazy ScrollView { VStack { ForEach } }"),
-    "H20": (h_offscreen, "M18", "offscreen-pass effect in a hot area"),
-    "H21": (h_img, "M18", "image outside the media pipeline"),
-    "H22": (h_web, "M31", "web view outside Rich/"),
-    "H23": (h_launch, "M33", "launch-path work in an init"),
-    "H24": (h_sendable, "M29", "@unchecked Sendable without a lock"),
-    "H25": (h_envclosure, "M07", "closure in the environment"),
-    "H26": (h_gesture, "M35", "SwiftUI DragGesture"),
-    "H27": (h_scrolljump, "M21", "transcript scroll/window code"),
+    "H01": (h_id_other, "M09", ".id/ForEach id: is it a stable entity id (seq:<seqStart>, agentId) that survives every state of the item, not an offset or a streaming value?"),
+    "H02": (h_binding_body, "M01", "Binding(get:) reading a store inside a body: does the parent now depend on that field for nothing?"),
+    "H03": (h_row_noneq, "M11", "Row/Cell view not Equatable: will SwiftUI run its body for every parent pass?"),
+    "H04": (h_anyview, "M11", "AnyView in repeated content: it erases the type, so the child is rebuilt instead of compared"),
+    "H05": (h_chain, "M16", "sort/filter/map over a store collection in a body or computed property: is it built once per pass (store or memo) and not per row?"),
+    "H06": (h_construct2, "M18", "a costly constructor or default read in a body: build it once (static let / memo) and pass it in"),
+    "H07": (h_geometry, "M14", "GeometryReader: does each row reserve its size and read width with onGeometryChange written on change?"),
+    "H08": (h_mainasync, "M25", "DispatchQueue.main hop from main-actor code: it only delays the work a runloop turn"),
+    "H09": (h_task, "M25", "Task/.task lifecycle: is it keyed by .task(id:), cancelled on disappear, and never one per row?"),
+    "H10": (h_timer, "M37", "timer, display link or endless animation: does it stop when obscured, asleep, or reduce-motion is on?"),
+    "H11": (h_onchange_coll, "M01", "onChange(of:) on a whole collection: does every element change re-run the action?"),
+    "H12": (h_dict_cache, "M29", "dictionary cache without a limit or eviction in this file: what bounds its count and cost?"),
+    "H14": (h_env_body, "M01", "many environment reads or a very large body: which of these does the body actually draw, and which belong to a child?"),
+    "H15": (h_repr, "M34", "representable update: is it Equatable, and does every assignment compare first?"),
+    "H16": (h_store_write, "M04", "store property written without a compare, or sorted in place: can the value repeat (push, poll, reconnect)?"),
+    "H17": (h_main_io, "M26", "file I/O on a main-actor type: can it move to a serial queue with a value snapshot?"),
+    "H18": (h_stream, "M30", "unbounded stream buffer: use .bufferingNewest(n)"),
+    "H19": (h_lazy, "M12", "ScrollView { VStack { ForEach } }: can the list exceed 30 items? Then it must be lazy or windowed"),
+    "H20": (h_offscreen, "M18", "mask/blur/shadow/drawingGroup in repeated content: each one adds an offscreen pass per row"),
+    "H21": (h_img, "M18", "image loaded outside the media pipeline: decode at the drawn size, off main"),
+    "H22": (h_web, "M31", "web view outside Rich/: is it lazy or warmed at idle, never in init or the open path?"),
+    "H23": (h_launch, "M33", "launch-path work in an init: is it on the first-frame list (defaults, one font call, the shell)?"),
+    "H24": (h_sendable, "M29", "@unchecked Sendable with no lock in this file: what protects it?"),
+    "H25": (h_envclosure, "M07", "closure literal in the environment: a non-comparable value re-runs every reader; use an observable flag object"),
+    "H26": (h_gesture, "M35", "DragGesture: finger-tracked motion belongs in a UIKit pan, and SwiftUI learns only open/closed"),
+    "H27": (h_scrolljump, "M21", "transcript scroll or window code: verify the target is a real row id, the hops are bounded, and the re-seat ends on the reader's action"),
+    "H29": (h_scan, "M18", "a linear scan in a helper: is it reachable from a body pass, a scroll/geometry callback or a tick? Then it must be O(log n) or resolved once"),
+    "H30": (h_own_task, "M25", "a Task started from a method with no stored handle: can a newer call, a close or a disappear supersede it?"),
+    "H31": (h_geo_dict, "M18", "a dictionary written from a geometry/scroll callback: a per-frame report must overwrite one value and compare first"),
 }
 SET_LEVEL_HEUR = {"H28": ("M40", "core store changed and no test file changed")}
 
@@ -886,15 +1144,16 @@ def analyse(files):
 
 
 def build_manual(res, must, manual):
-    """item id -> {why:set, lines:list}"""
+    """item id -> {why, lines, hints, area, triggered}. Area items apply to the paths; triggered items
+    also have a heuristic hit with a file:line and a sentence saying what to verify."""
     out = {}
 
-    def add(mid, why, line=None):
-        e = out.setdefault(mid, {"why": [], "lines": []})
-        if why not in e["why"]:
+    def add(mid, why=None, area=None):
+        e = out.setdefault(mid, {"why": [], "lines": [], "hints": [], "area": [], "triggered": False})
+        if why and why not in e["why"]:
             e["why"].append(why)
-        if line and line not in e["lines"]:
-            e["lines"].append(line)
+        if area and area not in e["area"]:
+            e["area"].append(area)
 
     for rel, feats in res["features"].items():
         for fid in sorted(feats):
@@ -905,17 +1164,116 @@ def build_manual(res, must, manual):
         for t in sorted(res["tags"][rel] & set(PATH_ITEMS)):
             for mid in PATH_ITEMS[t]:
                 if must.get(mid, {}).get("tag") == "MANUAL":
-                    add(mid, "path %s" % t)
+                    add(mid, area=t)
     for hid, rel, line, msg, _ in res["hits"]:
         mid = HEUR[hid][1] if hid in HEUR else SET_LEVEL_HEUR[hid][0]
-        add(mid, "hit %s" % hid, "%s:%d  %s" % (rel, line, msg))
-    if any(t & {"ui", "core"} for t in res["tags"].values()):
+        add(mid, "hit %s" % hid)
+        e = out[mid]
+        e["triggered"] = True
+        if (rel, line, msg) not in e["lines"]:
+            e["lines"].append((rel, line, msg))
+        verify = HEUR[hid][2] if hid in HEUR else "no test file changed: a store change needs a test (M40)"
+        hint = next((h for h in e["hints"] if h[0] == hid), None)
+        if hint is None:
+            hint = [hid, verify, []]
+            e["hints"].append(hint)
+        if (rel, line) not in hint[2]:
+            hint[2].append((rel, line))
+    if any(t & {"ui", "core"} for rel, t in res["tags"].items() if "test" not in t):
         add("M40", "any UI/Core change")
     return out
 
 
 def features_for(res):
     return {rel: sorted(v) for rel, v in res["features"].items()}
+
+
+# Which patterns to read first, per path tag. Chosen for the diff, so a small agent does not open the
+# whole Performance/ tree before its first edit.
+TAG_PATTERNS = {
+    "stream": ["lazy-stacks-and-scrolling", "identity-and-streaming", "hot-paths-and-indexing"],
+    "row": ["rows-and-lists", "identity-and-streaming", "hot-paths-and-indexing"],
+    "composer": ["uikit-interop-and-keyboard", "hot-paths-and-indexing"],
+    "shell": ["animation-and-drawer", "hot-paths-and-indexing"],
+    "media": ["media-and-images"],
+    "store": ["stores-and-core", "hot-paths-and-indexing"],
+    "launch": ["launch-and-startup"],
+    "lists": ["rows-and-lists", "lazy-stacks-and-scrolling"],
+}
+
+
+def read_block(res):
+    tags = set()
+    for _, t in res["tags"].items():
+        tags |= (t - {"test"})
+    pats = []
+    for tag in ("stream", "row", "composer", "shell", "media", "store", "launch", "lists"):
+        if tag in tags:
+            for p in TAG_PATTERNS[tag]:
+                if p not in pats:
+                    pats.append(p)
+    items = sorted({m for t in tags for m in PATH_ITEMS.get(t, [])})
+    out = ["== 0. READ THIS FIRST (chosen from the paths in this diff; the rest is reference) =="]
+    out.append("  1. Performance/FINAL-CHECK.md: the procedure and what ESCALATE means (1 minute).")
+    out.extend(wrap_line("  2. Performance/MUST.md section B, only these lines: ", " ".join(items) or "(none)"))
+    if pats:
+        out.extend(wrap_line("  3. Before editing: ", ", ".join("Performance/PATTERNS/%s.md" % p for p in pats[:3])))
+    out.append("  When a check fires: Performance/CHECKS.md (what it means and the fix), MANUAL.md, PATTERNS/.")
+    out.append("  Long reference, open only on demand: RULES.md, DECISIONS.md, CATALOG.md, BUDGETS.md, GLOSSARY.md.")
+    return out
+
+
+def wrap_line(prefix, text, width=110, cont=None):
+    """prefix + text wrapped to `width`, continuation indented to the prefix (or `cont`)."""
+    out, cur = [], ""
+    for w in text.split():
+        if not cur:
+            cur = w
+        elif len(prefix) + len(cur) + 1 + len(w) <= width:
+            cur += " " + w
+        else:
+            out.append(prefix + cur)
+            prefix, cur = (cont if cont is not None else " " * len(prefix)), w
+    if cur:
+        out.append(prefix + cur)
+    return out
+
+
+def wrap_rule(text, width=94, indent="         "):
+    words, lines, cur = text.split(), [], ""
+    for w in words:
+        if not cur:
+            cur = w
+        elif len(cur) + 1 + len(w) <= width:
+            cur += " " + w
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return ("\n" + indent).join(lines)
+
+
+VERDICT_LINE_RX = re.compile(r"^\s*\[( |x|X)\]\s+(.+)$")
+
+
+def verdict_from_signoff(text):
+    """('DONE'|'DONE WITH ESCALATIONS'|'NOT DONE', reason) from a pasted SIGN-OFF block."""
+    items = []
+    for ln in text.split("\n"):
+        m = VERDICT_LINE_RX.match(ln)
+        if m:
+            items.append((m.group(1).strip(), ln.strip()))
+    if not items:
+        return "NOT DONE", "the sign-off has no [ ] item lines"
+    unticked = [ln for tick, ln in items if tick == "" and "ESCALATE:" not in ln]
+    escalated = [ln for _, ln in items if "ESCALATE:" in ln] + [
+        ln.strip() for ln in text.split("\n") if not VERDICT_LINE_RX.match(ln) and ln.strip().startswith("ESCALATE:")]
+    if unticked:
+        return "NOT DONE", "%d line(s) neither ticked nor escalated (first: %s)" % (len(unticked), unticked[0][:80])
+    if escalated:
+        return "DONE WITH ESCALATIONS", str(len(escalated))
+    return "DONE", ""
 
 
 # --------------------------------------------------------------------------------------------------
@@ -929,21 +1287,27 @@ def git(*args, cwd=REPO):
 
 
 def resolve_base(base):
-    cands = [base] if base else ["origin/main", "main", "origin/foundation", "foundation"]
+    """(ref, merge-base, where the ref came from). An explicit ref wins; else the branch's upstream; else
+    origin/main, main, origin/foundation, foundation."""
+    if base:
+        cands, source = [base], "given on the command line"
+    else:
+        up = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}").strip()
+        up = up if up and not up.startswith("HEAD") else ""
+        cands = ([up] if up else []) + ["origin/main", "main", "origin/foundation", "foundation"]
+        source = "the branch's upstream" if up else "origin/main, else foundation"
     for c in cands:
         if c and subprocess.run(["git", "rev-parse", "--verify", "-q", c + "^{commit}"], cwd=REPO, capture_output=True).returncode == 0:
             mb = git("merge-base", c, "HEAD").strip()
-            return c, mb or c
-    return None, None
+            return c, mb or c, source
+    return None, None, source
 
 
 SCOPE_RX = re.compile(r"^(?!.*/paseo-probe/)(Packages/(PaseoUI|PaseoCore)/Sources/|App/).*\.swift$")
 
 
 def changed_from_git(base):
-    ref, mb = resolve_base(base)
-    if not mb:
-        return None, None, {}
+    ref, mb, source = resolve_base(base)
     files = {}
     names = git("diff", "--name-only", "--diff-filter=ACMR", "-M", mb, "--").split("\n")
     names += git("ls-files", "-o", "--exclude-standard").split("\n")
@@ -961,7 +1325,7 @@ def changed_from_git(base):
                 start, cnt = int(m.group(1)), int(m.group(2) if m.group(2) is not None else 1)
                 lines.update(range(start, start + cnt))
         files[n] = lines
-    return ref, mb, {"files": files, "tests": tests}
+    return ref, mb, {"files": files, "tests": tests, "source": source}
 
 
 # --------------------------------------------------------------------------------------------------
@@ -969,18 +1333,30 @@ def changed_from_git(base):
 # --------------------------------------------------------------------------------------------------
 
 
+def where_lines(lines):
+    """At most three `file:line` locations, then '+N more' (a hit list is a pointer, not a dump)."""
+    shown = ["%s:%d" % (os.path.basename(rel), line) for rel, line, _ in lines]
+    more = len(shown) - 3
+    return ", ".join(shown[:3]) + ("  (+%d more)" % more if more > 0 else "")
+
+
 def render(res, must, manual, meta):
     out = []
     failed_ids = {a[0] for a in res["auto"]}
-    out.append("final-check  base=%s  swift files=%d  (%s)" % (meta["base"], len(res["tags"]), meta["mode"]))
+    out.append("final-check  base=%s (%s)  swift files=%d  (%s)%s" % (
+        meta["base"], meta.get("source", "?"), len(res["tags"]), meta["mode"],
+        "  NO CHANGES since the base" if meta.get("empty") else ""))
     out.append("This script guarantees only the AUTO-VERIFIED list below (exact patterns on your changed lines).")
-    out.append("It never claims anything about timing or semantics: block 3 is yours to check by hand.")
+    out.append("It never claims anything about timing or semantics: blocks 3 and 4 are yours to answer.")
+    out.append("")
+    out.extend(read_block(res))
     out.append("")
     out.append("== 1. AUTO-VERIFIED PASS (reliable exact patterns) ==")
-    ran = ["S0 style-lint ratchet [%s]" % meta["style"]] if meta["style"] != "skipped" else []
     ok = [cid for cid in AUTO if cid not in failed_ids]
-    out.append("  reliable: " + (" ".join(ok) or "(none)") + ("  " + ran[0].split(" ")[0] + " (style-lint ratchet)" if ran and meta["style"] == "PASS" else ""))
-    out.append("  what each id checks: Performance/FINAL-CHECK.md (Auto checks table)")
+    out.extend(wrap_line("  every AUTO check ran on the changed lines: ", " ".join(AUTO)))
+    out.extend(wrap_line("  passed: ", " ".join(ok) or "(none)"))
+    if meta["style"] != "skipped":
+        out.append("  S0 style-lint ratchet: %s" % meta["style"])
     out.append("")
     out.append("== 2. AUTO-FAILED (confirmed violations; fix them; exit code 1) ==")
     if not res["auto"] and meta["style"] != "FAIL":
@@ -990,41 +1366,76 @@ def render(res, must, manual, meta):
     for cid, rel, line, msg, _ in sorted(res["auto"], key=lambda x: (x[1], x[2])):
         fn, mid, rule, pat, title = AUTO[cid]
         out.append("  FAIL %s  %s %s  %s:%d  %s" % (cid, mid, rule, rel, line, msg))
-        out.append("       MUST: %s %s" % (mid, must.get(mid, {}).get("text", "")[:150]))
-        out.append("       fix : Performance/PATTERNS/%s.md" % pat)
+        out.append("       MUST %s: %s" % (mid, must.get(mid, {}).get("text", "")))
+        out.append("       fix: Performance/PATTERNS/%s.md" % pat)
     out.append("")
     items = build_manual(res, must, manual)
-    out.append("== 3. MANUAL (NOT verified by this script; answer each, yes/no) ==")
+    out.append("== 3. MANUAL (NOT verified by this script; answer each in block 4) ==")
     order = sorted(items)
     if not order:
         out.append("  (no UI/Core Swift changes detected: nothing to check)")
     for mid in order:
         e, q = items[mid], manual.get(mid, {})
+        if not e["triggered"]:
+            out.append("  [%s] applies to %s; no heuristic hit. Full rule in block 4." % (
+                mid, " and ".join(e["area"]) or "these paths"))
+            continue
         out.append("  [%s] %s" % (mid, q.get("Ask", must.get(mid, {}).get("text", ""))))
         out.append("       because: " + "; ".join(e["why"]))
-        for ln in e["lines"]:
-            out.append("       look at: " + ln)
+        for hid, verify, at in e["hints"]:
+            out.append("       hint %s: %s" % (hid, verify))
+            if at:
+                out.append("       where: " + where_lines([(rel, line, None) for rel, line in at]))
         out.append("       if no or unsure: " + q.get("If no or unsure", "escalate"))
         out.append("       re-read: " + q.get("Re-read", "MUST.md section B"))
+    expected, why_missing = set(), {}
+    for rel, tags in res["tags"].items():
+        for tag in tags:
+            for mid in PATH_ITEMS.get(tag, []):
+                if must.get(mid, {}).get("tag") == "MANUAL":
+                    expected.add(mid)
+                    why_missing.setdefault(mid, set()).add(tag)
+    missing = sorted(m for m in expected if m not in items)
+    if missing:
+        out.append("  NOT SHOWN for this diff: " + "; ".join(
+            "%s (relevant to %s)" % (m, "/".join(sorted(why_missing[m]))) for m in missing))
     if res["waived"]:
-        out.append("  [WAIVERS] perf-ok comments found; each needs an escalation line in your report:")
+        out.append("  [WAIVERS] perf-ok comments found; each needs an ESCALATE line in your report:")
         for cid, rel, line, msg, why in res["waived"]:
             out.append("       %s %s:%d  \"%s\"" % (cid, rel, line, why))
     out.append("")
-    out.append("== 4. SIGN-OFF (copy into your report; tick each with a one-clause reason, or write ESCALATE: why) ==")
-    out.append("final-check: base=%s auto-failed=%d auto-pass=%d manual=%d waivers=%d" % (meta["base"], len(res["auto"]) + (1 if meta["style"] == "FAIL" else 0), len(ok), len(order), len(res["waived"])))
+    out.append("== 4. SIGN-OFF (tick every line with one clause, or write ESCALATE: why; then run --signoff <file>) ==")
+    out.append("final-check: base=%s auto-failed=%d auto-pass=%d manual=%d waivers=%d" % (
+        meta["base"], len(res["auto"]) + (1 if meta["style"] == "FAIL" else 0), len(ok), len(order), len(res["waived"])))
     for mid in order:
-        out.append("[ ] %s %s" % (mid, must.get(mid, {}).get("text", "")[:95]))
+        out.append("[ ] %s %s" % (mid, wrap_rule(must.get(mid, {}).get("text", ""))))
     for cid, rel, line, msg, why in res["waived"]:
         out.append("[ ] WAIVER %s %s:%d ESCALATE: %s" % (cid, rel, line, why))
-    hot = sorted(rel for rel, t in res["tags"].items() if t & HOT_TAGS)
-    out.append("measure: %s" % ("REQUIRED (hot-path files: %s) -> Performance/MEASURE.md" % ", ".join(os.path.basename(h) for h in hot[:6]) if hot else "not required (no hot-path file changed); this output is the evidence"))
+    hot = sorted(rel for rel, t in res["tags"].items() if (t & HOT_TAGS) and "test" not in t)
+    if hot:
+        out.extend(wrap_line("measure: REQUIRED. Files in this diff against %s on hot paths: " % meta["base"],
+                             ", ".join(os.path.basename(h) for h in hot[:8])))
+        out.append("  Follow Performance/MEASURE.md, or record `unmeasured, handed to manager` with the argument, bound and test it asks for.")
+    else:
+        out.append("measure: not required (no hot-path file in this diff against %s); this output is the evidence" % meta["base"])
     bad = len(res["auto"]) + (1 if meta["style"] == "FAIL" else 0)
     if bad:
-        out.append("VERDICT: NOT DONE  (auto-failed=%d)" % bad)
+        out.append("VERDICT: NOT DONE (auto-failed=%d)" % bad)
+    elif meta.get("signoff") is not None:
+        verdict, reason = verdict_from_signoff(meta["signoff"])
+        out.append("VERDICT: %s%s" % (verdict, (" (%s)" % reason) if reason else ""))
     else:
-        out.append("VERDICT: DONE if every [ ] above is ticked with a reason (or ESCALATE); otherwise NOT DONE")
-    return "\n".join(out), bad
+        out.append("VERDICT: NOT DONE (no complete sign-off supplied; tick block 4, save it, then run: final-check.sh %s --signoff <file>)" % meta["base"])
+    wrapped = []
+    for ln in out:
+        if len(ln) <= 118 or not ln.strip():
+            wrapped.append(ln)
+            continue
+        ind = ln[:len(ln) - len(ln.lstrip())]
+        tick = re.match(r"\[[ xX]\] (\S+) ", ln.strip())
+        cont = ind + (" " * (len(tick.group(1)) + 4) if tick else "  ")
+        wrapped.extend(wrap_line(ind, ln.strip(), 118, cont))
+    return "\n".join(wrapped), bad
 
 
 # --------------------------------------------------------------------------------------------------
@@ -1141,10 +1552,47 @@ def self_test():
         check(hid in seen_hit, "no bad fixture proves %s is reported as MANUAL" % hid)
     for fid, *_ in FEATURES:
         check(fid in seen_feat, "no fixture proves feature %s is detected" % fid)
-    # 3. the renderer always has the three blocks in order
+    # 3. the renderer always has the blocks in order, and its output is answerable
     txt, _ = render({"auto": [], "hits": [], "waived": [], "features": {}, "tags": {}}, must, manual, {"base": "x", "mode": "t", "style": "skipped"})
-    pos = [txt.find(k) for k in ("== 1. AUTO-VERIFIED PASS", "== 2. AUTO-FAILED", "== 3. MANUAL", "== 4. SIGN-OFF")]
+    pos = [txt.find(k) for k in ("== 0. READ", "== 1. AUTO-VERIFIED PASS", "== 2. AUTO-FAILED", "== 3. MANUAL", "== 4. SIGN-OFF")]
     check(pos == sorted(pos) and -1 not in pos, "output blocks missing or out of order")
+    # a stream-tagged diff asks M18 even with no feature and no hit (nothing disappears silently)
+    res = {"auto": [], "hits": [], "waived": [], "features": {"a.swift": set()}, "tags": {"a.swift": {"ui", "stream"}}}
+    txt, _ = render(res, must, manual, {"base": "x", "mode": "t", "style": "skipped"})
+    check("[M18]" in txt, "a stream path does not ask M18")
+    sig = txt[txt.find("== 4. SIGN-OFF"):]
+    check("".join(sig.split()).find("".join(must["M18"]["text"].split())) >= 0, "the sign-off truncates or rewords M18")
+    check(all(len(ln) <= 120 for ln in txt.split("\n")), "an output line is longer than 120 characters")
+    # every MANUAL item a path tag can ask is shown for that path (or named as NOT SHOWN)
+    for tag, mids in PATH_ITEMS.items():
+        res = {"auto": [], "hits": [], "waived": [], "features": {"a.swift": set()}, "tags": {"a.swift": {tag}}}
+        txt, _ = render(res, must, manual, {"base": "x", "mode": "t", "style": "skipped"})
+        for mid in mids:
+            if must.get(mid, {}).get("tag") != "MANUAL":
+                continue
+            check(re.search(r"\[%s\]|\[ \] %s " % (mid, mid), txt) is not None or "NOT SHOWN" in txt and mid in txt,
+                  "path tag %s asks %s but the output neither shows it nor names it NOT SHOWN" % (tag, mid))
+    # grouping: more than three locations collapse to "+N more"
+    many = {"auto": [], "waived": [], "features": {"a.swift": set()}, "tags": {"a.swift": {"ui", "stream"}},
+            "hits": [("H29", "a.swift", n + 10, "scan", None) for n in range(5)]}
+    txt, _ = render(many, must, manual, {"base": "x", "mode": "t", "style": "skipped"})
+    check("(+2 more)" in txt, "five locations do not collapse to three + '+2 more'")
+    # 4. verdict strings
+    for text, want in (
+            ("[x] M18 reason\n[x] M25 reason", "DONE"),
+            ("[x] M18 reason\n[x] M25 reason\nESCALATE: M40 unmeasured", "DONE WITH ESCALATIONS"),
+            ("[x] M18 reason\n[ ] M25 reason", "NOT DONE"),
+            ("", "NOT DONE"),
+            ("[ ] WAIVER C01 a.swift:3 ESCALATE: one-shot", "DONE WITH ESCALATIONS"),
+            ("[x] M18 unmeasured, handed to manager: 2 lookups / test", "DONE")):
+        got, _ = verdict_from_signoff(text)
+        check(got == want, "verdict for %r: got %s want %s" % (text, got, want))
+    # every heuristic states what to verify, in a sentence
+    for hid, tup in HEUR.items():
+        check(len(tup) == 3 and len(tup[2]) > 40 and " " in tup[2], "%s has no verify sentence" % hid)
+    # 5. sync_check removal guard: AUTO ids are unique and mapped to AUTO MUST items
+    for cid in AUTO:
+        check(sum(1 for v in AUTO.values() if v[0].__name__ == AUTO[cid][0].__name__) == 1, "duplicate check function for " + cid)
     if fails:
         print("SELF-TEST FAILED (%d):" % len(fails))
         for x in fails:
@@ -1161,26 +1609,37 @@ def main():
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--style", default="skipped", help="PASS|FAIL|skipped (set by final-check.sh)")
     ap.add_argument("--files", nargs="*", help="check these files in full instead of the git diff")
+    ap.add_argument("--read", action="store_true", help="print only the read-first list for this diff")
+    ap.add_argument("--signoff", metavar="FILE", help="parse a ticked SIGN-OFF block and print the verdict")
     a = ap.parse_args()
     if a.self_test:
         return self_test()
     must, manual = parse_must(), parse_manual()
+    signoff = None
+    if a.signoff:
+        if not os.path.exists(a.signoff):
+            print("final-check: no sign-off file at %s" % a.signoff)
+            return 2
+        signoff = read(a.signoff)
     if a.files:
         files = [SwiftFile(os.path.relpath(os.path.abspath(p), REPO), read(p), all_lines=True) for p in a.files]
-        meta = {"base": "(explicit files)", "mode": "whole files", "style": a.style}
-        testless = files
+        meta = {"base": "(explicit files)", "mode": "whole files", "style": a.style, "source": "given on the command line", "signoff": signoff}
     else:
         ref, mb, info = changed_from_git(a.base)
         if not mb:
-            print("final-check: no base ref found (tried origin/main, main, origin/foundation, foundation); pass one: final-check.sh <base-ref>")
+            print("final-check: no base ref found (tried the branch upstream, origin/main, main, origin/foundation, foundation); pass one: final-check.sh <base-ref>")
             return 2
         files = []
         for n, lines in info["files"].items():
             files.append(SwiftFile(n, read(os.path.join(REPO, n)), changed=lines, all_lines=lines is None))
         for t in info["tests"]:
             files.append(SwiftFile(t, read(os.path.join(REPO, t)), all_lines=False))
-        meta = {"base": "%s (%s)" % (ref, mb[:7]), "mode": "changed lines only", "style": a.style}
+        meta = {"base": "%s merge-base %s" % (ref, mb[:7]), "mode": "changed lines only", "style": a.style,
+                "source": info["source"], "signoff": signoff, "empty": mb == git("rev-parse", "HEAD").strip()}
     res = analyse(files)
+    if a.read:
+        print("\n".join(read_block(res)))
+        return 0
     txt, bad = render(res, must, manual, meta)
     print(txt)
     return 1 if bad else 0

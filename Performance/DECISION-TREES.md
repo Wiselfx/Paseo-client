@@ -1,6 +1,7 @@
 # Decision trees: "I am adding X"
 
-Find X, follow the numbered steps in order. Every step is a yes/no or a lookup; where the call is not yours, it says ESCALATE.
+Find X, follow the numbered steps in order. Every step is a yes/no or a lookup. Where the call is not yours it says ESCALATE
+(write the parts a pattern covers, flag the decision, keep going: [FINAL-CHECK.md](FINAL-CHECK.md)) or BLOCKED (do not write it).
 Ids: M.. = [MUST.md](MUST.md), PF-.. = [RULES.md](RULES.md), templates in [TEMPLATES](TEMPLATES/). Finish every tree with [FINAL-CHECK.md](FINAL-CHECK.md).
 
 ## A new row or list view
@@ -8,7 +9,7 @@ Ids: M.. = [MUST.md](MUST.md), PF-.. = [RULES.md](RULES.md), templates in [TEMPL
 2. Copy [row.swift.md](TEMPLATES/row.swift.md): a value model (Equatable) + one actions object, `==` on the model only, `.equatable()` at the call site (M10, M11).
 3. ForEach id: an entity id. Never `\.offset`, never a streaming value (M09).
 4. Anything computed from a store collection (sort/filter/group/Set/lookup)? Build once per pass in the store or a memo (`FileListMemo`), pass the result in (M16).
-5. Row size known before it appears? Reserve it. Cannot? ESCALATE (M14). Needs a width: `onGeometryChange`, written on change.
+5. Row size known before it appears? Reserve it. Cannot? Do not invent one: record `ESCALATE: row height not reserved` (M14). Needs a width: `onGeometryChange`, written on change.
 
 ## A new observable store or property
 1. Does a setter receive repeated values (push, poll, reconnect, snapshot)? Yes: compare first (`if a != b { a = b }`), sort a copy (M04).
@@ -37,7 +38,7 @@ Ids: M.. = [MUST.md](MUST.md), PF-.. = [RULES.md](RULES.md), templates in [TEMPL
 ## A new UIViewRepresentable
 1. Copy [representable.swift.md](TEMPLATES/representable.swift.md): `Equatable` on the inputs, `updateUIView` compares before assigning (M34).
 2. Sizing calls (`sizeThatFits`) memoised on a key listing every input; else do not memoise.
-3. Gesture tracking a finger? ESCALATE: it belongs in the shell container (M35).
+3. Gesture tracking a finger? BLOCKED: do not add it here; finger-tracked motion belongs in the shell container (M35).
 4. Delegate/IPC calls (pasteboard, keyboard) cached with a notification refresh (M27).
 
 ## A new timer, Task or stream
@@ -51,7 +52,27 @@ Ids: M.. = [MUST.md](MUST.md), PF-.. = [RULES.md](RULES.md), templates in [TEMPL
 1. Copy [cache.swift.md](TEMPLATES/cache.swift.md): count limit AND cost limit, `NSLock` if anything off main touches it (M29).
 2. Key = exactly what the reader keys on (a warm-up with a different key warms nothing).
 3. Images: `NSCache` with both limits, evict on memory warning. Dates/strings: bounded dictionary like `PaseoDate`.
-4. Add the bound test ([tests.swift.md](TEMPLATES/tests.swift.md)). Unbounded for any reason: ESCALATE.
+4. Add the bound test ([tests.swift.md](TEMPLATES/tests.swift.md)). Unbounded for any reason: BLOCKED, not written.
+
+## A lookup over a store collection (an index, a position, a row)
+1. Where is it read? Once per user action: O(n) is fine, and say so in the M18 tick. From a body pass, a scroll or
+   geometry callback, or a tick: it must be O(1) or O(log n) (M18, [hot paths](PATTERNS/hot-paths-and-indexing.md)).
+2. Ordered array? Binary-search it (`FindNavigation.firstTurnIndex`) and state the invariant that makes the search valid.
+   Not ordered? Keep the index in the store, updated once per store change.
+3. Need the nearest built or visible item? Search outward from the target (`FindNavigation.nearestIndex`); a tie goes to the
+   lower index. Do not build an array of every candidate (M41, C48, H29).
+4. In a scroll handler, read the O(1) condition first so most frames never reach the O(n) lookup.
+5. Pin the fast path with a test that compares it with the plain scan on duplicates and ties (new file, [tests](TEMPLATES/tests.swift.md)).
+
+## A Task, fetch or timer started from a method
+1. Does a view own it and key it? `.task(id:)` (M23). Loop? `while !Task.isCancelled`, sleep inside, check again (M24).
+2. Does a method start it (a find step, a save, a load)? Keep the handle; cancel it on close, deinit and on the next call
+   (`TranscriptJumpRunner.runAfterFetch`); a discarded `Task {` in a method is H30 (M25).
+3. After every await inside the work, `guard !Task.isCancelled else { return }`: cancelling a task does not stop a closure
+   that is already waiting.
+4. Visible-only work: gate on the visibility fact (`isSurfaceObscured`, `scenePhase`) and return early (M37).
+5. Several in flight? Bound them or make them supersede each other; never one per row.
+
 
 ## A new store write path or persistence
 1. Compare-before-write (M04). 2. Encode/write/decode off main, value snapshot taken on main (M26). 3. Coalesce frequent writes; first change goes out at once; `flush()` on background.
@@ -64,7 +85,7 @@ Ids: M.. = [MUST.md](MUST.md), PF-.. = [RULES.md](RULES.md), templates in [TEMPL
 
 ## A new animation
 1. Token from `Motion`, `.resolved(reduceMotion:)` (M36). No literal animations.
-2. Follows a finger? ESCALATE (UIKit, R-3) (M35). 3. Endless (`repeatForever`, `TimelineView(.animation)`, timer)? It stops when obscured, asleep or reduce motion (M37).
+2. Follows a finger? BLOCKED: it belongs in a UIKit pan (R-3, M35). 3. Endless (`repeatForever`, `TimelineView(.animation)`, timer)? It stops when obscured, asleep or reduce motion (M37).
 4. Inside a row or the transcript? `withAnimation` there is a manual question: it must not change layout of settled rows. Avoid `mask`/`blur`/`shadow`/`drawingGroup` in repeated content (offscreen pass).
 
 ## A new environment value
@@ -75,7 +96,7 @@ Ids: M.. = [MUST.md](MUST.md), PF-.. = [RULES.md](RULES.md), templates in [TEMPL
 ## A text or markdown rendering change
 1. Does the view stay Equatable on layout inputs (not colour tokens)? (M11) 2. Any scan: O(n), no `count` on a suffix (M17).
 3. Parse/split/highlight over 4 ms? Off main with a thread-safe bounded cache under the view's key (M18, M29).
-4. Look unchanged at xs, m, ax5, light and dark? Else ESCALATE (visible change). 5. Measure streaming and open scenarios.
+4. Look unchanged at xs, m, ax5, light and dark? Else BLOCKED: a visible change was not asked for (R-6). 5. Measure streaming and open scenarios.
 
 ## A streaming change
 1. A delta changes the tail only (M20). 2. Identity: no `.id` on moving values; anchors are overlays (M08). 3. Each piece gets its own truth (`isStreaming && isTail`) (M09).
@@ -83,6 +104,9 @@ Ids: M.. = [MUST.md](MUST.md), PF-.. = [RULES.md](RULES.md), templates in [TEMPL
 
 ## Anything in the transcript, composer or shell
 1. Is your change one of the patterns in [PATTERNS](PATTERNS/) applied as written? Yes: proceed, cite the pattern in the commit.
-2. No: ESCALATE before writing. These paths carry the rejected options (D01 to D07) and the floors; improvising here cost passes 2 to 11.
-3. Never change `windowSize`/`windowStep`, `repinOpen`, the roots assignment, keyboard behaviour or the hosting container without a lead decision.
+2. No: do not improvise. Apply the parts a listed pattern covers, write the rest down as
+   `ESCALATE: <what>` (or `BLOCKED:` for step 3's items), and stop that part. These paths carry the rejected
+   options (D01 to D07) and the floors; improvising here cost passes 2 to 11.
+3. BLOCKED: never change `windowSize`/`windowStep`, the re-seat's end condition, the roots assignment, keyboard
+   behaviour or the hosting container. These are not yours to write, even with an ESCALATE line.
 4. Always measure (3 cold runs) and paste the evidence block.

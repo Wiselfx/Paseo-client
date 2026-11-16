@@ -32,7 +32,7 @@ Same for `UIImagePickerController.isSourceTypeAvailable(.camera)`: `private stat
 - Per key: stalls <= 20 ms; `ChatScreen` body 0 per key, `Composer` 1 (PF-18).
 - `keyboardWillShow` ends the open re-seat before the insets move (PF-14). Keep the transcript layout independent of the keyboard (`stableViewportHeight`).
 - `ComposerWarmup` builds a `ComposerUITextView` off window and 20 SF Symbols once, 2 s after the shell appears; first-focus frame unchanged (~390 ms, system).
-- Behaviour switches (`writingToolsBehavior`, `inlinePredictionType`, `spellCheckingType`, TextKit 1 vs 2) are visible changes: owner decision, escalate.
+- Behaviour switches (`writingToolsBehavior`, `inlinePredictionType`, `spellCheckingType`, TextKit 1 vs 2) are visible changes: BLOCKED, not written (R-6).
 
 If you remember nothing else:
 - Compare before you assign in `updateUIView`; memoise sizing keyed on every input; make the representable Equatable.

@@ -37,6 +37,9 @@ BAD: `let f = DateFormatter()` / `NSRegularExpression(pattern:)` / `Data(content
 Event closures (Button, `.task`, `.onChange`) are not bodies: the check ignores them, but the main-actor rule still applies (M26).
 
 ## 5. Do not hop what is already main
+
+A task started from a method (not a view modifier) keeps its handle and is cancelled by its next call and by close:
+`TranscriptJumpRunner.runAfterFetch` / `cancel()`, [hot-paths-and-indexing.md](hot-paths-and-indexing.md) section 5.
 `DispatchQueue.main.async` from main-actor code only delays the work a runloop turn. From a non-main callback use `Task { @MainActor in }` or `MainActor.assumeIsolated` with the notification's `queue: .main`.
 
 If you remember nothing else:

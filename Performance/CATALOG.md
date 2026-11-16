@@ -41,6 +41,12 @@ Every problem found by the W1 passes, the W3 sweep and the audits. Numbers are D
 | J33 | Draft typing waits for disk | JSON+write per key on main | sync persistence | `DraftFileWriter` (`d061427`) | off main | PF-32 |
 | J34 | Memory grows with chats opened | every chat kept store+stream | no retention | limit 6 + busy (`d061427`) | bounded | PF-33 |
 | J35 | Instrument inflated numbers | 45 of 110 samples under `PaseoPerf` | `Mirror` in `diff`; hit re-checks | removed (`675e14d`) | numbers honest | PF-22 |
+| J36 | Find: window start scanned per body pass and per scroll frame | `firstTurnIndex` was `turns.firstIndex { ... }`: O(n) per read | linear scan of an ordered array | binary search over `lastRowSeq` (`040f0be`); `FindNavigationIndexTests` | code-read: O(n) -> O(log n) | PF-9/21; [hot paths](PATTERNS/hot-paths-and-indexing.md) |
+| J37 | Find: jump tick allocated every built index | `all.indices.filter { ... }` per 100 ms tick | array + closure per element | `FindNavigation.nearestIndex` outward search (`040f0be`) | code-read: O(n) allocation -> O(distance) | PF-21 |
+| J38 | Find: fetch outlived a close | discarded `Task { ... }` in `scrollToMatch` | no handle, no cancel | `TranscriptJumpRunner.runAfterFetch` stores and cancels (`040f0be`) | code-read | PF-36 |
+| J39 | Find: dictionary write per geometry change | `FindRowProbe.report` wrote `frames[seqEnd] = frame` | growing table + hash per frame | one `lastReport` slot, compare-first (`040f0be`) | code-read | PF-9 |
+| J40 | Find: per-step flags re-ran the transcript | `isFollowing = false` etc. on every step | literal writes to `@Observable` | `if x { x = false }` guards (`040f0be`) | code-read | PF-25 |
+
 
 ## Symptom -> likely cause -> where to look
 | Symptom | Likely cause | Where to look |
@@ -58,3 +64,4 @@ Every problem found by the W1 passes, the W3 sweep and the audits. Numbers are D
 | `swift_conformsToProtocol` under `ShellView.body` | the instrument (`Mirror` in `diff`) | check the caller is not `PaseoPerf` (PF-22) |
 | Memory grows over a session | unbounded cache, stream or retained stores | PF-31/33; Allocations |
 | Edit shows no `body=` change | `==` is never true (colours, closures) | compare by drawn inputs (PF-4) |
+| Find a match lags on a long chat | O(n) window-start scan, index array per tick, flag writes per step | `-paseo-perf` while jumping; PF-9/21/25; [hot paths](PATTERNS/hot-paths-and-indexing.md) |

@@ -1,6 +1,6 @@
 # MEASURE: the cheapest path to evidence
 
-Needs the gate (a Mac with the simulator, reached over ssh). Never commit its host. If you do not have it, say so in the report and escalate; do not invent numbers.
+Needs the gate (a Mac with the simulator, reached over ssh). Never commit its host. If you do not have it, use "When you cannot measure" below; never invent numbers.
 
 ## Environment
 ```sh
@@ -39,6 +39,22 @@ a loop `fr=9 hit=9 busy=100% body=Shell:150`. `stalls=334.0[rich.pieces 2.0]` na
 - Simulator floor: 60 Hz only; one-frame hitches cannot be signed off. Mixed scripts and the app-start window (first 2 s) lie. `applog` keeps 300 lines: read right after the scenario.
 - Draft text persists across launches and changes composer height; clear it before typing runs. Simulator stuck on "Connecting..." = lost route to the test daemon, not an app bug.
 - Instrument costs: `diff` with `Mirror`, per-hit re-layout checks. If a stack's caller is `PaseoPerf`, remove the probe first.
+
+## When you cannot measure (no gate, no simulator, or no app build on this machine)
+"Unmeasured" is a state, not a failure and not a licence. It needs three things, and it is recorded, never implied:
+1. **A complexity argument**: which loop/callback/path, what it does per call, and why it is now O(1)/O(log n), O(distance),
+   or moved off main. Name the invariant that makes it true (e.g. "turns are in timeline order, so `lastRowSeq` is
+   non-decreasing; binary search is valid").
+2. **A bound**: the number the code can reach, in the same units the section above uses ("<= 2 lookups per scroll frame;
+   one dictionary slot; one allocation per report").
+3. **A test** that pins it: a unit test of the arithmetic (e.g. `FindNavigationIndexTests` compares the binary search with
+   the linear scan and the outward search with the argmin), a bound test for a cache, or — if the property is only visible
+   in a trace — say so and name the trace check the lead should run.
+Record it in the sign-off and the report as:
+`measure: unmeasured, handed to manager — <argument>; bound: <n>; test: <file>`.
+What the manager does afterwards: accepts it (the bound plus the test carry it), asks for one measured run on the gate
+before merge, or reverts. An unmeasured change is never reported as measured, never moves a baseline or budget, and
+`unmeasured, handed to manager` is a legitimate tick of M40 — "not done" is a different answer.
 
 ## When you may skip measuring
 Skip only if EVERY changed file is in this list; `final-check.sh` prints `measure: not required` exactly then:

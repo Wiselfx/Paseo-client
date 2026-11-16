@@ -52,7 +52,7 @@ no or unsure do what the entry says; tick it in the sign-off with one clause. Th
 ### M18
 **Ask:** Can any work you added take more than 4 ms on the main thread (parse, highlight, decode, scan, layout of long text, image work) or grow with content length?
 **If no or unsure:** Do it off main (Task.detached + cache, ProseWarmup pattern) or in slices with reserved space; make the per-frame/per-token part O(1). If you cannot prove it is under 4 ms, escalate with a measurement.
-**Re-read:** MUST.md section B (M18); PATTERNS/text-markdown-code.md
+**Re-read:** MUST.md section B (M18); PATTERNS/hot-paths-and-indexing.md (per-frame access); PATTERNS/text-markdown-code.md (parse/highlight)
 
 ### M20
 **Ask:** Does a streamed delta change only the tail (no re-split or rebuild of settled pieces, no id change, no flag that flips for every piece)?
@@ -61,13 +61,13 @@ no or unsure do what the entry says; tick it in the sign-off with one clause. Th
 
 ### M21
 **Ask:** Do you scroll programmatically in a lazy stack by more than about 5 screens, change the turn window, or end the open re-seat on a layout heuristic?
-**If no or unsure:** Do not. Use a window around the target or bounded hops; the re-seat ends on focus, a finger, a send or a find. Escalate before touching windowSize/windowStep.
+**If no or unsure:** Do not. Use a window around the target or bounded hops; the re-seat ends on focus, a finger, a send or a find. Do not change windowSize/windowStep: that is BLOCKED, not an escalation.
 **Re-read:** MUST.md section B (M21); PATTERNS/lazy-stacks-and-scrolling.md
 
 ### M25
 **Ask:** Does every Task/timer/stream you started have an owner that cancels it (disappear, deinit, id change), run at most once per view not per row, and avoid hopping to the main queue from main-actor code?
 **If no or unsure:** Use `.task(id:)` or a stored Task cancelled in deinit/teardown (TEMPLATES/task.swift.md); drop the DispatchQueue.main hop.
-**Re-read:** MUST.md section B (M25); PATTERNS/concurrency-and-main-thread.md
+**Re-read:** MUST.md section B (M25); PATTERNS/concurrency-and-main-thread.md; PATTERNS/hot-paths-and-indexing.md section 5 (a task started from a method)
 
 ### M26
 **Ask:** Do disk writes, JSON encode/decode, file reads or Keychain access you added run off the main thread (or on a serial writer), and are writes coalesced?
@@ -106,7 +106,7 @@ no or unsure do what the entry says; tick it in the sign-off with one clause. Th
 
 ### M35
 **Ask:** Does anything track a finger across the screen in SwiftUI (DragGesture writing state per event) or animate a drawer/panel with SwiftUI state per frame?
-**If no or unsure:** Move it to a UIKit container with UIPanGestureRecognizer and a velocity-matched spring (R-3). Escalate: this is a shell change.
+**If no or unsure:** Move it to a UIKit container with UIPanGestureRecognizer and a velocity-matched spring (R-3); that pattern is yours to write. Changing the shell container itself is the lead's: `ESCALATE:` it.
 **Re-read:** MUST.md section B (M35); PATTERNS/animation-and-drawer.md
 
 ### M37
@@ -116,5 +116,5 @@ no or unsure do what the entry says; tick it in the sign-off with one clause. Th
 
 ### M40
 **Ask:** Does this change carry its evidence: for a hot path, before -> after numbers from MEASURE.md (3 cold runs, median + range); for a store, a test; and no baseline, budget or bound grew?
-**If no or unsure:** Run MEASURE.md for hot-path files, or write the reason it cannot affect one. Add the test (TEMPLATES/tests.swift.md). If a baseline must grow, escalate.
+**If no or unsure:** Run MEASURE.md for hot-path files, or write the reason it cannot affect one. Add the test (TEMPLATES/tests.swift.md). A baseline must not grow: raising one is BLOCKED, not an escalation.
 **Re-read:** MUST.md section B (M40); MEASURE.md
