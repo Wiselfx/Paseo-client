@@ -153,10 +153,11 @@ struct TranscriptView: View {
                 }
             }
             // The Core's 15 s watchdog only advances inside `update`, and a stale load mid-chat (idle, not
-            // underfilled) asks for nothing else. While a page loads, wake once a second: that is the watchdog's
-            // clock and the settle, never a new fetch (`update` returns false while loading).
-            .task(id: historyStartLoading) {
-                guard historyStartLoading else { return }
+            // underfilled) asks for nothing else. While the operation runs — loading or settling, per
+            // upstream `isHistoryStartLoadingOperation` — wake once a second: that is the watchdog's
+            // clock and the settle, never a new fetch (`update` returns nil while loading or settling).
+            .task(id: isHistoryStartLoadingOperation) {
+                guard isHistoryStartLoadingOperation else { return }
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(1))
                     guard !Task.isCancelled else { return }
@@ -279,6 +280,13 @@ struct TranscriptView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Self.turnSpacing) {
+                        // Older history loads itself: the only affordance is this fixed-height seat at
+                        // the top of the content for the spinner and the retry (upstream
+                        // `historyStartSlotStyle`, strategy-native.tsx:69-74, rendered as the
+                        // `ListHeaderComponent`). Fixed in every state — spinner, retry, empty — so
+                        // appearing or disappearing never moves the content or the prepend anchor
+                        // (`restoreHistoryAnchor` only compensates growth deltas).
+                        historyStartSlot
                         turnRows(columnWidth: column)
                         pendingPermissionCards
                         resolvedPermissionLines
@@ -302,23 +310,6 @@ struct TranscriptView: View {
                 // pinned while following, and the reader's line stays put when not.
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(followAnchor, for: .sizeChanges)
-                // Older history loads itself; the only affordance is this spinner at the top,
-                // overlaid so appearing/disappearing never moves the content (UX spec §4.3).
-                .overlay(alignment: .top) {
-                    if store.isLoadingOlder || historyStart?.state.status == .loading {
-                        ProgressView()
-                            .controlSize(.small)
-                            .padding(.top, 6)
-                            .allowsHitTesting(false)
-                            .accessibilityLabel("Loading earlier messages")
-                    } else if historyStart?.state.status == .failed {
-                        // Upstream `rearm`: the machine is ready again and asks for the page at once.
-                        Button("Try again") { retryOlderHistory() }
-                            .buttonStyle(.paseoSecondary)
-                            .accessibilityLabel("Try again")
-                            .padding(.top, 6)
-                    }
-                }
                 .overlay(alignment: .trailing) { outlineRail }
                 .onChange(of: controller.find.isOpen) { _, isOpen in
                     if isOpen {
@@ -602,7 +593,12 @@ struct TranscriptView: View {
         scrollTrack.distanceFromBottom = metrics.distanceFromBottom
         scrollTrack.distanceFromContentBottom = metrics.distanceFromContentBottom
         scrollTrack.contentHeight = metrics.contentHeight
-        let underfilled = metrics.contentHeight < metrics.viewportHeight
+        // Underfilled is the machine's own predicate (native-history-start-geometry.ts:12:
+        // `contentHeight - 32 - topOverlayInset < viewportHeight`), not a bare height comparison:
+        // content within 32 pt of the viewport still starts the fill timer.
+        let underfilled = historyGeometry(
+            contentHeight: metrics.contentHeight, viewportHeight: metrics.viewportHeight,
+            offsetY: metrics.offsetY)?.isUnderfilled ?? false
         if historyUnderfilled != underfilled { historyUnderfilled = underfilled }
         // A page that is settling resolves on the content's own changes too, not only at rest (upstream
         // `handleContentSizeChange` schedules the settle). A no-op in every other state.
@@ -1022,17 +1018,36 @@ struct TranscriptView: View {
     static let revealAhead: CGFloat = 4
     static let revealUrgent: CGFloat = 1
 
-    /// The scroll settled: reveal the next slice now if the reader is within `revealAhead` screens of
-    /// the top, so the slice is mounted before the next flick reaches it and no flick is interrupted.
-    private func revealAtRest() {
-        guard scrollTrack.viewportHeight > 0 else { return }
-        let metrics = ScrollFollowMetrics(
+    /// The transcript's current scroll numbers as follow metrics: what the rest paths re-check with
+    /// when no fresh frame is in hand (the settled rest, the retry button).
+    private func currentScrollMetrics() -> ScrollFollowMetrics {
+        ScrollFollowMetrics(
             distanceFromBottom: scrollTrack.distanceFromBottom,
             distanceFromContentBottom: scrollTrack.distanceFromContentBottom,
             distanceFromTop: scrollTrack.contentOffset,
             contentHeight: scrollTrack.contentHeight, offsetY: scrollTrack.contentOffset,
             viewportHeight: scrollTrack.viewportHeight, visibleHeight: scrollTrack.visibleHeight)
+    }
+
+    /// The scroll settled: reveal the next slice now if the reader is within `revealAhead` screens of
+    /// the top, so the slice is mounted before the next flick reaches it and no flick is interrupted.
+    private func revealAtRest() {
+        guard scrollTrack.viewportHeight > 0 else { return }
+        let metrics = currentScrollMetrics()
         if !revealOlderTurnsIfNeeded(metrics) { loadOlderIfNeeded(metrics) }
+    }
+
+    /// A jump that lands within the prefetch window re-arms older history. Upstream never re-arms on
+    /// a programmatic scroll — `rearm` runs only on retry (strategy-native.tsx:242) and drag begin
+    /// (:571) — but a filled list sits `.dormant` until a finger re-arms it, and a jump is no finger:
+    /// an outline or find jump to the first turns would otherwise fetch nothing there. Deliberate
+    /// divergence, kept to the jump runner's landing below.
+    private func rearmHistoryIfNearTop() {
+        guard scrollTrack.viewportHeight > 0,
+            scrollTrack.contentOffset <= scrollTrack.viewportHeight * Self.revealAhead
+        else { return }
+        historyStart?.rearm()
+        revealAtRest()
     }
 
     /// Fetched ahead too: the page is on its way before the top is, so the prepend lands (and the offset is
@@ -1045,15 +1060,17 @@ struct TranscriptView: View {
         guard let geometry = historyGeometry(
             contentHeight: metrics.contentHeight, viewportHeight: metrics.viewportHeight, offsetY: metrics.offsetY)
         else { return }
-        // The machine is asked even while a page is in flight, so its watchdog keeps running. A request it makes
-        // then is dropped here; the in-flight page reports back and settles the machine.
-        guard historyStart?.update(geometry) == true, !historyLoadInFlight else { return }
-        requestOlderPage(metrics)
+        // Decided before asking: while a page is in flight the machine is already `.loading` with a
+        // request of its own, so asking would arm a second one the watchdog would fail with a spurious
+        // retry. The watchdog still advances through the dedicated task above.
+        guard !historyLoadInFlight else { return }
+        guard let generation = historyStart?.update(geometry) else { return }
+        requestOlderPage(metrics, generation: generation)
     }
 
     /// Starts the page the machine asked for. The anchor is armed as it was before the machine, so the prepend is
     /// undone by `restoreHistoryAnchor`; the machine hears whether the page landed.
-    private func requestOlderPage(_ metrics: ScrollFollowMetrics) {
+    private func requestOlderPage(_ metrics: ScrollFollowMetrics, generation: Int) {
         historyLoadInFlight = true
         let cursor = store.timeline.startCursor
         historyAnchor = HistoryAnchor(
@@ -1063,9 +1080,16 @@ struct TranscriptView: View {
             await store.loadOlder()
             historyLoadInFlight = false
             // Applied: the start moved (a page prepended) or no older history is left (the end is confirmed).
-            // An empty or failed page is not applied, and the machine fails it, which offers "Try again".
+            // An empty or failed page is not applied, and the machine fails it, which offers "Retry".
             historyStart?.loadCompleted(
+                generation: generation,
                 applied: store.timeline.startCursor != cursor || !store.timeline.hasOlder)
+            // The page landed: advance the machine on the fresh layout now, instead of leaving
+            // `.loading` up until the next tick (upstream resolves in `load().then`).
+            _ = historyStart?.update(historyGeometry(
+                contentHeight: scrollTrack.contentHeight, viewportHeight: scrollTrack.viewportHeight,
+                offsetY: scrollTrack.contentOffset))
+            settleHistoryStart()
             // Nothing was prepended (an empty or failed page): there is nothing to anchor.
             if let anchor = historyAnchor, store.timeline.startCursor == anchor.cursor {
                 historyAnchor = nil
@@ -1083,8 +1107,39 @@ struct TranscriptView: View {
             offsetY: Double(offsetY), prefetchDistance: Double(viewportHeight * Self.revealAhead), store: store)
     }
 
-    /// True while the machine waits on a page: keys the watchdog clock above, so it runs only for a load.
-    private var historyStartLoading: Bool { historyStart?.state.status == .loading }
+    /// The whole loading operation: a fetch in flight or the page settling onto the screen
+    /// (upstream `isHistoryStartLoadingOperation`, history-start-pagination.ts:18-20). Keys the
+    /// watchdog clock above, and draws the spinner below. `update` returns nil in both states — read
+    /// the machine — so neither can start a fetch.
+    private var isHistoryStartLoadingOperation: Bool {
+        guard let status = historyStart?.state.status else { return false }
+        return status == .loading || status == .settling
+    }
+
+    /// Upstream's fixed header slot (strategy-native.tsx:69-74: height 32): the spinner while the
+    /// operation runs, the retry on failure, empty otherwise — the height never changes.
+    static let historyStartSlotHeight: CGFloat = 32
+
+    /// The spinner and the retry live in the content, not over it: after a failure the button sits
+    /// at the top of the transcript like upstream's `ListHeaderComponent`, never floating over the
+    /// reader's messages or intercepting taps mid-list. The retry is upstream's ghost/small button
+    /// with its verbatim copy (strategy-native.tsx:727-729, i18n/resources/en.ts:14), shown only for
+    /// a failed operation with older history left; `.paseoSecondary` already keeps a 44 pt hit area.
+    private var historyStartSlot: some View {
+        Group {
+            if store.isLoadingOlder || isHistoryStartLoadingOperation {
+                ProgressView()
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+                    .accessibilityLabel("Loading earlier messages")
+            } else if historyStart?.state.status == .failed, store.timeline.hasOlder {
+                // Upstream `rearm`: the machine is ready again and asks for the page at once.
+                Button("Retry") { retryOlderHistory() }
+                    .buttonStyle(.paseoSecondary)
+            }
+        }
+        .frame(height: Self.historyStartSlotHeight)
+    }
 
     /// A settling page resolves to ready or dormant once the transcript is at rest, or the content changed under it.
     private func settleHistoryStart() {
@@ -1095,10 +1150,23 @@ struct TranscriptView: View {
                 offsetY: scrollTrack.contentOffset))
     }
 
-    /// "Try again": the machine is ready again and asks for the page now (upstream `rearm`, then its evaluate).
+    /// "Retry": the machine is ready again and is asked for the page now (upstream `rearm`, then its
+    /// evaluate). Asked directly — `revealAtRest` can mount a held-back window slice instead of asking,
+    /// which would leave the rearmed machine idle until the next scroll. A fetch in flight wins over a
+    /// window slice, so the anchor is never double-armed.
     private func retryOlderHistory() {
         historyStart?.rearm()
-        revealAtRest()
+        let metrics = currentScrollMetrics()
+        if !historyLoadInFlight,
+            let geometry = historyGeometry(
+                contentHeight: metrics.contentHeight, viewportHeight: metrics.viewportHeight,
+                offsetY: metrics.offsetY),
+            let generation = historyStart?.update(geometry)
+        {
+            requestOlderPage(metrics, generation: generation)
+        } else {
+            _ = revealOlderTurnsIfNeeded(metrics)
+        }
     }
 
     /// Undoes a prepend by scrolling down by the height the content above the viewport grew.
@@ -1247,7 +1315,10 @@ struct TranscriptView: View {
                 PaseoPerf.count("jump.nudge")
                 scrollPosition.scrollTo(y: max(scrollTrack.contentOffset - 2, 0))
             },
-            landed: onLanded)
+            landed: {
+                self.rearmHistoryIfNearTop()
+                onLanded()
+            })
     }
 
     /// Find opened mid-conversation: remember where the reader was (the turn they were on, or the end

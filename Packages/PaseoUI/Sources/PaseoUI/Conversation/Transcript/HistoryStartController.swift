@@ -62,17 +62,20 @@ final class HistoryStartController {
         return cursor.epoch + ":" + String(cursor.seq)
     }
 
-    /// Returns true when the caller must start one page load and then report it with `loadCompleted`.
-    func update(_ geometry: HistoryStartGeometry?) -> Bool {
+    /// The generation of the page load the caller must start when non-nil, and then report with
+    /// `loadCompleted(generation:applied:)`. Nil in every other state, including while `.loading`
+    /// or `.settling`, so a watchdog tick can never start a fetch.
+    func update(_ geometry: HistoryStartGeometry?) -> Int? {
         let requested = machine.update(geometry)
         publish()
         return requested
     }
 
-    /// The page the machine asked for has finished. `applied` means a page landed or the end was
+    /// The page the machine asked for has finished. `generation` must be the value `update`
+    /// returned for it; a stale one is ignored. `applied` means a page landed or the end was
     /// confirmed; false means the load failed or added nothing.
-    func loadCompleted(applied: Bool) {
-        machine.loadCompleted(applied: applied)
+    func loadCompleted(generation: Int, applied: Bool) {
+        machine.loadCompleted(generation: generation, applied: applied)
         publish()
     }
 
