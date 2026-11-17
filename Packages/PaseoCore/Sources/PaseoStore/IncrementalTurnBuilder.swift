@@ -17,8 +17,9 @@ import PaseoProtocol
 ///   its own `turnId`, the id of a pending user message, or the draft's current key), so starting
 ///   the walk at a real boundary yields the same turns a full walk would from there.
 /// - If the change is exactly at a turn boundary the previous turn may absorb the new row, so the
-///   rebuild starts one turn earlier. A change at row 0 (prepended page, replaced timeline) is a
-///   full rebuild, which is rare.
+///   rebuild starts one turn earlier. A prepended page reuses every turn after the first one (see
+///   `turnsAfterPrepend`); any other change at row 0 (replaced timeline) is a full rebuild, which is
+///   rare.
 /// - `activeTurnId` only feeds `phase`/`endedAt`, and only for turns whose `turnId` is the old or
 ///   the new active id. Those turns are the only ones refreshed; no row walk is needed.
 internal final class IncrementalTurnBuilder {
@@ -45,6 +46,14 @@ internal final class IncrementalTurnBuilder {
         defer { PaseoSignpost.log.endInterval("turn rebuild", signpost) }
         let previousActiveTurnId = self.activeTurnId
         let activeChanged = activeTurnId != previousActiveTurnId
+
+        // A page prepended above the loaded rows keeps every turn after the first one.
+        if let prepended = turnsAfterPrepend(
+            newRows, activeTurnId: activeTurnId, previousActiveTurnId: previousActiveTurnId)
+        {
+            return prepended
+        }
+
         let firstChange = firstChangedRow(rows, newRows)
 
         // Same rows: only the active turn's phase/endedAt can differ.
@@ -88,6 +97,79 @@ internal final class IncrementalTurnBuilder {
         }
         turnsBuiltLastUpdate = built
         return turns
+    }
+
+    // MARK: - Prepended pages
+
+    /// The turns for `newRows` when they are the rows last seen with a page prepended, or nil when
+    /// they are not (the caller then takes the general path). Only the prepended page and the first
+    /// old turn are walked by `TurnBuilder`, so a history page builds O(page + first turn) turns. The
+    /// equality check over the old rows is O(rows) row comparisons with no turn construction, the
+    /// same cost class as the general path's forward walk.
+    ///
+    /// Why the old turns after the first one can be reused: `TurnBuilder` decides each row from the
+    /// rows before it only. Let `c0` be the first old turn's row count. In the old build row `c0`
+    /// opened a turn, so it either has a `turnId` other than the first turn's key, or it is a user
+    /// message without one. In the new rows the walk over `newRows[0..<cut]`, `cut = k + c0`, gives
+    /// the same turns as the full walk, and `cut` is still a boundary. The rows from `cut` on are
+    /// then walked from a fresh draft, as they were before. Turns are compared by value, and their
+    /// identity is kept.
+    ///
+    /// The one exception is an old first row with no `turnId` that is not a user message. Its key was
+    /// `untracked:<id>` only because no draft preceded it. After a prepend it joins the prepended
+    /// page's last turn, so the old boundary at `c0` can disappear. That case takes the general path.
+    private func turnsAfterPrepend(
+        _ newRows: [TimelineRow], activeTurnId: String?, previousActiveTurnId: String?
+    ) -> [Turn]? {
+        let prependedCount = newRows.count - rows.count
+        guard prependedCount > 0, let firstTurn = turns.first, let oldFirst = rows.first else {
+            return nil
+        }
+        if oldFirst.turnId == nil, !Self.isUserMessage(oldFirst) { return nil }
+        // Full equality, as the general path does: a page that rewrote an old row is not a prepend.
+        guard rows.elementsEqual(newRows[prependedCount...]) else { return nil }
+
+        let comparedRows = rows.count
+        let firstTurnRowCount = Self.rowCount(of: firstTurn)
+        let cut = prependedCount + firstTurnRowCount
+        guard firstTurnRowCount > 0, cut <= newRows.count else { return nil }
+
+        let prefix = TurnBuilder.turns(from: Array(newRows[0..<cut]), activeTurnId: activeTurnId)
+        var merged = prefix
+        merged.append(contentsOf: turns.dropFirst())
+
+        // Ranges for the merged turns, checked against the new row count before anything is
+        // assigned, so a mismatch leaves the builder untouched.
+        var mergedRanges: [Range<Int>] = []
+        mergedRanges.reserveCapacity(merged.count)
+        var offset = 0
+        for turn in merged {
+            let count = Self.rowCount(of: turn)
+            mergedRanges.append(offset..<(offset + count))
+            offset += count
+        }
+        guard offset == newRows.count else { return nil }
+
+        turns = merged
+        ranges = mergedRanges
+        rows = newRows
+        self.activeTurnId = activeTurnId
+        rowsComparedLastUpdate = comparedRows
+
+        // The prefix was built with the new active id. Only the reused suffix may hold the old one.
+        var built = prefix.count
+        if activeTurnId != previousActiveTurnId {
+            built += refreshActiveTurns(
+                in: prefix.count..<turns.count, previous: previousActiveTurnId,
+                activeTurnId: activeTurnId)
+        }
+        turnsBuiltLastUpdate = built
+        return turns
+    }
+
+    private static func isUserMessage(_ row: TimelineRow) -> Bool {
+        if case .userMessage = row.item { return true }
+        return false
     }
 
     // MARK: - Where to rebuild from
