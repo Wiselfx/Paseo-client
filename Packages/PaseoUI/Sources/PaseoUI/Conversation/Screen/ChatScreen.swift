@@ -68,10 +68,11 @@ public struct ChatScreen: View {
             // Maximum chat area: no bar anywhere. A short fade keeps the status bar readable, and a
             // blur strip sits under the composer card only (user directive; upstream: none).
             .overlay(alignment: .top) { statusBarFade }
-            .safeAreaBar(edge: .top) { topChrome }
-            .safeAreaBar(edge: .bottom) { bottomChrome }
-            .scrollEdgeEffectHidden(true, for: .top)
-            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            // Plain safe-area insets, not `safeAreaBar`: a bar hosted the composer twice (two live text
+            // views, both updated per keystroke). The transcript is a UIKit scroll view that draws its own
+            // soft edge under the composer (`TranscriptContainerView`).
+            .safeAreaInset(edge: .top) { topChrome }
+            .safeAreaInset(edge: .bottom) { bottomChrome }
             // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so
             // the corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).
             .foregroundStyle(Palette.ink)

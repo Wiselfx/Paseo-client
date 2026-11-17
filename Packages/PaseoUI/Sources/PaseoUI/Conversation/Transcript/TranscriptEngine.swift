@@ -154,6 +154,12 @@ extension View {
 final class TranscriptContainerView: UIView {
     static let overscan: CGFloat = 400
     let collectionView: TranscriptCollectionView
+    /// The composer's region (and the keyboard's, under it): the scroll view draws its soft edge
+    /// effect behind it, the system blur under the composer card. Never hit-tested.
+    private let bottomBar = UIView()
+    var bottomBarHeight: CGFloat = 0 {
+        didSet { if bottomBarHeight != oldValue { layoutBottomBar() } }
+    }
 
     init(layout: UICollectionViewLayout) {
         collectionView = TranscriptCollectionView(frame: .zero, collectionViewLayout: layout)
@@ -161,6 +167,13 @@ final class TranscriptContainerView: UIView {
         clipsToBounds = false
         backgroundColor = .clear
         addSubview(collectionView)
+        bottomBar.isUserInteractionEnabled = false
+        bottomBar.backgroundColor = .clear
+        addSubview(bottomBar)
+        let edge = UIScrollEdgeElementContainerInteraction()
+        edge.scrollView = collectionView
+        edge.edge = .bottom
+        bottomBar.addInteraction(edge)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -170,6 +183,13 @@ final class TranscriptContainerView: UIView {
         let frame = CGRect(
             x: 0, y: -Self.overscan, width: bounds.width, height: bounds.height + Self.overscan)
         if collectionView.frame != frame { collectionView.frame = frame }
+        layoutBottomBar()
+    }
+
+    private func layoutBottomBar() {
+        let height = max(bottomBarHeight, 0)
+        let frame = CGRect(x: 0, y: bounds.height - height, width: bounds.width, height: height)
+        if bottomBar.frame != frame { bottomBar.frame = frame }
     }
 }
 
@@ -805,6 +825,7 @@ final class TranscriptEngine: NSObject {
             cv.contentInset = insets
             cv.verticalScrollIndicatorInsets = UIEdgeInsets(
                 top: insets.top, left: 0, bottom: insets.bottom, right: 0)
+            container.bottomBarHeight = insets.bottom
             if first || wasPinned {
                 cv.layoutIfNeeded()
                 pinIfNeeded()
