@@ -187,7 +187,7 @@ struct ClaudeTurnView: View {
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
                 )
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background(findHighlight(row.seqEnd))
             }
             // Upstream TurnSummaryLine sits under the user message, above the final reply, and
@@ -252,7 +252,7 @@ struct ClaudeTurnView: View {
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
                 )
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background(findHighlight(row.seqEnd))
             }
             if showsHeader { header }
@@ -315,7 +315,6 @@ struct ClaudeTurnView: View {
         RoundedRectangle(cornerRadius: Radius.md)
             .fill(Palette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
             .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
-            .reportsFindRow(seqEnd, isTarget: findTarget == seqEnd)
     }
 
     var copyText: String {
@@ -428,7 +427,6 @@ struct ClaudeSegmentView: View {
                         RoundedRectangle(cornerRadius: Radius.md)
                             .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
                             .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
-                            .reportsFindRow(row.seqEnd, isTarget: findTarget == row.seqEnd)
                     }
             }
         case .todo:
@@ -470,7 +468,7 @@ struct ClaudeMidTurnBubble: View {
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
                 )
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background {
                     RoundedRectangle(cornerRadius: Radius.md)
                         .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
@@ -493,7 +491,7 @@ struct ClaudeVisibleRow: View {
     var body: some View {
         if case .compaction(let status, let trigger, let preTokens) = row.item {
             ClaudeCompactionMarker(status: status, trigger: trigger, preTokens: preTokens)
-                .id("row:\(row.seqEnd)")
+                .rowAnchor(row.seqEnd)
                 .background {
                     RoundedRectangle(cornerRadius: Radius.md)
                         .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
@@ -613,22 +611,6 @@ struct ClaudeTurnActionGlyph: View {
 /// The verbs come from `@Environment(\.chatActions)`-adjacent input — the same `ChatActions`
 /// instance for the screen's life, so it is not part of `==`. `ClaudeTurnView` carries the layout
 /// and its subviews; this row only decides what the row is told.
-extension View {
-    /// Used for rows whose `seqEnd` moves while they stream (assistant prose, reasoning and tool
-    /// rows); your own bubbles and compaction markers keep the content `.id`, exactly as before.
-    ///
-    /// The scroll and find anchor of one timeline row (`row:<seqEnd>`), drawn as an invisible overlay
-    /// of the row's own size so `scrollTo(_, anchor: .center)` still centres the whole row.
-    ///
-    /// W1: `.id` on the content itself makes the id part of the content's identity, and a streaming
-    /// row's `seqEnd` moves with every delta, so the whole prose subtree (every markdown piece, text
-    /// view and code block) was destroyed and rebuilt per token: 12 to 25 markdown views per update,
-    /// each one re-measured and re-highlighted. The anchor now changes identity; the content does not.
-    func rowAnchor(_ seqEnd: Int) -> some View {
-        overlay { Color.clear.allowsHitTesting(false).accessibilityHidden(true).id("row:\(seqEnd)") }
-    }
-}
-
 struct TurnRow: View, Equatable {
     let turn: Turn
     /// The agent/host capability value rows draw; part of `==` so a capability change re-renders
