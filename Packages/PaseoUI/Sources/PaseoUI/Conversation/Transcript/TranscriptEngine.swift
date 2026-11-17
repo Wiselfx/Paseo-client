@@ -407,8 +407,9 @@ final class TranscriptEngine: NSObject {
     private var lastTick = Date.distantPast
     private var reportedReadingAnchor: Int??
 
-    /// A finger, a flick or its deceleration owns the scroll.
-    private(set) var isUserScrolling = false
+    /// A finger, a flick or its deceleration owns the scroll. Read live from the scroll view: a tap
+    /// that stops a flick ends the deceleration without any callback.
+    var isUserScrolling: Bool { collectionView.isDragging || collectionView.isDecelerating }
     /// A programmatic animated scroll is running (`setContentOffset(_:animated: true)`).
     private var isAnimatingScroll = false
     private var animationCompletion: (@MainActor () -> Void)?
@@ -832,6 +833,7 @@ final class TranscriptEngine: NSObject {
     func collectionViewDidLayout() {
         didInitialLayout = true
         pinIfNeeded()
+        if items.count > 1 { prewarmWebOnce() }
         let cv = collectionView
         if cv.contentSize.height != lastContentHeight || cv.bounds.height != lastBoundsHeight {
             lastContentHeight = cv.contentSize.height
@@ -893,7 +895,6 @@ final class TranscriptEngine: NSObject {
 
     /// The scroll came to rest: the follow, the button and the history decide here.
     private func settled() {
-        isUserScrolling = false
         guard let controller else { return }
         let m = metrics
         reportReadingPosition()
@@ -1417,7 +1418,6 @@ extension TranscriptEngine: UICollectionViewDataSource, UICollectionViewDataSour
 
 extension TranscriptEngine: UICollectionViewDelegate, UIGestureRecognizerDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        isUserScrolling = true
         // A finger takes the viewport from any jump or glide still on its way (upstream `beginUserScroll`).
         revealToken += 1
         if isAnimatingScroll {
