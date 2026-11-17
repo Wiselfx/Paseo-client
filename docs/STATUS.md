@@ -5,6 +5,26 @@ Last updated 2026-11-12. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 
 ## Next session starts here (2026-11-11)
 
+**Branch `ham` (2026-11-17, NOT merged; awaiting device test). Responsiveness rewrite, user-mandated.**
+- Transcript is a `UICollectionView` (`Transcript/TranscriptEngine.swift`): custom layout, self-sizing
+  `UIHostingConfiguration` cells, exact offsets, end pin after every layout pass, prepend anchoring in the
+  layout pass, compensation only for rows wholly above the screen, tapped disclosures glide (FLIP), turn
+  cells borrow one of 64 LRU reuse slots (bounded memory; a recycled cell starts fresh). The jump runner,
+  find probe, re-seat loop, blank guard and turn window are gone.
+- Streaming: status line and work-group sweep run on a stepped band clock (`ClaudeSweepSchedule`) instead
+  of display-rate `TimelineView`s; turn clock 1 Hz; loader capped at 30 Hz; reveal pacing 30 Hz; the open
+  piece's partial parses never enter the shared markdown / rich-piece LRUs (they used to evict every
+  settled message within seconds of streaming).
+- Composer: chrome reads `draftIsBlank` / `textIsBlank` (Core, flip-only) instead of the text; only
+  `ComposerMenus` reads the draft per keystroke. Chrome hosted once via `safeAreaInset` (was `safeAreaBar`,
+  which hosted the composer twice).
+- Cells get `isSurfaceObscured` and `scenePhase` through `TranscriptUIState` (UIKit does not carry custom
+  environment into hosting cells). Outline memo keyed on the prompt set, not on every row change.
+- Device checks: open a long chat (lands at end), stream (follows; drag releases), flick to the top
+  (older pages, no stop), keyboard show/hide and interactive dismiss, find/outline/media jumps, Back to
+  the end, expand/collapse work groups (rows below glide), bottom soft edge under the composer.
+
+
 **Composer keyboard bug FIXED (2026-11-15, merge of fix-composer-focus):** the bottom bar hosts the composer twice and both instances share one focus binding; the hidden one also took first responder when the binding turned true, UIKit ended editing in the visible one, the binding flipped false and both resigned (seen after a rewound message was sent, because that flow leaves the hidden instance in a window). Fix: `ComposerTextView.bridgeFocus` never takes focus while another composer in the window has it. Verified on the simulator with the real sequence (rewind the first message, send it back, tap, type). Also fixed: the gate's `install` picked the first `.app` in the build folder, which since the UITests target arrived could be the test runner, so manual simulator tests were running an older build (all earlier simulator experiments and the bisect in this session are void); it now installs `PaseoClient.app` only. Until the Mac has the new gate, run `clean` before `install`. Tests: `App/PaseoUITests/RewindKeyboardTests` and `RewindComposerTests` (the strict one still needs its send-wait fixed).
 
 **QUEUE after the composer-keyboard fix (user, 2026-11-15; reference screenshot kept outside the repo in `/home/paseo/dev/feedback/claude-app-sidebar-reference.jpg`):**
