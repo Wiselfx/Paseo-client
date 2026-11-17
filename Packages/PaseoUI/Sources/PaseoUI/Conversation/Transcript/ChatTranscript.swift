@@ -152,6 +152,21 @@ struct TranscriptView: View {
                     revealAtRest()
                 }
             }
+            // The Core's 15 s watchdog only advances inside `update`, and a stale load mid-chat (idle, not
+            // underfilled) asks for nothing else. While a page loads, wake once a second: that is the watchdog's
+            // clock and the settle, never a new fetch (`update` returns false while loading).
+            .task(id: historyStartLoading) {
+                guard historyStartLoading else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    _ = historyStart?.update(
+                        historyGeometry(
+                            contentHeight: scrollTrack.contentHeight, viewportHeight: scrollTrack.viewportHeight,
+                            offsetY: scrollTrack.contentOffset))
+                    settleHistoryStart()
+                }
+            }
             // The open is over: the first quiet moment of this conversation. The shared web view starts
             // here (a second later, so the last layout pass is done), not inside the open (W1).
             .onChange(of: openPin) { _, pinned in
@@ -1067,6 +1082,9 @@ struct TranscriptView: View {
             contentHeight: Double(contentHeight), viewportHeight: Double(viewportHeight),
             offsetY: Double(offsetY), prefetchDistance: Double(viewportHeight * Self.revealAhead), store: store)
     }
+
+    /// True while the machine waits on a page: keys the watchdog clock above, so it runs only for a load.
+    private var historyStartLoading: Bool { historyStart?.state.status == .loading }
 
     /// A settling page resolves to ready or dormant once the transcript is at rest, or the content changed under it.
     private func settleHistoryStart() {
