@@ -200,6 +200,7 @@ struct TranscriptView: View {
             .containerRelativeFrame(.vertical)
         }
         .scrollDisabled(true)
+        .simultaneousGesture(TapGesture().onEnded { controller.dismissKeyboard() })
     }
 }
 
