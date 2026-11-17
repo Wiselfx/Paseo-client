@@ -132,6 +132,10 @@ extension Turn {
 
 /// Loader (18 × 14, the accent), the words with the host's highlight band swept across them,
 /// the turn clock, and "No response yet" after 10 s of silence (doc 08 §2, §3).
+///
+/// Nothing here runs at the display rate: the band has its own stepped clock over the words alone
+/// (`ClaudeSweepLabel`), the clock ticks once a second, and the wording lock and the silence badge
+/// are timers that fire once.
 struct ClaudeLiveStatusLine: View {
     let turn: Turn
     @State private var activity: ClaudeActivity
@@ -141,51 +145,26 @@ struct ClaudeLiveStatusLine: View {
     /// The clause the model last said it was on, held across the gaps between clauses.
     @State private var lastModelWords: String?
     @State private var lastActivityAt = Date()
-    /// The words' first appearance anchors the band's 300 ms delay.
-    @State private var sweepStart = Date()
+    @State private var overtime = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
-    @Environment(\.scenePhase) private var scenePhase
-
-    // One timeline drives the clock and the sweep, at the display rate (120 Hz on ProMotion).
 
     init(turn: Turn) {
         self.turn = turn
         _activity = State(initialValue: ClaudeActivity.current(for: turn))
     }
 
-    private func elapsed(at date: Date) -> TimeInterval {
-        max(1, date.timeIntervalSince(turn.startedAt ?? date))
-    }
-
-    private func showsOvertime(at date: Date) -> Bool {
-        date.timeIntervalSince(lastActivityAt) >= ClaudeMotion.overtime
-    }
-
-    /// The sweep and the elapsed clock stop while covered, backgrounded or animating less.
-    private var paused: Bool {
-        reduceMotion || isSurfaceObscured || scenePhase != .active
-    }
-
     var body: some View {
-        TimelineView(.animation(paused: paused)) { context in
-            line(at: context.date)
-                .onChange(of: context.date) { _, date in advanceActivity(at: date) }
-        }
-    }
-
-    @ViewBuilder
-    private func line(at date: Date) -> some View {
+        let next = ClaudeActivity.current(for: turn)
         HStack(spacing: 6) {
             ClaudeLoader()
-            sweepText(activity.text, font: .paseo(.callout), at: date)
-                .id(activity)
-                .transition(.asymmetric(insertion: .claudeWordEntrance, removal: .claudeWordExit))
-            Text(DurationText.short(elapsed(at: date)))
-                .font(.paseo(.footnote).monospacedDigit())
-                .foregroundStyle(Palette.captionInk)
+            ClaudeSweepLabel(startedAt: wordingChangedAt, rest: Palette.secondaryInk) { ink in
+                Text(activity.text).font(.paseo(.callout)).foregroundStyle(ink)
+            }
+            .id(activity)
+            .transition(.asymmetric(insertion: .claudeWordEntrance, removal: .claudeWordExit))
+            ClaudeElapsedClock(since: turn.startedAt)
                 .padding(.leading, 2)
-            if showsOvertime(at: date) {
+            if overtime {
                 Text("No response yet")
                     .font(.paseo(.caption2, weight: .medium))
                     .foregroundStyle(Palette.warning)
@@ -200,32 +179,25 @@ struct ClaudeLiveStatusLine: View {
         .frame(height: 24)
         .animation(Motion.swap.resolved(reduceMotion: reduceMotion), value: activity)
         // OCU §12: the overtime badge settles critically damped, like every surface.
-        .animation(
-            Motion.settle.resolved(reduceMotion: reduceMotion),
-            value: showsOvertime(at: date))
+        .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: overtime)
+        .onChange(of: next) { _, _ in advanceActivity(at: Date()) }
         .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
+        // The wording lock: whatever arrived during the stand is written when it ends.
+        .task(id: wordingChangedAt) {
+            try? await Task.sleep(for: .seconds(ClaudeMotion.wordLock))
+            guard !Task.isCancelled else { return }
+            advanceActivity(at: Date())
+        }
+        // Silence: the badge appears after `overtime` seconds with nothing new.
+        .task(id: lastActivityAt) {
+            if overtime { overtime = false }
+            let remaining = ClaudeMotion.overtime - Date().timeIntervalSince(lastActivityAt)
+            if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
+            guard !Task.isCancelled else { return }
+            overtime = true
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(activity.text)
-    }
-
-    /// The words with the host's highlight band swept across them while the turn runs.
-    /// The band is a masked copy of the glyphs tinted the shimmer ink — never a coloured wash.
-    @ViewBuilder
-    private func sweepText(_ text: String, font: Font, at date: Date) -> some View {
-        let base = Text(text).font(font).foregroundStyle(Palette.secondaryInk)
-        if reduceMotion {
-            base
-        } else {
-            base.overlay(alignment: .leading) {
-                if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: date) {
-                    Text(text)
-                        .font(font)
-                        .foregroundStyle(Palette.ink)
-                        .mask(ClaudeSweep.windowGradient(phase: phase))
-                        .allowsHitTesting(false)
-                }
-            }
-        }
     }
 
     /// The wording lock: a wording stands for a second so a fast turn reads as one line, not a
@@ -240,13 +212,14 @@ struct ClaudeLiveStatusLine: View {
         }
         if date.timeIntervalSince(wordingChangedAt) >= ClaudeMotion.wordLock {
             let winner = pendingDetail ?? next
+            pendingDetail = nil
             if winner != activity {
                 activity = winner
                 wordingChangedAt = date
                 lastActivityAt = date
             }
-            pendingDetail = nil
         } else if next.isCallOwnWords, next != activity {
+            // Held for the end of the stand (the timer above re-reads the rest then).
             pendingDetail = next
         }
     }

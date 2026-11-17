@@ -62,6 +62,7 @@ struct TranscriptView: View {
         .overlay(alignment: .trailing) {
             TranscriptRail(store: store, controller: controller, engine: engine)
         }
+        .background { TranscriptEnvironmentRelay(ui: engine.ui) }
         .onChange(of: controller.find.isOpen) { _, isOpen in
             if isOpen { engine.findOpened() } else { engine.findClosed() }
         }
@@ -78,11 +79,6 @@ struct TranscriptView: View {
         .onChange(of: controller.endScrollRequest) { _, _ in engine.endScrollRequested() }
         .onChange(of: controller.sendEndRequest) { _, _ in engine.followEndAfterSend() }
         .onChange(of: controller.jumpToEndRequest) { _, _ in engine.returnToEnd() }
-        .onChange(of: engine.ui.turnNavVisible) { _, shown in
-            shellDrawer?.trailingEdgeReserved = shown
-        }
-        .onAppear { shellDrawer?.trailingEdgeReserved = engine.ui.turnNavVisible }
-        .onDisappear { shellDrawer?.trailingEdgeReserved = false }
         // The newest turns' prose is split, parsed and highlighted off the main actor before their
         // first render (`ProseWarmup`).
         .task(id: store.turns.isEmpty) {
@@ -148,6 +144,7 @@ struct TranscriptView: View {
             controller: controller,
             history: engine.history,
             engine: engine,
+            ui: engine.ui,
             rowFrames: engine.rowFrames,
             openURL: engine.openURL(for: controller),
             column: max(width - 2 * TranscriptLayout.sideMargin, 0),
@@ -224,26 +221,53 @@ private struct TranscriptCollectionHost: UIViewRepresentable {
     }
 }
 
+/// Carries the screen's environment that UIKit does not hand to the cells (a drawer covering the
+/// chat, the app's scene phase) into the engine's state, from a body of its own: a flip never
+/// re-evaluates the transcript.
+private struct TranscriptEnvironmentRelay: View {
+    let ui: TranscriptUIState
+    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        Color.clear
+            .onChange(of: isSurfaceObscured, initial: true) { _, value in
+                if ui.surfaceObscured != value { ui.surfaceObscured = value }
+            }
+            .onChange(of: scenePhase, initial: true) { _, value in
+                if ui.scenePhase != value { ui.scenePhase = value }
+            }
+    }
+}
+
 /// U5: the prompt rail, over the transcript's trailing edge while scrolling. Its own body, so a
 /// streamed token never re-evaluates it.
 private struct TranscriptRail: View {
     let store: ConversationStore
     let controller: ChatController
     let engine: TranscriptEngine
+    @Environment(\.shellDrawer) private var shellDrawer
 
     var body: some View {
-        if ChatOutlineRail.promptRailEnabled, case .ready = store.phase, controller.outlineAvailable {
-            GeometryReader { proxy in
-                ChatOutlineRail(
-                    items: controller.outlineItems,
-                    activeSeq: store.promptOutline.activeSeq,
-                    viewportHeight: proxy.size.height,
-                    isRevealed: engine.ui.turnNavVisible,
-                    onJump: { seq in controller.jumpToPrompt(seq) },
-                    onReveal: { engine.revealTurnRail() })
+        ZStack {
+            if ChatOutlineRail.promptRailEnabled, case .ready = store.phase, controller.outlineAvailable {
+                GeometryReader { proxy in
+                    ChatOutlineRail(
+                        items: controller.outlineItems,
+                        activeSeq: store.promptOutline.activeSeq,
+                        viewportHeight: proxy.size.height,
+                        isRevealed: engine.ui.turnNavVisible,
+                        onJump: { seq in controller.jumpToPrompt(seq) },
+                        onReveal: { engine.revealTurnRail() })
+                }
+                .transition(.opacity)
             }
-            .transition(.opacity)
         }
+        // While the rail is up its edge belongs to it, not to the drawer's edge pan.
+        .onChange(of: engine.ui.turnNavVisible, initial: true) { _, shown in
+            shellDrawer?.trailingEdgeReserved = shown
+        }
+        .onDisappear { shellDrawer?.trailingEdgeReserved = false }
     }
 }
 

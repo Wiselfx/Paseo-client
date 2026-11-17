@@ -136,17 +136,10 @@ struct ClaudeWorkGroupCell: View {
 
     func summary(_ text: String) -> some View {
         Group {
-            if turnIsRunning && group.isActive && !reduceMotion {
-                // A capped rate, not display rate: the masked sweep is an offscreen pass
-                // (findings #11, #24). The band's 48 steps don't need more than this.
-                TimelineView(.animation) { context in
-                    summaryRuns(text, Palette.tertiaryInk).overlay(alignment: .leading) {
-                        if let phase = ClaudeSweep.phase(startedAt: sweepStart, at: context.date) {
-                            summaryRuns(text, Palette.ink)
-                                .mask(ClaudeSweep.windowGradient(phase: phase))
-                                .allowsHitTesting(false)
-                        }
-                    }
+            if turnIsRunning && group.isActive {
+                // The band's own stepped clock over the words alone, never the display rate.
+                ClaudeSweepLabel(startedAt: sweepStart, rest: Palette.tertiaryInk) { ink in
+                    summaryRuns(text, ink)
                 }
             } else {
                 summaryRuns(text, Palette.tertiaryInk)

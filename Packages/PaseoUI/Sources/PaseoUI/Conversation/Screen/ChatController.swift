@@ -1370,25 +1370,48 @@ struct TranscriptJump: Equatable {
     /// fallback maps every turn. The same (epoch, rows version) answers the cached list; any
     /// row change rebuilds it once. Ignored by observation (like `mediaIndexStorage`): the
     /// memo is written while a body reads it, and must never notify on its own (M05).
-    @ObservationIgnored private var outlineMemoKey: (epoch: String, version: Int)?
+    @ObservationIgnored private var outlineMemoKey: OutlineMemoKey?
     @ObservationIgnored private var outlineMemoItems: [ChatOutlineItem] = []
+
+    /// What the outline depends on. A streamed token changes none of it: prompts only come and go
+    /// with whole turns (a send, a page of history, a rewind) or with the daemon's index.
+    private struct OutlineMemoKey: Equatable {
+        var indexed: Bool
+        var epoch: String
+        var count: Int
+        var firstId: String?
+        var lastId: String?
+        var lastPromptSeq: Int?
+    }
 
     /// The chat outline: the daemon's prompt index when the host serves it (the whole
     /// conversation, loaded or not), otherwise the loaded turns. Never pages history in.
     var outlineItems: [ChatOutlineItem] {
-        let indexed = store.promptOutline.prompts
-        if store.promptOutline.isSupported, !indexed.isEmpty {
-            return indexed.map { ChatOutlineItem(seq: $0.seq, preview: $0.preview) }
+        let outline = store.promptOutline
+        let key: OutlineMemoKey
+        if outline.isSupported, !outline.prompts.isEmpty {
+            key = OutlineMemoKey(
+                indexed: true, epoch: outline.epoch ?? "", count: outline.prompts.count,
+                firstId: nil, lastId: nil, lastPromptSeq: outline.prompts.last?.seq)
+        } else {
+            let turns = store.turns
+            key = OutlineMemoKey(
+                indexed: false, epoch: store.timeline.epoch ?? "", count: turns.count,
+                firstId: turns.first?.id, lastId: turns.last?.id,
+                lastPromptSeq: turns.last?.userMessage?.seqStart)
         }
-        let timeline = store.timeline
-        let key = (epoch: timeline.epoch ?? "", version: timeline.rowsVersion)
-        if let memoKey = outlineMemoKey, memoKey == key { return outlineMemoItems }
-        let items: [ChatOutlineItem] = store.turns.compactMap { turn in
-            guard let row = turn.userMessage, case .userMessage(let message) = row.item else {
-                return nil
+        if let outlineMemoKey, outlineMemoKey == key { return outlineMemoItems }
+        let items: [ChatOutlineItem]
+        if key.indexed {
+            items = outline.prompts.map { ChatOutlineItem(seq: $0.seq, preview: $0.preview) }
+        } else {
+            items = store.turns.compactMap { turn in
+                guard let row = turn.userMessage, case .userMessage(let message) = row.item else {
+                    return nil
+                }
+                return ChatOutlineItem(
+                    seq: row.seqStart, preview: PromptOutline.previewText(message.text))
             }
-            return ChatOutlineItem(
-                seq: row.seqStart, preview: PromptOutline.previewText(message.text))
         }
         outlineMemoKey = key
         outlineMemoItems = items

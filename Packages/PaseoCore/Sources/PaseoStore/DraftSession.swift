@@ -53,9 +53,14 @@ public final class DraftSession {
     public var text = "" {
         didSet {
             guard text != oldValue else { return }
+            let blank = DraftText.isBlank(text)
+            if blank != textIsBlank { textIsBlank = blank }
             drafts?.editText(text, for: key)
         }
     }
+    /// Whether the text holds only whitespace. Written only when it flips (see
+    /// `ConversationStore.draftIsBlank`).
+    public private(set) var textIsBlank = true
     /// This draft's own record key, one per draft tab, so two unsent drafts never overwrite each
     /// other (`Upstream: packages/app/src/stores/draft-keys.ts:1-12,36-45`).
     public let draftId: String
@@ -97,6 +102,7 @@ public final class DraftSession {
         // text instead of filling in under the user's first keystroke.
         // `Upstream: packages/app/src/composer/draft/input-draft.ts:240-255`.
         if let saved = drafts?.input(for: key) { text = saved.text }
+        textIsBlank = DraftText.isBlank(text)
     }
 
     /// A fresh draft tab's key. `Upstream: packages/app/src/stores/draft-keys.ts:7-9`.
@@ -228,7 +234,7 @@ public final class DraftSession {
     /// True when a send can create the agent: a provider with a model, and something to say.
     public func canSend(hasAttachments: Bool) -> Bool {
         guard !isCreating, providerId != nil, modelId != nil else { return false }
-        return hasAttachments || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return hasAttachments || !textIsBlank
     }
 
     /// What the create request will carry, or nil while the catalogue still owes a provider.
@@ -308,5 +314,13 @@ public final class DraftSession {
             arguments.modelId ?? "", arguments.modeId ?? "", arguments.thinkingOptionId ?? "",
             prompt, attachments.map { String($0.hashValue) } ?? "",
         ].joined(separator: "\u{1F}")
+    }
+}
+
+/// The one blank test the composer's stores share: whitespace and newlines only. Stops at the first
+/// visible character, so a keystroke into a long draft costs O(1).
+public enum DraftText {
+    public static func isBlank(_ text: String) -> Bool {
+        !text.unicodeScalars.contains { !CharacterSet.whitespacesAndNewlines.contains($0) }
     }
 }

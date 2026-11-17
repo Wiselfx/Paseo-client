@@ -107,6 +107,12 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
     public static func cached(_ source: String, home: String? = nil) -> MarkdownDocumentModel {
         MarkdownDocumentCache.document(for: source, home: home)
     }
+
+    /// The document for a streamed piece's intermediate text: read from the cache when present, never
+    /// stored (see `RichPiecesCache.pieces(_:home:transient:)`).
+    static func transient(_ source: String, home: String? = nil) -> MarkdownDocumentModel {
+        MarkdownDocumentCache.document(for: source, home: home, store: false)
+    }
 }
 
 /// Small in-memory memo for the prose parse (P3), now an LRU under a byte budget
@@ -123,14 +129,14 @@ enum MarkdownDocumentCache {
         countLimit: 512,
         cost: { key, _ in key.source.utf8.count * 4 })
 
-    static func document(for source: String, home: String? = nil) -> MarkdownDocumentModel {
+    static func document(for source: String, home: String? = nil, store: Bool = true) -> MarkdownDocumentModel {
         let key = Key(source: source, home: home?.isEmpty == true ? nil : home)
         if let cached = table.value(for: key) { return cached }
         PaseoPerf.count("md.miss")
         let document = PaseoPerf.measure("md.parse") {
             MarkdownDocumentModel(source: source, home: key.home)
         }
-        table.setValue(document, for: key)
+        if store { table.setValue(document, for: key) }
         return document
     }
 }

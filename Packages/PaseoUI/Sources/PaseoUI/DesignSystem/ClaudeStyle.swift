@@ -108,6 +108,107 @@ enum ClaudeSweep {
     }
 }
 
+/// The band's own clock: one entry per step while the band moves, one when it comes to rest, and
+/// the next cycle's start. Nothing ticks while the band rests (a third of the time), and nothing ticks
+/// at the display rate.
+struct ClaudeSweepSchedule: TimelineSchedule {
+    let start: Date
+    var paused = false
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> Entries {
+        Entries(origin: start.addingTimeInterval(ClaudeMotion.sweepDelay), cursor: startDate, paused: paused)
+    }
+
+    struct Entries: Sequence, IteratorProtocol {
+        let origin: Date
+        var cursor: Date
+        let paused: Bool
+        var emitted = false
+
+        mutating func next() -> Date? {
+            if !emitted {
+                emitted = true
+                return cursor
+            }
+            if paused { return nil }
+            cursor = Self.boundary(after: cursor, origin: origin)
+            return cursor
+        }
+
+        static func boundary(after date: Date, origin: Date) -> Date {
+            let t = date.timeIntervalSince(origin)
+            guard t >= 0 else { return origin }
+            let period = ClaudeMotion.statusPeriod
+            let active = period * (2.0 / 3.0)
+            let step = active / Double(ClaudeMotion.sweepSteps)
+            let cycle = (t / period).rounded(.down)
+            let inCycle = t - cycle * period
+            let next: Double
+            if inCycle < active {
+                next = cycle * period + min(((inCycle / step).rounded(.down) + 1) * step, active)
+            } else {
+                next = (cycle + 1) * period
+            }
+            return origin.addingTimeInterval(max(next, t + 0.001))
+        }
+    }
+}
+
+/// Words with the running band swept across them: the label is drawn once in its resting ink, and
+/// only the masked copy above it follows the band's clock. `label` draws the glyphs in the ink it is
+/// given, so both copies set the same.
+struct ClaudeSweepLabel<Label: View>: View {
+    var startedAt: Date
+    var rest: Color
+    var band: Color = Palette.ink
+    @ViewBuilder var label: (Color) -> Label
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isSurfaceObscured) private var isSurfaceObscured
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        label(rest).overlay(alignment: .leading) {
+            if !reduceMotion {
+                TimelineView(
+                    ClaudeSweepSchedule(
+                        start: startedAt, paused: isSurfaceObscured || scenePhase == .background)
+                ) { context in
+                    // A hair past the entry, so a step boundary never rounds back into the last step.
+                    if let phase = ClaudeSweep.phase(
+                        startedAt: startedAt, at: context.date.addingTimeInterval(0.001))
+                    {
+                        label(band).mask(ClaudeSweep.windowGradient(phase: phase))
+                    }
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
+    }
+}
+
+/// A running clock in the turn's short duration format, redrawn once a second.
+struct ClaudeElapsedClock: View {
+    let since: Date?
+    var font: Font = .paseo(.footnote).monospacedDigit()
+    var ink: Color = Palette.captionInk
+
+    var body: some View {
+        if let since {
+            TimelineView(.periodic(from: since, by: 1)) { context in
+                text(max(1, context.date.timeIntervalSince(since)))
+            }
+        } else {
+            text(1)
+        }
+    }
+
+    private func text(_ seconds: TimeInterval) -> some View {
+        Text(DurationText.short(seconds)).font(font).foregroundStyle(ink)
+    }
+}
+
 /// 0.5 pt hairline, as the DSH separators are drawn.
 struct ClaudeDivider: View {
     var body: some View {

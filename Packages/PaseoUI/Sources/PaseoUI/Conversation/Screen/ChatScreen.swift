@@ -54,13 +54,9 @@ public struct ChatScreen: View {
         // D1 §1: the transcript is the screen's base layer; the chrome floats over it in
         // safe-area bars and the system's scroll edge effect is the only background.
         TranscriptView(store: store, controller: controller)
-            // "Back to the end" rides the transcript, not the composer bar (J3 §2). The bar lives
-            // in `.safeAreaBar(edge: .bottom)`, whose host does not hit-test outside the bar's own
-            // frame, so a touch on a button pushed above it landed on the transcript underneath
-            // and only dropped the keyboard. An overlay on the transcript is inside its own
-            // hit-testable frame, and it respects the safe area the bottom bar and the keyboard
-            // contribute, so it sits `Space.sm` above the bar (and above the subagent pill),
-            // moving with the keyboard and with the composer's growth. No inset arithmetic.
+            // "Back to the end" rides the transcript (J3 §2): the overlay respects the safe area the
+            // bottom chrome and the keyboard contribute, so it sits `Space.sm` above the composer (and
+            // the subagent pill) and moves with the keyboard and the composer's growth.
             .overlay(alignment: .bottom) {
                 TranscriptBackToEndButton(controller: controller)
                     .padding(.bottom, Space.sm)
@@ -134,9 +130,7 @@ public struct ChatScreen: View {
     }
 
     /// The bottom bar: the subagent pill and the composer, both clear behind their own cards, so
-    /// the transcript runs under them (D1 §1). "Back to the end" is **not** here: it is an overlay
-    /// on the transcript, because a `safeAreaBar` host does not hit-test outside its own frame
-    /// (J3 §2, `ChatScreen`).
+    /// the transcript runs under them (D1 §1). "Back to the end" is an overlay on the transcript.
     private var bottomChrome: some View {
         VStack(spacing: 0) {
             SubagentPill(store: store, controller: controller)

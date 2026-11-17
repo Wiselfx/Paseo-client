@@ -61,6 +61,7 @@ struct TranscriptCellEnvironment {
     var controller: ChatController
     var history: HistoryStartController
     weak var engine: TranscriptEngine?
+    var ui: TranscriptUIState
     var rowFrames: TranscriptRowFrames
     var openURL: OpenURLAction
     /// The prose column (the transcript's width less its margins).
@@ -89,6 +90,10 @@ struct TranscriptCellEnvironment {
 final class TranscriptUIState {
     var landingTurnId: String?
     var turnNavVisible = false
+    /// The screen's environment that UIKit does not carry into the cells' hosting views: a covered
+    /// chat or a backgrounded app stops every running loop in the transcript.
+    var surfaceObscured = false
+    var scenePhase: ScenePhase = .active
 }
 
 // MARK: - Row frames
@@ -1512,6 +1517,8 @@ struct TranscriptCellRoot: View {
             .environment(\.richViewportHeight, env.viewport)
             .environment(\.claudeProcessCap, min(400, env.viewport * 0.5))
             .environment(\.transcriptRowFrames, env.rowFrames)
+            .environment(\.isSurfaceObscured, env.ui.surfaceObscured)
+            .environment(\.scenePhase, env.ui.scenePhase)
             .foregroundStyle(Palette.ink)
             .tint(Palette.ink)
     }

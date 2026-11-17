@@ -46,11 +46,14 @@ enum RichPiecesCache {
         countLimit: 256,
         cost: { key, _ in key.source.utf8.count * 2 })
 
-    static func pieces(_ source: String, home: String?) -> [RichPiece] {
+    /// `transient`: a streamed message's intermediate text. It is split but never stored: tens of
+    /// partial copies a second would push every settled message out of the budget, and scrolling
+    /// back would split them all again.
+    static func pieces(_ source: String, home: String?, transient: Bool = false) -> [RichPiece] {
         let key = Key(source: source, home: home)
         if let cached = table.value(for: key) { return cached }
         let pieces = richPieces(source, home: home)
-        table.setValue(pieces, for: key)
+        if !transient { table.setValue(pieces, for: key) }
         return pieces
     }
 }
