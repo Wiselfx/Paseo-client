@@ -13,9 +13,7 @@ enum TranscriptItemID: Hashable {
     case resolvedPermissions
     case backgroundWork
 
-    /// Every item has a reuse pool of its own, so a cell is only ever reused for the item it was built
-    /// for. Its SwiftUI state (an opened work group, a decoded image, a highlighted code block) survives
-    /// scrolling away and back, exactly as it did in the lazy stack, and is never handed to another turn.
+    /// The singletons' own pools. Turns borrow a slot instead (`TranscriptEngine.reuseIdentifier(for:)`).
     var reuseIdentifier: String {
         switch self {
         case .historyStart: "transcript.history"
@@ -431,6 +429,17 @@ final class TranscriptEngine: NSObject {
     private var indexByID: [TranscriptItemID: Int] = [:]
     private var environment: TranscriptCellEnvironment?
     private var registeredReuse: Set<String> = []
+
+    /// Turn cells kept with their SwiftUI state (an opened work group, a decoded image, highlighted
+    /// code). Each turn borrows a slot, a reuse pool of its own, and keeps it while it is among the
+    /// most recently shown, so scrolling away and back finds the same cell. Past `cellSlots` the turn
+    /// shown least recently (and not on screen) gives its slot up; its cell is rebuilt for the new
+    /// turn with fresh state (the root is identified by turn). Memory stays bounded in a long chat.
+    static let cellSlots = 64
+    private var slotOf: [TranscriptItemID: Int] = [:]
+    private var slotOwner: [TranscriptItemID?] = []
+    private var slotUse: [Int] = []
+    private var useClock = 0
     private var lastEpoch: String?
 
     private var didInitialLayout = false
@@ -1474,13 +1483,49 @@ extension TranscriptEngine: UICollectionViewDataSource, UICollectionViewDataSour
         _ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath
     ) -> UICollectionViewCell {
         let reuse = items.indices.contains(indexPath.item)
-            ? items[indexPath.item].reuseIdentifier : "transcript.empty"
+            ? reuseIdentifier(for: items[indexPath.item]) : "transcript.empty"
         if registeredReuse.insert(reuse).inserted {
             collectionView.register(TranscriptCell.self, forCellWithReuseIdentifier: reuse)
         }
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: reuse, for: indexPath)
         if let cell = cell as? TranscriptCell { configure(cell, at: indexPath.item) }
         return cell
+    }
+
+    /// The reuse pool for an item: the singletons' own, a turn's borrowed slot.
+    private func reuseIdentifier(for id: TranscriptItemID) -> String {
+        guard case .turn = id else { return id.reuseIdentifier }
+        useClock += 1
+        if let slot = slotOf[id] {
+            slotUse[slot] = useClock
+            return "transcript.slot.\(slot)"
+        }
+        var slot = slotOwner.count
+        if slotOwner.count >= Self.cellSlots {
+            var onScreen = Set<TranscriptItemID>()
+            for indexPath in collectionView.indexPathsForVisibleItems
+            where items.indices.contains(indexPath.item) {
+                onScreen.insert(items[indexPath.item])
+            }
+            var oldest = Int.max
+            for (index, owner) in slotOwner.enumerated() {
+                if let owner, onScreen.contains(owner) { continue }
+                if slotUse[index] < oldest {
+                    oldest = slotUse[index]
+                    slot = index
+                }
+            }
+        }
+        if slot < slotOwner.count {
+            if let previous = slotOwner[slot] { slotOf[previous] = nil }
+            slotOwner[slot] = id
+            slotUse[slot] = useClock
+        } else {
+            slotOwner.append(id)
+            slotUse.append(useClock)
+        }
+        slotOf[id] = slot
+        return "transcript.slot.\(slot)"
     }
 
     /// The prose of turns about to scroll in is split, parsed and highlighted off the main actor.
@@ -1557,6 +1602,8 @@ struct TranscriptCellRoot: View {
 
     var body: some View {
         content
+            // A recycled cell starts the new turn with fresh state.
+            .id(identity)
             .frame(maxWidth: .infinity, alignment: .leading)
             .coordinateSpace(.named(TranscriptRowFrames.space))
             .environment(\.chatActions, env.controller.actions)
@@ -1575,6 +1622,16 @@ struct TranscriptCellRoot: View {
             .environment(\.scenePhase, env.ui.scenePhase)
             .foregroundStyle(Palette.ink)
             .tint(Palette.ink)
+    }
+
+    private var identity: String {
+        switch entry {
+        case .historyStart: "history"
+        case .turn(let row): row.turn.id
+        case .permissions: "permissions"
+        case .resolvedPermissions: "resolved"
+        case .backgroundWork: "background"
+        }
     }
 
     @ViewBuilder private var content: some View {
