@@ -277,7 +277,7 @@ struct ClaudeTurnView: View {
             }
             if !isRunning, showsAnswerFooter {
                 HStack(spacing: 17) {
-                    if !copyText.isEmpty {
+                    if hasProse {
                         ClaudeCopyButton(text: copyText, label: "Copy response")
                     }
                     if let onFork, let forkTarget = finalProse {
@@ -375,7 +375,16 @@ struct ClaudeTurnView: View {
     /// True when the answer footer has anything to show: copy or the fork menu (needs a boundary
     /// row).
     var showsAnswerFooter: Bool {
-        !copyText.isEmpty || (onFork != nil && finalProse != nil)
+        hasProse || (onFork != nil && finalProse != nil)
+    }
+
+    /// Whether the turn said anything: what Copy needs, without joining the whole reply per pass.
+    var hasProse: Bool {
+        turn.segments.contains { segment in
+            guard case .prose(let row) = segment, case .assistantMessage(let message) = row.item
+            else { return false }
+            return !message.text.isEmpty
+        }
     }
 
     func toggleWork() {

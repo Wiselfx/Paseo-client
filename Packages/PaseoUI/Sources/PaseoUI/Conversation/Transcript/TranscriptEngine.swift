@@ -101,7 +101,7 @@ final class TranscriptUIState {
 /// nothing per scroll frame. A jump to a row adds it to the cell's frame in the layout.
 @MainActor
 final class TranscriptRowFrames {
-    static let space = "paseo.transcript.cell"
+    nonisolated static let space = "paseo.transcript.cell"
     private var frames: [Int: CGRect] = [:]
 
     func report(_ seqEnd: Int, _ frame: CGRect) { frames[seqEnd] = frame }
