@@ -69,16 +69,19 @@ import Testing
         var pagination = HistoryStartPagination(initiallyVisible: false)
         let underfilled = geometry(underfilled: true)
 
-        #expect(pagination.update(underfilled, now: t0) == true)
+        guard let request = pagination.update(underfilled, now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
         #expect(pagination.state.status == .loading)
 
         // Upstream :72: a request not completed yet never re-requests.
-        #expect(pagination.update(underfilled, now: t0.addingTimeInterval(1)) == false)
+        #expect(pagination.update(underfilled, now: t0.addingTimeInterval(1)) == nil)
         #expect(pagination.state.status == .loading)
 
-        pagination.loadCompleted(applied: true)
+        pagination.loadCompleted(generation: request, applied: true)
         // Upstream :74-75: the progress key moved, so the operation settles.
-        #expect(pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(2)) == false)
+        #expect(pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(2)) == nil)
         #expect(pagination.state.status == .settling)
 
         // Upstream :125-126: the list fills the viewport, so settling ends dormant and shown.
@@ -92,18 +95,21 @@ import Testing
         var pagination = HistoryStartPagination(initiallyVisible: false)
 
         // Upstream :83-85: a dormant list that fills the viewport stays dormant, and is shown.
-        #expect(pagination.update(geometry(), now: t0) == false)
+        #expect(pagination.update(geometry(), now: t0) == nil)
         #expect(pagination.state == HistoryStartPaginationState(status: .dormant, visible: true))
 
         // Upstream :137: a user drag re-arms dormant to ready (strategy-native.tsx:571).
         pagination.rearm()
         #expect(pagination.state.status == .ready)
 
-        #expect(pagination.update(geometry(), now: t0) == true)
+        guard let request = pagination.update(geometry(), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
         #expect(pagination.state.status == .loading)
-        pagination.loadCompleted(applied: true)
+        pagination.loadCompleted(generation: request, applied: true)
 
-        #expect(pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(3)) == false)
+        #expect(pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(3)) == nil)
         #expect(pagination.state.status == .settling)
 
         // Upstream :129-130: at the start with no older history left, settling ends dormant.
@@ -116,30 +122,36 @@ import Testing
     @Test func settlingBecomesReadyWhenTheReaderHasMovedAway() {
         var pagination = HistoryStartPagination(initiallyVisible: true)
         pagination.rearm()
-        #expect(pagination.update(geometry(), now: t0) == true)
-        pagination.loadCompleted(applied: true)
+        guard let request = pagination.update(geometry(), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
+        pagination.loadCompleted(generation: request, applied: true)
         _ = pagination.update(geometry(key: "k2"), now: t0)
         #expect(pagination.state.status == .settling)
 
         // Upstream :127-128: distance > 96 after settle means the reader is no longer at the start.
         pagination.settle(geometry(distance: 300, key: "k2"))
         #expect(pagination.state == HistoryStartPaginationState(status: .ready, visible: true))
-        #expect(pagination.update(geometry(distance: 300, key: "k2"), now: t0) == false)
+        #expect(pagination.update(geometry(distance: 300, key: "k2"), now: t0) == nil)
     }
 
     @Test func stillUnderfilledSettleLeavesReadyAndTheCallerRequestsTheNextPage() {
         // Upstream :131-133: settle publishes ready and calls update(), so the next page is requested
         // when the view is still underfilled. In this API the caller calls update(_:now:) after settle.
         var pagination = HistoryStartPagination(initiallyVisible: false)
-        #expect(pagination.update(geometry(underfilled: true), now: t0) == true)
-        pagination.loadCompleted(applied: true)
+        guard let first = pagination.update(geometry(underfilled: true), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
+        pagination.loadCompleted(generation: first, applied: true)
         _ = pagination.update(geometry(underfilled: true, key: "k2"), now: t0)
         #expect(pagination.state.status == .settling)
 
         pagination.settle(geometry(underfilled: true, key: "k2"))
         #expect(pagination.state.status == .ready)
 
-        #expect(pagination.update(geometry(underfilled: true, key: "k2"), now: t0) == true)
+        #expect(pagination.update(geometry(underfilled: true, key: "k2"), now: t0) != nil)
         #expect(pagination.state.status == .loading)
     }
 
@@ -147,13 +159,13 @@ import Testing
 
     @Test func failsOnTheFifteenSecondWatchdogWhenNoFetchCompletes() {
         var pagination = HistoryStartPagination(initiallyVisible: false)
-        #expect(pagination.update(geometry(underfilled: true), now: t0) == true)
+        #expect(pagination.update(geometry(underfilled: true), now: t0) != nil)
 
         // Upstream :63 and :62: 15 s is the limit, and it fails only once it is passed.
-        #expect(pagination.update(nil, now: t0.addingTimeInterval(15)) == false)
+        #expect(pagination.update(nil, now: t0.addingTimeInterval(15)) == nil)
         #expect(pagination.state.status == .loading)
 
-        #expect(pagination.update(geometry(underfilled: true), now: t0.addingTimeInterval(16)) == false)
+        #expect(pagination.update(geometry(underfilled: true), now: t0.addingTimeInterval(16)) == nil)
         #expect(pagination.state == HistoryStartPaginationState(status: .failed, visible: true))
     }
 
@@ -161,32 +173,38 @@ import Testing
         // Upstream :53-55: a completed request with an unready view clears the timer. Upstream :56-57
         // arms it again once the view is ready.
         var pagination = HistoryStartPagination(initiallyVisible: false)
-        #expect(pagination.update(geometry(underfilled: true), now: t0) == true)
-        pagination.loadCompleted(applied: true)
+        guard let request = pagination.update(geometry(underfilled: true), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
+        pagination.loadCompleted(generation: request, applied: true)
 
-        #expect(pagination.update(geometry(ready: false), now: t0.addingTimeInterval(1)) == false)
-        #expect(pagination.update(geometry(ready: false), now: t0.addingTimeInterval(100)) == false)
+        #expect(pagination.update(geometry(ready: false), now: t0.addingTimeInterval(1)) == nil)
+        #expect(pagination.update(geometry(ready: false), now: t0.addingTimeInterval(100)) == nil)
         #expect(pagination.state.status == .loading, "no failure while the view is not ready")
 
         // Ready again at 101 s: the timer restarts from here, so 115 s is still inside the window.
-        #expect(pagination.update(geometry(), now: t0.addingTimeInterval(101)) == false)
-        #expect(pagination.update(geometry(), now: t0.addingTimeInterval(115)) == false)
+        #expect(pagination.update(geometry(), now: t0.addingTimeInterval(101)) == nil)
+        #expect(pagination.update(geometry(), now: t0.addingTimeInterval(115)) == nil)
         #expect(pagination.state.status == .loading)
-        #expect(pagination.update(geometry(), now: t0.addingTimeInterval(117)) == false)
+        #expect(pagination.update(geometry(), now: t0.addingTimeInterval(117)) == nil)
         #expect(pagination.state.status == .failed)
     }
 
     @Test func aFailedFetchFailsTheOperationAndALateCompletionIsIgnored() {
         var pagination = HistoryStartPagination(initiallyVisible: false)
-        #expect(pagination.update(geometry(underfilled: true), now: t0) == true)
+        guard let request = pagination.update(geometry(underfilled: true), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
 
         // Upstream :102-103: applied == false fails the operation.
-        pagination.loadCompleted(applied: false)
+        pagination.loadCompleted(generation: request, applied: false)
         #expect(pagination.state == HistoryStartPaginationState(status: .failed, visible: true))
-        #expect(pagination.update(geometry(underfilled: true), now: t0) == false)
+        #expect(pagination.update(geometry(underfilled: true), now: t0) == nil)
 
         // A completion after failure belongs to no request in flight. It is ignored.
-        pagination.loadCompleted(applied: true)
+        pagination.loadCompleted(generation: request, applied: true)
         #expect(pagination.state.status == .failed)
     }
 
@@ -195,19 +213,22 @@ import Testing
     @Test func rearmFromFailedRequestsAgain() {
         // Upstream :137: failed -> ready. The retry button then calls update.
         var pagination = HistoryStartPagination(initiallyVisible: false)
-        #expect(pagination.update(geometry(underfilled: true), now: t0) == true)
-        pagination.loadCompleted(applied: false)
+        guard let failed = pagination.update(geometry(underfilled: true), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
+        pagination.loadCompleted(generation: failed, applied: false)
         #expect(pagination.state.status == .failed)
 
         pagination.rearm()
         #expect(pagination.state == HistoryStartPaginationState(status: .ready, visible: true))
-        #expect(pagination.update(geometry(), now: t0.addingTimeInterval(20)) == true)
+        #expect(pagination.update(geometry(), now: t0.addingTimeInterval(20)) != nil)
         #expect(pagination.state.status == .loading)
     }
 
     @Test func rearmLeavesALoadingOperationAlone() {
         var pagination = HistoryStartPagination(initiallyVisible: false)
-        #expect(pagination.update(geometry(underfilled: true), now: t0) == true)
+        #expect(pagination.update(geometry(underfilled: true), now: t0) != nil)
         pagination.rearm()
         #expect(pagination.state.status == .loading)
     }
@@ -218,19 +239,19 @@ import Testing
         // Upstream :92: isLoadingOlderHistory suppresses the request.
         var pagination = HistoryStartPagination(initiallyVisible: true)
         pagination.rearm()
-        #expect(pagination.update(geometry(loading: true), now: t0) == false)
+        #expect(pagination.update(geometry(loading: true), now: t0) == nil)
         #expect(pagination.state.status == .ready)
-        #expect(pagination.update(geometry(underfilled: true, loading: true), now: t0) == false)
+        #expect(pagination.update(geometry(underfilled: true, loading: true), now: t0) == nil)
         #expect(pagination.state.status == .ready)
     }
 
     @Test func aMissingProgressKeySuppressesTheRequest() {
         // Upstream :92: no progress key, so no request.
         var pagination = HistoryStartPagination(initiallyVisible: false)
-        #expect(pagination.update(geometry(underfilled: true, key: nil), now: t0) == false)
+        #expect(pagination.update(geometry(underfilled: true, key: nil), now: t0) == nil)
         #expect(pagination.state.status == .dormant)
         pagination.rearm()
-        #expect(pagination.update(geometry(key: nil), now: t0) == false)
+        #expect(pagination.update(geometry(key: nil), now: t0) == nil)
         #expect(pagination.state.status == .ready)
     }
 
@@ -238,16 +259,19 @@ import Testing
         // Upstream :88-90: without older history the operation is finished, dormant.
         var pagination = HistoryStartPagination(initiallyVisible: false)
         pagination.rearm()
-        #expect(pagination.update(geometry(hasOlder: false), now: t0) == false)
+        #expect(pagination.update(geometry(hasOlder: false), now: t0) == nil)
         #expect(pagination.state == HistoryStartPaginationState(status: .dormant, visible: true))
     }
 
     @Test func aCompletedRequestWithNoOlderHistoryFinishesDormant() {
         // Upstream :76-77: the completed request sees the history has run out.
         var pagination = HistoryStartPagination(initiallyVisible: false)
-        #expect(pagination.update(geometry(underfilled: true), now: t0) == true)
-        pagination.loadCompleted(applied: true)
-        #expect(pagination.update(geometry(hasOlder: false), now: t0) == false)
+        guard let request = pagination.update(geometry(underfilled: true), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
+        pagination.loadCompleted(generation: request, applied: true)
+        #expect(pagination.update(geometry(hasOlder: false), now: t0) == nil)
         #expect(pagination.state == HistoryStartPaginationState(status: .dormant, visible: true))
     }
 
@@ -257,24 +281,78 @@ import Testing
         #expect(pagination.state == HistoryStartPaginationState(status: .dormant, visible: false))
     }
 
+    // MARK: - Generation
+
+    @Test func aCompletionForAnOlderGenerationIsIgnored() {
+        // Upstream history-start-pagination.ts:100-101: the load resolves against its own generation.
+        var pagination = HistoryStartPagination(initiallyVisible: false)
+        guard let stale = pagination.update(geometry(underfilled: true), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
+
+        // The watchdog fails the operation, retiring its generation (finish -> clear, :45-48).
+        #expect(pagination.update(geometry(underfilled: true), now: t0.addingTimeInterval(16)) == nil)
+        #expect(pagination.state.status == .failed)
+        pagination.loadCompleted(generation: stale, applied: true)
+        #expect(pagination.state.status == .failed, "a stale completion must not revive the operation")
+
+        // Rearm starts a new generation; the stale one is still ignored.
+        pagination.rearm()
+        guard
+            let fresh = pagination.update(
+                geometry(underfilled: true), now: t0.addingTimeInterval(17))
+        else {
+            Issue.record("expected update to start a request")
+            return
+        }
+        #expect(fresh != stale)
+        pagination.loadCompleted(generation: stale, applied: true)
+        #expect(pagination.state.status == .loading)
+        pagination.loadCompleted(generation: fresh, applied: true)
+        #expect(pagination.update(geometry(underfilled: true, key: "k2"), now: t0.addingTimeInterval(18)) == nil)
+        #expect(pagination.state.status == .settling)
+    }
+
+    @Test func aCompletionAfterSettlingIsIgnored() {
+        // Settle retires the generation (clear, :41-44), so a late failure for it changes nothing.
+        var pagination = HistoryStartPagination(initiallyVisible: false)
+        guard let request = pagination.update(geometry(underfilled: true), now: t0) else {
+            Issue.record("expected update to start a request")
+            return
+        }
+        pagination.loadCompleted(generation: request, applied: true)
+        #expect(pagination.update(geometry(key: "k2"), now: t0) == nil)
+        #expect(pagination.state.status == .settling)
+        pagination.settle(geometry(underfilled: true, key: "k2"))
+        #expect(pagination.state.status == .ready)
+        pagination.loadCompleted(generation: request, applied: false)
+        #expect(pagination.state.status == .ready, "a late failure must not fail the settled operation")
+    }
+
     // MARK: - Return value
 
     @Test func updateReturnsTrueExactlyOncePerRequest() {
         // Upstream :93-96: the request starts once. Later updates do not re-request.
         var pagination = HistoryStartPagination(initiallyVisible: false)
         let underfilled = geometry(underfilled: true)
-        var results: [Bool] = []
+        var results: [Int?] = []
         for step in 0..<5 {
             results.append(pagination.update(underfilled, now: t0.addingTimeInterval(Double(step))))
         }
-        #expect(results == [true, false, false, false, false])
+        #expect(results[0] != nil)
+        #expect(results[1...].allSatisfy { $0 == nil })
 
-        // Once completed and settled, a new request is a new single true.
-        pagination.loadCompleted(applied: true)
+        // Once completed and settled, a new request is a new single generation.
+        guard let first = results[0] else {
+            Issue.record("expected the first update to start a request")
+            return
+        }
+        pagination.loadCompleted(generation: first, applied: true)
         _ = pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(5))
         pagination.settle(geometry(distance: 300, key: "k2"))
         pagination.rearm()
-        #expect(pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(6)) == true)
-        #expect(pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(7)) == false)
+        #expect(pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(6)) != nil)
+        #expect(pagination.update(geometry(key: "k2"), now: t0.addingTimeInterval(7)) == nil)
     }
 }

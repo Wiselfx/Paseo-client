@@ -71,7 +71,8 @@ public enum HistoryStartGeometryProvider {
 }
 
 /// One history-start pagination operation, as a value. Feed it geometry with `update(_:now:)`; it says
-/// when to start a fetch. Report the fetch with `loadCompleted(applied:)`, then call `update` again.
+/// when to start a fetch. Report the fetch with `loadCompleted(generation:applied:)`, then call
+/// `update` again.
 ///
 /// The watchdog and the settle decision use the caller's clock and geometry, so the model is
 /// deterministic and testable.
@@ -92,24 +93,29 @@ public struct HistoryStartPagination: Sendable {
     /// When the watchdog timer was armed: the request time, or the first ready observation after a
     /// completed request was reset. Nil when no timer is armed (upstream `timeout === undefined`).
     private var watchStartedAt: Date?
+    /// Upstream `generation` (history-start-pagination.ts:30): bumped on every request and every
+    /// finish, so a completion that arrives after its operation ended is ignored (:100-101, :111).
+    private var generation = 0
 
     public init(initiallyVisible: Bool) {
         state = HistoryStartPaginationState(status: .dormant, visible: initiallyVisible)
     }
 
-    /// Mirrors upstream createHistoryStartPagination.update(). Returns true EXACTLY ONCE per request:
-    /// true on the call that transitions into .loading (the caller must then start one fetch).
-    public mutating func update(_ geometry: HistoryStartGeometry?, now: Date = Date()) -> Bool {
+    /// Mirrors upstream createHistoryStartPagination.update(). Returns the started request's generation
+    /// EXACTLY ONCE per request: non-nil on the call that transitions into .loading (the caller must
+    /// then start one fetch and report it with that generation). Nil in every other state, including
+    /// while `.loading` or `.settling`, so a watchdog tick can never start a fetch.
+    public mutating func update(_ geometry: HistoryStartGeometry?, now: Date = Date()) -> Int? {
         // Upstream watchProgress runs before the `!geometry` return (history-start-pagination.ts:68-69).
         if isLoadingOperation, runWatchdog(geometry, now: now) == false {
-            return false
+            return nil
         }
-        guard let geometry else { return false }
+        guard let geometry else { return nil }
 
         if state.status == .loading {
             // Upstream :72. A completed request is only waiting for the progress key to change or for
             // the history to run out.
-            guard completed else { return false }
+            guard completed else { return nil }
             if let progressKey = geometry.progressKey, progressKey != requestedKey {
                 // Upstream :74-75: the next step is the settle, which the caller schedules.
                 publish(.settling)
@@ -117,32 +123,32 @@ public struct HistoryStartPagination: Sendable {
                 // Upstream :76-77: nothing older to load.
                 finish(.dormant)
             }
-            return false
+            return nil
         }
 
         // Upstream :81. A failed or settling operation waits. So does a view that is not ready yet.
         if state.status == .settling || state.status == .failed || !geometry.isReady {
-            return false
+            return nil
         }
         let atStart = geometry.distanceFromHistoryStart <= Self.thresholdPx
         if state.status == .dormant, !geometry.isUnderfilled {
             // Upstream :83-85: a list that fills the viewport stays dormant, and is shown.
             publish(.dormant, visible: true)
-            return false
+            return nil
         }
         // Upstream :87: a request needs the reader at the start. A list that is not underfilled also
         // needs `.ready` (a dormant list is re-armed by a user scroll first).
         if !atStart || (!geometry.isUnderfilled && state.status != .ready) {
-            return false
+            return nil
         }
         if !geometry.hasOlderHistory {
             // Upstream :88-90.
             finish(.dormant)
-            return false
+            return nil
         }
         // Upstream :92: a request in flight, or nothing to key progress on, suppresses the next one.
         if geometry.isLoadingOlderHistory || geometry.progressKey == nil {
-            return false
+            return nil
         }
 
         // Upstream :93-96: start the request.
@@ -150,17 +156,18 @@ public struct HistoryStartPagination: Sendable {
         requestedKey = geometry.progressKey
         completed = false
         publish(.loading)
+        generation += 1
         watchStartedAt = now
-        return true
+        return generation
     }
 
     /// The fetch finished. applied == false -> .failed. Sets `completed`; the next update() call then
     /// observes it (it does NOT change state by itself).
     ///
-    /// A completion that arrives when no request is in flight (the watchdog failed it, say) is ignored,
-    /// as upstream ignores a stale `generation` (history-start-pagination.ts:100-101, :111).
-    public mutating func loadCompleted(applied: Bool) {
-        guard state.status == .loading, !completed else { return }
+    /// A completion whose generation is not the current one (the watchdog failed its operation, say)
+    /// is ignored, as upstream ignores a stale `generation` (history-start-pagination.ts:100-101, :111).
+    public mutating func loadCompleted(generation: Int, applied: Bool) {
+        guard state.status == .loading, !completed, generation == self.generation else { return }
         completed = true
         if !applied {
             finish(.failed)
@@ -175,7 +182,7 @@ public struct HistoryStartPagination: Sendable {
     public mutating func settle(_ geometry: HistoryStartGeometry?) {
         // Upstream :121-124.
         guard state.status == .settling, let geometry, geometry.isReady else { return }
-        clearWatchdog()
+        clear()
         if fill, !geometry.isUnderfilled {
             // Upstream :125-126.
             publish(.dormant, visible: true)
@@ -230,15 +237,23 @@ public struct HistoryStartPagination: Sendable {
         return true
     }
 
-    /// Upstream `clear()` (history-start-pagination.ts:41-44): cancels the watchdog.
+    /// Upstream `clear()` (history-start-pagination.ts:41-44): cancels the watchdog and retires the
+    /// in-flight generation, so its late completion is ignored.
+    private mutating func clear() {
+        generation += 1
+        clearWatchdog()
+    }
+
+    /// Upstream `clearTimeout` only (watchProgress :53-55): a completed request waiting on an unready
+    /// view drops the timer but keeps its generation — the completion already arrived.
     private mutating func clearWatchdog() {
         if watchStartedAt != nil { watchStartedAt = nil }
     }
 
-    /// Upstream `finish` (history-start-pagination.ts:45-48): clears the watchdog and publishes with
+    /// Upstream `finish` (history-start-pagination.ts:45-48): clears and publishes with
     /// `visible = true`.
     private mutating func finish(_ status: HistoryStartPaginationStatus) {
-        clearWatchdog()
+        clear()
         publish(status, visible: true)
     }
 

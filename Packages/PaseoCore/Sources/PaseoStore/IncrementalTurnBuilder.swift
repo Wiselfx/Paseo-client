@@ -126,6 +126,11 @@ internal final class IncrementalTurnBuilder {
             return nil
         }
         if oldFirst.turnId == nil, !Self.isUserMessage(oldFirst) { return nil }
+        // O(1) precheck before the O(rows) walk below: a true prepend shifts every old row right by
+        // exactly prependedCount, so the row now at that index is the old first row and the tail is
+        // untouched. A pure append fails both (its shifted row is a later old row, its tail is new)
+        // and takes the general path without scanning the transcript.
+        guard newRows[prependedCount] == rows[0], newRows.last == rows.last else { return nil }
         // Full equality, as the general path does: a page that rewrote an old row is not a prepend.
         guard rows.elementsEqual(newRows[prependedCount...]) else { return nil }
 
