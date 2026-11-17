@@ -145,11 +145,11 @@ struct ClaudeSweepSchedule: TimelineSchedule {
             let inCycle = t - cycle * period
             let next: Double
             if inCycle < active {
-                next = cycle * period + min(((inCycle / step).rounded(.down) + 1) * step, active)
+                next = cycle * period + Swift.min(((inCycle / step).rounded(.down) + 1) * step, active)
             } else {
                 next = (cycle + 1) * period
             }
-            return origin.addingTimeInterval(max(next, t + 0.001))
+            return origin.addingTimeInterval(Swift.max(next, t + 0.001))
         }
     }
 }
