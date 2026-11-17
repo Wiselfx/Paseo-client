@@ -28,6 +28,8 @@ import UniformTypeIdentifiers
     var loadImage: (String) async -> UIImage? = { _ in nil }
     /// An agent's live title by id, for "Sent by" (upstream `user-message/index.tsx:95`).
     var agentTitle: (String) -> String? = { _ in nil }
+    /// Opens a diff whole, in the chat's diff sheet (an inline diff shows its first lines).
+    var showDiff: (ClaudeDiffDocument) -> Void = { _ in }
 
     /// What this agent and host can actually do with a turn, as one value the rows compare
     /// (R-2). Recomputed by `ChatController` when the agent snapshot, the host features or the
@@ -307,6 +309,9 @@ struct TranscriptJump: Equatable {
         }
         actions.openFile = { [weak self] path in
             self?.openFileViewer(at: path)
+        }
+        actions.showDiff = { [weak self] document in
+            self?.diffDocument = document
         }
         actions.markdown = { [weak self] action in
             self?.handleMarkdown(action)

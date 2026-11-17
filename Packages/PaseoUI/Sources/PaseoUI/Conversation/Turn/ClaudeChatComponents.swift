@@ -116,6 +116,7 @@ struct ClaudeCodeBlock: View {
                     if let title {
                         Text(title).font(.paseo(.codeSmall)).foregroundStyle(
                             Palette.secondaryInk)
+                            .lineLimit(1).truncationMode(.middle)
                     }
                     if let command {
                         Text(command).font(.paseo(.codeSmall)).foregroundStyle(
@@ -135,18 +136,9 @@ struct ClaudeCodeBlock: View {
                 if terminal, let output {
                     terminalOutput(output)
                 } else if let output {
-                    ScrollView([.vertical, .horizontal]) {
-                        Text(output)
-                            .font(.paseo(.codeSmall))
-                            .foregroundStyle(Palette.ink.opacity(0.85))
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .padding(12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .scrollBounceBehavior(.basedOnSize)
-                    .frame(maxHeight: maxHeight)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // The first lines, sideways-scrollable; the rest a tap away. A whole file laid
+                    // out in a capped scroll box cost its full text layout on every measure.
+                    ClaudeOutputPreview(text: output, maxLines: max(4, Int(maxHeight / 17)))
                 }
             }
         }
@@ -198,7 +190,7 @@ struct ClaudeCodeBlock: View {
     private func terminalOutput(_ output: String) -> some View {
         let display = parsed ?? TerminalParseCache.entry(for: output)
         return VStack(alignment: .leading, spacing: 0) {
-            ScrollView([.vertical, .horizontal]) {
+            ScrollView(.horizontal) {
                 if let display {
                     Text(Self.attributedText(display.tail))
                         .font(.paseo(.codeSmall))
@@ -216,9 +208,8 @@ struct ClaudeCodeBlock: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: maxHeight)
-            .fixedSize(horizontal: false, vertical: true)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             if let display, display.lineCount > Self.tailLines {
                 Button("Show all \(display.lineCount) lines") { showAll = true }
                     .font(.paseo(.caption, weight: .medium))
@@ -285,6 +276,105 @@ struct ClaudeCodeBlock: View {
     private var hasOutput: Bool { !(output ?? "").isEmpty }
 }
 
+/// A long text's first lines in mono, sideways-scrollable, with "Show all N lines" opening the rest
+/// in a sheet. The head and the count are read once per text (the text is compared by identity
+/// first, so an unchanged output costs nothing), never per body pass.
+struct ClaudeOutputPreview: View {
+    let text: String
+    let maxLines: Int
+
+    /// The sheet's line cap: past it a single `Text` stops being responsive.
+    static let sheetLines = 2000
+
+    private final class Memo {
+        var source: String?
+        var maxLines = 0
+        var head = ""
+        var lineCount = 0
+    }
+
+    @State private var memo = Memo()
+    @State private var showsAll = false
+
+    private var preview: (head: String, lines: Int) {
+        if memo.source != text || memo.maxLines != maxLines {
+            memo.source = text
+            memo.maxLines = maxLines
+            memo.head = Self.head(of: text, lines: maxLines)
+            memo.lineCount = Self.lineCount(of: text)
+        }
+        return (memo.head, memo.lineCount)
+    }
+
+    var body: some View {
+        let preview = self.preview
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView(.horizontal) {
+                Text(preview.head)
+                    .font(.paseo(.codeSmall))
+                    .foregroundStyle(Palette.ink.opacity(0.85))
+                    .textSelection(.enabled)
+                    .fixedSize()
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            if preview.lines > maxLines {
+                Button("Show all \(PaseoFormat.integer(preview.lines)) lines") { showsAll = true }
+                    .font(.paseo(.caption, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .frame(minHeight: Metrics.hitSize)
+                    .padding(.horizontal, 12)
+                    .sheet(isPresented: $showsAll) {
+                        SheetScaffold("Output", detents: .large) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                if preview.lines > Self.sheetLines {
+                                    Text("Showing the first \(PaseoFormat.integer(Self.sheetLines)) of \(PaseoFormat.integer(preview.lines)) lines")
+                                        .font(.paseo(.caption))
+                                        .foregroundStyle(Palette.secondaryInk)
+                                        .padding(.horizontal, Space.md)
+                                        .padding(.vertical, Space.sm)
+                                }
+                                ScrollView([.vertical, .horizontal]) {
+                                    Text(Self.head(of: text, lines: Self.sheetLines))
+                                        .font(.paseo(.codeSmall))
+                                        .textSelection(.enabled)
+                                        .fixedSize()
+                                        .padding(Space.md)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                        }
+                    }
+            }
+        }
+    }
+
+    /// The text up to its `lines`-th line break, without the break.
+    static func head(of text: String, lines: Int) -> String {
+        var seen = 0
+        let utf8 = text.utf8
+        var index = utf8.startIndex
+        while index != utf8.endIndex {
+            if utf8[index] == 10 {
+                seen += 1
+                if seen == lines { return String(text[..<index]) }
+            }
+            index = utf8.index(after: index)
+        }
+        return text.hasSuffix("\n") ? String(text.dropLast()) : text
+    }
+
+    /// Lines in the text; a trailing break does not start another.
+    static func lineCount(of text: String) -> Int {
+        guard !text.isEmpty else { return 0 }
+        var count = 1
+        for byte in text.utf8 where byte == 10 { count += 1 }
+        return text.utf8.last == 10 ? count - 1 : count
+    }
+}
+
 /// The tool call's status, as a 6 pt dot with a spinner while it runs.
 struct ClaudeStatusDot: View {
     var status: ToolCallPresentation.Status
@@ -311,13 +401,19 @@ func rewindScopeTitle(_ scope: RewindScope) -> String {
 
 /// 28 × 28 copy affordance, the size DSH uses for its own row buttons.
 struct ClaudeCopyButton: View {
-    var text: String
+    /// Read when the button is tapped, never per body pass: the text can be a whole log.
+    let text: () -> String
     var label = "Copy"
     @State private var copied = false
 
+    init(text: @autoclosure @escaping () -> String, label: String = "Copy") {
+        self.text = text
+        self.label = label
+    }
+
     var body: some View {
         Button {
-            UIPasteboard.general.string = text
+            UIPasteboard.general.string = text()
             Haptics.light()
             copied = true
             Task {
@@ -354,9 +450,6 @@ struct ClaudeUserBubble: View {
     var rewindChoices: [RewindScope] = []
     /// Called with the chosen scope; the parent presents the confirmation dialog.
     var onRewind: ((RewindScope) -> Void)? = nil
-    /// M7g file mentions: a pre-formatted body with tappable `paseo-file:` links. Nil (the
-    /// default) renders the plain `text` unchanged.
-    var attributed: AttributedString? = nil
     /// A rewind is in flight: the rewind items are disabled until it settles (upstream
     /// `rewind-menu.tsx` `isLocked`).
     var rewindInFlight: Bool = false
@@ -376,18 +469,15 @@ struct ClaudeUserBubble: View {
     /// The "Select text" sheet.
     @State private var showingText = false
 
-    /// The bubble's shape, shared by the fill and the context-menu preview.
-
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
-        onRewind: ((RewindScope) -> Void)? = nil, attributed: AttributedString? = nil,
+        onRewind: ((RewindScope) -> Void)? = nil,
         rewindInFlight: Bool = false, clientMessageId: String? = nil, sentAt: Date? = nil
     ) {
         self.text = text
         self.isPending = isPending
         self.rewindChoices = rewindChoices
         self.onRewind = onRewind
-        self.attributed = attributed
         self.rewindInFlight = rewindInFlight
         self.clientMessageId = clientMessageId
         self.sentAt = sentAt
@@ -395,11 +485,13 @@ struct ClaudeUserBubble: View {
     }
 
     var body: some View {
+        // The bubble's width is decided once, by the column: a fixed inset on the leading side and
+        // the text's own wrapped width, never an HStack/Spacer split that depends on the height
+        // offered (the measure and the draw were offered different heights, so a bubble flipped
+        // between wide and narrow while scrolling).
         VStack(alignment: .trailing, spacing: Space.xs) {
-            HStack {
-                Spacer(minLength: 42)
-                bubble
-            }
+            bubble
+                .padding(.leading, 42)
             if let sentAt, !isPending, !text.isEmpty {
                 Text(PaseoFormat.messageTimestamp(sentAt))
                     .font(.paseo(.caption))
@@ -514,13 +606,16 @@ struct ClaudeUserBubble: View {
         }
     }
 
-    /// The plain text, or the M7g-formatted body with tappable file links.
+    /// The plain text, or with its file paths as tappable links (M7g), memoized by text.
     @ViewBuilder private var bodyText: some View {
-        if let attributed {
-            Text(attributed)
-        } else {
-            Text(text)
+        Group {
+            if let linked = FilePathLinks.bubbleText(text) {
+                Text(linked)
+            } else {
+                Text(text)
+            }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// A sent message rises 10 pt into place (fade-up, OCU §12.20).

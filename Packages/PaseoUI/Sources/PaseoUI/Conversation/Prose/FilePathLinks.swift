@@ -134,34 +134,43 @@ enum FilePathLinks {
         return ranges
     }
 
-    /// `text` with every file-path candidate turned into a `paseo-file:` link.
-    static func attributed(
-        _ text: String, font: Font, foreground: Color, linkColor: Color
-    ) -> AttributedString {
+    /// Your bubble's text with every file-path candidate as a `paseo-file:` link, or nil when it
+    /// names none (the bubble then draws the plain string). Memoized by text: a bubble asks on
+    /// every body pass, the regex runs once per message. The runs carry no colour or body font,
+    /// so the bubble's own ink, size and tint apply; a link is the mono face, underlined.
+    static func bubbleText(_ text: String) -> AttributedString? {
+        if let cached = bubbleCache.value(for: text) { return cached.value }
+        let result = bubbleLinks(text)
+        bubbleCache.setValue(BubbleLinks(value: result), for: text)
+        return result
+    }
+
+    private struct BubbleLinks {
+        let value: AttributedString?
+    }
+
+    private static let bubbleCache = ProseCache<String, BubbleLinks>(
+        budget: 2 * 1024 * 1024, countLimit: 512, cost: { text, _ in text.utf8.count * 3 })
+
+    private static func bubbleLinks(_ text: String) -> AttributedString? {
+        let found = matches(in: text)
+        guard !found.isEmpty else { return nil }
         var result = AttributedString()
         let ns = text as NSString
         var cursor = 0
-        for match in matches(in: text) {
+        for match in found {
             if match.range.location > cursor {
-                var plain = AttributedString(ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)))
-                plain.font = font
-                plain.foregroundColor = foreground
-                result.append(plain)
+                result.append(AttributedString(
+                    ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))))
             }
             var linked = AttributedString(ns.substring(with: match.range))
-            linked.font = ClaudeTypography().mono(13)
-            linked.foregroundColor = linkColor
+            linked.font = ClaudeTypography().mono(15)
             linked.underlineStyle = .single
             linked.link = url(forPath: match.path)
             result.append(linked)
             cursor = match.range.location + match.range.length
         }
-        if cursor < ns.length {
-            var plain = AttributedString(ns.substring(from: cursor))
-            plain.font = font
-            plain.foregroundColor = foreground
-            result.append(plain)
-        }
+        if cursor < ns.length { result.append(AttributedString(ns.substring(from: cursor))) }
         return result
     }
 }

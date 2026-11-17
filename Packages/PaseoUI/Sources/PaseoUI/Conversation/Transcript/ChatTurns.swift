@@ -124,16 +124,6 @@ struct ClaudeTurnView: View {
         return false
     }
 
-    /// `@relative/path` tokens in your bubble, as tappable `paseo-file:` links (M7g).
-    var bubbleAttributed: (String) -> AttributedString {
-        { text in
-            FilePathLinks.attributed(
-                text, font: .paseo(.body),
-                foreground: Palette.ink,
-                linkColor: Palette.proseLink)
-        }
-    }
-
     /// Rows that stay visible while the work is folded: messages you sent while this turn ran, and
     /// compaction markers. Upstream never folds these away (`turn-collapse/model.ts:102`
     /// `staysVisibleWhenCollapsed`), so they render whether the work is shown or folded: in place
@@ -182,7 +172,6 @@ struct ClaudeTurnView: View {
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
                     onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
-                    attributed: bubbleAttributed(message.text),
                     rewindInFlight: rewindInFlight,
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
@@ -212,8 +201,7 @@ struct ClaudeTurnView: View {
             .accessibilityLabel(turnSummaryLabel)
             // Messages sent mid-turn and compaction markers stay visible while the work is folded.
             ForEach(visibleRows) { row in
-                ClaudeVisibleRow(
-                    row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
+                ClaudeVisibleRow(row: row, highlightedSeq: highlightedSeq)
             }
             if let finalProse, case .assistantMessage(let message) = finalProse.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown)
@@ -247,7 +235,6 @@ struct ClaudeTurnView: View {
                     text: message.text, isPending: row.isPending,
                     rewindChoices: rewindable ? rewindChoices : [],
                     onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
-                    attributed: bubbleAttributed(message.text),
                     rewindInFlight: rewindInFlight,
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
@@ -261,9 +248,10 @@ struct ClaudeTurnView: View {
                     ForEach(bodySegments) { segment in
                         ClaudeSegmentView(
                             segment: segment, turnIsRunning: isRunning,
+                            isTail: isRunning && segment.id == turn.segments.last?.id,
                             onMarkdown: onMarkdown,
                             highlightedSeq: highlightedSeq, findTarget: findTarget,
-                            onOpenFile: onOpenFile, bubbleAttributed: bubbleAttributed)
+                            onOpenFile: onOpenFile)
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: -2)))
@@ -271,8 +259,7 @@ struct ClaudeTurnView: View {
                 // Work folded: the messages sent mid-turn and compaction markers still show, in
                 // order, after the header.
                 ForEach(visibleRows) { row in
-                    ClaudeVisibleRow(
-                        row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
+                    ClaudeVisibleRow(row: row, highlightedSeq: highlightedSeq)
                 }
             }
             if let answerProse, case .assistantMessage(let message) = answerProse.item {
@@ -404,20 +391,19 @@ struct ClaudeTurnView: View {
 struct ClaudeSegmentView: View {
     let segment: Turn.Segment
     let turnIsRunning: Bool
+    /// The turn's newest segment while it runs: its last step is the one happening now.
+    var isTail: Bool = false
     let onMarkdown: (MarkdownAction) -> Void
     var highlightedSeq: Int?
     var findTarget: Int?
     var onOpenFile: ((String) -> Void)?
-    /// The turn's file-link builder for your bubbles (`ClaudeTurnView.bubbleAttributed`). Nil
-    /// renders a mid-turn message as plain text.
-    var bubbleAttributed: ((String) -> AttributedString)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         switch segment {
         case .work(let group):
-            ClaudeWorkGroupCell(
-                group: group, turnIsRunning: turnIsRunning,
+            ClaudeWorkTimeline(
+                group: group, turnIsRunning: turnIsRunning, isTail: isTail,
                 highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
@@ -435,8 +421,7 @@ struct ClaudeSegmentView: View {
         case .notice(let row):
             // A message sent mid-turn is a notice row in the model (Turn.swift TurnDraft.add).
             if case .userMessage = row.item {
-                ClaudeMidTurnBubble(
-                    row: row, highlightedSeq: highlightedSeq, attributed: bubbleAttributed)
+                ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq)
             } else {
                 ClaudeNoticeRow(item: row.item)
             }
@@ -451,7 +436,6 @@ struct ClaudeSegmentView: View {
 struct ClaudeMidTurnBubble: View {
     let row: TimelineRow
     var highlightedSeq: Int?
-    var attributed: ((String) -> AttributedString)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -464,7 +448,6 @@ struct ClaudeMidTurnBubble: View {
                 ClaudeUserBubble(
                     text: message.text, isPending: row.isPending,
                     rewindChoices: [], onRewind: nil,
-                    attributed: attributed?(message.text),
                     clientMessageId: message.clientMessageId,
                     sentAt: PaseoDate.parse(row.timestamp)
                 )
@@ -485,7 +468,6 @@ struct ClaudeMidTurnBubble: View {
 struct ClaudeVisibleRow: View {
     let row: TimelineRow
     var highlightedSeq: Int?
-    var attributed: ((String) -> AttributedString)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -498,8 +480,7 @@ struct ClaudeVisibleRow: View {
                         .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
                 }
         } else {
-            ClaudeMidTurnBubble(
-                row: row, highlightedSeq: highlightedSeq, attributed: attributed)
+            ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq)
         }
     }
 }
