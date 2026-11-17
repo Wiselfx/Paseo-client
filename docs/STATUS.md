@@ -23,6 +23,16 @@ Last updated 2026-11-12. Read `ARCHITECTURE.md` and `AGENTS.md` first. Work happ
 - Device checks: open a long chat (lands at end), stream (follows; drag releases), flick to the top
   (older pages, no stop), keyboard show/hide and interactive dismiss, find/outline/media jumps, Back to
   the end, expand/collapse work groups (rows below glide), bottom soft edge under the composer.
+- Round 2 (device feedback: bubbles flipping wide/narrow on scroll, text dancing, thinking/tool blocks
+  slow): the cell root is `fixedSize(vertical)` so the measure pass and the draw pass offer the content
+  the same proposal; the bubble uses a fixed leading inset (no HStack/Spacer split) and its file links are
+  cached per text without a colour override. Thinking and tool calls are now one work timeline
+  (`ChatWorkGroup.swift`, `ClaudeWorkTimeline`): a rail with a node per step, thoughts in the serif (one
+  line settled, live fading tail, full when opened), tool calls as tense-tracking verb + mono target +
+  outcome; no nested scroll views, no measure-then-resize card, long runs fold older steps. Code output and
+  inline diffs are bounded previews with Show all (diff opens the chat diff sheet via `ChatActions.showDiff`).
+  IPA Paseo-20261117-0855-5ed7190. Check: scroll a chat with many bubbles; open/close thoughts and tools;
+  a live turn's thinking tail; a long run's "N earlier steps"; Show all on a long Read and on a diff.
 
 
 **Composer keyboard bug FIXED (2026-11-15, merge of fix-composer-focus):** the bottom bar hosts the composer twice and both instances share one focus binding; the hidden one also took first responder when the binding turned true, UIKit ended editing in the visible one, the binding flipped false and both resigned (seen after a rewound message was sent, because that flow leaves the hidden instance in a window). Fix: `ComposerTextView.bridgeFocus` never takes focus while another composer in the window has it. Verified on the simulator with the real sequence (rewind the first message, send it back, tap, type). Also fixed: the gate's `install` picked the first `.app` in the build folder, which since the UITests target arrived could be the test runner, so manual simulator tests were running an older build (all earlier simulator experiments and the bisect in this session are void); it now installs `PaseoClient.app` only. Until the Mac has the new gate, run `clean` before `install`. Tests: `App/PaseoUITests/RewindKeyboardTests` and `RewindComposerTests` (the strict one still needs its send-wait fixed).
