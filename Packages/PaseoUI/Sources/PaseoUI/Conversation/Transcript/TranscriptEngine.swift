@@ -204,8 +204,18 @@ final class TranscriptCollectionView: UICollectionView {
     weak var engine: TranscriptEngine?
 
     override func layoutSubviews() {
+        guard let engine, engine.animatesResizes else {
+            super.layoutSubviews()
+            engine?.collectionViewDidLayout()
+            return
+        }
+        // Just after a tap (a disclosure): rows a resize moved glide from where they were, in the
+        // same curve as the SwiftUI content opening inside its cell.
+        var before: [ObjectIdentifier: CGFloat] = [:]
+        for cell in visibleCells { before[ObjectIdentifier(cell)] = cell.frame.minY }
         super.layoutSubviews()
-        engine?.collectionViewDidLayout()
+        engine.collectionViewDidLayout()
+        engine.animateMoves(of: visibleCells, from: before)
     }
 }
 
@@ -441,6 +451,10 @@ final class TranscriptEngine: NSObject {
     private var animationToken = 0
     /// Bumped by every new reveal and by a finger: a stale reveal step does nothing.
     private var revealToken = 0
+    /// A tap opens and closes things in the cells: until then, a row that a resize moves glides
+    /// (`animateMoves`) and the end pin follows in the same curve.
+    private var resizeAnimationUntil = Date.distantPast
+    private var isApplyingStructuralChange = false
     private var findFetchTask: Task<Void, Never>?
 
     private var headerReveal = HeaderRevealState()
@@ -515,7 +529,35 @@ final class TranscriptEngine: NSObject {
     }
 
     @objc private func transcriptTapped() {
+        resizeAnimationUntil = Date().addingTimeInterval(0.6)
         controller?.dismissKeyboard()
+    }
+
+    /// A tap just happened and nothing else is moving the content.
+    var animatesResizes: Bool {
+        Date() < resizeAnimationUntil && !reduceMotion && !isUserScrolling && !isAnimatingScroll
+            && !isApplyingStructuralChange
+    }
+
+    /// Rows whose place in the content a resize changed slide there from the old place. A row UIKit
+    /// already animates, or one that just appeared, is left alone.
+    func animateMoves(of cells: [UICollectionViewCell], from before: [ObjectIdentifier: CGFloat]) {
+        var moves: [(cell: UICollectionViewCell, frame: CGRect)] = []
+        UIView.performWithoutAnimation {
+            for cell in cells {
+                guard let oldY = before[ObjectIdentifier(cell)] else { continue }
+                let frame = cell.frame
+                guard abs(frame.minY - oldY) > 0.5, cell.layer.animationKeys()?.isEmpty ?? true else {
+                    continue
+                }
+                cell.frame = CGRect(x: frame.minX, y: oldY, width: frame.width, height: frame.height)
+                moves.append((cell, frame))
+            }
+        }
+        guard !moves.isEmpty else { return }
+        UIView.animate(Motion.disclosure.animation, changes: {
+            for move in moves { move.cell.frame = move.frame }
+        })
     }
 
     @objc private func keyboardWillChangeFrame(_ note: Notification) {
@@ -635,6 +677,8 @@ final class TranscriptEngine: NSObject {
         let anchor = isFollowing ? nil : captureAnchor(present: newIndex)
         let batch = didInitialLayout && cv.window != nil && deleted.count + inserted.count <= 400
             && newIndex.count == new.count
+        isApplyingStructuralChange = true
+        defer { isApplyingStructuralChange = false }
 
         if batch {
             UIView.performWithoutAnimation {
@@ -801,12 +845,15 @@ final class TranscriptEngine: NSObject {
         TurnHeightStore.save(heightMemory.persisted)
     }
 
-    /// A row above the reader's line changed height: move the offset with it. While the end is pinned
-    /// the pin does it instead.
+    /// A row wholly above the reader's line changed height (measured for the first time in the
+    /// overscan, an older page settling): move the offset with it, so nothing on screen moves. A row
+    /// that reaches into the screen is not compensated: its change happens where the reader can see
+    /// it (a tapped disclosure, streamed text), and the rows below it move as they should. While the
+    /// end is pinned the pin does it instead.
     func compensatesResize(of frame: CGRect) -> Bool {
         guard !pinsToBottom else { return false }
         let cv = collectionView
-        return frame.minY < cv.contentOffset.y + cv.contentInset.top - 0.5
+        return frame.maxY <= cv.contentOffset.y + cv.contentInset.top + 0.5
     }
 
     // MARK: Insets
@@ -833,7 +880,7 @@ final class TranscriptEngine: NSObject {
             container.bottomBarHeight = insets.bottom
             if first || wasPinned {
                 cv.layoutIfNeeded()
-                pinIfNeeded()
+                pinIfNeeded(glides: false)
             }
         }
         if first {
@@ -868,11 +915,18 @@ final class TranscriptEngine: NSObject {
         }
     }
 
-    private func pinIfNeeded() {
+    /// `glides`: a disclosure's resize may animate the pin. Off inside the keyboard's own animation.
+    private func pinIfNeeded(glides: Bool = true) {
         guard pinsToBottom, didInitialLayout else { return }
         let cv = collectionView
         let target = maxOffsetY
-        if abs(cv.contentOffset.y - target) > 0.25 {
+        guard abs(cv.contentOffset.y - target) > 0.25 else { return }
+        if glides, animatesResizes {
+            // A disclosure at the end: the end follows it in the content's own curve.
+            UIView.animate(Motion.disclosure.animation, changes: {
+                cv.contentOffset = CGPoint(x: 0, y: target)
+            })
+        } else {
             cv.contentOffset = CGPoint(x: 0, y: target)
         }
     }
