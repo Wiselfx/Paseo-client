@@ -41,7 +41,7 @@ struct ClaudeLoader: View {
                     // 30 Hz is all the bounce needs, and the clock stops entirely while the
                     // surface is covered, the app is backgrounded, or Reduce Motion is on
                     // (R9 §3).
-                    TimelineView(.animation(paused: paused)) { context in
+                    TimelineView(.animation(minimumInterval: 1.0 / 30, paused: paused)) { context in
                         Canvas { canvas, _ in
                             draw(canvas, time: max(0, context.date.timeIntervalSince(start)))
                         }

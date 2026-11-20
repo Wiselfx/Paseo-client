@@ -26,7 +26,8 @@ enum ClaudeReasoningClause {
 
     /// The clause the model is on, or nil where the tail says nothing of the kind.
     static func extract(from text: String) -> String? {
-        let tail = text.count > tailChars ? String(text.suffix(tailChars)) : text
+        // `suffix` walks back from the end only; `count` would walk the whole thought per token.
+        let tail = String(text.suffix(tailChars))
         let chars = Array(tail)
         for sentence in endedSentences(chars).reversed() {
             if let clause = englishClause(sentence) { return clause }

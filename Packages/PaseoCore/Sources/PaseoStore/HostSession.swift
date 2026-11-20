@@ -835,7 +835,15 @@ public final class ConversationStore: Identifiable {
     /// composer: only the user's own send, cancel or settings change belongs there.
     public private(set) var backgroundError: String?
     /// The composer text. Lives here so it survives navigating away and back.
-    public var draft = ""
+    public var draft = "" {
+        didSet {
+            let blank = DraftText.isBlank(draft)
+            if blank != draftIsBlank { draftIsBlank = blank }
+        }
+    }
+    /// Whether the draft holds only whitespace. Written only when it flips, so the composer's chrome
+    /// (send button, card shape) can read it without re-running on every keystroke.
+    public private(set) var draftIsBlank = true
     /// In-conversation search (find bar). Owned here so results survive view churn.
     public let search: ConversationSearch
     /// Provider-managed subagents for this agent's track.

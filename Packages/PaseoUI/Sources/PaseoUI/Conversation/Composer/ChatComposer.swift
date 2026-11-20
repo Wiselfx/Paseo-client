@@ -130,10 +130,11 @@ struct ComposerView: View {
     var body: some View {
         let _ = PaseoPerf.body("Composer")
         let _ = PaseoPerf.why(Self.self)
-        VStack(alignment: .leading, spacing: 6) {
-            if !isDraft {
-                slashMenu
-                mentionMenu
+        // Spacing 0: each piece above the card carries its own 6 pt, so an absent one leaves no gap.
+        VStack(alignment: .leading, spacing: 0) {
+            if !isDraft, let store, let controller {
+                // The only part of the composer that reads the text on every keystroke.
+                ComposerMenus(store: store, controller: controller, focused: $focused)
                 queueStack
             }
             composerCard
@@ -153,8 +154,6 @@ struct ComposerView: View {
         } action: { height in
             surfaceHeight = height
         }
-        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: slashQuery != nil)
-        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: mentionQuery != nil)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: queueIsEmpty == false)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: fastModeActive)
         .onChange(of: photoSelection) { _, items in
@@ -180,8 +179,14 @@ struct ComposerView: View {
 
     // MARK: Derived (all local to the composer)
 
-    private var trimmedText: String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Whether the text is only whitespace. Read from the store's flag, which changes only when the
+    /// answer flips: the chrome below never depends on the text itself, so a keystroke re-runs
+    /// only `ComposerMenus` and the field.
+    private var draftIsBlank: Bool {
+        switch mode {
+        case .conversation: store?.draftIsBlank ?? true
+        case .draft(let draft): draft.textIsBlank
+        }
     }
 
     /// One O(lines) pass per text change, and only while the draft is being typed into: what the
@@ -205,7 +210,7 @@ struct ComposerView: View {
     /// text, an attachment, an error or dictation. A live conversation is always the card (V5 §4.4).
     private var composerExpanded: Bool {
         guard isDraft else { return true }
-        return focused || !trimmedText.isEmpty || !trayItems.isEmpty || errorText != nil
+        return focused || !draftIsBlank || !trayItems.isEmpty || errorText != nil
             || (activeDictation?.isListening ?? false)
     }
 
@@ -214,13 +219,6 @@ struct ComposerView: View {
         controller?.dictation ?? draftDictation
     }
 
-    private var slashQuery: String? {
-        controller?.slashQuery(in: text)
-    }
-
-    private var mentionQuery: String? {
-        ChatMentions.query(in: text)
-    }
 
     private var trayItems: [ComposerAttachmentItem] {
         controller?.trayItems ?? localTray
@@ -252,7 +250,7 @@ struct ComposerView: View {
         if let draft = draftSession {
             return draft.canSend(hasAttachments: !readyAttachments.isEmpty)
         }
-        if !trimmedText.isEmpty { return true }
+        if !draftIsBlank { return true }
         return !readyAttachments.isEmpty
     }
 
@@ -706,7 +704,7 @@ struct ComposerView: View {
         // An upload in flight has nothing to send yet; the table's disabled look says so without
         // inventing a second one.
         if hasUploadingAttachment { return .unavailable }
-        if !trimmedText.isEmpty || !readyAttachments.isEmpty { return .send }
+        if !draftIsBlank || !readyAttachments.isEmpty { return .send }
         if store?.isRunning == true { return .stop }
         if voiceCanStart { return .voice }
         return .unavailable
@@ -1068,30 +1066,6 @@ struct ComposerView: View {
 
     // MARK: Slash and mentions
 
-    @ViewBuilder private var slashMenu: some View {
-        if let controller, let query = slashQuery {
-            SlashMenu(controller: controller, query: query, onPick: { command in
-                text = "/" + command.name + " "
-                focused = true
-            })
-            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
-        }
-    }
-
-    @ViewBuilder private var mentionMenu: some View {
-        if let controller, mentionQuery != nil,
-            !controller.mentionMatches.isEmpty || controller.mentionIndex.isBuilding
-        {
-            MentionMenu(
-                rows: controller.mentionMatches, isBuilding: controller.mentionIndex.isBuilding
-            ) { row in
-                controller.handleMentionPick(row)
-                focused = true
-            }
-            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
-        }
-    }
-
     // MARK: Queue
 
     @ViewBuilder private var queueStack: some View {
@@ -1117,6 +1091,7 @@ struct ComposerView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 2)
+            .padding(.bottom, 6)
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         }
     }
@@ -1172,6 +1147,45 @@ struct ComposerView: View {
 }
 
 // MARK: - Extracted pieces
+
+/// The slash-command and mention menus over the card. The one composer view that reads the draft
+/// on every keystroke: it needs the query, and nothing else in the composer does.
+private struct ComposerMenus: View {
+    let store: ConversationStore
+    let controller: ChatController
+    @Binding var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let text = store.draft
+        let slash = controller.slashQuery(in: text)
+        let mentionOpen = ChatMentions.query(in: text) != nil
+        let showsMentions =
+            mentionOpen && (!controller.mentionMatches.isEmpty || controller.mentionIndex.isBuilding)
+        VStack(alignment: .leading, spacing: 0) {
+            if let slash {
+                SlashMenu(controller: controller, query: slash, onPick: { command in
+                    store.draft = "/" + command.name + " "
+                    focused = true
+                })
+                .padding(.bottom, 6)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
+            }
+            if showsMentions {
+                MentionMenu(
+                    rows: controller.mentionMatches, isBuilding: controller.mentionIndex.isBuilding
+                ) { row in
+                    controller.handleMentionPick(row)
+                    focused = true
+                }
+                .padding(.bottom, 6)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: slash != nil)
+        .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: showsMentions)
+    }
+}
 
 /// The slash-command menu body.
 struct SlashMenu: View {

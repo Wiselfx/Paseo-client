@@ -106,6 +106,10 @@ struct ClaudeRevealProse: View {
         var source: String?
         var home: String?
         var refs: [PieceRef] = []
+        /// The open piece's last parse while the turn streams (never stored in the shared cache).
+        var tailText: String?
+        var tailHome: String?
+        var tailDocument: MarkdownDocumentModel?
     }
     @State private var memo = PieceMemo()
 
@@ -119,9 +123,24 @@ struct ClaudeRevealProse: View {
         return refs
     }
 
+    /// A settled piece is parsed once into the shared cache; the open piece of a running turn is
+    /// parsed for this view only, so its partial copies never evict settled messages.
+    private func document(_ text: String, open: Bool) -> MarkdownDocumentModel {
+        let home = richActions?.homeDirectory
+        guard open else { return .cached(text, home: home) }
+        if memo.tailText == text, memo.tailHome == home, let document = memo.tailDocument {
+            return document
+        }
+        let document = MarkdownDocumentModel.transient(text, home: home)
+        memo.tailText = text
+        memo.tailHome = home
+        memo.tailDocument = document
+        return document
+    }
+
     private func computePieceRefs(_ source: String, home: String?) -> [PieceRef] {
         let raw = PaseoPerf.measure("rich.pieces") {
-            RichPiecesCache.pieces(source, home: home)
+            RichPiecesCache.pieces(source, home: home, transient: isStreaming)
         }
         var refs: [PieceRef] = []
         var offset = 0
@@ -160,7 +179,8 @@ struct ClaudeRevealProse: View {
                     let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         ClaudeMarkdownView(
-                            document: .cached(trimmed, home: richActions?.homeDirectory), theme: theme,
+                            document: document(trimmed, open: isStreaming && ref.isTailMarkdown),
+                            theme: theme,
                             // Only the open piece can be still arriving. A settled piece sees
                             // `false` while the turn runs, so its code highlights as soon as its
                             // fence is closed and the turn ending changes one piece, not all of
@@ -228,7 +248,9 @@ struct ClaudeRevealProse: View {
             var stampMs = 0.0
             var previousMs: Double?
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(TextReveal.frameIntervalMs / 1000))
+                // Half the upstream frame rate: each step re-lays-out the turn's cell, and the
+                // backlog is released by elapsed time, so a step simply carries two frames' text.
+                try? await Task.sleep(for: .seconds(2 * TextReveal.frameIntervalMs / 1000))
                 guard !Task.isCancelled else { return }
                 let now = clock.now
                 let elapsed = now - last
