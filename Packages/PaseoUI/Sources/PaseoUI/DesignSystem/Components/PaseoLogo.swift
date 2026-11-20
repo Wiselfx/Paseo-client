@@ -30,42 +30,46 @@ struct PaseoLogoShimmer: View {
     var size: CGFloat = 96
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var sweep = false
 
     /// Upstream's `SHIMMER_PEAK_WIDTH`.
     private static let peakWidth: CGFloat = 120
     /// Upstream's `SHIMMER_DURATION_MS`, in seconds.
     private static let duration: Double = 1.8
+    /// Upstream's web gradient dips to `88` (53 %) around the peak.
+    private static let restingOpacity: Double = 0.5
+
+    /// The band's centre travels from out of frame on the left to out of frame on the right.
+    private var travel: CGFloat { (size + Self.peakWidth) / 2 }
 
     var body: some View {
         // The mark rests dim and a full-strength band sweeps across it. A white highlight on the
         // mark's own near-white ink (dark mode) would be invisible, so the contrast comes from the
         // dimmed base instead (upstream's web splash does the same: the mark dips and the peak
         // returns it to full colour, `startup-splash-screen.tsx:94-116`).
+        //
+        // The loop is a repeating keyframe animator, not `withAnimation(.repeatForever)`: a
+        // repeating transaction started in `onAppear` leaks into whatever transition removes
+        // the hero, and the draft → chat swap then fades the hero in and out forever.
         PaseoLogo(size: size)
             .opacity(reduceMotion ? 1 : Self.restingOpacity)
             .overlay {
                 if !reduceMotion {
                     PaseoLogo(size: size)
-                        .mask {
-                            ZStack { band }.frame(width: size, height: size)
+                        .keyframeAnimator(initialValue: -travel, repeating: true) { content, x in
+                            content.mask {
+                                Self.band(height: size)
+                                    .offset(x: x)
+                                    .frame(width: size, height: size)
+                            }
+                        } keyframes: { _ in
+                            LinearKeyframe(travel, duration: Self.duration)
                         }
-                }
-            }
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.linear(duration: Self.duration).repeatForever(autoreverses: false)) {
-                    sweep = true
                 }
             }
     }
 
-    /// Upstream's web gradient dips to `88` (53 %) around the peak.
-    private static let restingOpacity: Double = 0.5
-
-    /// The peak: transparent, full, transparent, from out of frame on the left to out of frame on
-    /// the right.
-    private var band: some View {
+    /// The peak: transparent, full, transparent.
+    private static func band(height: CGFloat) -> some View {
         LinearGradient(
             stops: [
                 .init(color: .black.opacity(0), location: 0),
@@ -74,8 +78,7 @@ struct PaseoLogoShimmer: View {
             ],
             startPoint: .leading, endPoint: .trailing
         )
-        .frame(width: Self.peakWidth, height: size)
-        .offset(x: sweep ? (size + Self.peakWidth) / 2 : -(size + Self.peakWidth) / 2)
+        .frame(width: peakWidth, height: height)
     }
 }
 #endif

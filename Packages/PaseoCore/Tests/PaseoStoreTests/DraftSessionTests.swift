@@ -200,7 +200,7 @@ struct DraftSessionTests {
         #expect(request.attachments?.count == 1)
         #expect(agentId == "e02d8100-d528-4dae-ad00-88d911bc3777")
         #expect(draft.text.isEmpty)
-        #expect(draft.pendingPrompt == nil)
+        #expect(draft.pendingPrompt == "say ready", "the bubble stays until the shell swaps")
         #expect(draft.error == nil)
         #expect(!draft.isCreating)
     }

@@ -300,7 +300,8 @@ public final class DraftSession {
             return nil
         }
         pendingCreation = nil
-        pendingPrompt = nil
+        // The pending bubble stays: the shell swaps the conversation in next, and clearing it
+        // here would bring the hero back for the frames before the swap. The draft is spent.
         return agentId
     }
 
