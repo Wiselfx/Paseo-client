@@ -3,249 +3,12 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-// MARK: - The work timeline
-
-/// The work of a turn as one timeline: a hairline rail with a node per step.
-///
-/// Thinking is the model's own voice: the serif, no card, a node of its own. Settled, it is one line
-/// ("Thought for 4s", then its first words); while it streams, its newest lines run under a live
-/// "Thinking"; opened, it reads in full. A tool call is one precise line: what it did (the verb turns
-/// from "Running" to "Ran" when it lands), what it did it to in mono, what came of it (the diff count,
-/// a failed exit), and it opens onto its output.
-///
-/// Nothing here scrolls inside the transcript or measures itself to lay out twice: a step is as tall as
-/// what it shows, output previews are bounded, and a long run shows its newest steps with the earlier
-/// ones a tap away. Steps are equatable values, so a streamed token redraws the one step it changed.
-struct ClaudeWorkTimeline: View {
-    let group: Turn.WorkGroup
-    let turnIsRunning: Bool
-    /// The turn's newest segment while it runs: its last step is the one happening now.
-    let isTail: Bool
-    var highlightedSeq: Int?
-    var findTarget: Int?
-    var onOpenFile: ((String) -> Void)?
-
-    /// Collapse-tool-calls mode: the run is one summary line until the reader opens it.
-    @State private var userOpened: Bool?
-    /// A long run shows its newest steps; the earlier ones open on a tap or for a find match.
-    @State private var showsEarlier = false
-    @State private var cache = WorkTimelineCache()
-    @State private var liveSince = Date()
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
-
-    /// Past this many steps the run folds its older ones away…
-    static let foldThreshold = 8
-    /// …and keeps this many of the newest.
-    static let keptSteps = 5
-
-    private var summarizes: Bool { ChatDisplayMode(rawValue: chatDisplay) == .collapseToolCalls }
-    private var isOpen: Bool { userOpened ?? !summarizes }
-
-    var body: some View {
-        let derived = cache.derived(for: group)
-        VStack(alignment: .leading, spacing: 0) {
-            if summarizes {
-                summaryRow(derived)
-            }
-            if isOpen {
-                steps(derived)
-                    .transition(.opacity.combined(with: .offset(y: -2)))
-            }
-        }
-        .onChange(of: findTarget, initial: true) { _, target in reveal(target) }
-    }
-
-    // MARK: Steps
-
-    @ViewBuilder private func steps(_ derived: WorkTimelineDerived) -> some View {
-        let all = derived.steps
-        let hidden = !showsEarlier && all.count > Self.foldThreshold ? all.count - Self.keptSteps : 0
-        VStack(alignment: .leading, spacing: 0) {
-            if hidden > 0 {
-                WorkEarlierSteps(count: hidden) {
-                    Haptics.selection()
-                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                        showsEarlier = true
-                    }
-                }
-            }
-            ForEach(hidden..<all.count, id: \.self) { index in
-                let step = all[index]
-                WorkStepView(
-                    step: step,
-                    rail: WorkRailPosition(above: index > 0, below: index < all.count - 1),
-                    isLive: isTail && index == all.count - 1,
-                    duration: derived.durations[step.id],
-                    highlighted: highlightedSeq.map { step.covers($0) } ?? false,
-                    findHit: findTarget.map { step.covers($0) } ?? false,
-                    onOpenFile: onOpenFile
-                )
-                .equatable()
-                .id(step.id)
-            }
-        }
-    }
-
-    /// A find match inside the run opens the run and, when it sits among the folded steps, them too.
-    private func reveal(_ target: Int?) {
-        guard let target, group.rows.contains(where: { $0.seqStart <= target && target <= $0.seqEnd })
-        else { return }
-        let steps = cache.derived(for: group).steps
-        let index = steps.firstIndex { $0.covers(target) } ?? steps.count
-        let folded = steps.count > Self.foldThreshold && index < steps.count - Self.keptSteps
-        guard (summarizes && userOpened != true) || (folded && !showsEarlier) else { return }
-        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-            if summarizes { userOpened = true }
-            if folded { showsEarlier = true }
-        }
-    }
-
-    // MARK: Summary (collapse-tool-calls mode)
-
-    private func summaryRow(_ derived: WorkTimelineDerived) -> some View {
-        Button {
-            Haptics.selection()
-            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                userOpened = !isOpen
-            }
-        } label: {
-            HStack(spacing: WorkTimelineMetrics.gutter - WorkTimelineMetrics.nodeSize) {
-                ClaudeGlyph(kind: derived.seat, size: 14, color: Palette.tertiaryInk)
-                    .frame(width: WorkTimelineMetrics.nodeSize, height: WorkTimelineMetrics.nodeSize)
-                Group {
-                    if isTail && group.isActive {
-                        ClaudeSweepLabel(startedAt: liveSince, rest: Palette.tertiaryInk) { ink in
-                            summaryLabel(derived.summary, ink)
-                        }
-                    } else {
-                        summaryLabel(derived.summary, Palette.tertiaryInk)
-                    }
-                }
-                Spacer(minLength: 4)
-                ClaudeTurnChevron(expanded: isOpen)
-            }
-            .frame(minHeight: WorkTimelineMetrics.headerHeight)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(derived.summary)
-        .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
-    }
-
-    private func summaryLabel(_ text: String, _ ink: Color) -> some View {
-        Text(text)
-            .font(.paseo(.processTitle, weight: .medium))
-            .foregroundStyle(ink)
-            .lineLimit(1)
-    }
-
-    // MARK: Derived text
-
-    /// One sentence of what the run did, such as "Edited 3 files and ran 2 commands".
-    nonisolated static func summaryText(_ group: Turn.WorkGroup) -> String {
-        var editedFiles = Set<String>()
-        var readFiles = Set<String>()
-        var commands = 0, searches = 0, otherTools = 0
-        for row in group.rows {
-            guard case .toolCall(let call) = row.item else { continue }
-            switch call.detail {
-            case .edit(let path, _, _, _), .write(let path, _): editedFiles.insert(path)
-            case .read(let path, _): readFiles.insert(path)
-            case .shell: commands += 1
-            case .search: searches += 1
-            default: otherTools += 1
-            }
-        }
-        var parts: [String] = []
-        if !editedFiles.isEmpty {
-            parts.append("edited \(editedFiles.count) file\(editedFiles.count == 1 ? "" : "s")")
-        }
-        if commands > 0 { parts.append("ran \(commands) command\(commands == 1 ? "" : "s")") }
-        if !readFiles.isEmpty {
-            parts.append("read \(readFiles.count) file\(readFiles.count == 1 ? "" : "s")")
-        }
-        if searches > 0 { parts.append("searched \(searches) time\(searches == 1 ? "" : "s")") }
-        if otherTools > 0 {
-            parts.append("used \(otherTools) other tool\(otherTools == 1 ? "" : "s")")
-        }
-        if parts.isEmpty { return "Thought" }
-        let joined: String
-        switch parts.count {
-        case 1: joined = parts[0]
-        case 2: joined = parts.joined(separator: " and ")
-        default: joined = parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
-        }
-        guard let first = joined.first else { return "Thought" }
-        return String(first).uppercased() + joined.dropFirst()
-    }
-
-    /// The summary line's glyph: the run's content decides it.
-    nonisolated static func seatGlyph(_ group: Turn.WorkGroup) -> ClaudeGlyph.Kind {
-        var hasShell = false
-        var hasFile = false
-        for row in group.rows {
-            guard case .toolCall(let call) = row.item else { continue }
-            switch call.detail {
-            case .read, .edit, .write, .search, .fetch: hasFile = true
-            default: hasShell = true
-            }
-        }
-        if hasShell { return .api }
-        if hasFile { return .browse }
-        return .think
-    }
-}
-
-/// What the timeline reads off its run.
-struct WorkTimelineDerived {
-    var steps: [WorkRow] = []
-    var summary = ""
-    var seat: ClaudeGlyph.Kind = .think
-    /// A thought's length by row id, from its own timestamp to the next step's.
-    var durations: [String: TimeInterval] = [:]
-}
-
-/// The run's steps and what is read off them, recomputed only when the run changes. A thought's
-/// length is parsed once per thought.
-final class WorkTimelineCache {
-    private var group: Turn.WorkGroup?
-    private var value = WorkTimelineDerived()
-    private var knownDurations: [String: TimeInterval] = [:]
-
-    @MainActor func derived(for group: Turn.WorkGroup) -> WorkTimelineDerived {
-        if let cached = self.group, cached == group { return value }
-        self.group = group
-        var derived = WorkTimelineDerived()
-        derived.steps = WorkRow.merging(group.rows)
-        derived.summary = ClaudeWorkTimeline.summaryText(group)
-        derived.seat = ClaudeWorkTimeline.seatGlyph(group)
-        let rows = group.rows
-        for index in rows.indices where index + 1 < rows.count {
-            guard case .reasoning = rows[index].item else { continue }
-            let id = rows[index].id
-            if let known = knownDurations[id] {
-                derived.durations[id] = known
-                continue
-            }
-            guard let start = PaseoDate.parse(rows[index].timestamp),
-                let end = PaseoDate.parse(rows[index + 1].timestamp)
-            else { continue }
-            let seconds = max(0, end.timeIntervalSince(start))
-            knownDurations[id] = seconds
-            derived.durations[id] = seconds
-        }
-        value = derived
-        return derived
-    }
-}
-
 // MARK: - Geometry
 
 enum WorkTimelineMetrics {
     /// The rail's column: the nodes sit in it, the step's content starts after it.
     static let gutter: CGFloat = 28
-    static let nodeSize: CGFloat = 18
+    static let nodeSize: CGFloat = 20
     /// A step's first line: the node is centred on it.
     static let headerHeight: CGFloat = 32
     /// Air between the rail and a node.
@@ -282,114 +45,43 @@ struct WorkRail: View {
     }
 }
 
-/// What a step's node shows.
-enum WorkNodeKind: Equatable, Sendable {
-    case thought
-    case shell
-    case symbol(String)
-    case more
-}
-
-/// A step's node: the thought's own glyph bare on the rail, a tool's symbol in a small disc, a
-/// spinner while the tool runs, the failure ink when it failed.
-struct WorkNode: View {
-    let kind: WorkNodeKind
-    var running = false
-    var failed = false
-
-    var body: some View {
-        ZStack {
-            switch kind {
-            case .thought:
-                ClaudeGlyph(kind: .think, size: 15, color: Palette.tertiaryInk)
-            case .more:
-                Circle().strokeBorder(Palette.cardBorder, style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                Image(systemName: "ellipsis")
-                    .font(.glyph(.small, weight: .semibold))
-                    .imageScale(.small)
-                    .foregroundStyle(Palette.tertiaryInk)
-            case .shell:
-                disc
-                if running {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    ClaudeGlyph(kind: .api, size: 11, color: ink)
-                }
-            case .symbol(let name):
-                disc
-                if running {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Image(systemName: name)
-                        .font(.glyph(.small, weight: .medium))
-                        .imageScale(.small)
-                        .foregroundStyle(ink)
-                }
-            }
-        }
-        .frame(width: WorkTimelineMetrics.nodeSize, height: WorkTimelineMetrics.nodeSize)
-        .accessibilityHidden(true)
-    }
-
-    private var disc: some View {
-        Circle().fill(failed ? Palette.failureInk.opacity(0.14) : Palette.chip)
-    }
-
-    private var ink: Color { failed ? Palette.failureInk : Palette.secondaryInk }
-}
-
-/// The frame every step shares: the node on the rail, the content beside it, the find flash behind.
+/// The frame every step shares: the icon on the rail, the content beside it, the find wash behind.
 struct WorkStepFrame<Content: View>: View {
-    let node: WorkNode
+    let icon: WorkIcon
     let rail: WorkRailPosition
     let highlighted: Bool
     @ViewBuilder var content: Content
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .top, spacing: WorkTimelineMetrics.gutter - WorkTimelineMetrics.nodeSize) {
-            node.frame(height: WorkTimelineMetrics.headerHeight)
+            icon.frame(height: WorkTimelineMetrics.headerHeight)
             content.frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.bottom, 2)
         .background(alignment: .topLeading) { WorkRail(position: rail) }
-        .background {
-            RoundedRectangle(cornerRadius: Radius.md)
-                .fill(Palette.warning.opacity(highlighted ? 0.18 : 0))
-                .padding(.horizontal, -4)
-                .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlighted)
-        }
+        .background { WorkFindWash(highlighted: highlighted) }
     }
 }
 
 // MARK: - One step
 
-/// One step of the timeline, compared by value so an unchanged step is skipped.
+/// One tool step of the opened tools section, compared by value so an unchanged step is skipped.
+/// Thoughts are not steps: the thought section reads them as one text.
 struct WorkStepView: View, Equatable {
     let step: WorkRow
     let rail: WorkRailPosition
     let isLive: Bool
-    let duration: TimeInterval?
     let highlighted: Bool
     let findHit: Bool
     let onOpenFile: ((String) -> Void)?
 
     nonisolated static func == (lhs: WorkStepView, rhs: WorkStepView) -> Bool {
         lhs.step == rhs.step && lhs.rail == rhs.rail && lhs.isLive == rhs.isLive
-            && lhs.duration == rhs.duration && lhs.highlighted == rhs.highlighted
-            && lhs.findHit == rhs.findHit
+            && lhs.highlighted == rhs.highlighted && lhs.findHit == rhs.findHit
     }
 
     var body: some View {
         switch step {
-        case .thought(let row):
-            if case .reasoning(let reasoning) = row.item {
-                WorkThoughtStep(
-                    text: reasoning.text, rail: rail, isLive: isLive, duration: duration,
-                    highlighted: highlighted, findHit: findHit
-                )
-                .rowAnchor(row.seqEnd)
-            }
         case .tool(let row):
             if case .toolCall(let call) = row.item {
                 WorkToolStep(
@@ -404,6 +96,8 @@ struct WorkStepView: View, Equatable {
                 onOpenFile: onOpenFile ?? { _ in }
             )
             .rowAnchors(call.rowSeqEnds)
+        case .thought:
+            EmptyView()
         }
     }
 }
@@ -416,113 +110,17 @@ extension WorkRow {
         case .fileCall(let call): call.rowSeqEnds.contains(seq)
         }
     }
+
+    /// Every timeline row this step stands for, as find and jump anchors.
+    var seqEnds: [Int] {
+        switch self {
+        case .thought(let row), .tool(let row): [row.seqEnd]
+        case .fileCall(let call): call.rowSeqEnds
+        }
+    }
 }
 
 // MARK: - Thinking
-
-/// A thought. Settled: one line, "Thought for 4s" and its first words. Streaming: a live "Thinking"
-/// over its newest lines, which run up and fade at the top. Opened: the whole thought, selectable.
-struct WorkThoughtStep: View {
-    let text: String
-    let rail: WorkRailPosition
-    let isLive: Bool
-    let duration: TimeInterval?
-    let highlighted: Bool
-    let findHit: Bool
-
-    @State private var userExpanded: Bool?
-    @State private var liveSince = Date()
-    @AppStorage("paseo.reasoning.alwaysExpand") private var alwaysExpand = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var isExpanded: Bool { userExpanded ?? (findHit || alwaysExpand) }
-
-    private var title: String {
-        if let duration, duration >= 1 { return "Thought for \(DurationText.short(duration))" }
-        return "Thought"
-    }
-
-    var body: some View {
-        WorkStepFrame(node: WorkNode(kind: .thought), rail: rail, highlighted: highlighted) {
-            VStack(alignment: .leading, spacing: 0) {
-                Button {
-                    Haptics.selection()
-                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                        userExpanded = !isExpanded
-                    }
-                } label: {
-                    VStack(alignment: .leading, spacing: 0) {
-                        header
-                        if isLive && !isExpanded {
-                            liveTail
-                        }
-                    }
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isLive ? "Thinking" : title)
-                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-                if isExpanded {
-                    WorkThoughtText(text: text)
-                        .padding(.bottom, 10)
-                        .transition(.opacity.combined(with: .offset(y: -2)))
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private var lead: some View {
-        if isLive {
-            ClaudeSweepLabel(startedAt: liveSince, rest: Palette.tertiaryInk) { ink in
-                Text("Thinking")
-                    .font(.paseo(.processTitle, weight: .medium))
-                    .foregroundStyle(ink)
-            }
-        } else if isExpanded {
-            Text(title)
-                .font(.paseo(.processTitle, weight: .medium))
-                .foregroundStyle(Palette.tertiaryInk)
-        } else {
-            let label = Text(title).font(.paseo(.processTitle, weight: .medium))
-            let words = Text(WorkThoughtText.excerpt(text)).font(.paseo(.processTitle))
-            Text("\(label)  \(words)")
-                .foregroundStyle(Palette.tertiaryInk)
-                .lineLimit(1)
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 6) {
-            lead
-            Spacer(minLength: 4)
-            ClaudeTurnChevron(expanded: isExpanded)
-        }
-        .frame(minHeight: WorkTimelineMetrics.headerHeight)
-    }
-
-    /// The newest three lines of the thought, the oldest of them fading: the text grows at the
-    /// bottom and leaves at the top. Bounded, so a long thought costs what three lines cost.
-    private var liveTail: some View {
-        Text(WorkThoughtText.tail(text))
-            .font(.paseo(.processTitle))
-            .lineSpacing(4)
-            .foregroundStyle(Palette.secondaryInk)
-            .lineLimit(3)
-            .truncationMode(.head)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .mask {
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.25), location: 0),
-                        .init(color: .black, location: 0.5),
-                    ],
-                    startPoint: .top, endPoint: .bottom)
-            }
-            .padding(.bottom, 10)
-            .accessibilityHidden(true)
-    }
-}
 
 /// The whole thought: paragraphs in the serif, the model's own emphasis kept (its section titles
 /// arrive in bold), selectable.
@@ -531,7 +129,7 @@ struct WorkThoughtText: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(Self.paragraphs(text).enumerated()), id: \.offset) { _, paragraph in
+            ForEach(Self.paragraphs(text).enumerated(), id: \.offset) { _, paragraph in
                 Text(Self.styled(paragraph))
                     .font(.paseo(.processTitle))
                     .lineSpacing(5)
@@ -563,25 +161,6 @@ struct WorkThoughtText: View {
 
     private static let styledCache = ProseCache<String, AttributedString>(
         budget: 2 * 1024 * 1024, countLimit: 512, cost: { key, _ in key.utf8.count * 3 })
-
-    /// The thought's first words on one line: no line breaks, no Markdown marks. Reads a bounded
-    /// prefix, never the whole thought.
-    static func excerpt(_ text: String) -> String {
-        flattened(text.prefix(240))
-    }
-
-    /// The thought's newest words, bounded.
-    static func tail(_ text: String) -> String {
-        flattened(text.suffix(360))
-    }
-
-    private static func flattened(_ text: Substring) -> String {
-        text.replacingOccurrences(of: "**", with: "")
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-    }
 }
 
 // MARK: - Tool calls
@@ -590,7 +169,7 @@ struct WorkThoughtText: View {
 struct WorkToolWording: Equatable {
     var verb: String
     var target: String?
-    var node: WorkNodeKind
+    var icon: WorkIcon.Kind
 
     init(_ call: ToolCall) {
         let running = call.status == .running
@@ -600,33 +179,33 @@ struct WorkToolWording: Equatable {
             verb = tense("Running", "Ran")
             let line = ClaudeActivity.firstLine(command)
             target = line.isEmpty ? nil : line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-            node = .shell
+            icon = .shell
         case .read(let path, _):
             verb = tense("Reading", "Read")
             target = ClaudeActivity.fileName(path)
-            node = .symbol("doc.text")
+            icon = .read
         case .edit(let path, _, _, _):
             verb = tense("Editing", "Edited")
             target = ClaudeActivity.fileName(path)
-            node = .symbol("pencil")
+            icon = .edit
         case .write(let path, _):
             verb = tense("Writing", "Wrote")
             target = ClaudeActivity.fileName(path)
-            node = .symbol("square.and.pencil")
+            icon = .write
         case .search(let search):
             let web = search.toolName == "web_search"
             verb = web ? tense("Searching the web", "Searched the web") : tense("Searching", "Searched")
             target = search.query
-            node = .symbol(web ? "globe" : "magnifyingglass")
+            icon = web ? .webSearch : .search
         case .fetch(let url, _, _):
             verb = tense("Fetching", "Fetched")
             target = URL(string: url)?.host() ?? url
-            node = .symbol("network")
+            icon = .fetch
         default:
             let presentation = ToolCallPresentation(call)
             verb = presentation.title
             target = presentation.subtitle
-            node = .symbol(presentation.symbol)
+            icon = .symbol(presentation.symbol)
         }
         if target?.isEmpty == true { target = nil }
     }
@@ -636,12 +215,13 @@ struct WorkToolWording: Equatable {
 struct WorkToolLine: View {
     let verb: String
     let target: String?
+    var ink: Color = Palette.secondaryInk
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Text(verb)
                 .font(.paseo(.processTitle, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
+                .foregroundStyle(ink)
                 .lineLimit(1)
                 .fixedSize()
             if let target {
@@ -706,8 +286,8 @@ struct WorkToolStep: View {
     var body: some View {
         let wording = WorkToolWording(call)
         WorkStepFrame(
-            node: WorkNode(
-                kind: wording.node, running: call.status == .running,
+            icon: WorkIcon(
+                kind: wording.icon, running: call.status == .running,
                 failed: call.status == .failed),
             rail: rail, highlighted: highlighted
         ) {
@@ -770,17 +350,17 @@ struct WorkFileStep: View {
         }
     }
 
-    private var symbol: String {
+    private var icon: WorkIcon.Kind {
         switch call.kind {
-        case .read: "doc.text"
-        case .edit: "pencil"
-        case .write: "square.and.pencil"
+        case .read: .read
+        case .edit: .edit
+        case .write: .write
         }
     }
 
     var body: some View {
         WorkStepFrame(
-            node: WorkNode(kind: .symbol(symbol), running: running, failed: failed),
+            icon: WorkIcon(kind: icon, running: running, failed: failed),
             rail: rail, highlighted: highlighted
         ) {
             VStack(alignment: .leading, spacing: 0) {
@@ -875,7 +455,7 @@ struct WorkEarlierSteps: View {
     var body: some View {
         Button(action: open) {
             WorkStepFrame(
-                node: WorkNode(kind: .more), rail: WorkRailPosition(above: false, below: true),
+                icon: WorkIcon(kind: .more), rail: WorkRailPosition(above: false, below: true),
                 highlighted: false
             ) {
                 HStack(spacing: 6) {

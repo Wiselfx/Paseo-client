@@ -411,8 +411,8 @@ struct ClaudeSegmentView: View {
     var body: some View {
         switch segment {
         case .work(let group):
-            ClaudeWorkTimeline(
-                group: group, turnIsRunning: turnIsRunning, isTail: isTail,
+            WorkDigest(
+                group: group, isTail: isTail,
                 highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {

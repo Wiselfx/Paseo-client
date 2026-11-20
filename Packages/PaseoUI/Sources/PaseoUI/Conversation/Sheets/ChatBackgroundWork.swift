@@ -22,7 +22,7 @@ struct BackgroundWorkRow: View {
             action()
         } label: {
             HStack(spacing: 8) {
-                ClaudeGlyph(kind: .api, size: 13, color: Palette.tertiaryInk)
+                WorkIcon(kind: .shell)
                 Text(text)
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.secondaryInk)
@@ -106,8 +106,7 @@ struct ChatBackgroundWorkSheet: View {
 
     private func backgroundWorkRow(_ item: BackgroundWorkItem) -> some View {
         HStack(spacing: 12) {
-            ClaudeGlyph(kind: glyph(for: item.kind), size: 15, color: Palette.tertiaryInk)
-                .frame(width: 20)
+            WorkIcon(kind: icon(for: item.kind))
             VStack(alignment: .leading, spacing: 2) {
                 Text(rowTitle(item))
                     .font(.paseo(.callout, weight: .semibold))
@@ -148,10 +147,10 @@ struct ChatBackgroundWorkSheet: View {
         item.command ?? item.description ?? item.kind
     }
 
-    private func glyph(for kind: String) -> ClaudeGlyph.Kind {
+    private func icon(for kind: String) -> WorkIcon.Kind {
         switch kind {
-        case "monitor": .browse
-        default: .api
+        case "monitor": .symbol("waveform.path.ecg")
+        default: .shell
         }
     }
 

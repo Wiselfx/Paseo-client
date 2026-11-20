@@ -125,14 +125,21 @@ struct TranscriptRowAnchor: ViewModifier {
     let seqs: [Int]
     @Environment(\.transcriptRowFrames) private var frames
 
+    /// The frame and the rows it stands for: a view that takes over rows (a work section folding
+    /// its steps away) reports again even when its own frame did not move.
+    private struct Report: Equatable {
+        var frame: CGRect
+        var seqs: [Int]
+    }
+
     func body(content: Content) -> some View {
         let sink = frames
         let seqs = seqs
-        content.onGeometryChange(for: CGRect.self) { proxy in
-            proxy.frame(in: .named(TranscriptRowFrames.space))
-        } action: { frame in
+        content.onGeometryChange(for: Report.self) { proxy in
+            Report(frame: proxy.frame(in: .named(TranscriptRowFrames.space)), seqs: seqs)
+        } action: { report in
             guard let sink else { return }
-            for seq in seqs { sink.report(seq, frame) }
+            for seq in report.seqs { sink.report(seq, report.frame) }
         }
     }
 }
@@ -914,9 +921,28 @@ final class TranscriptEngine: NSObject {
             UIView.animate(Motion.disclosure.animation, changes: {
                 cv.contentOffset = CGPoint(x: 0, y: target)
             })
+        } else if glides, followsStreamGrowth(by: target - cv.contentOffset.y) {
+            // A reply growing at the end: a new line slides up into place instead of the whole
+            // transcript jumping a line per reveal step. Short, so it never trails the text.
+            UIView.animate(
+                withDuration: Self.streamFollowDuration, delay: 0,
+                options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction],
+                animations: { cv.contentOffset = CGPoint(x: 0, y: target) })
         } else {
             cv.contentOffset = CGPoint(x: 0, y: target)
         }
+    }
+
+    /// How long the end takes to catch up with a streamed line.
+    private static let streamFollowDuration: TimeInterval = 0.16
+    /// Growth past this is a jump (a block, a card, history), not a streamed line: it lands at once.
+    private static let streamFollowMaxStep: CGFloat = 96
+
+    /// A small downward growth while a turn streams, with nothing else animating the content.
+    private func followsStreamGrowth(by delta: CGFloat) -> Bool {
+        let keyboardMoving = (keyboardAnimation?.until ?? .distantPast) > Date()
+        guard store?.activeTurnId != nil, !reduceMotion, !keyboardMoving else { return false }
+        return delta > 0 && delta <= Self.streamFollowMaxStep
     }
 
     // MARK: Scroll
