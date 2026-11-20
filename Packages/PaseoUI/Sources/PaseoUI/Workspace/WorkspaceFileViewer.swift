@@ -166,11 +166,9 @@ struct WorkspaceFileViewer: View {
         .environment(\.richViewportHeight, stageSize.height > 1 ? stageSize.height : 800)
         .confirmationDialog(
             "Discard changes?",
-            isPresented: Binding(
-                get: { pendingExit != nil },
-                set: { if !$0 { pendingExit = nil } }),
+            item: $pendingExit,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Discard changes", role: .destructive) { performExit() }
             Button("Keep editing", role: .cancel) {}
         }

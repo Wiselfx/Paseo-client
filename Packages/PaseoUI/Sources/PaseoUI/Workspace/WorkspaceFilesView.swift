@@ -245,18 +245,16 @@ private struct WorkspaceFilesDirectoryList: View {
         }
         .confirmationDialog(
             "Delete “\(pendingDelete?.name ?? "")”?",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: { if !$0 { pendingDelete = nil } }),
+            item: $pendingDelete,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Delete", role: .destructive) {
                 guard let target = pendingDelete else { return }
                 pendingDelete = nil
                 Task { await deleteEntry(target) }
             }
             Button("Cancel", role: .cancel) {}
-        } message: {
+        } message: { _ in
             Text("This permanently deletes it. This cannot be undone.")
         }
     }

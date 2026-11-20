@@ -120,11 +120,8 @@ struct OverviewPage: View {
         .refreshable { await hostSettings.load() }
         .confirmationDialog(
             "Restart \(hostName)",
-            isPresented: Binding(
-                get: { restartKind != nil },
-                set: { if !$0 { restartKind = nil } }),
-            titleVisibility: .visible,
-            presenting: restartKind
+            item: $restartKind,
+            titleVisibility: .visible
         ) { kind in
             Button(kind == .closeTerminals ? "Restart and close terminals" : "Restart", role: .destructive) {
                 restartKind = nil

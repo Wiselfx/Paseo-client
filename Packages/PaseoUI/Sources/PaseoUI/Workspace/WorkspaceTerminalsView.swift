@@ -153,32 +153,26 @@ struct WorkspaceTerminalsView: View {
                 }
             }
         }
-        .alert("Rename terminal", isPresented: Binding(
-            get: { renameTarget != nil },
-            set: { if !$0 { renameTarget = nil } })) {
+        .alert("Rename terminal", item: $renameTarget) { _ in
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) { renameTarget = nil }
             Button("Rename") { commitRename() }
-        } message: {
+        } message: { _ in
             Text("Choose a name for this terminal.")
         }
         .confirmationDialog(
             closeCandidate.map { "Close “\(displayName($0))”?" } ?? "Close terminal?",
-            isPresented: Binding(
-                get: { closeCandidate != nil },
-                set: { if !$0 { closeCandidate = nil } }),
-            titleVisibility: .visible) {
+            item: $closeCandidate,
+            titleVisibility: .visible) { _ in
             Button("Close terminal", role: .destructive) { commitClose() }
             Button("Cancel", role: .cancel) { closeCandidate = nil }
-        } message: {
+        } message: { _ in
             Text("Any running process in this terminal will be stopped immediately.")
         }
         .confirmationDialog(
             "Open service URL",
-            isPresented: Binding(
-                get: { pendingServiceURL != nil },
-                set: { if !$0 { pendingServiceURL = nil } }),
-            titleVisibility: .visible) {
+            item: $pendingServiceURL,
+            titleVisibility: .visible) { _ in
             Button("In Paseo") {
                 if let url = pendingServiceURL { serviceURLSheet = url }
                 pendingServiceURL = nil
@@ -188,7 +182,7 @@ struct WorkspaceTerminalsView: View {
                 pendingServiceURL = nil
             }
             Button("Cancel", role: .cancel) { pendingServiceURL = nil }
-        } message: {
+        } message: { _ in
             Text(pendingServiceURL.map { "Open \($0.absoluteString)?" } ?? "")
         }
         .sheet(item: $linkedFile) { target in

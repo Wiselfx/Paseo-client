@@ -69,18 +69,16 @@ struct SchedulesListPage: View {
         }
         .confirmationDialog(
             "Delete schedule?",
-            isPresented: Binding(
-                get: { deleteRequest != nil },
-                set: { if !$0 { deleteRequest = nil } }),
+            item: $deleteRequest,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Delete", role: .destructive) {
                 guard let summary = deleteRequest else { return }
                 deleteRequest = nil
                 Task { await delete(summary) }
             }
             Button("Cancel", role: .cancel) { deleteRequest = nil }
-        } message: {
+        } message: { _ in
             Text("Runs that already started finish, but no new runs will be created.")
         }
     }

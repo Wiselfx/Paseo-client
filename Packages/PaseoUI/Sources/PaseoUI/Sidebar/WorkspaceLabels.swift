@@ -269,14 +269,12 @@ struct LabelsManageSheet: View {
         .background(Palette.panel)
         .confirmationDialog(
             "Delete \(deleting?.name ?? "label")?",
-            isPresented: Binding(
-                get: { deleting != nil },
-                set: { if !$0 { deleting = nil } }),
+            item: $deleting,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Delete label", role: .destructive) { confirmDelete() }
             Button("Cancel", role: .cancel) { deleting = nil }
-        } message: {
+        } message: { _ in
             Text(deleteMessage)
         }
         .task(id: deleting?.name) {

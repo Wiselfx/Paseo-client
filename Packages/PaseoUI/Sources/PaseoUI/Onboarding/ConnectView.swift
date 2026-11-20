@@ -144,16 +144,15 @@ public struct ConnectView: View {
         .sheet(item: $renameTarget) { target in renameSheet(target) }
         .confirmationDialog(
             "Forget \(forgetTarget?.label ?? "this host")?",
-            isPresented: Binding(
-                get: { forgetTarget != nil }, set: { if !$0 { forgetTarget = nil } }),
+            item: $forgetTarget,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Forget host", role: .destructive) {
                 if let id = forgetTarget?.id { onForgetSaved(id) }
                 forgetTarget = nil
             }
             Button("Cancel", role: .cancel) { forgetTarget = nil }
-        } message: {
+        } message: { _ in
             Text("The password stored on this device for this host is removed too. The host itself isn't changed.")
         }
     }

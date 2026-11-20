@@ -41,10 +41,9 @@ struct AgentProfilesSection: View {
         }
         .confirmationDialog(
             "Delete profile?",
-            isPresented: Binding(
-                get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            item: $pendingDelete,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             if let profile = pendingDelete {
                 Button("Delete \(profile.name)", role: .destructive) {
                     remove(profile)
@@ -52,7 +51,7 @@ struct AgentProfilesSection: View {
                 }
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: {
+        } message: { _ in
             Text("This removes the profile from this host. Agents already created are not affected.")
         }
     }

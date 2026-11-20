@@ -196,18 +196,16 @@ struct WorkspaceChangesView: View {
         }
         .confirmationDialog(
             "Merge pull request?",
-            isPresented: Binding(
-                get: { mergeCandidate != nil },
-                set: { if !$0 { mergeCandidate = nil } }),
+            item: $mergeCandidate,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             let method = mergeCandidate ?? .squash
             Button(mergeLabel(method), role: .destructive) {
                 mergeCandidate = nil
                 Task { await performMergePullRequest(method) }
             }
             Button("Cancel", role: .cancel) { mergeCandidate = nil }
-        } message: {
+        } message: { _ in
             let method = mergeCandidate ?? .squash
             let number = extras.prBadge?.number.map { "#\($0)" } ?? ""
             let base = extras.prStatus?.baseRefName ?? checkout.prStatus?.baseRefName ?? baseRef ?? "base"
@@ -215,18 +213,16 @@ struct WorkspaceChangesView: View {
         }
         .confirmationDialog(
             "Discard changes?",
-            isPresented: Binding(
-                get: { pendingDiscard != nil },
-                set: { if !$0 { pendingDiscard = nil } }),
+            item: $pendingDiscard,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Discard changes", role: .destructive) {
                 guard let target = pendingDiscard else { return }
                 pendingDiscard = nil
                 performDiscard(target)
             }
             Button("Cancel", role: .cancel) { pendingDiscard = nil }
-        } message: {
+        } message: { _ in
             // Upstream: workspace.fileActions.confirmRevert.message (en.ts:513).
             Text(
                 pendingDiscard.map {

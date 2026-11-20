@@ -97,11 +97,8 @@ struct ChatHeaderBar: View {
         // so the dialog carries rewind.warning (en.ts:2012) as its message.
         .confirmationDialog(
             "Rewind to this message",
-            isPresented: Binding(
-                get: { controller.pendingRewind != nil },
-                set: { if !$0 { controller.pendingRewind = nil } }),
-            titleVisibility: .visible,
-            presenting: controller.pendingRewind
+            item: $controller.pendingRewind,
+            titleVisibility: .visible
         ) { rewind in
             Button(rewindScopeTitle(rewind.scope), role: .destructive) {
                 controller.performPendingRewind(rewind)

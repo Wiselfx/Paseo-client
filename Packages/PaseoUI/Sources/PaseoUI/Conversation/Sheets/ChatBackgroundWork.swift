@@ -81,11 +81,8 @@ struct ChatBackgroundWorkSheet: View {
             }
             .confirmationDialog(
                 "Stop this background task?",
-                isPresented: Binding(
-                    get: { pendingStop != nil },
-                    set: { if !$0 { pendingStop = nil } }),
-                titleVisibility: .visible,
-                presenting: pendingStop
+                item: $pendingStop,
+                titleVisibility: .visible
             ) { item in
                 Button("Stop", role: .destructive) {
                     performStop(item)

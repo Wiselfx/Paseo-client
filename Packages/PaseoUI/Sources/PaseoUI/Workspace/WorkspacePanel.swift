@@ -206,10 +206,8 @@ struct WorkspacePanel: View {
         }
         .alert(
             "Rename agent",
-            isPresented: Binding(
-                get: { renamingAgent != nil },
-                set: { if !$0 { renamingAgent = nil } })
-        ) {
+            item: $renamingAgent
+        ) { _ in
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) { renamingAgent = nil }
             Button("Rename") {
@@ -222,23 +220,21 @@ struct WorkspacePanel: View {
                     await session.refreshAgents()
                 }
             }
-        } message: {
+        } message: { _ in
             Text("Choose a short name for this agent.")
         }
         .confirmationDialog(
             "Archive agent?",
-            isPresented: Binding(
-                get: { agentPendingArchive != nil },
-                set: { if !$0 { agentPendingArchive = nil } }),
+            item: $agentPendingArchive,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Archive", role: .destructive) {
                 guard let agent = agentPendingArchive else { return }
                 agentPendingArchive = nil
                 archive(agent)
             }
             Button("Cancel", role: .cancel) { agentPendingArchive = nil }
-        } message: {
+        } message: { _ in
             Text(archiveMessage(for: agentPendingArchive))
         }
         .workspaceArchiveDialogs(workspaceArchive, session: session)

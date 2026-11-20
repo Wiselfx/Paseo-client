@@ -44,32 +44,28 @@ struct HostsPage: View {
         .inlinePageTitle("Hosts")
         .confirmationDialog(
             "Remove host?",
-            isPresented: Binding(
-                get: { removeTarget != nil },
-                set: { if !$0 { removeTarget = nil } }),
+            item: $removeTarget,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Remove host", role: .destructive) {
                 if let id = removeTarget?.id { context?.forgetHost(id) }
                 removeTarget = nil
             }
             Button("Cancel", role: .cancel) { removeTarget = nil }
-        } message: {
+        } message: { _ in
             Text("Removes this host and its saved connections from this device")
         }
         .confirmationDialog(
             "Switch host",
-            isPresented: Binding(
-                get: { switchTarget != nil },
-                set: { if !$0 { switchTarget = nil } }),
+            item: $switchTarget,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Switch host") {
                 if let id = switchTarget?.id { context?.switchTo(id) }
                 switchTarget = nil
             }
             Button("Cancel", role: .cancel) { switchTarget = nil }
-        } message: {
+        } message: { _ in
             // The existing disconnect wording: switching closes this host's connection.
             Text("The connection to the host will be closed. Your settings are kept.")
         }

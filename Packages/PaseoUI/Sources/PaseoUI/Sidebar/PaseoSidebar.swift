@@ -186,10 +186,8 @@ struct PaseoSidebar: View {
         content
         .alert(
             "Rename workspace",
-            isPresented: Binding(
-                get: { renamingWorkspace != nil },
-                set: { if !$0 { renamingWorkspace = nil } })
-        ) {
+            item: $renamingWorkspace
+        ) { _ in
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) { renamingWorkspace = nil }
             Button("Rename") {
@@ -206,15 +204,13 @@ struct PaseoSidebar: View {
                     }
                 }
             }
-        } message: {
+        } message: { _ in
             Text("Choose a short name for this workspace.")
         }
         .alert(
             "Rename project",
-            isPresented: Binding(
-                get: { renamingProject != nil },
-                set: { if !$0 { renamingProject = nil } })
-        ) {
+            item: $renamingProject
+        ) { _ in
             TextField("Folder name", text: $renameText)
             Button("Cancel", role: .cancel) { renamingProject = nil }
             Button("Rename") {
@@ -232,7 +228,7 @@ struct PaseoSidebar: View {
                     }
                 }
             }
-        } message: {
+        } message: { _ in
             Text("Empty restores the folder name.")
         }
     }
@@ -242,18 +238,16 @@ struct PaseoSidebar: View {
             .workspaceArchiveDialogs(archive, session: session)
             .confirmationDialog(
                 ProjectActions.removeTitle,
-            isPresented: Binding(
-                get: { projectPendingRemoval != nil },
-                set: { if !$0 { projectPendingRemoval = nil } }),
+            item: $projectPendingRemoval,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Remove", role: .destructive) {
                 guard let project = projectPendingRemoval else { return }
                 projectPendingRemoval = nil
                 ProjectActions.remove(project, session: session, toast: toast)
             }
             Button("Cancel", role: .cancel) { projectPendingRemoval = nil }
-        } message: {
+        } message: { _ in
             Text(ProjectActions.removeMessage)
         }
     }

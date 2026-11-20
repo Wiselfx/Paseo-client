@@ -150,10 +150,8 @@ struct ClaudeHistoryView: View {
         }
         .alert(
             "Rename agent",
-            isPresented: Binding(
-                get: { renamingAgent != nil },
-                set: { if !$0 { renamingAgent = nil } })
-        ) {
+            item: $renamingAgent
+        ) { _ in
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) { renamingAgent = nil }
             Button("Rename") {
@@ -162,39 +160,35 @@ struct ClaudeHistoryView: View {
                 renamingAgent = nil
                 Task { await lifecycle.rename(agentId: agent.id, to: next) }
             }
-        } message: {
+        } message: { _ in
             Text("Choose a short name for this agent.")
         }
         .confirmationDialog(
             "Archive agent?",
-            isPresented: Binding(
-                get: { agentPendingArchive != nil },
-                set: { if !$0 { agentPendingArchive = nil } }),
+            item: $agentPendingArchive,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Archive", role: .destructive) {
                 guard let agent = agentPendingArchive else { return }
                 agentPendingArchive = nil
                 Task { await archive(agent) }
             }
             Button("Cancel", role: .cancel) { agentPendingArchive = nil }
-        } message: {
+        } message: { _ in
             Text("This agent is still running. Archiving it will stop the agent.")
         }
         .confirmationDialog(
             "Delete agent?",
-            isPresented: Binding(
-                get: { agentPendingDelete != nil },
-                set: { if !$0 { agentPendingDelete = nil } }),
+            item: $agentPendingDelete,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Delete permanently", role: .destructive) {
                 guard let agent = agentPendingDelete else { return }
                 agentPendingDelete = nil
                 Task { await delete(agent) }
             }
             Button("Cancel", role: .cancel) { agentPendingDelete = nil }
-        } message: {
+        } message: { _ in
             Text("This removes its history for good.")
         }
     }

@@ -157,18 +157,16 @@ struct SpeechProviderSheet: View {
         }
         .confirmationDialog(
             pendingDelete.map { "Delete \($0.label)?" } ?? "Delete model?",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: { if !$0 { pendingDelete = nil } }),
+            item: $pendingDelete,
             titleVisibility: .visible
-        ) {
+        ) { _ in
             Button("Delete", role: .destructive) {
                 guard let model = pendingDelete else { return }
                 pendingDelete = nil
                 Task { _ = await voice.delete(modelId: model.id) }
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: {
+        } message: { _ in
             if let model = pendingDelete {
                 Text("This frees \(formatModelSize(bytes: model.downloadSizeBytes)). You can download it again later.")
             }

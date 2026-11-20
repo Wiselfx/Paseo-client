@@ -90,17 +90,15 @@ struct ProjectSettingsView: View {
         }
         .confirmationDialog(
             "Remove script?",
-            isPresented: Binding(
-                get: { pendingDeleteScript != nil },
-                set: { if !$0 { pendingDeleteScript = nil } })
-        ) {
+            item: $pendingDeleteScript
+        ) { _ in
             Button("Remove", role: .destructive) {
                 guard let script = pendingDeleteScript else { return }
                 pendingDeleteScript = nil
                 scripts.removeAll { $0.id == script.id }
             }
             Button("Cancel", role: .cancel) { pendingDeleteScript = nil }
-        } message: {
+        } message: { _ in
             Text("This only removes the script from paseo.json when you save.")
         }
         .sheet(item: $editingScript) { script in

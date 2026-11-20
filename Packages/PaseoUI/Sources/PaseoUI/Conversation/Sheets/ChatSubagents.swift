@@ -196,11 +196,8 @@ struct ChatSubagentsSheet: View {
             }
             .confirmationDialog(
                 "Detach subagent?",
-                isPresented: Binding(
-                    get: { detachTarget != nil },
-                    set: { if !$0 { detachTarget = nil } }),
-                titleVisibility: .visible,
-                presenting: detachTarget
+                item: $detachTarget,
+                titleVisibility: .visible
             ) { agent in
                 // Upstream's confirm is not destructive: detaching loses nothing.
                 Button("Detach") {
