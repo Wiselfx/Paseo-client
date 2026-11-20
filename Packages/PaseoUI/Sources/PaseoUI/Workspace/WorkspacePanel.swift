@@ -11,7 +11,6 @@ extension EnvironmentValues {
     /// consumed by the Files page and its viewer.
     @Entry var workspaceGitExtras: WorkspaceGitExtras?
 }
-
 /// The workspace panel: "inside this workspace" — its agents, files, changes and terminals. Slides
 /// in from the right edge over the chat, mirroring the left sidebar drawer.
 ///
@@ -642,17 +641,5 @@ struct WorkspacePanel: View {
         }
         return "The agent will be archived."
     }
-}
-
-/// A stable identity for the mounted page, so `.onDisappear` fires when the panel closes or the
-/// workspace changes, but not when the selected tab changes.
-private struct PanelPage<Content: View>: View {
-    private let content: () -> Content
-
-    init(@ViewBuilder content: @escaping () -> Content) {
-        self.content = content
-    }
-
-    var body: some View { content() }
 }
 #endif

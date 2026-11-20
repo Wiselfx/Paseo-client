@@ -1,96 +1,6 @@
 #if canImport(UIKit)
     import PaseoStore
     import SwiftUI
-
-    /// Theme values follow `docs/research/08-dsh-live-observation.md` §6: serif body, 12 pt between
-    /// blocks, mono code. Sizes are measured at Claude's 17 pt body (V5); headings and code are
-    /// ratios of `bodySize`, so the whole ladder follows the size setting and Dynamic Type.
-    /// Claude's uncaptured rich-block metrics remain provisional.
-    public struct ClaudeMarkdownTheme: Equatable, Sendable {
-        public var bodyFont: Font
-        public var headingFonts: [Font]
-        public var codeFont: Font
-        public var foreground: Color = Palette.ink
-        public var secondary: Color = Palette.secondaryInk
-        public var link: Color = Palette.proseLink
-        public var inlineCodeForeground: Color = Palette.ink
-        /// The blockquote's wash: rgba(20,20,19,0.04) light / rgba(250,249,245,0.06) dark.
-        public var quoteWash: Color = Palette.quoteWash
-        public var codeBackground: Color = Palette.codeSurface
-        public var inlineCodeBackground: Color = Palette.inlineCodeFill
-        public var tableHeaderBackground: Color = Palette.adaptive(light: 1, dark: 0.16)
-        public var rule: Color = Palette.divider
-        public var blockSpacing: CGFloat = 12
-        public var lineSpacing: CGFloat = 9
-        public var listSpacing: CGFloat = 9
-        public var tableColumnWidth: CGFloat = 150
-        /// The theme is built from one number — the body size in points — so inline strong and
-        /// emphasis runs can ask `ProseFonts` for a *real* face (J1 §1: the bundled serif is one
-        /// static Regular, so `.weight()` and `.italic()` on it draw Regular).
-        public var bodySize: CGFloat = 20
-        /// Heading sizes are ratios of `bodySize`: h1 1.5, h2 1.29, h3 1.14, h4 1, h5 0.93, h6 0.86
-        /// (the sizes measured at 14 pt: 21 / 18 / 16 / 14 / 13 / 12).
-        public static let headingRatios: [CGFloat] = [1.5, 1.286, 1.143, 1, 0.929, 0.857]
-
-        public init(serifName: String = "Newsreader16pt-Regular", bodySize: CGFloat = 20) {
-            foreground = Palette.ink
-            // Dynamic Type (shifted by Content size in `RootView`) scales prose; the theme no
-            // longer multiplies sizes by hand.
-            self.bodySize = bodySize
-            bodyFont = ProseFonts.serif(size: bodySize)
-            headingFonts = Self.headingRatios.enumerated().map { index, ratio in
-                // h1–h3 are bold, h4–h6 semibold, as real faces.
-                ProseFonts.serif(
-                    size: bodySize * ratio, relativeTo: index < 3 ? .headline : .body,
-                    weight: index < 3 ? .bold : .semibold)
-            }
-            // ~0.88 of the body: 15 pt at the 17 pt Claude body. The code-size step is applied by
-            // the code container (`codeTypeScale()`), not baked into the face.
-            codeFont = ProseFonts.mono(size: 15)
-        }
-        /// What decides how a piece lays out: the size ladder, spacing and the two faces. Colours are
-        /// Palette tokens that resolve per trait when drawn, and the theme builder makes fresh
-        /// colour values on every call (`Palette.adaptive`), so comparing them would make every pair
-        /// unequal and defeat `ClaudeMarkdownView`'s Equatable (W1).
-        nonisolated public static func == (lhs: Self, rhs: Self) -> Bool {
-            lhs.bodySize == rhs.bodySize && lhs.blockSpacing == rhs.blockSpacing
-                && lhs.lineSpacing == rhs.lineSpacing && lhs.listSpacing == rhs.listSpacing
-                && lhs.tableColumnWidth == rhs.tableColumnWidth && lhs.bodyFont == rhs.bodyFont
-                && lhs.codeFont == rhs.codeFont && lhs.headingFonts == rhs.headingFonts
-        }
-
-        public static var artifact: Self {
-            var theme = Self()
-            theme.bodyFont = .system(size: 17)
-            theme.bodySize = 17
-            theme.codeFont = .system(size: 13, design: .monospaced)
-            theme.lineSpacing = 6
-            return theme
-        }
-
-        /// The face for a run of prose: `font` is the run's base (the body face or one heading of
-        /// the ladder), `strong`/`emphasis` the markdown marks on top of it. Returns a real face:
-        /// strong is 600 (DSH strong is semibold, not 700), emphasis is the base weight slanted.
-        /// A heading keeps its ladder size; anything this theme did not build is left alone.
-        public func face(for font: Font, strong: Bool, emphasis: Bool) -> Font {
-            guard let role = role(of: font) else { return font }
-            let weight: Font.Weight = strong ? .semibold : role.weight
-            return ProseFonts.serif(
-                size: role.size, relativeTo: role.relativeTo, weight: weight, italic: emphasis)
-        }
-
-        /// Which rung of this theme's ladder `font` is: the body, or one heading. `Font` is
-        /// equatable, and the ladder is seven values, so this is O(7) with no allocation.
-        private func role(of font: Font) -> (size: CGFloat, relativeTo: Font.TextStyle, weight: Font.Weight)? {
-            if font == bodyFont { return (bodySize, .body, .regular) }
-            guard let index = headingFonts.firstIndex(of: font) else { return nil }
-            let ratio = Self.headingRatios[min(index, Self.headingRatios.count - 1)]
-            return (
-                bodySize * ratio, index < 3 ? .headline : .body, index < 3 ? .bold : .semibold
-            )
-        }
-    }
-
     public struct ClaudeMarkdownView: View, Equatable {
         /// R-2 (W1): equal inputs skip `body`. A streamed message is many of these in one stack, and
         /// every token re-ran every one of them (closures in the initialiser are never equal, so
@@ -770,31 +680,9 @@
             return result
         }
     }
-    private struct ExpandedCode: Identifiable {
-        let id = UUID()
-        let language: String?
-        let content: String
-    }
-    private struct InlineCodeAttribute: TextAttribute {}
-    private struct InlineCodeRenderer: TextRenderer {
-        var background: Color
-        func draw(layout: Text.Layout, in context: inout GraphicsContext) {
-            for line in layout {
-                for run in line {
-                    if run[InlineCodeAttribute.self] != nil {
-                        context.fill(
-                            Path(roundedRect: run.typographicBounds.rect.insetBy(dx: -1, dy: -1), cornerRadius: Radius.xs),
-                            with: .color(background))
-                    }
-                    context.draw(run)
-                }
-            }
-        }
-    }
-
 /// Content hashes for the stable `ForEach` identities (P5-B). `MarkdownBlock` is only
 /// `Equatable` (its public contract), so the hash is written out rather than synthesized.
-private extension MarkdownInline {
+extension MarkdownInline {
     func hashStable(into hasher: inout Hasher) {
         switch self {
         case .text(let value): hasher.combine("text"); hasher.combine(value)
@@ -816,23 +704,20 @@ private extension MarkdownInline {
         }
     }
 }
-
-private extension Array where Element == MarkdownInline {
+extension Array where Element == MarkdownInline {
     func hashStable(into hasher: inout Hasher) {
         hasher.combine(count)
         for child in self { child.hashStable(into: &hasher) }
     }
 }
-
-private extension MarkdownListItem {
+extension MarkdownListItem {
     func hashStable(into hasher: inout Hasher) {
         hasher.combine(checked ?? false)
         hasher.combine(checked == nil)
         blocks.hashStable(into: &hasher)
     }
 }
-
-private extension MarkdownBlock {
+extension MarkdownBlock {
     func hashStable(into hasher: inout Hasher) {
         switch self {
         case .paragraph(let content): hasher.combine("paragraph"); content.hashStable(into: &hasher)
@@ -863,66 +748,16 @@ private extension MarkdownBlock {
         }
     }
 }
-
-private extension Array where Element == MarkdownBlock {
+extension Array where Element == MarkdownBlock {
     func hashStable(into hasher: inout Hasher) {
         hasher.combine(count)
         for block in self { block.hashStable(into: &hasher) }
     }
 }
-
-private extension Array where Element == [MarkdownInline] {
+extension Array where Element == [MarkdownInline] {
     func hashStable(into hasher: inout Hasher) {
         hasher.combine(count)
         for row in self { row.hashStable(into: &hasher) }
-    }
-}
-
-/// One fenced code block, highlighted **after** first paint (R9 §1).
-///
-/// The plain mono text is what mounts; the actor's tokens arrive a moment later and replace it with
-/// the same font and metrics, so nothing moves. While the producing turn is still streaming the
-/// block waits — the last fence of a running answer is not closed yet — and highlights once the
-/// turn ends.
-struct ClaudeHighlightedCode: View {
-    let language: String?
-    let content: String
-    let theme: ClaudeMarkdownTheme
-    /// The reveal's "still arriving" signal: true while the producing turn runs.
-    let isStreaming: Bool
-
-    @State private var highlighted: AttributedString?
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var syntaxTheme: ClaudeCodeSyntaxTheme {
-        colorScheme == .dark ? .dark : .light
-    }
-
-    /// Identity of the request: language, theme and the text's length. The actor caches on the
-    /// source hash, so two revisions of different length are two entries, and a re-render of the
-    /// same block asks for the same one.
-    private var requestKey: String {
-        "\(syntaxTheme.rawValue)/\(language ?? "")/\(content.utf16.count)"
-    }
-
-    var body: some View {
-        Text(highlighted ?? CodeHighlightMirror.value(code: content, language: language, theme: syntaxTheme) ?? AttributedString(content))
-            .font(theme.codeFont)
-            .foregroundStyle(theme.foreground)
-            .task(id: requestKey) {
-                guard !isStreaming else { return }
-                let result = await CodeHighlighter.shared.highlight(
-                    content, language: language, theme: syntaxTheme)
-                if highlighted != result { highlighted = result }
-            }
-            .onChange(of: isStreaming) { _, streaming in
-                guard !streaming else { return }
-                Task {
-                    let result = await CodeHighlighter.shared.highlight(
-                        content, language: language, theme: syntaxTheme)
-                    if highlighted != result { highlighted = result }
-                }
-            }
     }
 }
 #endif

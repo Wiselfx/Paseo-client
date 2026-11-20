@@ -3,35 +3,6 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// What the composer's one trailing control is doing right now (D2 §1). The circle never changes
-/// size; only its glyph and its fill do, so it reads as one button changing its mind.
-enum ComposerPrimaryState: Equatable {
-    /// Nothing typed, idle, the host has realtime voice: the waveform starts it.
-    case voice
-    /// Nothing typed, idle, no voice on this host: a send that cannot go anywhere.
-    case unavailable
-    /// Text or a finished attachment: send (a long press queues).
-    case send
-    /// Nothing typed, the agent is working: stop the turn.
-    case stop
-    /// Voice mode is live on this agent: the live level, and a tap mutes.
-    case voiceActive
-}
-
-/// The touch-down answer every composer button gives: scale to 0.92 on the way down, back on the
-/// way up, through `Motion.feedback` (D2 §1).
-struct ComposerPressStyle: ButtonStyle {
-    let reduceMotion: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .animation(
-                Motion.feedback.resolved(reduceMotion: reduceMotion),
-                value: configuration.isPressed)
-    }
-}
-
 /// Claude's composer button: a 36 pt circle in a 44 pt hit area whose content follows the
 /// composer's state — voice, send, stop — with a symbol replace and a fill crossfade.
 struct ComposerPrimaryButton: View {

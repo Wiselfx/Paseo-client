@@ -3,110 +3,6 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// One script in trouble on a row's meta line.
-enum SidebarScriptDot: Equatable {
-    case running
-    case failed
-}
-
-/// Everything a workspace row draws, as plain values (R-2): the row skips its body when this is
-/// equal. Built per realized row from the directory pass's shared `SidebarDerivations`.
-struct SidebarRowModel: Equatable {
-    let workspace: WorkspaceDescriptor
-    let title: String
-    let statusKind: StatusDot.State
-    let selected: Bool
-    let attention: Bool
-    let manuallyUnread: Bool
-    let hidden: Bool
-    /// The most recently active agent of the workspace; a tap opens it.
-    let firstAgentId: String?
-    let branchText: String
-    /// The compact age ("5m"), nil without an activity stamp.
-    let ageText: String?
-    let showBranch: Bool
-    let showDiffStats: Bool
-    let showPRBadge: Bool
-    let labelDefinitions: [WorkspaceLabelDefinition]
-    let scriptDots: [SidebarScriptDot]
-    let scriptDotsLabel: String
-    let supportsPinning: Bool
-    let supportsLabels: Bool
-    let labelCatalog: [WorkspaceLabelDefinition]
-}
-
-/// What a row can do. One object per directory pass, shared by every row; rows compare equal
-/// without it (the closures it reaches are the sidebar's stable `@State` and the shell's actions).
-@MainActor
-final class SidebarRowActions {
-    private let sidebar: PaseoSidebar
-
-    init(sidebar: PaseoSidebar) {
-        self.sidebar = sidebar
-    }
-
-    /// Tapping a workspace opens its most recently active agent; the other agents are the header's
-    /// tab chips. Opening also clears a manual unread mark.
-    func open(_ workspace: WorkspaceDescriptor, firstAgentId: String?) {
-        // The tap moves the drawer, so the shell owns the haptic (PLAN §RH).
-        sidebar.clearManualUnread(workspace)
-        guard let firstAgentId else {
-            // No agent yet: a draft in this workspace, like Search (audit C #6).
-            sidebar.onNewSession(workspace.id)
-            return
-        }
-        sidebar.onSelectAgent(firstAgentId)
-    }
-
-    func newSession(_ workspace: WorkspaceDescriptor) { sidebar.onNewSession(workspace.id) }
-
-    func rename(_ workspace: WorkspaceDescriptor) {
-        sidebar.renameText = workspace.title ?? workspace.name
-        sidebar.renamingWorkspace = workspace
-    }
-
-    func togglePinned(_ workspace: WorkspaceDescriptor) {
-        let session = sidebar.session
-        Task {
-            let ok = await session.workspaceDirectory.setPinned(workspace.id, !workspace.isPinned)
-            if !ok {
-                sidebar.showToast(session.workspaceDirectory.actionError ?? "Couldn't change the pin.")
-            }
-        }
-    }
-
-    func toggleUnread(_ workspace: WorkspaceDescriptor) {
-        Haptics.selection()
-        sidebar.toggleManualUnread(workspace)
-    }
-
-    func toggleLabel(_ label: WorkspaceLabelDefinition, on workspace: WorkspaceDescriptor) {
-        Haptics.selection()
-        sidebar.toggleLabel(label, on: workspace)
-    }
-
-    func newLabel(on workspace: WorkspaceDescriptor) { sidebar.sheet = .newLabel(workspace) }
-
-    func copyPath(_ workspace: WorkspaceDescriptor) {
-        Clipboard.copy(workspace.cwd)
-        sidebar.showToast("Path copied")
-    }
-
-    func copyBranch(_ branch: String) {
-        Clipboard.copy(branch)
-        sidebar.showToast("Branch name copied")
-    }
-
-    func toggleHidden(_ workspace: WorkspaceDescriptor) {
-        Haptics.selection()
-        sidebar.toggleHiddenFromSidebar(workspace)
-    }
-
-    func archive(_ workspace: WorkspaceDescriptor) {
-        sidebar.archive.request(workspace, session: sidebar.session, toast: sidebar.toast)
-    }
-}
-
 /// A workspace row of the directory. `Equatable` on the model only (R-2), applied with `.equatable()`.
 struct SidebarWorkspaceRow: View, Equatable {
     let model: SidebarRowModel
@@ -282,7 +178,6 @@ struct SidebarWorkspaceRow: View, Equatable {
         }
     }
 }
-
 extension PaseoSidebar {
     func workspaceRow(
         _ workspace: WorkspaceDescriptor, derivations: SidebarDerivations

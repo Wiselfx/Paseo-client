@@ -1,0 +1,420 @@
+#if canImport(UIKit)
+import LinkPresentation
+import MapKit
+import PaseoStore
+import SwiftUI
+import UIKit
+import WebKit
+
+// MARK: - Images (§1.3–§1.5)
+
+/// A remote image URL (H5 §2). One shared loader, one card.
+///
+/// E3 §3.5 stays: full width, the image's own aspect ratio, capped at 60 % of the container
+/// height. What changed is everything behind that:
+///
+/// - the loader keeps the decoded image and its shape, so scrolling back draws it on the first
+///   frame — no placeholder, no re-download, no layout shift;
+/// - the box is reserved from the known aspect ratio before the bytes land, and the single
+///   change from the 4:3 guess to the real ratio is animated with `Motion.disclosure`;
+/// - a row that scrolls away mid-load does not end in a broken card: the fetch finishes into
+///   the cache and the card is instant when it returns;
+/// - failure says what happened and offers Retry and Open link, instead of a bare URL string.
+struct RichRemoteImage: View {
+    let urlString: String
+    let alt: String
+
+    @State private var image: UIImage?
+    /// Known before the pixels: from the cache, or from the image once it lands.
+    @State private var aspectRatio: CGFloat?
+    @State private var failure: MediaFailure?
+    /// True while this card is the one that showed the placeholder: its failure then keeps the
+    /// reserved box instead of collapsing to a 56 pt row and pulling the rest of the turn up.
+    @State private var keepsFailureBox = true
+    @State private var width: CGFloat = 0
+    @State private var retryToken = 0
+    /// The URL the state above belongs to. SwiftUI can hand this view a different block; when it
+    /// does, the old picture must not be drawn for the new link.
+    @State private var stateURL: String?
+    @Namespace private var zoom
+    /// The last streaming progress, for the determinate ring in place. Nil before the first
+    /// progress event (or when the total is unknown): the indeterminate spinner instead.
+    @State private var downloadProgress: Double?
+    @Environment(\.richActions) private var richActions
+    @State private var showViewer = false
+    /// The container's height, for the 60 % cap, known before the first frame (`RichViewport`).
+    @Environment(\.richViewportHeight) private var viewportHeight
+    /// The prose column, published once by the transcript: the slot's width before any pixel.
+    @Environment(\.richProseWidth) private var proseWidth
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
+
+    init(urlString: String, alt: String) {
+        self.urlString = urlString
+        self.alt = alt
+        // First frame: whatever the session already knows about this URL. A cache read is
+        // O(1), so the row has no "empty" frame to flash when it scrolls back.
+        let seed = Self.seed(for: urlString)
+        _image = State(initialValue: seed.image)
+        _aspectRatio = State(initialValue: seed.aspectRatio)
+        _failure = State(initialValue: seed.failure)
+        _keepsFailureBox = State(initialValue: seed.keepsBox)
+    }
+
+    /// What the caches say about a URL before anything is drawn.
+    private struct Seed {
+        let image: UIImage?
+        let aspectRatio: CGFloat?
+        let failure: MediaFailure?
+        /// A card that has not drawn the placeholder (a cache hit) may show the compact failure
+        /// row; one that has must keep its box so nothing under it moves.
+        let keepsBox: Bool
+    }
+
+    private static func seed(for urlString: String) -> Seed {
+        let identity = MediaPipeline.cacheIdentity(for: urlString)
+        let cached = MediaPipeline.cached(for: identity)
+        let memo = MediaPipeline.cachedFailure(for: identity)
+        let image = cached?.image
+        return Seed(
+            image: image,
+            aspectRatio: cached?.aspectRatio ?? MediaMetadataCache.aspectRatio(for: identity),
+            failure: image == nil ? memo : nil,
+            keepsBox: image == nil && memo == nil)
+    }
+
+    private var heightCap: CGFloat { viewportHeight * 0.6 }
+
+    /// The width of the image slot: the prose column when the transcript published one, else
+    /// this card's own measurement (the file viewer and previews). Never the image's pixel size.
+    private var slotWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
+
+    /// The ratio the box reserves: the image's own when we know it, else the old 4:3 guess.
+    private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
+
+    /// The §12 verdict for this card, O(1) in the environment's condition (R-1). Images always
+    /// load on every link (user directive); only offline changes it, to `.cacheOnly`.
+    private var policy: MediaFetchPolicy {
+        mediaFetchPolicy(
+            kind: .remoteImage, knownBytes: nil,
+            condition: richActions?.linkCondition ?? .assumed)
+    }
+
+    private var fileName: String {
+        MediaPipeline.target(for: urlString)?.lastPathComponent.nilIfEmpty ?? "image"
+    }
+
+    private var host: String? {
+        MediaPipeline.target(for: urlString)?.host
+    }
+
+    /// Only an http(s) link is worth sending to Safari; a `data:` or `blob:` one is not.
+    private var webURL: URL? {
+        guard let url = MediaPipeline.target(for: urlString) else { return nil }
+        let scheme = url.scheme?.lowercased()
+        return scheme == "http" || scheme == "https" ? url : nil
+    }
+
+    /// One load per (URL, pixel bucket, retry). Nothing here runs per scroll frame.
+    private var loadKey: String {
+        "\(urlString)|\(MediaSizing.pixelWidth(points: width, scale: displayScale))|\(retryToken)"
+    }
+
+    /// What the card's box is doing, as one value: a placeholder at a reserved ratio, the image
+    /// at its own, or a failure that either keeps the box or is compact. Motion runs only when
+    /// this changes.
+    private struct Layout: Equatable {
+        let aspectRatio: CGFloat
+        let stage: Int
+    }
+
+    private var layout: Layout {
+        var stage = 0
+        if image != nil {
+            stage = 2
+        } else if failure != nil {
+            stage = keepsFailureBox ? 3 : 1
+        }
+        return Layout(aspectRatio: reservedAspect, stage: stage)
+    }
+
+    var body: some View {
+        stage
+            .frame(maxWidth: .infinity)
+            .background { widthReader }
+            .animation(
+                Motion.disclosure.resolved(reduceMotion: reduceMotion),
+                value: layout)
+            .task(id: loadKey) { await load() }
+            .fullScreenCover(isPresented: $showViewer) {
+                MediaViewerView(
+                    items: [viewerItem],
+                    sourceID: viewerSourceID,
+                    namespace: zoom,
+                    onClose: { showViewer = false },
+                    selection: .constant(0))
+            }
+    }
+
+    @ViewBuilder private var stage: some View {
+        if let image {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .mediaSlot(width: slotWidth, heightCap: heightCap)
+                .background(Palette.codeSurface)
+                .clipShape(.rect(cornerRadius: Radius.md))
+                .overlay(alignment: .bottomTrailing) {
+                    if showsAnimationBadge {
+                        Text(MediaPipeline.target(for: urlString)?.pathExtension.uppercased() ?? "GIF")
+                            .font(.paseo(.codeCaption))
+                            .foregroundStyle(Palette.onMediaBadge)
+                            .padding(.horizontal, Metrics.badgeHPadding)
+                            .padding(.vertical, Metrics.badgeVPadding)
+                            .background(Palette.mediaBadge, in: .capsule)
+                            .padding(Space.sm)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .contentShape(.rect)
+                .matchedTransitionSource(id: viewerSourceID, in: zoom)
+                .onTapGesture {
+                    showViewer = true
+                }
+                .accessibilityLabel(alt.isEmpty ? "Image" : alt)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Opens the image full screen")
+                // A context menu is the only way to the link without a second gesture language.
+                // Share and Save to Photos live in the viewer (G3 §4.6).
+                .paseoCardMenu(
+                    copyTitle: "Copy link",
+                    copyText: webURL != nil ? urlString : nil,
+                    externalTitle: "Open link",
+                    externalURL: webURL)
+        } else if let failure {
+            if keepsFailureBox {
+                boxedFailure(failure)
+            } else {
+                compactFailure(failure)
+            }
+        } else {
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        Rectangle()
+            .fill(Palette.codeSurface)
+            .aspectRatio(reservedAspect, contentMode: .fit)
+            .mediaSlot(width: slotWidth, heightCap: heightCap)
+            .clipShape(.rect(cornerRadius: Radius.md))
+            .overlay {
+                // Streaming with a known total: the determinate ring in the same frame.
+                if let progress = downloadProgress {
+                    ProgressView(value: progress)
+                        .controlSize(.small)
+                        .tint(Palette.secondaryInk)
+                } else {
+                    ProgressView().controlSize(.small).tint(Palette.secondaryInk)
+                }
+            }
+            .accessibilityLabel(alt.isEmpty ? "Loading image" : "Loading image: \(alt)")
+    }
+
+    /// What went wrong, in the user's words, with the two things worth doing about it.
+    ///
+    /// Two forms, one behaviour: a card that showed the placeholder keeps the placeholder's
+    /// height (H5 round 2 review — a 270 pt box must not collapse to 56 pt under the reader),
+    /// a card that was created already failed takes the compact row.
+    private func boxedFailure(_ failure: MediaFailure) -> some View {
+        Rectangle()
+            .fill(Palette.codeSurface)
+            .aspectRatio(reservedAspect, contentMode: .fit)
+            .mediaSlot(width: slotWidth, heightCap: heightCap)
+            .clipShape(.rect(cornerRadius: Radius.md))
+            .overlay {
+                failureContent(failure)
+                    .padding(.horizontal, Space.md)
+                    .padding(.vertical, Space.sm)
+            }
+    }
+
+    private func compactFailure(_ failure: MediaFailure) -> some View {
+        PaseoCard(content:
+            failureContent(failure)
+                .frame(maxWidth: .infinity, alignment: .leading))
+    }
+
+    private func failureContent(_ failure: MediaFailure) -> some View {
+        HStack(alignment: .center, spacing: Space.sm) {
+            Image(systemName: "photo")
+                .font(.glyph(.large, weight: .light))
+                .foregroundStyle(Palette.secondaryInk)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Space.xs) {
+                Text("Couldn't load image")
+                    .font(.paseo(.caption, weight: .medium))
+                    .foregroundStyle(Palette.ink)
+                Text(detail(for: failure))
+                    .font(.paseo(.codeCaption))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: Space.sm)
+            Button("Retry") { retry() }
+                .buttonStyle(.plain)
+                .font(.paseo(.caption, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .frame(minWidth: Metrics.hitSize, minHeight: Metrics.hitSize)
+                .accessibilityLabel("Try loading the image again")
+            if webURL != nil {
+                Button {
+                    if let webURL { openURL(webURL) }
+                } label: {
+                    Image(systemName: "safari")
+                        .font(.glyph(.small))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .frame(width: Metrics.hitSize, height: Metrics.hitSize)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open link")
+                .accessibilityHint("Opens \(host ?? "the link") in Safari")
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The zoom-transition source, stable per card: the thumbnail the viewer returns to.
+    private var viewerSourceID: String { "image:\(urlString)" }
+
+    /// One viewer page: the pixels on screen now, the full fetch behind them (G3 §4.6).
+    private var viewerItem: MediaViewerItem {
+        MediaViewerItem(
+            id: urlString,
+            thumbnail: image,
+            fullSource: MediaPipeline.target(for: urlString).map(MediaSource.remote),
+            fileName: fileName,
+            alt: alt.isEmpty ? fileName : alt,
+            filePath: nil)
+    }
+
+    /// The transcript shows the first frame; only the viewer animates (G3 §4.6).
+    private var showsAnimationBadge: Bool {
+        let ext = MediaPipeline.target(for: urlString)?.pathExtension.lowercased()
+        return ext == "gif" || ext == "apng"
+    }
+
+    /// "host · what happened", the one line the card has room for.
+    private func detail(for failure: MediaFailure) -> String {
+        guard let host else { return failure.message }
+        return "\(host) · \(failure.message)"
+    }
+
+    /// The card's inner width, for decoding at the size it will be drawn at. Published only
+    /// when it actually changes — never per scroll frame.
+    private var widthReader: some View {
+        // `onGeometryChange` on the clear background instead of a `GeometryReader` per card (W1): same
+        // size, delivered at once and on change, written only when it differs.
+        Color.clear
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if width != newWidth { width = newWidth }
+            }
+    }
+
+    private func retry() {
+        Haptics.light()
+        failure = nil
+        downloadProgress = nil
+        // A retry shows the placeholder again, so a second failure must keep its box.
+        keepsFailureBox = true
+        retryToken += 1
+    }
+
+    @MainActor
+    private func load() async {
+        if stateURL != urlString { adoptState(for: urlString) }
+        // No width yet: a fetch at a guessed size would only be thrown away.
+        guard width > 1 else { return }
+        // Offline fails closed: no fetch, the offline failure shows. Every other link fetches.
+        if policy == .cacheOnly {
+            if image == nil, failure == nil { failure = .offline }
+            return
+        }
+        guard let url = MediaPipeline.target(for: urlString) else {
+            failure = .badURL
+            return
+        }
+        let pixelWidth = MediaSizing.pixelWidth(points: width, scale: displayScale)
+        let ignoresFailureCache = retryToken > 0
+        for await event in await MediaPipeline.shared.events(
+            source: .remote(url), pixelWidth: pixelWidth,
+            ignoreFailureCache: ignoresFailureCache)
+        {
+            // The row may have gone; the pipeline already cached the result for its return.
+            guard !Task.isCancelled else { return }
+            switch event {
+            case .size(let size):
+                // The probe's true ratio wins only while nothing is known: one settle, once.
+                if aspectRatio == nil, size.height > 0 {
+                    aspectRatio = size.width / size.height
+                }
+            case .progress(let fraction):
+                downloadProgress = fraction
+            case .final(let outcome):
+                downloadProgress = nil
+                switch outcome {
+                case .image(let payload):
+                    image = payload.image
+                    aspectRatio = payload.aspectRatio
+                    failure = nil
+                case .svg(let source, let knownAspect):
+                    await renderSVG(source, knownAspect: knownAspect)
+                case .failure(let reason):
+                    failure = reason
+                }
+            }
+        }
+    }
+
+    /// Point the card at a URL it has not drawn yet, starting from whatever is cached.
+    private func adoptState(for urlString: String) {
+        stateURL = urlString
+        let seed = Self.seed(for: urlString)
+        image = seed.image
+        aspectRatio = seed.aspectRatio
+        failure = seed.failure
+        keepsFailureBox = seed.keepsBox
+        downloadProgress = nil
+    }
+
+    /// SVG has no `UIImage` decoder; the shared offscreen `WKWebView` draws it instead, at the
+    /// card's width, and its `viewBox` reserves the box while that happens.
+    @MainActor
+    private func renderSVG(_ source: String, knownAspect: CGFloat?) async {
+        let identity = MediaPipeline.cacheIdentity(for: urlString)
+        if let knownAspect {
+            aspectRatio = knownAspect
+            MediaMetadataCache.remember(knownAspect, for: identity)
+        }
+        let dark = colorScheme == .dark
+        let html = RichHTMLDocument.rawSVG(source: source, dark: dark)
+        guard
+            let rendered = await RichSnapshotQueue.shared.snapshot(
+                html: html, width: width, scale: displayScale)
+        else {
+            failure = .decoding
+            return
+        }
+        guard !Task.isCancelled else { return }
+        image = rendered
+        let size = rendered.size
+        let ratio = size.height > 0 ? size.width / size.height : 1
+        aspectRatio = ratio
+        MediaMetadataCache.remember(ratio, for: identity)
+    }
+}
+#endif

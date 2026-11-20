@@ -1,8 +1,6 @@
 import Foundation
 import Highlighter
 
-public enum ClaudeCodeSyntaxTheme: String, Sendable { case dark = "atom-one-dark", light = "atom-one-light" }
-
 /// Offline syntax coloring. Source is data passed to bundled highlight.js, never executed.
 ///
 /// This is the **main-actor facade**: the production path is `CodeHighlighter` (an actor, R9 §1),

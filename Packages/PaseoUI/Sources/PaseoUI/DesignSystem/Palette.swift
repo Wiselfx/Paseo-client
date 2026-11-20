@@ -3,75 +3,24 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// The pure-black flag as a UIKit trait: the palette's `UIColor` providers read it from the
-/// trait collection, so switching Dark ↔ Pure black redraws live instead of rebuilding the app.
-struct PureBlackTrait: UITraitDefinition {
-    static let defaultValue = false
-    static let identifier = "com.wiselfx.paseoclient.pureBlack"
-}
-
 extension UITraitCollection {
     var pureBlack: Bool { self[PureBlackTrait.self] }
 }
-
-/// The SwiftUI side of the trait: `RootView` sets `\.pureBlack`, and SwiftUI bridges it into the
-/// UIKit trait collections its hosting views see.
-struct PureBlackKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
 extension EnvironmentValues {
     public var pureBlack: Bool {
         get { self[PureBlackKey.self] }
         set { self[PureBlackKey.self] = newValue }
     }
 }
-
-extension PureBlackKey: UITraitBridgedEnvironmentKey {
-    static func read(from traitCollection: UITraitCollection) -> Bool {
-        traitCollection.pureBlack
-    }
-
-    static func write(to mutableTraits: inout any UIMutableTraits, value: Bool) {
-        mutableTraits[PureBlackTrait.self] = value
-    }
-}
-
-/// The colour accent as a UIKit trait, exactly like `PureBlackTrait`: the accent tokens are
-/// dynamic `UIColor` providers that read it, so a switch redraws in place — no rebuild and no
-/// `@AppStorage` read in any leaf body.
-struct AccentTrait: UITraitDefinition {
-    static let defaultValue = ClaudeAccent.paseo
-    static let identifier = "com.wiselfx.paseoclient.accent"
-}
-
 extension UITraitCollection {
     var accent: ClaudeAccent { self[AccentTrait.self] }
 }
-
-/// The SwiftUI side of the trait: `RootView` sets `\.accent`, and SwiftUI bridges it into the
-/// UIKit trait collections its hosting views see.
-struct AccentKey: EnvironmentKey {
-    static let defaultValue = ClaudeAccent.paseo
-}
-
 extension EnvironmentValues {
     public var accent: ClaudeAccent {
         get { self[AccentKey.self] }
         set { self[AccentKey.self] = newValue }
     }
 }
-
-extension AccentKey: UITraitBridgedEnvironmentKey {
-    static func read(from traitCollection: UITraitCollection) -> ClaudeAccent {
-        traitCollection.accent
-    }
-
-    static func write(to mutableTraits: inout any UIMutableTraits, value: ClaudeAccent) {
-        mutableTraits[AccentTrait.self] = value
-    }
-}
-
 /// The app's palette (ClaudeUI's tokens extended with the DSH turn tokens; see
 /// `docs/research/08-dsh-live-observation.md` §5, which overrides doc 06).
 enum Palette {

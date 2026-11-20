@@ -1,20 +1,6 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// Metrics shared by the one home geometry (E2 §3).
-enum HomeHeroMetrics {
-    /// The home header's resting height: `ShellHeader`'s 48 pt row (its own `minHeight`). A page
-    /// that draws no header — the launch frame — reserves exactly this, so the hero sits where
-    /// the draft draws it and the hand-off moves nothing (H4 §1). It is the exact height, not an
-    /// estimate: the draft's header title is bar chrome and is capped so its line box never makes
-    /// the row taller (`DraftChatView.header`), and `EmptyMain`'s title is empty.
-    static let headerHeight: CGFloat = 48
-    /// The draft's resting chrome under the hero: its workspace line (28 pt + 4 pt) and its
-    /// one-line composer (48 pt + 8 pt). Screens with no footer of their own reserve exactly this
-    /// strip, so the greeting sits where the draft draws it and the hand-off moves nothing.
-    static let draftChrome: CGFloat = 88
-}
-
 /// The home page's geometry, in one place: the header as the page's first row, a flexible hero,
 /// and the page's own footer under it — never a stack hugging its content in the middle of the
 /// screen (the floating sidebar button, E2 §3).
@@ -52,7 +38,6 @@ struct HomeHeroLayout<Header: View, Hero: View, Footer: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-
 extension HomeHeroLayout where Footer == HomeHeroRestingFooter {
     /// A home with no footer yet (launching, or no agent/draft to show): reserve the draft's
     /// resting chrome so the hero does not move when the final screen arrives.
@@ -61,21 +46,6 @@ extension HomeHeroLayout where Footer == HomeHeroRestingFooter {
         @ViewBuilder hero: @escaping () -> Hero
     ) {
         self.init(header: header, hero: hero) { HomeHeroRestingFooter() }
-    }
-}
-
-/// The blank strip that stands in for the draft's workspace line and resting composer.
-struct HomeHeroRestingFooter: View {
-    var body: some View {
-        Color.clear.frame(height: HomeHeroMetrics.draftChrome)
-    }
-}
-
-/// The blank strip that stands in for the home header: the same height, no chrome and no
-/// button, so a launch frame reserves the header's space without drawing any of it (H4 §1).
-struct HomeHeroHeaderSpacer: View {
-    var body: some View {
-        Color.clear.frame(height: HomeHeroMetrics.headerHeight)
     }
 }
 #endif

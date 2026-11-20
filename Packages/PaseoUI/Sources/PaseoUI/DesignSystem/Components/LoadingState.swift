@@ -33,16 +33,6 @@ struct LoadingState: View {
         }
     }
 }
-
-/// The small spinner a row or button embeds.
-struct InlineProgress: View {
-    var body: some View {
-        ProgressView()
-            .controlSize(.small)
-            .tint(Palette.secondaryInk)
-    }
-}
-
 #Preview("Light") {
     VStack(spacing: Space.xl) {
         LoadingState()
@@ -56,7 +46,6 @@ struct InlineProgress: View {
     .background(Palette.background)
     .preferredColorScheme(.light)
 }
-
 #Preview("Dark") {
     VStack(spacing: Space.xl) {
         LoadingState("Loading…")

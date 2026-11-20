@@ -2,14 +2,13 @@
 import SwiftUI
 
 /// The surface is not visible (a sheet covers it, the app is backgrounded): running pulses stop.
-private struct SurfaceObscuredKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
 extension EnvironmentValues {
+    /// What `isSurfaceObscured` reads outside the shell, where there are no surface flags.
+    @Entry var surfaceObscuredFallback = false
+
     var isSurfaceObscured: Bool {
-        get { surfaceFlags?.obscured ?? self[SurfaceObscuredKey.self] }
-        set { self[SurfaceObscuredKey.self] = newValue }
+        get { surfaceFlags?.obscured ?? surfaceObscuredFallback }
+        set { surfaceObscuredFallback = newValue }
     }
 }
 

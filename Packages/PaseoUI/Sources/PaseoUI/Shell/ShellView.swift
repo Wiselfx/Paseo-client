@@ -7,26 +7,6 @@ import SwiftUI
 extension EnvironmentValues {
     @Entry var composerFocusRequested: Binding<Bool> = .constant(false)
 }
-
-/// See `ShellView.rootsKey`.
-struct ShellRootsKey: Equatable {
-    let session: ObjectIdentifier
-    let selectedAgentId: String?
-    let conversation: ObjectIdentifier?
-    let draft: ObjectIdentifier?
-    let homeSettled: Bool
-    let panelTerminalId: String?
-    let workspaceId: String?
-    let directoryLoaded: Bool
-    let directoryFailed: Bool
-    let dynamicTypeSize: DynamicTypeSize
-    let reduceMotion: Bool
-    let codeSizeStep: Int
-    let pureBlack: Bool
-    let accent: ClaudeAccent
-    let hostSwitch: ObjectIdentifier?
-}
-
 /// The app after connecting: a drawer of workspaces and their agents on the left, the selected
 /// agent's conversation in the middle, and the workspace panel pushed over both from the right
 /// edge. The three surfaces are `UIView`s inside one UIKit container (`ShellContainer`), which
@@ -639,100 +619,6 @@ public struct ShellView: View {
         draftOpenedByUser = false
     }
 }
-
 /// The same shell, under the name the app has always used.
 public typealias PaseoShellView = ShellView
-
-/// Watches the two session facts the shell reacts to, in its own body, so `ShellView.body` never
-/// reads the agent list or the directory state (R5 §4.1). It reacts to the agent ids, not to
-/// every snapshot field, so a status change does not re-route anything.
-struct ShellSessionWatcher: View {
-    let session: HostSession
-    let onAgentsChange: () -> Void
-    let onDirectoryLoaded: () -> Void
-
-    var body: some View {
-        Color.clear
-            .onChange(of: session.agents.map(\.id)) { _, _ in
-                onAgentsChange()
-            }
-            .onChange(of: session.workspaceDirectory.hasLoaded) { _, loaded in
-                if loaded { onDirectoryLoaded() }
-            }
-    }
-}
-
-/// W1: which of the shell's inputs move, and how often (`-paseo-perf` only; never mounted
-/// otherwise). Reads live here so the shell's own body gains no dependency.
-struct ShellPerfProbes: View {
-    let session: HostSession
-    let conversation: ConversationStore?
-
-    var body: some View {
-        let _ = PaseoPerf.body("ShellProbes")
-        Group {
-            PerfProbe("conv.agent", conversation?.agent)
-            PerfProbe("dir.loaded", session.workspaceDirectory.hasLoaded)
-            PerfProbe("dir.error", session.workspaceDirectory.error)
-            PerfProbe("connection", session.connection)
-            PerfProbe("agents.ids", session.agents.map(\.id))
-            PerfProbe("agents.count", session.agents.count)
-        }
-    }
-}
-
-/// The panel's root: it resolves the workspace descriptor in its own body, so the shell body
-/// never reads the directory (R5 §4.1).
-struct PanelRoot: View {
-    let session: HostSession
-    let workspaceId: String?
-    let currentAgentId: String?
-    let initialTerminalId: String?
-    let onSelectAgent: (String) -> Void
-    let onNewAgent: (WorkspaceDescriptor) -> Void
-    let onMentionInChat: (String) -> Void
-
-    var body: some View {
-        WorkspacePanel(
-            session: session,
-            workspace: workspaceId.flatMap { session.workspaceDirectory.workspace(id: $0) },
-            currentAgentId: currentAgentId,
-            onSelectAgent: onSelectAgent,
-            onNewAgent: onNewAgent,
-            onMentionInChat: onMentionInChat,
-            initialTerminalId: initialTerminalId)
-    }
-}
-
-/// No agent and no draft: the brand mark, and a retry when the agent list failed (R5 §4.4).
-struct EmptyMain: View {
-    let session: HostSession
-    let onOpenSidebar: () -> Void
-
-    private func refreshAgents() {
-        Task { await session.refreshAgents() }
-    }
-
-    var body: some View {
-        // Same geometry as `LaunchSkeleton` and the draft: the header is the page's first row,
-        // pinned top-leading, and the hero is centred in the space the draft's composer will take
-        // (E2 §3.1, H4 §1).
-        HomeHeroLayout {
-            ShellHeader(leading: .sidebar(onOpenSidebar)) {
-                Color.clear
-            } trailing: {
-                Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
-            }
-        } hero: {
-            ClaudeHomeHero()
-        }
-        .overlay(alignment: .bottom) {
-            if let error = session.agentsError {
-                InlineBanner(.failure, title: error, action: ("Try again", refreshAgents))
-                    .padding(.horizontal, Space.lg)
-                    .padding(.bottom, Space.xl)
-            }
-        }
-    }
-}
 #endif

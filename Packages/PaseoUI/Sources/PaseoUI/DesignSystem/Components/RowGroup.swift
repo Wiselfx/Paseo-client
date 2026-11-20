@@ -10,14 +10,6 @@ struct RowGroup<Content: View>: View {
             .background(Palette.panel, in: .rect(cornerRadius: Radius.group))
     }
 }
-
-/// The hairline between two rows in a group, inset by the row's own leading padding.
-struct RowDivider: View {
-    var body: some View {
-        ClaudeDivider().padding(.horizontal, Space.lg)
-    }
-}
-
 #Preview("Light") {
     VStack(spacing: Space.lg) {
         RowGroup {
@@ -30,7 +22,6 @@ struct RowDivider: View {
     .background(Palette.background)
     .preferredColorScheme(.light)
 }
-
 #Preview("Dark") {
     RowGroup {
         ListRow(title: "First row", systemImage: "person", accessory: .chevron, action: {})

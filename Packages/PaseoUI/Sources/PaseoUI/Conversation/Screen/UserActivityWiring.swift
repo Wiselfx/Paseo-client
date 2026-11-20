@@ -1,0 +1,43 @@
+#if canImport(UIKit)
+import Observation
+import PaseoStore
+import SwiftUI
+import UIKit
+
+/// Toast notices and the turn-finished haptic: neither is drawn by this screen.
+struct UserActivityWiring: ViewModifier {
+    let store: ConversationStore
+    let controller: ChatController
+    @Binding var focused: Bool
+
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: store.lastNotice?.message) { _, message in
+                guard let message else { return }
+                controller.showToast(message)
+                store.clearNotice()
+            }
+            .onChange(of: store.isRunning) { wasRunning, isRunning in
+                if wasRunning && !isRunning { Haptics.settle() }
+            }
+            .onChange(of: focused) { _, isFocused in
+                if isFocused {
+                    controller.feedMascot(.userActivity(at: Date()))
+                    controller.requestEndScroll()
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase != .active else { return }
+                controller.dictation.stop(keepingDraft: true)
+                // M15: voice mode stops cleanly in the background (mic + wake lock off).
+                controller.voiceEngineIfCreated?.stopCapture()
+                if controller.session.voiceSession.isVoiceMode {
+                    Task { await controller.session.voiceSession.stop() }
+                }
+            }
+    }
+}
+#endif

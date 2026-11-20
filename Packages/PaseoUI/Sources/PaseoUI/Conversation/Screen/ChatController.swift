@@ -6,135 +6,10 @@ import Synchronization
 import UIKit
 import UniformTypeIdentifiers
 
-// MARK: - Actions
-
-/// The transcript's verbs, in the environment so a turn row can call them without taking a dozen
-/// closures in its init (R6 §4). One instance per open agent, created by `ChatController`.
-///
-/// It is `@Observable` only so a flag can change without rebuilding the rows; the closures
-/// themselves are stable for the controller's life.
-@MainActor @Observable final class ChatActions {
-    /// Opens the workspace file viewer at a path (prose links, Read/Edit/Write rows).
-    var openFile: (String) -> Void = { _ in }
-    /// Markdown interactions that are not links: copy code, and anything else the prose reports.
-    var markdown: (MarkdownAction) -> Void = { _ in }
-    /// Asks for the can't-undo confirmation of a rewind (scope + message id).
-    var rewind: (RewindScope, String) -> Void = { _, _ in }
-    /// Fork at the row above `row` (nil for the in-flight fork of the whole timeline).
-    var fork: ((ClaudeForkTarget, TimelineRow) async -> Void)?
-    /// The running turn's fork: no boundary.
-    var forkInFlight: ((ClaudeForkTarget) async -> Void)?
-    /// Reads a workspace image for prose. Decoded off main and cached by (workspace, path).
-    var loadImage: (String) async -> UIImage? = { _ in nil }
-    /// An agent's live title by id, for "Sent by" (upstream `user-message/index.tsx:95`).
-    var agentTitle: (String) -> String? = { _ in nil }
-    /// Opens a diff whole, in the chat's diff sheet (an inline diff shows its first lines).
-    var showDiff: (ClaudeDiffDocument) -> Void = { _ in }
-
-    /// What this agent and host can actually do with a turn, as one value the rows compare
-    /// (R-2). Recomputed by `ChatController` when the agent snapshot, the host features or the
-    /// workspace capabilities change — never in a row body (R-1).
-    var availability = TurnActionAvailability()
-
-    private let store: ConversationStore
-
-    init(store: ConversationStore) {
-        self.store = store
-    }
-}
-
 extension EnvironmentValues {
     /// The open conversation's verbs; nil outside a conversation (previews, the draft screen).
     @Entry var chatActions: ChatActions?
 }
-
-// MARK: - Turn action availability
-
-/// What the open agent can actually do with a turn. One value, computed once per agent/host
-/// capability change by `ChatController` and passed to rows (R-2), so a provider that cannot
-/// rewind or fork never shows an action that would fail.
-///
-/// Upstream's conditions:
-/// - **Rewind** (`use-rewind-capabilities.ts:32-56`, `message.tsx:531`): the agent's
-///   `capabilities.supportsRewind*` flags, under the host's `features.rewind`. Our
-///   `rewindMenuScopes` is exactly that list.
-/// - **Edit / Rerun** (`composer-restore.tsx`): rewind to the conversation, then restore the
-///   text. Offered when the conversation scope can be rewound.
-/// - **Fork** (`use-fork-agent.ts`: `useHostFeature(serverId, "agentForkContext")`): the host
-///   feature and a shell that can open the new agent. A completed turn pins a boundary
-///   (`turn-boundary.ts:9-24`), which needs `features.agentForkContextCursor` — the only
-///   boundary this client sends (`ForkContextRequest.boundaryCursor`). The running turn forks
-///   with no boundary and needs neither.
-/// Upstream has no Retract or Delete-turn gesture; both were forks that spawned a new agent and
-/// were removed (L1, LEDGER D-012). Rewind is the in-place path.
-struct TurnActionAvailability: Sendable, Equatable {
-    /// Scopes the provider offers on your bubbles, in menu order; empty hides rewind.
-    var rewindChoices: [RewindScope] = []
-    /// Fork with no boundary: the running turn's footer (`turn-footer.tsx:38-46`).
-    var canForkInFlight = false
-    /// Fork pinned to a boundary: the completed turn's footer.
-    var canForkAtBoundary = false
-    /// The workspace target is offered beside the tab target: the host can create one.
-    var canForkWorkspace = false
-    /// A rewind is in flight: the rewind items are locked until it settles (upstream
-    /// `rewind-menu.tsx` `isLocked`).
-    var rewindInFlight = false
-}
-
-// MARK: - Find state
-
-/// The find-in-conversation session's view state. The matches themselves live in
-/// `ConversationStore.search`, so they survive view churn; this is what the views draw.
-@MainActor @Observable final class ChatFind {
-    var isOpen = false
-    var query = ""
-    var index = 0
-    /// The seqEnd whose row flashes after a step.
-    var flash: Int?
-    /// The row of the current match, resolved by the transcript against the loaded turns (the
-    /// located seq can be a message that has streamed on since). Its turn is held open and drawn
-    /// as the match. Nil when the match is not loaded or find is closed.
-    var rowSeq: Int?
-    /// Stepping scrolled the transcript during this find session: closing find then returns the reader.
-    /// Survives `reset()` like `anchor`; the transcript clears it once it has acted.
-    var moved = false
-    /// The turn the reader was nearest when find opened (nil: they were at the end); closing restores
-    /// it when stepping moved them. Survives `reset()`: the transcript reads it after the close.
-    var anchor: String?
-    /// The same place as a timeline position (the first row's seq of that turn): a turn's id is its first
-    /// row's id, which changes when an older page prepends rows to a partial turn, a position does not.
-    /// Set by the transcript when find opens; nil: the reader was at the end.
-    var anchorSeq: Int?
-    /// A scroll the transcript owes after a step or a search result. Cleared by the transcript.
-    var jump: FindJump?
-    var task: Task<Void, Never>?
-
-    func reset() {
-        task?.cancel()
-        task = nil
-        query = ""
-        index = 0
-        flash = nil
-        rowSeq = nil
-        jump = nil
-    }
-}
-
-/// One pending find scroll: the located message (the daemon's `seq` and `role`), resolved to a row by
-/// the transcript against the turns it holds.
-struct FindJump: Equatable {
-    var seq: Int
-    var role: AgentTimelineSearchRequest.Role
-    /// Stepped backward: the last occurrence in the message is the one to show (upstream
-    /// `navigate`: `occurrence = direction === 1 ? 0 : -1`).
-    var backward: Bool
-}
-
-/// A recorded jump intent: the transcript performs the scroll (it owns the scroll handles).
-struct TranscriptJump: Equatable {
-    var id: String
-}
-
 // MARK: - Controller
 
 /// Everything the conversation screen does that is not a SwiftUI handle: state that must survive a
@@ -1360,7 +1235,6 @@ struct TranscriptJump: Equatable {
     }
 
 
-
     // MARK: Outline and end-of-transcript requests
 
     /// The fallback outline, memoized on the timeline it was built from (W8): the transcript
@@ -1500,57 +1374,4 @@ struct TranscriptJump: Equatable {
         return WorkspaceFileFormat.relativePath(stripped, cwd: workspace.cwd)
     }
 }
-
-/// The pipeline registration ticket: workspace id plus the token that owns the entry.
-/// Written once, read in `deinit`. `Mutex`-guarded (the codebase's lock) so the box is
-/// `Sendable` without isolation acrobatics.
-final class DaemonFetchRegistration: @unchecked Sendable {
-    struct Change: Sendable {
-        /// The workspace whose entry is still registered and must be torn down.
-        var previous: (workspaceID: String, token: UUID)?
-        /// Identifies the pending registration, so an actor hop that lands after the id moved
-        /// on does not overwrite the newer entry.
-        var generation: Int
-    }
-
-    private struct State {
-        var workspaceID: String?
-        var token: UUID?
-        var generation = 0
-    }
-
-    private let state = Mutex<State>(State())
-
-    /// Starts following `workspaceID`. Nil when the id did not change (the entry, or the
-    /// registration in flight, still owns it). Otherwise the previous entry is returned for
-    /// the caller to unregister, and the token is cleared until `settle` records the new one.
-    func begin(workspaceID: String?) -> Change? {
-        state.withLock { state in
-            guard state.workspaceID != workspaceID else { return nil }
-            var previous: (workspaceID: String, token: UUID)?
-            if let oldID = state.workspaceID, let oldToken = state.token {
-                previous = (oldID, oldToken)
-            }
-            state.workspaceID = workspaceID
-            state.token = nil
-            state.generation += 1
-            return Change(previous: previous, generation: state.generation)
-        }
-    }
-
-    /// Records the token for `generation` when it is still the current one. False means the id
-    /// moved on while the registration was in flight: the caller must unregister its token.
-    func settle(token: UUID, generation: Int) -> Bool {
-        state.withLock { state in
-            guard state.generation == generation, state.workspaceID != nil else { return false }
-            state.token = token
-            return true
-        }
-    }
-
-    func snapshot() -> (workspaceID: String?, token: UUID?) {
-        state.withLock { ($0.workspaceID, $0.token) }
-    }
-}
-
 #endif

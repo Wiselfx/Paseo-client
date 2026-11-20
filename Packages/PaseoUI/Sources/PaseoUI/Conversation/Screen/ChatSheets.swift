@@ -3,22 +3,6 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-enum ClaudeChatSheet: String, Identifiable {
-    case controls
-    case subagents
-    case backgroundWork
-    case turnNav
-    case media
-    var id: String { rawValue }
-}
-
-/// A rewind awaiting the can't-undo confirmation (M7d).
-struct PendingRewind: Identifiable {
-    let messageId: String
-    let scope: RewindScope
-    var id: String { "\(messageId)/\(scope)" }
-}
-
 /// Every modal the conversation presents: the agent-controls sheet, the subagents and background
 /// work sheets, the prompt index, context usage, the file viewer, and the rewind confirmation
 /// that belongs to the timeline. R4 owns the sheet bodies; this only
@@ -156,73 +140,4 @@ struct ChatSheets: ViewModifier {
         }
     }
 }
-
-/// An inline prose image the reader tapped (H5 round 2). A workspace path arrives already
-/// decoded; a remote source is left to the viewer, which loads it through `MediaPipeline`.
-struct InlineProseImage: Identifiable {
-    let markdown: MarkdownImage
-    let uiImage: UIImage?
-
-    var id: String { markdown.source }
-}
-
-/// One file's diff, opened from the turn changes card (G6 C11): the tool call's own
-/// unified diff when this conversation has one, else the file viewer.
-struct ClaudeDiffDocument: Identifiable {
-    var id: String { path }
-    let path: String
-    let unifiedDiff: String?
-    let old: String?
-    let new: String?
-
-    /// The file name for the sheet title.
-    var fileName: String {
-        (path as NSString).lastPathComponent
-    }
-}
-
-/// The full-screen viewer for an image tapped inside a sentence — the same `MediaViewerView`
-/// the image cards use, so zoom, share and the chrome look identical everywhere.
-struct InlineProseImageViewer: View {
-    let item: InlineProseImage
-    let onClose: () -> Void
-
-    @Namespace private var zoom
-
-    private var source: String {
-        item.markdown.source.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var isRemote: Bool {
-        let lower = source.lowercased()
-        return ["http://", "https://", "data:", "blob:"].contains { lower.hasPrefix($0) }
-    }
-
-    private var fileName: String {
-        let base = isRemote
-            ? URL(string: source)?.lastPathComponent
-            : (source as NSString).lastPathComponent
-        guard let base, !base.isEmpty else { return "image" }
-        return base
-    }
-
-    var body: some View {
-        MediaViewerView(
-            items: [
-                MediaViewerItem(
-                    id: "inline:\(source)",
-                    thumbnail: item.uiImage,
-                    fullSource: isRemote
-                        ? MediaPipeline.target(for: source).map(MediaSource.remote) : nil,
-                    fileName: fileName,
-                    alt: item.markdown.alt.isEmpty ? fileName : item.markdown.alt,
-                    filePath: isRemote ? nil : source)
-            ],
-            sourceID: "inline:\(source)",
-            namespace: zoom,
-            onClose: onClose,
-            selection: .constant(0))
-    }
-}
-
 #endif

@@ -121,7 +121,6 @@ public struct ChatScreen: View {
         .accessibilityHidden(true)
     }
 
-
     /// The top bar: two glass buttons and the centred title. No band, and the find bar joins it
     /// when find is open; content dissolves under them through the scroll edge effect (D1 §1).
     /// The bar reads its own chrome state (find, hidden, sheets), so a flip never rebuilds the
@@ -142,154 +141,9 @@ public struct ChatScreen: View {
         .background(alignment: .bottom) { ComposerUnderBlur() }
     }
 }
-
-/// Builds the screen's `ChatController` on first use, once. A throwaway holder (one per `init`)
-/// costs a closure; only the holder `@State` keeps is ever asked. The build runs inside an
-/// observation scope of its own, so the reads the controller's setup makes (agent, workspace,
-/// checkout) never become dependencies of the view body that happened to ask first.
-@MainActor
-final class ChatControllerHolder {
-    private let make: () -> ChatController
-    private var built: ChatController?
-
-    init(make: @escaping () -> ChatController) {
-        self.make = make
-    }
-
-    var controller: ChatController {
-        if let built { return built }
-        let controller = withObservationTracking({ make() }, onChange: {})
-        built = controller
-        return controller
-    }
-}
-
-/// Reads `\.openURL` in its own body (W1). `ChatScreen` read it itself, and the value is rebuilt by the
-/// hosting controller whenever the input session changes, so every keystroke re-ran the screen's body
-/// (21 runs a window with no input of its own changing). Here only this modifier re-evaluates.
-struct ChatOpenURLWiring: ViewModifier {
-    let controller: ChatController
-    @Environment(\.openURL) private var openURL
-    @Environment(\.toast) private var toast
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        content
-            .environment(\.openURL, controller.fileLinkAction(host: openURL))
-            .onAppear {
-                controller.openURLFromEnvironment = { url in openURL(url) }
-                controller.toastCenter = toast
-                controller.reduceMotion = reduceMotion
-            }
-            .onChange(of: reduceMotion) { _, value in controller.reduceMotion = value }
-            .onChange(of: toast.map(ObjectIdentifier.init)) { _, _ in controller.toastCenter = toast }
-    }
-}
-
 /// The old name, kept so the shell and the rest of the app compile unchanged (ticket: a
 /// `public typealias` is fine if the screen is renamed).
 public typealias ClaudeChatView = ChatScreen
-
-// MARK: - Wiring
-
-/// The draft, the queue and the turn boundary: things that change while you type or while the
-/// agent works. A modifier's body is its own value in the graph, so a keystroke re-evaluates this
-/// and the composer's text field — not the transcript.
-struct ChatInputWiring: ViewModifier {
-    let store: ConversationStore
-    let controller: ChatController
-    @Binding var focused: Bool
-
-    /// Inline images decode at the screen's width in pixels; `UIScreen.main` is deprecated on
-    /// iOS 26, so the scale comes from the environment (D1 §4).
-    @Environment(\.displayScale) private var displayScale
-
-    func body(content: Content) -> some View {
-        content
-            .task { await controller.loadSlashCommands() }
-            .onChange(of: store.activeTurnId) { oldId, newId in
-                guard newId == nil, oldId != nil else { return }
-                // The anchor's job (hold your message at the top while the answer arrives) is
-                // done. Clearing it first lets a queued message arm its own runway.
-                controller.anchoringToAnswer = false
-                controller.flushQueuedMessage()
-                // Follow comes back from the transcript's idle rule, not from here: the reader
-                // may have scrolled away from the end while the answer ran.
-            }
-            .draftObserver(
-                store: store,
-                onDraftChange: { newValue in
-                    controller.scheduleDraftSave(newValue)
-                    controller.feedMascot(.userActivity(at: Date()))
-                },
-                onMentionQueryChange: { query in controller.handleMentionQuery(query) })
-            .onAppear {
-                controller.seedSavedDraft()
-                controller.displayScale = displayScale
-                controller.dictation.onDraft = { [store] text in store.draft = text }
-            }
-            .onChange(of: displayScale) { _, scale in controller.displayScale = scale }
-    }
-}
-
-/// Toast notices and the turn-finished haptic: neither is drawn by this screen.
-struct UserActivityWiring: ViewModifier {
-    let store: ConversationStore
-    let controller: ChatController
-    @Binding var focused: Bool
-
-    @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        content
-            .onChange(of: store.lastNotice?.message) { _, message in
-                guard let message else { return }
-                controller.showToast(message)
-                store.clearNotice()
-            }
-            .onChange(of: store.isRunning) { wasRunning, isRunning in
-                if wasRunning && !isRunning { Haptics.settle() }
-            }
-            .onChange(of: focused) { _, isFocused in
-                if isFocused {
-                    controller.feedMascot(.userActivity(at: Date()))
-                    controller.requestEndScroll()
-                }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                guard phase != .active else { return }
-                controller.dictation.stop(keepingDraft: true)
-                // M15: voice mode stops cleanly in the background (mic + wake lock off).
-                controller.voiceEngineIfCreated?.stopCapture()
-                if controller.session.voiceSession.isVoiceMode {
-                    Task { await controller.session.voiceSession.stop() }
-                }
-            }
-    }
-}
-
-/// Watches the composer's text in a body of its own (P3).
-///
-/// `.onChange(of: store.draft)` placed on the conversation's root view subscribed that whole
-/// body to the draft, so every keystroke re-evaluated the header, the transcript's turns and the
-/// turn rail. A view modifier's body is a separate value in the graph: reading the draft here
-/// re-evaluates this modifier and the text field, and nothing else.
-struct DraftObserver: ViewModifier {
-    let store: ConversationStore
-    let onDraftChange: (String) -> Void
-    let onMentionQueryChange: (String?) -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .onChange(of: store.draft) { _, newValue in onDraftChange(newValue) }
-            .onChange(of: mentionQuery) { _, query in onMentionQueryChange(query) }
-    }
-
-    /// The open mention query for the current draft; nil when there is none.
-    private var mentionQuery: String? { ChatMentions.query(in: store.draft) }
-}
-
 extension View {
     func draftObserver(
         store: ConversationStore, onDraftChange: @escaping (String) -> Void,
