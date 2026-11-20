@@ -14,7 +14,8 @@ struct FilePathItem: Hashable {
 struct WorkspaceFilesView: View {
     let checkout: CheckoutStore
 
-    @State private var path: [FilePathItem] = []
+    /// Restored from `WorkspaceFilesLocation`, so the page reopens where it was left.
+    @State private var path: [FilePathItem]
     /// The file pushed on top of the folder stack.
     @State private var openFile: String?
     /// Workspace-relative path of a file the Files page should flash and scroll to
@@ -23,6 +24,13 @@ struct WorkspaceFilesView: View {
     @Environment(\.shellDrawer) private var shellDrawer
 
     private var files: WorkspaceFiles { checkout.files }
+
+    init(checkout: CheckoutStore) {
+        self.checkout = checkout
+        let saved = WorkspaceFilesLocation.load(checkout.workspaceId)
+        _path = State(initialValue: saved.stack.map(FilePathItem.init(path:)))
+        _openFile = State(initialValue: saved.openFile)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -49,12 +57,22 @@ struct WorkspaceFilesView: View {
         .onAppear { shellDrawer?.panelHandlesBack = !path.isEmpty }
         .onChange(of: path) { _, newPath in
             shellDrawer?.panelHandlesBack = !newPath.isEmpty
+            rememberLocation()
         }
         .onChange(of: openFile) { _, _ in
             // A file is a terminal destination; only folders make the stack "deeper".
             shellDrawer?.panelHandlesBack = !path.isEmpty
+            rememberLocation()
         }
-        .onDisappear { shellDrawer?.panelHandlesBack = false }
+        .onDisappear {
+            shellDrawer?.panelHandlesBack = false
+            WorkspaceFilesLocation.flush(checkout.workspaceId)
+        }
+    }
+
+    private func rememberLocation() {
+        WorkspaceFilesLocation.setStack(
+            path.map(\.path), openFile: openFile, in: checkout.workspaceId)
     }
 
     /// Pop the file off the stack; the containing directory page stays and consumes
@@ -150,6 +168,9 @@ private struct WorkspaceFilesDirectoryList: View {
     /// The listing of this page's directory, captured when this page's refresh completed. The
     /// store keeps a single listing, so pages snapshot it rather than watch it change.
     @State private var listing: Listing?
+    /// The row at the top of the list, kept in `WorkspaceFilesLocation` so the folder reopens
+    /// scrolled where it was.
+    @State private var topRow: String?
     /// A page snapshot: entries, or the error text to show (not `Result`: the failure is plain text).
     private enum Listing: Equatable {
         case success([FileExplorerEntry])
@@ -334,6 +355,10 @@ private struct WorkspaceFilesDirectoryList: View {
         if case .failed(let message) = files.phase {
             listing = .failure(message)
         } else {
+            // First listing of this page: come back to the row that was on top last time.
+            if listing == nil {
+                topRow = WorkspaceFilesLocation.topRow(folder: relPath, in: checkout.workspaceId)
+            }
             listing = .success(files.entries)
         }
     }
@@ -398,16 +423,27 @@ private struct WorkspaceFilesDirectoryList: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
-                        if index > 0 {
-                            ClaudeDivider().padding(.leading, 46)
+                    // One container per element, so every row has the same shape and the lazy
+                    // stack identifies rows by id alone; the first row's divider is hidden, not
+                    // left out.
+                    ForEach(visible.enumerated(), id: \.element.id) { index, entry in
+                        VStack(spacing: 0) {
+                            ClaudeDivider()
+                                .padding(.leading, 46)
+                                .opacity(index > 0 ? 1 : 0)
+                            row(entry)
                         }
-                        row(entry)
-                            .id(relative(entry))
+                        .id(relative(entry))
                     }
                 }
+                .scrollTargetLayout()
             }
+            .scrollPosition(id: $topRow, anchor: .top)
             .scrollBounceBehavior(.basedOnSize)
+            .onChange(of: topRow) { _, row in
+                WorkspaceFilesLocation.setTopRow(
+                    row, folder: relPath, in: checkout.workspaceId)
+            }
             .refreshable { await refresh() }
             .onChange(of: revealedRow) { _, target in
                 guard let target else { return }
