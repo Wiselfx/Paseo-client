@@ -156,6 +156,7 @@ struct RichRemoteImage: View {
                     onClose: { showViewer = false },
                     selection: .constant(0))
             }
+            .paseoFeedback(.light, trigger: retryToken)
     }
 
     @ViewBuilder private var stage: some View {
@@ -326,7 +327,6 @@ struct RichRemoteImage: View {
     }
 
     private func retry() {
-        Haptics.light()
         failure = nil
         downloadProgress = nil
         // A retry shows the placeholder again, so a second failure must keep its box.

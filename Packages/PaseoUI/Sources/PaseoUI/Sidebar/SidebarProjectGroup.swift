@@ -9,7 +9,6 @@ extension PaseoSidebar {
         let title = projectTitle(group.project)
         return HStack(spacing: 0) {
             Button {
-                Haptics.selection()
                 withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                     toggleCollapsed(group.id)
                 }
@@ -45,6 +44,7 @@ extension PaseoSidebar {
         // nothing below (E2b §11). The workspace rows carry their own vertical padding, so the
         // first one does not crowd the header when the group expands.
         .padding(.top, Space.sm)
+        .paseoFeedback(.selection, trigger: collapsed)
         .contextMenu {
             // PLAN §RH order: open-variants, edit verbs, copy, then the destructive verb.
             Button("New session", systemImage: "plus") { newSession(in: group) }

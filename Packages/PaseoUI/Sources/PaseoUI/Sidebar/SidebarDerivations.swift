@@ -137,7 +137,6 @@ extension PaseoSidebar {
     func dateGroupHeader(_ bucket: SidebarDateBucket) -> some View {
         let collapsed = isDateGroupCollapsed(bucket.id)
         return Button {
-            Haptics.selection()
             withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                 toggleDateGroupCollapsed(bucket.id)
             }
@@ -158,6 +157,7 @@ extension PaseoSidebar {
         .buttonStyle(.plain)
         .accessibilityLabel(bucket.title)
         .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
+        .paseoFeedback(.selection, trigger: collapsed)
     }
 
     /// The Pinned section, shared by both groupings.
@@ -187,7 +187,6 @@ extension PaseoSidebar {
 
     var hiddenWorkspacesRow: some View {
         Button {
-            Haptics.selection()
             withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { showHidden.toggle() }
         } label: {
             HStack(spacing: 8) {
@@ -213,6 +212,7 @@ extension PaseoSidebar {
             showHidden
                 ? "Hide hidden workspaces"
                 : "Show hidden workspaces")
+        .paseoFeedback(.selection, trigger: showHidden)
     }
 
     /// An error is a banner with a retry (PLAN §RI 22); everything else is the quiet line.

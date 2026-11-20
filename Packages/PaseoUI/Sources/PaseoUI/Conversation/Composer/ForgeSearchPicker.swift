@@ -100,7 +100,6 @@ struct ForgeSearchPicker: View {
         HStack(spacing: 6) {
             ForEach(KindFilter.allCases, id: \.self) { filter in
                 Button {
-                    Haptics.selection()
                     kindFilter = filter
                     scheduleSearch(query)
                 } label: {
@@ -119,6 +118,7 @@ struct ForgeSearchPicker: View {
                 .buttonStyle(.plain)
             }
         }
+        .paseoFeedback(.selection, trigger: kindFilter)
     }
 
     private func filterLabel(_ filter: KindFilter) -> String {

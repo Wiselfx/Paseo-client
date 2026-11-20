@@ -98,11 +98,11 @@ struct WorkFileStep: View {
                 }
             }
         }
+        .paseoFeedback(.selection, trigger: userExpanded)
     }
 
     private func toggle<Label: View>(@ViewBuilder label: () -> Label) -> some View {
         Button {
-            Haptics.selection()
             withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                 userExpanded = !isExpanded
             }

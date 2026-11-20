@@ -60,6 +60,7 @@ struct WorkspaceFilesDirectoryList: View {
         }
         // Every pushed folder draws its own header row; the system bar would duplicate it.
         .toolbarVisibility(.hidden, for: .navigationBar)
+        .paseoFeedback(.selection, trigger: sortRaw)
         // The page owns the canvas too: a NavigationStack's own background must never be what
         // shows in dark or pure black (E2 §5).
         .background(Palette.panel)
@@ -140,7 +141,6 @@ struct WorkspaceFilesDirectoryList: View {
                 ForEach(FileSort.allCases, id: \.self) { choice in
                     Button {
                         sortRaw = choice.rawValue
-                        Haptics.selection()
                     } label: {
                         if currentSort == choice {
                             Label(choice.title, systemImage: "checkmark")

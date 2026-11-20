@@ -24,6 +24,7 @@ struct ComposerCrab: View {
                     if poke == newValue { poke = nil }
                 }
             }
+            .paseoFeedback(.light, trigger: poke) { _, new in new != nil }
     }
 
     private var effectiveAnimation: CrabAnimation {
@@ -32,7 +33,6 @@ struct ComposerCrab: View {
     }
 
     private func pokeNow() {
-        Haptics.light()
         let next: CrabAnimation = pokeLeftNext ? .pokeLeft : .pokeRight
         pokeLeftNext.toggle()
         poke = next

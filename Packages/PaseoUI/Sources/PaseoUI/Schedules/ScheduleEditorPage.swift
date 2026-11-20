@@ -335,12 +335,12 @@ struct ScheduleEditorPage: View {
                     "\(workspace.projectDisplayName)\(workspace.branch.map { " · \($0)" } ?? "")",
                 accessory: ListRow.Accessory.checkmark(cwd == workspace.cwd),
                 action: {
-                    Haptics.selection()
                     cwd = workspace.cwd
                 }
             )
             .panelRow()
         }
+        .paseoFeedback(.selection, trigger: cwd)
         if !cwd.isEmpty, !workspaces.contains(where: { $0.cwd == cwd }) {
             ListRow(title: "Custom directory", subtitle: cwd)
                 .panelRow()

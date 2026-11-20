@@ -33,7 +33,6 @@ struct WorkToolStep: View {
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    Haptics.selection()
                     withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                         userExpanded = !isExpanded
                     }
@@ -62,6 +61,7 @@ struct WorkToolStep: View {
                 }
             }
         }
+        .paseoFeedback(.selection, trigger: userExpanded)
     }
 }
 #endif

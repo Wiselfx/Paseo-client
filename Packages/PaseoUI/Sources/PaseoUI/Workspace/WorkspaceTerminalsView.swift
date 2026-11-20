@@ -84,6 +84,8 @@ struct WorkspaceTerminalsView: View {
         // One canvas for the whole workspace panel: the terminal page sits on the panel fill,
         // and the emulator's own background matches it (E2b §3).
         .background(Palette.panel)
+        .paseoFeedback(.light, trigger: isCreating) { _, new in new }
+        .paseoFeedback(.light, trigger: busyScripts) { old, new in new.count > old.count }
         .task {
             await store.open(workspaceId: workspaceId, cwd: workspace.cwd)
             guard !Task.isCancelled else { return }
@@ -437,7 +439,6 @@ struct WorkspaceTerminalsView: View {
 
     private var newTerminalButton: some View {
         Button {
-            Haptics.light()
             guard !isCreating else { return }
             isCreating = true
             Task {
@@ -563,7 +564,6 @@ struct WorkspaceTerminalsView: View {
             title: "No terminals yet",
             message: "Start one to run commands in this workspace.",
             action: (title: "New terminal", run: {
-                Haptics.light()
                 guard !isCreating else { return }
                 isCreating = true
                 Task {
@@ -800,7 +800,6 @@ struct WorkspaceTerminalsView: View {
     /// Restart = stop then start, one action. No confirmation: the script is designed to be
     /// bounced.
     private func restart(_ script: WorkspaceScript) async {
-        Haptics.light()
         busyScripts.insert(script.scriptName)
         if script.lifecycle == .running {
             _ = await store.stopScript(script.scriptName, in: workspaceId)
@@ -843,7 +842,6 @@ struct WorkspaceTerminalsView: View {
         let busy = busyScripts.contains(script.scriptName)
         let isRunning = script.lifecycle == .running
         return Button {
-            Haptics.light()
             busyScripts.insert(script.scriptName)
             Task {
                 if isRunning {

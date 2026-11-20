@@ -141,7 +141,6 @@ struct PairDevicePage: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                 Button {
-                    Haptics.light()
                     Self.copy(url: url)
                     copied = true
                     Task {
@@ -155,6 +154,7 @@ struct PairDevicePage: View {
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("pairDevice.copy")
+                .paseoFeedback(.light, trigger: copied) { _, new in new }
             }
             // en.ts:1987-1988 securityWarning
             Text("Treat this pairing link like a password. Anyone with it can access this host.")

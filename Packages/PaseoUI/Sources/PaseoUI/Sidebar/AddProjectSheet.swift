@@ -88,7 +88,6 @@ struct AddProjectSheet: View {
         HStack(spacing: 2) {
             ForEach(availableModes) { choice in
                 Button {
-                    Haptics.selection()
                     mode = choice
                 } label: {
                     Text(choice.title)
@@ -106,6 +105,7 @@ struct AddProjectSheet: View {
         .padding(3)
         .background(Palette.chip, in: .capsule)
         .padding(.top, 4)
+        .paseoFeedback(.selection, trigger: mode)
     }
 
     private var availableModes: [Mode] {
@@ -244,7 +244,6 @@ struct AddProjectSheet: View {
 
     private func resultRow(_ repo: GithubRepository) -> some View {
         Button {
-            Haptics.selection()
             selected = repo
             destination = defaultDestination(for: repo)
         } label: {
@@ -281,6 +280,7 @@ struct AddProjectSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(repo.nameWithOwner), select")
+        .paseoFeedback(.selection, trigger: selected == repo) { _, new in new }
     }
 
     private var destinationSection: some View {

@@ -19,7 +19,6 @@ struct CopyButton: View {
     var body: some View {
         Button {
             Clipboard.copy(text)
-            Haptics.light()
             withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) { copied = true }
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
@@ -36,6 +35,7 @@ struct CopyButton: View {
             guard !Task.isCancelled else { return }
             withAnimation(Motion.feedback.resolved(reduceMotion: reduceMotion)) { copied = false }
         }
+        .paseoFeedback(.light, trigger: copied) { _, new in new }
     }
 }
 

@@ -152,7 +152,6 @@ struct ImportSessionSheet: View {
 
     private func filterChip(id: String, label: String) -> some View {
         Button {
-            Haptics.selection()
             selectedProvider = id
         } label: {
             Text(label)
@@ -165,6 +164,7 @@ struct ImportSessionSheet: View {
                     selectedProvider == id ? Palette.ink : Palette.chip, in: .capsule)
         }
         .buttonStyle(.plain)
+        .paseoFeedback(.selection, trigger: selectedProvider == id) { _, new in new }
     }
 
     // MARK: Content

@@ -66,7 +66,7 @@ struct GeneralPage: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 172)
-                    .onChange(of: accent) { _, _ in Haptics.selection() }
+                    .paseoFeedback(.selection, trigger: accent)
                     .accessibilityIdentifier("settings.accent")
                 }
                 .padding(.horizontal, Space.lg)
@@ -79,7 +79,6 @@ struct GeneralPage: View {
                 SettingsMenuRow("Content size", value: contentTextSize) {
                     ForEach(ClaudeTextScale.Content.allCases, id: \.rawValue) { option in
                         Button {
-                            Haptics.selection()
                             contentTextSize = option.rawValue
                         } label: {
                             Label(
@@ -90,10 +89,10 @@ struct GeneralPage: View {
                     }
                 }
                 .accessibilityIdentifier("settings.fonts.content")
+                .paseoFeedback(.selection, trigger: contentTextSize)
                 SettingsMenuRow("Code size", value: codeFontSize) {
                     ForEach(ClaudeTextScale.Code.allCases, id: \.rawValue) { option in
                         Button {
-                            Haptics.selection()
                             codeFontSize = option.rawValue
                         } label: {
                             Label(
@@ -104,6 +103,7 @@ struct GeneralPage: View {
                     }
                 }
                 .accessibilityIdentifier("settings.fonts.code")
+                .paseoFeedback(.selection, trigger: codeFontSize)
             } header: {
                 Text("Fonts")
             } footer: {
@@ -151,7 +151,6 @@ struct GeneralPage: View {
                 SettingsMenuRow("Sound cue", value: currentSoundCue.title) {
                     ForEach(SoundCueLevel.allCases, id: \.rawValue) { level in
                         Button {
-                            Haptics.selection()
                             soundCueLevel = level.rawValue
                         } label: {
                             Label(
@@ -162,6 +161,7 @@ struct GeneralPage: View {
                     }
                 }
                 .accessibilityIdentifier("settings.notifications.soundCue")
+                .paseoFeedback(.selection, trigger: soundCueLevel)
                 testNotificationRow
             } header: {
                 Text("Notifications")
@@ -196,7 +196,6 @@ struct GeneralPage: View {
                 SettingsMenuRow("Chat display", value: chatDisplayMode.label) {
                     ForEach(ChatDisplayMode.allCases, id: \.self) { option in
                         Button {
-                            Haptics.selection()
                             chatDisplay = option.rawValue
                         } label: {
                             Label(
@@ -206,6 +205,7 @@ struct GeneralPage: View {
                     }
                 }
                 .accessibilityIdentifier("settings.chatDisplay")
+                .paseoFeedback(.selection, trigger: chatDisplay)
                 ListRow(
                     title: "Always expand reasoning",
                     accessory: ListRow.Accessory.toggle($alwaysExpandReasoning)
@@ -215,7 +215,6 @@ struct GeneralPage: View {
                 SettingsMenuRow("When the agent is running", value: defaultSendBehavior.label) {
                     ForEach(DefaultSendBehavior.allCases, id: \.self) { option in
                         Button {
-                            Haptics.selection()
                             defaultSend = option.rawValue
                         } label: {
                             Label(
@@ -225,6 +224,7 @@ struct GeneralPage: View {
                     }
                 }
                 .accessibilityIdentifier("settings.defaultsend")
+                .paseoFeedback(.selection, trigger: defaultSend)
             } header: {
                 Text("Chat")
             } footer: {

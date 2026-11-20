@@ -96,12 +96,12 @@ struct NewLabelSheet: View {
                             selected: labelKey(candidate) == labelKey(color)
                         ) {
                             color = candidate
-                            Haptics.selection()
                         }
                     }
                 }
             }
         }
+        .paseoFeedback(.selection, trigger: color)
     }
 
     private var header: some View {

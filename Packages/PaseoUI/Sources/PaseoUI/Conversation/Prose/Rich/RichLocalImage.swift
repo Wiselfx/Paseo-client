@@ -139,6 +139,7 @@ struct RichLocalImage: View {
                 onClose: { showViewer = false },
                 selection: .constant(0))
         }
+        .paseoFeedback(.light, trigger: retryToken)
     }
 
     /// One load per (path, pixel bucket, retry, workspace). The workspace is part of the key
@@ -198,7 +199,6 @@ struct RichLocalImage: View {
     }
 
     private func retry() {
-        Haptics.light()
         failure = nil
         keepsFailureBox = true
         downloadProgress = nil

@@ -30,7 +30,6 @@ struct TerminalPage: View {
                 SettingsMenuRow("Scrollback", value: selectedLabel) {
                     ForEach(options, id: \.value) { option in
                         Button {
-                            Haptics.selection()
                             scrollback = option.value
                         } label: {
                             Label(
@@ -40,12 +39,12 @@ struct TerminalPage: View {
                     }
                 }
                 .accessibilityIdentifier("settings.terminal.scrollback")
+                .paseoFeedback(.selection, trigger: scrollback)
                 SettingsMenuRow(
                     "Clicking a script's service URL", value: currentBehavior.label
                 ) {
                     ForEach(ServiceUrlBehavior.allCases, id: \.self) { option in
                         Button {
-                            Haptics.selection()
                             serviceUrlBehavior = option.rawValue
                         } label: {
                             Label(
@@ -55,6 +54,7 @@ struct TerminalPage: View {
                     }
                 }
                 .accessibilityIdentifier("settings.terminal.serviceUrls")
+                .paseoFeedback(.selection, trigger: serviceUrlBehavior)
             } header: {
                 Text("Terminal")
             } footer: {

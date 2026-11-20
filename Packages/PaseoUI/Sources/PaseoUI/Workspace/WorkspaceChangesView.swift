@@ -121,6 +121,8 @@ struct WorkspaceChangesView: View {
             .onChange(of: compare) { _, _ in
                 Task { await reloadDiff() }
             }
+            .paseoFeedback(.selection, trigger: compare)
+            .paseoFeedback(.light, trigger: copiedForgeCommand) { _, new in new != nil }
         }
     }
 
@@ -539,7 +541,6 @@ struct WorkspaceChangesView: View {
         let selected = compare == value
         return Button {
             guard compare != value else { return }
-            Haptics.selection()
             compare = value
         } label: {
             // A 36 pt pill in a 44 pt track: the whole track height takes the tap.
@@ -983,7 +984,6 @@ struct WorkspaceChangesView: View {
     private func forgeCopyCommand(_ command: String) -> some View {
         Button {
             UIPasteboard.general.string = command
-            Haptics.light()
             copiedForgeCommand = command
             Task {
                 try? await Task.sleep(for: .seconds(1.5))

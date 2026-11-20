@@ -71,6 +71,7 @@ struct ClaudePermissionCard: View {
             guard !Task.isCancelled else { return }
             pendingTitle = nil
         }
+        .paseoFeedback(.selection, trigger: pendingTitle) { _, new in new != nil }
     }
 
     // MARK: Tool cards (generic permission requests)
@@ -328,7 +329,6 @@ struct ClaudePermissionCard: View {
         return Button {
             guard !answering else { return }
             pendingTitle = title
-            Haptics.selection()
             let requestId = request.id
             let line = ResolutionLine.text(for: response, request: request)
             Task { await store.respond(to: requestId, with: response) }

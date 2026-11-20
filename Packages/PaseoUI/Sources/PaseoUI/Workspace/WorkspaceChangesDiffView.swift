@@ -99,7 +99,6 @@ struct WorkspaceChangesDiffView: View {
             }
             if selectionAnchor == nil {
                 Button("Select line range…", systemImage: "selection.pin.in.out") {
-                    Haptics.selection()
                     selectionAnchor = anchor
                     selectionEnd = nil
                 }
@@ -299,6 +298,8 @@ struct WorkspaceChangesDiffView: View {
         } message: {
             Text("This removes all changes in \(file.path). This cannot be undone.")
         }
+        .paseoFeedback(.selection, trigger: selectionAnchor) { _, new in new != nil }
+        .paseoFeedback(.selection, trigger: expandedLongHunks)
     }
 
     // MARK: Build
@@ -627,7 +628,6 @@ struct WorkspaceChangesDiffView: View {
         .background(Palette.chip)
         .contentShape(.rect)
         .onTapGesture {
-            Haptics.selection()
             expandedLongHunks.insert(section.hunk)
         }
         .accessibilityLabel("Show \(remaining) more lines")

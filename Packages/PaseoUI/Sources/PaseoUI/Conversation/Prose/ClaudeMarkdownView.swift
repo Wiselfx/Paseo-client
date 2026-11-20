@@ -355,6 +355,7 @@
                 }
             }
             .accessibilityIdentifier("markdown.table")
+            .paseoFeedback(.light, trigger: expandedTable?.index) { _, new in new != nil }
             .sheet(item: $expandedTable) { table in
                 SheetScaffold("Table", detents: .large) {
                     ScrollView([.vertical, .horizontal]) {
@@ -543,7 +544,6 @@
             header: [[MarkdownInline]], rows: [[[MarkdownInline]]],
             alignments: [MarkdownColumnAlignment], columns: Int, blockIndex: Int
         ) {
-            Haptics.light()
             expandedTable = ExpandedTable(
                 index: blockIndex, header: header, rows: rows, alignments: alignments,
                 columns: columns)

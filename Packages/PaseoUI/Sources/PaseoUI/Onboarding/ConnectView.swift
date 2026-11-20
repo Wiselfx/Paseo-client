@@ -137,9 +137,12 @@ public struct ConnectView: View {
         .onChange(of: status) { _, new in
             // A failed connect lands on the form with that host preselected and Retry in reach.
             if case .failed = new {
-                Haptics.failure()
                 showAddForm = true
             }
+        }
+        .paseoFeedback(.failure, trigger: status) { _, new in
+            if case .failed = new { return true }
+            return false
         }
         .sheet(item: $renameTarget) { target in renameSheet(target) }
         .confirmationDialog(
@@ -291,7 +294,6 @@ public struct ConnectView: View {
                 .accessibilityIdentifier("connect.tls")
                 RowDivider()
                 Button {
-                    Haptics.selection()
                     // Reduce Motion drops the disclosure animation, not the disclosure.
                     if reduceMotion {
                         showAdvanced.toggle()
@@ -315,6 +317,7 @@ public struct ConnectView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("connect.advanced")
+                .paseoFeedback(.selection, trigger: showAdvanced)
                 if showAdvanced {
                     RowDivider()
                     VStack(alignment: .leading, spacing: 2) {

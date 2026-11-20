@@ -222,7 +222,6 @@ struct WorkspaceFileViewer: View {
             exportDocument = nil
             switch result {
             case .success:
-                Haptics.success()
                 saveSuccessFlash = true
                 Task {
                     try? await Task.sleep(for: .seconds(1.5))
@@ -241,6 +240,10 @@ struct WorkspaceFileViewer: View {
         } message: {
             Text("This file changed on disk since you started editing. Reloading discards your changes.")
         }
+        .paseoFeedback(.success, trigger: saveSuccessFlash) { _, new in new }
+        .paseoFeedback(.success, trigger: savedFlash) { _, new in new }
+        .paseoFeedback(.light, trigger: copied) { _, new in new }
+        .paseoFeedback(.selection, trigger: previewAsSource)
     }
 
     // MARK: Render
@@ -325,7 +328,6 @@ struct WorkspaceFileViewer: View {
             editText = nil
             saveFailure = nil
             savedFlash = true
-            Haptics.success()
             await files.read(relativePath)
             Task {
                 try? await Task.sleep(for: .seconds(1.5))
@@ -505,7 +507,6 @@ struct WorkspaceFileViewer: View {
 
     private var copyButton: some View {
         Button {
-            Haptics.light()
             if let render {
                 switch render.payload {
                 case .image(_, let image):
@@ -597,7 +598,6 @@ struct WorkspaceFileViewer: View {
     private func previewSegment(_ source: Bool, label: String) -> some View {
         let selected = previewAsSource == source
         return Button {
-            Haptics.selection()
             if reduceMotion {
                 previewAsSource = source
             } else {

@@ -16,7 +16,6 @@ struct AppearancePicker: View {
         HStack(spacing: 10) {
             ForEach([ClaudeAppearance.light, .dark, .pureBlack, .system], id: \.self) { choice in
                 Button {
-                    Haptics.selection()
                     appearance = choice.rawValue
                 } label: {
                     VStack(spacing: 9) {
@@ -39,6 +38,7 @@ struct AppearancePicker: View {
                 .accessibilityIdentifier(identifierPrefix + "." + choice.rawValue)
             }
         }
+        .paseoFeedback(.selection, trigger: appearance)
     }
 
     @ViewBuilder private func preview(_ choice: ClaudeAppearance) -> some View {

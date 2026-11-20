@@ -50,7 +50,6 @@ struct TurnChangesCard: View, Equatable {
                     withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                         expanded.toggle()
                     }
-                    Haptics.selection()
                 } label: {
                     HStack(spacing: Space.sm) {
                         Image(systemName: "doc.badge.ellipsis")
@@ -122,6 +121,7 @@ struct TurnChangesCard: View, Equatable {
                 Motion.disclosure.resolved(reduceMotion: reduceMotion), value: expanded)
             .animation(
                 Motion.disclosure.resolved(reduceMotion: reduceMotion), value: summary)
+            .paseoFeedback(.selection, trigger: expanded)
     }
 }
 #endif

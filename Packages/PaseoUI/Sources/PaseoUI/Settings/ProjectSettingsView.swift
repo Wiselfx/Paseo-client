@@ -134,6 +134,7 @@ struct ProjectSettingsView: View {
             await icons.load(projectId: project.projectId)
             seed()
         }
+        .paseoFeedback(.success, trigger: savedPulse) { _, new in new }
     }
 
     // MARK: Content
@@ -680,7 +681,6 @@ struct ProjectSettingsView: View {
             teardown: ProjectConfigEditor.commands(from: teardownText),
             scripts: scripts)
         if ok {
-            Haptics.success()
             savedPulse = true
             seed()
             try? await Task.sleep(for: .seconds(1.5))

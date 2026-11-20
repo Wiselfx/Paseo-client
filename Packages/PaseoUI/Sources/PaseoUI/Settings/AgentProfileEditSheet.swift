@@ -126,6 +126,7 @@ struct AgentProfileEditSheet: View {
             .scrollIndicators(.hidden)
         }
         .onAppear(perform: seedIfNeeded)
+        .paseoFeedback(.selection, trigger: providerID) { old, _ in !old.isEmpty }
     }
 
     // MARK: Fields
@@ -285,7 +286,6 @@ struct AgentProfileEditSheet: View {
 
     private func selectProvider(_ id: String) {
         guard id != providerID else { return }
-        Haptics.selection()
         providerID = id
         model = nil
         modeId = nil

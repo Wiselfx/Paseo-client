@@ -20,8 +20,8 @@ struct UserActivityWiring: ViewModifier {
                 controller.showToast(message)
                 store.clearNotice()
             }
-            .onChange(of: store.isRunning) { wasRunning, isRunning in
-                if wasRunning && !isRunning { Haptics.settle() }
+            .paseoFeedback(.settle, trigger: store.isRunning) { wasRunning, isRunning in
+                wasRunning && !isRunning
             }
             .onChange(of: focused) { _, isFocused in
                 if isFocused {
