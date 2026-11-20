@@ -32,7 +32,7 @@ public struct HostSwitchEntry: Identifiable, Hashable, Sendable {
 /// The saved daemons and what to do with them, injected by the app so the sidebar footer and
 /// Settings → Hosts can switch without the shell knowing how hosts get switched. Nil in this
 /// environment means those surfaces quietly render nothing extra.
-@Observable
+@MainActor @Observable
 public final class HostSwitchContext {
     public private(set) var hosts: [HostSwitchEntry] = []
     public var switchTo: (UUID) -> Void = { _ in }
@@ -53,14 +53,7 @@ public final class HostSwitchContext {
     }
 }
 
-public struct HostSwitchEnvironmentKey: EnvironmentKey {
-    public static var defaultValue: HostSwitchContext? { nil }
-}
-
 extension EnvironmentValues {
-    public var hostSwitch: HostSwitchContext? {
-        get { self[HostSwitchEnvironmentKey.self] }
-        set { self[HostSwitchEnvironmentKey.self] = newValue }
-    }
+    @Entry public var hostSwitch: HostSwitchContext?
 }
 #endif

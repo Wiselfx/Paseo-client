@@ -183,7 +183,7 @@ import UIKit
             if title.range(of: q, options: [.caseInsensitive, .anchored]) != nil {
                 return (100, agent)
             }
-            if title.range(of: q, options: .caseInsensitive) != nil {
+            if title.localizedStandardContains(q) {
                 return (60, agent)
             }
             if let workspace = self.workspace(for: agent),
@@ -229,7 +229,7 @@ import UIKit
             if name.range(of: q, options: [.caseInsensitive, .anchored]) != nil {
                 return (100, project)
             }
-            if name.range(of: q, options: .caseInsensitive) != nil {
+            if name.localizedStandardContains(q) {
                 return (60, project)
             }
             return nil
@@ -373,11 +373,11 @@ import UIKit
     private func workspaceMatchScore(_ workspace: WorkspaceDescriptor, _ q: String) -> Int? {
         let title = workspaceTitle(workspace)
         if title.range(of: q, options: [.caseInsensitive, .anchored]) != nil { return 100 }
-        if title.range(of: q, options: .caseInsensitive) != nil { return 60 }
+        if title.localizedStandardContains(q) { return 60 }
         let project = workspace.projectDisplayName
         if project.range(of: q, options: [.caseInsensitive, .anchored]) != nil { return 50 }
-        if project.range(of: q, options: .caseInsensitive) != nil { return 30 }
-        if let branch = workspace.branch, branch.range(of: q, options: .caseInsensitive) != nil {
+        if project.localizedStandardContains(q) { return 30 }
+        if let branch = workspace.branch, branch.localizedStandardContains(q) {
             return 40
         }
         return nil
@@ -455,8 +455,8 @@ extension SearchModel {
         /// Scoring against the typed query; nil hides the row.
         func matchScore(_ q: String) -> Int? {
             if title.range(of: q, options: [.caseInsensitive, .anchored]) != nil { return 100 }
-            if title.range(of: q, options: .caseInsensitive) != nil { return 60 }
-            if keywords.range(of: q, options: .caseInsensitive) != nil { return 30 }
+            if title.localizedStandardContains(q) { return 60 }
+            if keywords.localizedStandardContains(q) { return 30 }
             return nil
         }
     }

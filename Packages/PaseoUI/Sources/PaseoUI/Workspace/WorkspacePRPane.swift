@@ -92,7 +92,7 @@ struct WorkspacePRSection: View {
 
     private func reviewDecisionLine(_ status: CheckoutPrStatus) -> String? {
         guard let decision = status.reviewDecision, !decision.isEmpty else { return nil }
-        return "Review: \(decision.replacingOccurrences(of: "_", with: " ").capitalized)"
+        return "Review: \(decision.replacing("_", with: " ").capitalized)"
     }
 
     // MARK: Checks
@@ -182,8 +182,8 @@ struct WorkspacePRSection: View {
 
     private func checksRollup(_ checks: [CheckoutPrCheck]) -> String? {
         guard !checks.isEmpty else { return nil }
-        let failing = checks.filter { isFailing($0.status) }.count
-        let passing = checks.filter { isPassing($0.status) }.count
+        let failing = checks.count(where: { isFailing($0.status) })
+        let passing = checks.count(where: { isPassing($0.status) })
         let pending = checks.count - failing - passing
         var parts: [String] = []
         if failing > 0 { parts.append("\(failing) failing") }

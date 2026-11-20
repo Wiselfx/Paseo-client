@@ -130,10 +130,10 @@ struct SidebarUsageFooter: View {
     /// drops "used" and "in" and keeps the countdown's first unit. The numbers are the same ones
     /// the spoken label reads in full (`fullText`).
     private func trailing(_ display: UsageWindowDisplay) -> String {
-        let value = display.value.replacingOccurrences(of: " used", with: "")
+        let value = display.value.replacing(" used", with: "")
         guard let countdown = display.countdown else { return value }
         if display.isAtRisk { return "\(value) · \(countdown)" }
-        let words = countdown.replacingOccurrences(of: "resets in ", with: "resets ")
+        let words = countdown.replacing("resets in ", with: "resets ")
             .split(separator: " ")
         let short = countdown.hasPrefix("resets in ") ? words.prefix(2).joined(separator: " ") : countdown
         return "\(value) · \(short)"

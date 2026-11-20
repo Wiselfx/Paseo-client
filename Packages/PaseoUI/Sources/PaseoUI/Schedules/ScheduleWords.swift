@@ -58,6 +58,11 @@ enum ScheduleWords {
     }
 
     /// True when all five fields parse under the grammar. Used to reject a custom cadence at the form.
+    /// A minute as two digits, "05".
+    static func twoDigits(_ value: Int) -> String {
+        value.formatted(.number.precision(.integerLength(2)).grouping(.never))
+    }
+
     static func isValid(cron expression: String) -> Bool {
         parse(expression) != nil
     }
@@ -74,7 +79,7 @@ enum ScheduleWords {
     private static let dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
 
     private static func parse(_ expression: String) -> (ParsedField, ParsedField, ParsedField, ParsedField, ParsedField)? {
-        let cleaned = expression.replacingOccurrences(of: "?", with: "*")
+        let cleaned = expression.replacing("?", with: "*")
         let fields = cleaned.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
         guard fields.count == 5 else { return nil }
         guard
@@ -196,16 +201,16 @@ enum ScheduleWords {
         if let n = stepCount(hour), domAny, monthAny, dowAny {
             let m = exactMinute()
             if m == 0 { return "Every \(n) hours" }
-            if let m { return String(format: "Every %d hours at :%02d", n, m) }
+            if let m { return "Every \(n) hours at :\(Self.twoDigits(m))" }
         }
 
         // Every hour at :MM (or every hour).
         if hour == .any, domAny, monthAny, dowAny {
             if let m = exactMinute() {
-                return m == 0 ? "Every hour" : String(format: "Every hour at :%02d", m)
+                return m == 0 ? "Every hour" : "Every hour at :\(Self.twoDigits(m))"
             }
             if case .set(let values) = minute, values.count <= 3, !values.isEmpty {
-                let marks = values.sorted().map { String(format: ":%02d", $0) }.joined(separator: " and ")
+                let marks = values.sorted().map { ":\(Self.twoDigits($0))" }.joined(separator: " and ")
                 return "Every hour at \(marks)"
             }
         }

@@ -65,11 +65,11 @@ struct DraftControlsSheet: View {
         .foregroundStyle(Palette.ink)
         .presentationDetents([.height(430)])
         .presentationDragIndicator(.visible)
-        .onAppear {
+        .task {
             // The draft's sheet can open before the conversation ever asked for a catalogue.
             if catalog.providers.isEmpty {
                 let cwd = draft.cwd
-                Task { await catalog.loadCatalog(cwd: cwd.isEmpty ? nil : cwd) }
+                await catalog.loadCatalog(cwd: cwd.isEmpty ? nil : cwd)
             }
         }
     }
@@ -114,7 +114,7 @@ struct DraftControlsSheet: View {
                     providerEmptyState
                 } else {
                     RowGroup {
-                        ForEach(Array(providers.enumerated()), id: \.element.id) { index, provider in
+                        ForEach(providers.enumerated(), id: \.element.id) { index, provider in
                             ListRow(
                                 title: provider.label ?? provider.provider,
                                 subtitle: providerDetail(provider),
@@ -201,7 +201,7 @@ struct DraftControlsSheet: View {
                     .padding(.top, 24)
                 } else {
                     RowGroup {
-                        ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
+                        ForEach(models.enumerated(), id: \.element.id) { index, model in
                             ListRow(
                                 title: model.label,
                                 subtitle: model.description,
@@ -272,7 +272,7 @@ struct DraftControlsSheet: View {
         ScrollView {
             VStack(spacing: 12) {
                 RowGroup {
-                    ForEach(Array(modes.enumerated()), id: \.element.id) { index, mode in
+                    ForEach(modes.enumerated(), id: \.element.id) { index, mode in
                         ListRow(
                             title: mode.label, subtitle: mode.description,
                             accessory: .checkmark(draft.modeId == mode.id)

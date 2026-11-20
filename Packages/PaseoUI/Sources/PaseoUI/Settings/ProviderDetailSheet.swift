@@ -48,9 +48,9 @@ struct ProviderDetailSheet: View {
                 _ = await session.hostSettings.providerDiagnostic(providerID)
             }
         }
-        .onAppear {
+        .task {
             if session.agentControl.phase == .idle {
-                Task { await session.agentControl.loadCatalog() }
+                await session.agentControl.loadCatalog()
             }
         }
     }
@@ -219,7 +219,7 @@ struct ProviderDetailSheet: View {
                     .padding(.horizontal, 16)
                     .frame(minHeight: 52)
             } else {
-                ForEach(Array(discoveredModels.enumerated()), id: \.element.id) { index, model in
+                ForEach(discoveredModels.enumerated(), id: \.element.id) { index, model in
                     discoveredModelRow(model)
                     if index < discoveredModels.count - 1 { RowDivider() }
                 }
@@ -289,7 +289,7 @@ struct ProviderDetailSheet: View {
                     .padding(.horizontal, 16)
                     .frame(minHeight: 52)
             } else {
-                ForEach(Array(customModels.enumerated()), id: \.element.id) { index, model in
+                ForEach(customModels.enumerated(), id: \.element.id) { index, model in
                     customModelRow(model)
                     if index < customModels.count - 1 { RowDivider() }
                 }

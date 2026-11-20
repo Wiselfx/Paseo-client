@@ -330,7 +330,7 @@ struct ClaudeNewWorkspaceSheet: View {
         }
         var slug = String(mapped)
         while slug.contains("--") {
-            slug = slug.replacingOccurrences(of: "--", with: "-")
+            slug = slug.replacing("--", with: "-")
         }
         slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-."))
         if slug.isEmpty { return nil }

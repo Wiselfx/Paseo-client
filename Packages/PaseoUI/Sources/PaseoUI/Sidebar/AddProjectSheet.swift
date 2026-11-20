@@ -234,7 +234,7 @@ struct AddProjectSheet: View {
         }
         if !results.isEmpty {
             RowGroup {
-                ForEach(Array(results.enumerated()), id: \.element.id) { index, repo in
+                ForEach(results.enumerated(), id: \.element.id) { index, repo in
                     resultRow(repo)
                     if index < results.count - 1 { RowDivider() }
                 }

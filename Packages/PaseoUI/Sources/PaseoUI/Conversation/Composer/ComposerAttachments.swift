@@ -544,6 +544,7 @@ struct AttachmentImageViewer: View {
         .onTapGesture { dismiss() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Image viewer, tap to dismiss")
+        .accessibilityAddTraits(.isButton)
     }
 }
 #endif

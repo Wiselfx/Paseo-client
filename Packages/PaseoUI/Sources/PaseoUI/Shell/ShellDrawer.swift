@@ -65,36 +65,21 @@ final class SurfaceFlags: @unchecked Sendable {
     var panelVisible = false
 }
 
-private struct SurfaceFlagsKey: EnvironmentKey {
-    static let defaultValue: SurfaceFlags? = nil
-}
-
-private struct ShellDrawerKey: EnvironmentKey {
-    static let defaultValue: ShellDrawer? = nil
-}
-
-private struct PanelVisibleKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
 extension EnvironmentValues {
     /// The shell's drawer bridge; nil outside the shell.
-    var shellDrawer: ShellDrawer? {
-        get { self[ShellDrawerKey.self] }
-        set { self[ShellDrawerKey.self] = newValue }
-    }
+    @Entry var shellDrawer: ShellDrawer?
+
+    /// The shell container's observable flags for this root; nil outside the shell.
+    @Entry var surfaceFlags: SurfaceFlags?
+
+    /// What `isPanelVisible` reads outside the shell, where there are no surface flags.
+    @Entry var panelVisibleFallback = false
 
     /// True while the workspace panel is on screen or moving. The panel mounts its page content
     /// on this instead of on every progress frame (P5-D).
     var isPanelVisible: Bool {
-        get { surfaceFlags?.panelVisible ?? self[PanelVisibleKey.self] }
-        set { self[PanelVisibleKey.self] = newValue }
-    }
-
-    /// The shell container's observable flags for this root; nil outside the shell.
-    var surfaceFlags: SurfaceFlags? {
-        get { self[SurfaceFlagsKey.self] }
-        set { self[SurfaceFlagsKey.self] = newValue }
+        get { surfaceFlags?.panelVisible ?? panelVisibleFallback }
+        set { panelVisibleFallback = newValue }
     }
 }
 #endif

@@ -10,15 +10,8 @@ import SwiftUI
 ///
 /// 800 is a phone-height fallback: a host that sets nothing still caps, so no screenshot is
 /// ever drawn at full height.
-struct RichViewportHeightKey: EnvironmentKey {
-    static let defaultValue: CGFloat = 800
-}
-
 extension EnvironmentValues {
-    var richViewportHeight: CGFloat {
-        get { self[RichViewportHeightKey.self] }
-        set { self[RichViewportHeightKey.self] = newValue }
-    }
+    @Entry var richViewportHeight: CGFloat = 800
 }
 
 /// The prose column's width, set once per screen (plan §1.3): the transcript root and the file
@@ -33,15 +26,8 @@ extension EnvironmentValues {
 ///
 /// 0 means no column was measured (previews, tests): a card then keeps its former flexible
 /// slot rather than pinning itself to a made-up number.
-struct RichProseWidthKey: EnvironmentKey {
-    static let defaultValue: CGFloat = 0
-}
-
 extension EnvironmentValues {
-    var richProseWidth: CGFloat {
-        get { self[RichProseWidthKey.self] }
-        set { self[RichProseWidthKey.self] = newValue }
-    }
+    @Entry var richProseWidth: CGFloat = 0
 }
 
 /// A media slot at exactly `width` points, its height capped at `heightCap` (`CGFloat.infinity`

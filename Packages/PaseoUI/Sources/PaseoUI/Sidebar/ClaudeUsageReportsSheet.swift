@@ -159,9 +159,13 @@ struct ClaudeUsageReportsSheet: View {
     }
 
     static func compactTokens(_ value: Int) -> String {
-        if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
-        if value >= 1_000 { return String(format: "%.1fk", Double(value) / 1_000) }
+        if value >= 1_000_000 { return Self.oneDecimal(Double(value) / 1_000_000) + "M" }
+        if value >= 1_000 { return Self.oneDecimal(Double(value) / 1_000) + "k" }
         return "\(value)"
+    }
+
+    private static func oneDecimal(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(1)).grouping(.never))
     }
 
     // MARK: A report

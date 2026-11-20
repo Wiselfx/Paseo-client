@@ -172,7 +172,7 @@ struct ClaudeCodeBlock: View {
             let tail = AnsiText.tail(runs, maxLines: Self.tailLines)
             let sheet = AnsiText.tail(runs, maxLines: Self.sheetLines)
             let summary = TestSummaryParser.parse(output)
-            let lines = runs.reduce(0) { $0 + $1.text.filter { $0.isNewline }.count }
+            let lines = runs.reduce(0) { $0 + $1.text.count(where: \.isNewline) }
             return (tail, runs, sheet, summary, lines)
         }.value
         guard !Task.isCancelled else { return }

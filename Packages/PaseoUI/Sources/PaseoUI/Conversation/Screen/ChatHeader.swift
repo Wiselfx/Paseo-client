@@ -214,7 +214,7 @@ struct ChatHeaderBar: View {
             .padding(.horizontal, Space.md)
             .frame(minHeight: Metrics.hitSize)
             .background(Palette.panel, in: Capsule())
-            .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 1))
+            .overlay { Capsule().strokeBorder(Palette.cardBorder, lineWidth: 1) }
             // Breathing room under the status bar, above the pill (D1 §1).
             .padding(.top, Space.xs)
             .frame(maxWidth: .infinity, alignment: .center)

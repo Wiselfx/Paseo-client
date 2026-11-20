@@ -313,7 +313,7 @@ struct WorkspaceTerminalsView: View {
 
     /// Single-quote for POSIX shells: `abc'def` → `'abc'\''def'`.
     private static func shellQuote(_ path: String) -> String {
-        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        "'" + path.replacing("'", with: "'\\''") + "'"
     }
 
     private func showToast(_ text: String) {
@@ -347,7 +347,7 @@ struct WorkspaceTerminalsView: View {
     }
 
     private func terminalPicker(_ terminals: [TerminalInfo]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(terminals) { terminal in
                     terminalChip(terminal)
@@ -357,6 +357,7 @@ struct WorkspaceTerminalsView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         }
+        .scrollIndicators(.hidden)
         .frame(height: 48)
     }
 
@@ -724,7 +725,7 @@ struct WorkspaceTerminalsView: View {
                         .foregroundStyle(Palette.secondaryInk)
                         .frame(minHeight: 30)
                         .padding(.horizontal, 12)
-                        .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
+                        .overlay { Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5) }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Show terminal for \(script.scriptName)")

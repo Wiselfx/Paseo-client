@@ -453,6 +453,12 @@ private struct QuestionFormState {
     /// Free-text ("Other") text per question, by position.
     var texts: [Int: String] = [:]
 
+    /// One question's free text, "" when untouched: what the answer field binds to.
+    subscript(text index: Int) -> String {
+        get { texts[index] ?? "" }
+        set { texts[index] = newValue }
+    }
+
     func isAnswered(index: Int, form: QuestionForm) -> Bool {
         let question = form.questions[index]
         if let selected = selections[index], !selected.isEmpty { return true }
@@ -501,9 +507,7 @@ private struct QuestionSection: View {
             if question.options.isEmpty || question.allowOther {
                 TextField(
                     question.placeholder ?? (question.options.isEmpty ? "Type your answer" : "Other"),
-                    text: Binding(
-                        get: { state.texts[index] ?? "" },
-                        set: { state.texts[index] = $0 }),
+                    text: $state[text: index],
                     axis: .vertical
                 )
                 .font(.paseo(.callout))

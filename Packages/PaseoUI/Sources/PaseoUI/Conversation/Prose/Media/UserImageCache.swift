@@ -56,7 +56,8 @@ final class UserImageCache {
         }
         guard let load = manifestLoad else { return }
         let loaded = await load.value
-        manifest = loaded.mapValues { $0.map { CGFloat($0) } }
+        // Ratios seeded at send while the file was loading are newer than the disk copy.
+        manifest.merge(loaded.mapValues { $0.map { CGFloat($0) } }) { current, _ in current }
         manifestLoaded = true
     }
 

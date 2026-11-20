@@ -1,5 +1,4 @@
 #if canImport(UIKit)
-import Dispatch
 import PaseoStore
 import QuartzCore
 import SwiftTerm
@@ -306,10 +305,9 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     /// loop hop per tab switch, never per frame.
     private static func scheduleKeyboardHandoff() {
         guard keyboardHandoff else { return }
-        DispatchQueue.main.async {
-            // Main queue by construction; the hop exists to run after this run loop turn.
-            MainActor.assumeIsolated { handOverKeyboard() }
-        }
+        // The hop exists to run after this update pass, once every terminal has been told
+        // whether it is visible.
+        Task { @MainActor in handOverKeyboard() }
     }
 
     /// Becoming first responder resigns the hidden one in the same turn, so the keyboard stays up

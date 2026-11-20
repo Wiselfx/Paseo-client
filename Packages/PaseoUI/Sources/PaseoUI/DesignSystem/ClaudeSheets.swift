@@ -12,7 +12,7 @@
         var trailingAction: (() -> Void)?
         var body: some View {
             ZStack {
-                Text(title).font(.system(size: 17, weight: .semibold)).lineLimit(1).frame(maxWidth: titleMaxWidth)
+                Text(title).font(.paseo(.headline, weight: .semibold)).lineLimit(1).frame(maxWidth: titleMaxWidth)
                 HStack {
                     Button(action: close) {
                         Image(systemName: back ? "chevron.left" : "xmark").font(.system(size: 21, weight: .light))
@@ -20,7 +20,7 @@
                     }.glassEffect(in: .circle).accessibilityLabel(back ? "Back" : "Close").accessibilityIdentifier(
                         "sheet.close.\(title)")
                     Spacer()
-                    if let trailing { Button(trailing) { trailingAction?() }.font(.system(size: 16)) }
+                    if let trailing { Button(trailing) { trailingAction?() }.font(.paseo(.callout)) }
                 }
             }.frame(height: 58).padding(.horizontal, 16).padding(.top, 7)
         }

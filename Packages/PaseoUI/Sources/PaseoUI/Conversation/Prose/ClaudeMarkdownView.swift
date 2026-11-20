@@ -533,7 +533,7 @@
             let allRows = [header] + rows
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    ForEach(Array(allRows.enumerated()), id: \.offset) { index, row in
+                    ForEach(allRows.enumerated(), id: \.offset) { index, row in
                         let isHeader = index == 0
                         tableCell(
                             row.first ?? [], isHeader: isHeader,
@@ -597,6 +597,7 @@
             }
             .contentShape(.rect)
             .accessibilityHint(isHeader ? "Opens table full screen" : "")
+            .accessibilityAddTraits(isHeader && headerTappable ? .isButton : [])
             .onTapGesture {
                 guard isHeader, headerTappable else { return }
                 expandTable(

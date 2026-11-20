@@ -393,9 +393,7 @@ struct LabelsManageSheet: View {
     }
 
     private func draftBinding(_ name: String) -> Binding<String> {
-        Binding(
-            get: { drafts[name] ?? name },
-            set: { drafts[name] = $0 })
+        $drafts[name, default: name]
     }
 
     /// Applies every pending rename. Called when the sheet closes.

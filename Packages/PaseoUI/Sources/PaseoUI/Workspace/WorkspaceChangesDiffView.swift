@@ -169,6 +169,8 @@ struct WorkspaceChangesDiffView: View {
                         commentTarget = .edit(draft)
                     }
                     .accessibilityLabel("Review comment: \(draft.body)")
+                    .accessibilityHint("Edits the comment")
+                    .accessibilityAddTraits(.isButton)
             }
         }
         .padding(.horizontal, Space.md)
@@ -544,9 +546,10 @@ struct WorkspaceChangesDiffView: View {
                 Section {
                     let rows = visibleRows(section)
                     ForEach(rows) { row in
-                        lineRow(row, totalWidth: render.totalWidth, gutterWidth: render.gutterWidth)
-                        if let anchored = row.anchor, let list = drafts[anchored] {
-                            ForEach(list) { draft in
+                        // One shape per row: a line and its (possibly empty) draft comments.
+                        VStack(spacing: 0) {
+                            lineRow(row, totalWidth: render.totalWidth, gutterWidth: render.gutterWidth)
+                            ForEach(row.anchor.flatMap { drafts[$0] } ?? []) { draft in
                                 draftCard(draft)
                             }
                         }
@@ -604,6 +607,7 @@ struct WorkspaceChangesDiffView: View {
             }
         }
         .accessibilityLabel(accessibilityLabel(for: row))
+        .accessibilityAddTraits(reviewEnabled && row.anchor != nil ? .isButton : [])
     }
 
     private func showMoreRow(_ section: DiffSection) -> some View {
@@ -627,6 +631,7 @@ struct WorkspaceChangesDiffView: View {
             expandedLongHunks.insert(section.hunk)
         }
         .accessibilityLabel("Show \(remaining) more lines")
+        .accessibilityAddTraits(.isButton)
     }
 
     private func selectionWash(_ anchor: LineAnchor?) -> Color? {

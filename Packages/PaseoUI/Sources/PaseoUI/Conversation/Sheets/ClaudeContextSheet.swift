@@ -246,7 +246,7 @@ struct ClaudeContextSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 sectionLabel("Cost by model")
                 RowGroup {
-                    ForEach(Array(costByModel.enumerated()), id: \.offset) { index, entry in
+                    ForEach(costByModel.enumerated(), id: \.element.key) { index, entry in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 12) {
                                 Text(Self.modelName(entry.key))
@@ -329,7 +329,7 @@ struct ClaudeContextSheet: View {
     }
 
     static func cost(_ value: Double, fractionDigits: Int = 2) -> String {
-        String(format: "$%.\(fractionDigits)f", value)
+        value.formatted(.currency(code: "USD").precision(.fractionLength(fractionDigits)))
     }
 
     static func modelName(_ key: String) -> String {

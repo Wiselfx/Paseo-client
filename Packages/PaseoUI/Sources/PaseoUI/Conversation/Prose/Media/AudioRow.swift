@@ -22,7 +22,6 @@ struct AudioRow: View {
     let input: Input
 
     @Environment(\.richActions) private var richActions
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var bars: [CGFloat] = []
     @State private var duration: Double = 0
     @State private var elapsed: Double = 0
@@ -68,10 +67,9 @@ struct AudioRow: View {
 
     private static func timestamp(_ seconds: Double) -> String {
         let total = max(0, Int(seconds))
-        if total >= 3600 {
-            return String(format: "%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
-        }
-        return String(format: "%d:%02d", total / 60, total % 60)
+        let pattern: Duration.TimeFormatStyle.Pattern =
+            total >= 3600 ? .hourMinuteSecond : .minuteSecond
+        return Duration.seconds(total).formatted(.time(pattern: pattern))
     }
 
     var body: some View {

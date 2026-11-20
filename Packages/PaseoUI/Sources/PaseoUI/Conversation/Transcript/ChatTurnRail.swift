@@ -133,7 +133,7 @@ struct ChatOutlineRail: View {
 
     private var slots: some View {
         VStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+            ForEach(items.enumerated(), id: \.element.id) { index, item in
                 slotView(index: index, item: item)
             }
         }
@@ -274,7 +274,7 @@ struct ChatTurnNavSheet: View {
             SheetHeader(title: "Jump to message", close: { dismiss() })
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    ForEach(items.enumerated(), id: \.element.id) { index, item in
                         row(index: index, item: item)
                         if item.id != items.last?.id {
                             ClaudeDivider().padding(.leading, 56)

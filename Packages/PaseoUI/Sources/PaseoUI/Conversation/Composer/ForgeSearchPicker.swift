@@ -157,7 +157,7 @@ struct ForgeSearchPicker: View {
             } else {
                 ScrollView {
                     RowGroup {
-                        ForEach(Array(result.items.enumerated()), id: \.element.id) { index, item in
+                        ForEach(result.items.enumerated(), id: \.element.id) { index, item in
                             resultRow(item)
                             if index < result.items.count - 1 { RowDivider() }
                         }

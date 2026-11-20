@@ -214,6 +214,8 @@ struct MascotCrab: View {
                                 .opacity.combined(with: .scale(scale: 0.96, anchor: .bottomTrailing))
                             )
                             .onTapGesture { controller.showCostBubble = false }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityHint("Dismisses the cost")
                             .task {
                                 try? await Task.sleep(for: .seconds(4))
                                 controller.showCostBubble = false

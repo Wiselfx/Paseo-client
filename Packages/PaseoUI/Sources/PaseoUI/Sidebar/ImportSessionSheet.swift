@@ -202,7 +202,7 @@ struct ImportSessionSheet: View {
                 quietText(emptyText)
             } else {
                 RowGroup {
-                    ForEach(Array(visibleEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(visibleEntries.enumerated(), id: \.element.id) { index, entry in
                         sessionRow(entry)
                         if index < visibleEntries.count - 1 { RowDivider() }
                     }

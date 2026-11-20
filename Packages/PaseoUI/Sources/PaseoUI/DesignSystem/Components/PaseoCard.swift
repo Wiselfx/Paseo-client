@@ -83,16 +83,9 @@ final class RichActions {
     }
 }
 
-private struct RichActionsKey: EnvironmentKey {
-    static let defaultValue: RichActions? = nil
-}
-
 extension EnvironmentValues {
     /// The conversation's card verbs; nil outside a conversation (previews, the draft screen).
-    var richActions: RichActions? {
-        get { self[RichActionsKey.self] }
-        set { self[RichActionsKey.self] = newValue }
-    }
+    @Entry var richActions: RichActions?
 }
 
 // MARK: - Chrome

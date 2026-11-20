@@ -73,8 +73,8 @@ enum ClaudeGreeting {
         let index = min(lines.count - 1, Int(floor(draw * Double(lines.count))))
         let weekdayIndex = min(weekdays.count - 1, max(0, calendar.component(.weekday, from: date) - 1))
         return lines[max(0, index)]
-            .replacingOccurrences(of: "{name}", with: name)
-            .replacingOccurrences(of: "{weekday}", with: weekdays[weekdayIndex])
+            .replacing("{name}", with: name)
+            .replacing("{weekday}", with: weekdays[weekdayIndex])
     }
 }
 

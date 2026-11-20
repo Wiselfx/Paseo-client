@@ -70,16 +70,9 @@ import UIKit
     }
 }
 
-private struct ToastCenterKey: EnvironmentKey {
-    static let defaultValue: ToastCenter? = nil
-}
-
 extension EnvironmentValues {
     /// The shell's toast center; nil outside the shell (previews, isolated views).
-    var toast: ToastCenter? {
-        get { self[ToastCenterKey.self] }
-        set { self[ToastCenterKey.self] = newValue }
-    }
+    @Entry var toast: ToastCenter?
 }
 
 private struct ToastRectKey: PreferenceKey {

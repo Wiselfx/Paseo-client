@@ -36,9 +36,9 @@ struct WorkspaceBranchSwitcherSheet: View {
     /// The current branch checked first? No: upstream keeps the daemon's order and only marks the
     /// selected row, so the list does not jump under the user's finger.
     private var branches: [BranchSuggestion] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return extras.branchSuggestions }
-        return extras.branchSuggestions.filter { $0.name.lowercased().contains(query) }
+        return extras.branchSuggestions.filter { $0.name.localizedStandardContains(query) }
     }
 
     private var isBusy: Bool { switchingTo != nil || isRestoring }

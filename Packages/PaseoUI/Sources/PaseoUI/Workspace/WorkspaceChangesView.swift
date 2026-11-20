@@ -95,7 +95,7 @@ struct WorkspaceChangesView: View {
         } else {
             NavigationStack {
                 root
-                    .toolbar(.hidden, for: .navigationBar)
+                    .toolbarVisibility(.hidden, for: .navigationBar)
                     .navigationDestination(item: $openFile) { file in
                         WorkspaceChangesDiffView(
                             file: file, extras: extras,
@@ -145,11 +145,14 @@ struct WorkspaceChangesView: View {
                         listPlaceholder
                     } else {
                         ForEach(files) { file in
-                            fileRow(file)
-                                .id(file.id)
-                            if file.id != files.last?.id {
-                                ClaudeDivider().padding(.leading, 46)
+                            // One shape per row: the last divider is hidden, not left out.
+                            VStack(spacing: 0) {
+                                fileRow(file)
+                                ClaudeDivider()
+                                    .padding(.leading, 46)
+                                    .opacity(file.id == files.last?.id ? 0 : 1)
                             }
+                            .id(file.id)
                         }
                         .padding(.bottom, Space.md)
                     }
@@ -1092,9 +1095,11 @@ struct WorkspaceChangesView: View {
                 } else {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(gitActions.commits) { commit in
-                            commitRow(commit)
-                            if commit.id != gitActions.commits.last?.id {
-                                ClaudeDivider().padding(.leading, 20)
+                            VStack(spacing: 0) {
+                                commitRow(commit)
+                                ClaudeDivider()
+                                    .padding(.leading, 20)
+                                    .opacity(commit.id == gitActions.commits.last?.id ? 0 : 1)
                             }
                         }
                     }

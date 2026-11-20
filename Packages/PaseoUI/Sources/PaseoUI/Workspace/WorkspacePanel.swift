@@ -3,27 +3,13 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// The action a "Mention in chat" button triggers. Internal, so the panel's pages can reach it
-/// without widening their fixed constructors. Nil disables the action.
-struct MentionInChatKey: EnvironmentKey {
-    static var defaultValue: ((String) -> Void)? { nil }
-}
-
-/// The live-file watch (T11) for the workspace the panel shows. Published by the panel;
-/// consumed by the Files page and its viewer.
-struct WorkspaceGitExtrasKey: EnvironmentKey {
-    static var defaultValue: WorkspaceGitExtras? { nil }
-}
-
 extension EnvironmentValues {
-    var mentionInChat: ((String) -> Void)? {
-        get { self[MentionInChatKey.self] }
-        set { self[MentionInChatKey.self] = newValue }
-    }
-    var workspaceGitExtras: WorkspaceGitExtras? {
-        get { self[WorkspaceGitExtrasKey.self] }
-        set { self[WorkspaceGitExtrasKey.self] = newValue }
-    }
+    /// The action a "Mention in chat" button triggers. Internal, so the panel's pages can reach
+    /// it without widening their fixed constructors. Nil disables the action.
+    @Entry var mentionInChat: ((String) -> Void)?
+    /// The live-file watch (T11) for the workspace the panel shows. Published by the panel;
+    /// consumed by the Files page and its viewer.
+    @Entry var workspaceGitExtras: WorkspaceGitExtras?
 }
 
 /// The workspace panel: "inside this workspace" — its agents, files, changes and terminals. Slides

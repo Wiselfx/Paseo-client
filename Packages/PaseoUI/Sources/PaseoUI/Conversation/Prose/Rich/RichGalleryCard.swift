@@ -196,6 +196,8 @@ struct RichGalleryCard: View {
                     selection = 3
                     showViewer = true
                 }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Opens the images full screen")
             }
         }
     }

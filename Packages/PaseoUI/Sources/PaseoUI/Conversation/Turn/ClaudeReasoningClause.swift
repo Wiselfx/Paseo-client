@@ -204,7 +204,7 @@ enum ClaudeReasoningClause {
         var result = text.replacingOccurrences(
             of: #"\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
         for marker in ["`", "**", "__", "~~"] {
-            result = result.replacingOccurrences(of: marker, with: "")
+            result = result.replacing(marker, with: "")
         }
         return result
     }

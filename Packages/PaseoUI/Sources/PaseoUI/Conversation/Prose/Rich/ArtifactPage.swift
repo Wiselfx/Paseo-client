@@ -105,15 +105,8 @@ struct ArtifactDocument: Identifiable, Equatable, @unchecked Sendable {
 /// The shared zoom namespace for artifact opens (G4 §1.2): the card's thumbnail and the
 /// controller-presented page live in different hierarchies, so `ChatSheets` owns one
 /// namespace and lends it down through the environment.
-private struct ArtifactZoomNamespaceKey: EnvironmentKey {
-    static let defaultValue: Namespace.ID? = nil
-}
-
 extension EnvironmentValues {
-    var artifactZoomNamespace: Namespace.ID? {
-        get { self[ArtifactZoomNamespaceKey.self] }
-        set { self[ArtifactZoomNamespaceKey.self] = newValue }
-    }
+    @Entry var artifactZoomNamespace: Namespace.ID?
 }
 
 /// Applies the zoom source only when the shared namespace is present (previews have
@@ -202,7 +195,7 @@ struct ArtifactPage: View {
             }
         }
         .background(Palette.background)
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbarVisibility(.hidden, for: .navigationBar)
         .modifier(MediaViewerTransition(
             sourceID: sourceID, namespace: namespace, reduceMotion: reduceMotion))
         .accessibilityAction(.escape) { onClose() }

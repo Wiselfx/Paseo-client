@@ -85,19 +85,20 @@ public struct ChatScreen: View {
                     store: store, controller: controller, focused: $composerFocused))
             .modifier(MascotDriver(store: store, session: session, controller: controller))
             .modifier(ChatSheets(store: store, session: session, controller: controller))
-            .onAppear {
+            .task {
                 // The user-image manifest loads once, off main: bubbles with history
                 // reserve their image boxes on the first pass instead of jumping.
-                Task { await UserImageCache.shared.ensureManifestLoaded() }
+                await UserImageCache.shared.ensureManifestLoaded()
+            }
+            .task {
                 // The shared web view for diagrams and SVG cards starts before the first card needs it,
                 // not mid-scroll (W1). `WKWebView.init` blocks the main thread while WebKit's content
                 // process launches (100 to 700 ms), so the transcript starts it when its open is over
                 // (`TranscriptView`, `openPin` ending); this is only the fallback for a chat whose open
                 // never ends (a conversation shorter than the screen).
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(8))
-                    RichWebSnapshotRenderer.shared.prewarm()
-                }
+                try? await Task.sleep(for: .seconds(8))
+                guard !Task.isCancelled else { return }
+                RichWebSnapshotRenderer.shared.prewarm()
             }
     }
 

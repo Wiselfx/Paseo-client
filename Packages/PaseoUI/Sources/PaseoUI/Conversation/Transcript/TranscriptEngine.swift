@@ -109,15 +109,8 @@ final class TranscriptRowFrames {
     func reset() { frames.removeAll() }
 }
 
-private struct TranscriptRowFramesKey: EnvironmentKey {
-    static let defaultValue: TranscriptRowFrames? = nil
-}
-
 extension EnvironmentValues {
-    var transcriptRowFrames: TranscriptRowFrames? {
-        get { self[TranscriptRowFramesKey.self] }
-        set { self[TranscriptRowFramesKey.self] = newValue }
-    }
+    @Entry var transcriptRowFrames: TranscriptRowFrames?
 }
 
 /// Reports a row's frame inside its cell for every `seqEnd` it stands for.

@@ -477,7 +477,7 @@ struct ProjectSettingsView: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 14)
                 } else {
-                    ForEach(Array(scripts.enumerated()), id: \.element.id) { index, script in
+                    ForEach(scripts.enumerated(), id: \.element.id) { index, script in
                         scriptRow(script)
                         if index < scripts.count - 1 { RowDivider() }
                     }
@@ -515,7 +515,7 @@ struct ProjectSettingsView: View {
                 Image(systemName: "ellipsis")
                     .font(.glyph(.regular, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 36, height: 44)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .accessibilityLabel("Script actions")
@@ -646,7 +646,7 @@ struct ProjectSettingsView: View {
     private var scriptsIssue: String? {
         let names = scripts.map { $0.name.trimmingCharacters(in: .whitespaces) }
         if names.contains(where: \.isEmpty) { return "Every script needs a name." }
-        if let first = names.first(where: { name in names.filter { $0 == name }.count > 1 }) {
+        if let first = names.first(where: { name in names.count(where: { $0 == name }) > 1 }) {
             return "Duplicate script name: \(first)."
         }
         if scripts.contains(where: { $0.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {

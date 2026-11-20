@@ -43,16 +43,9 @@ import UniformTypeIdentifiers
     }
 }
 
-private struct ChatActionsKey: EnvironmentKey {
-    static let defaultValue: ChatActions? = nil
-}
-
 extension EnvironmentValues {
     /// The open conversation's verbs; nil outside a conversation (previews, the draft screen).
-    var chatActions: ChatActions? {
-        get { self[ChatActionsKey.self] }
-        set { self[ChatActionsKey.self] = newValue }
-    }
+    @Entry var chatActions: ChatActions?
 }
 
 // MARK: - Turn action availability

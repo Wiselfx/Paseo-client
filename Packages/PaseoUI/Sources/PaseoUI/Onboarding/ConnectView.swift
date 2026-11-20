@@ -165,7 +165,7 @@ public struct ConnectView: View {
     /// context-menu "Forget" (same confirmation); no new copy.
     private var savedHostsList: some View {
         RowGroup {
-            ForEach(Array(hosts.enumerated()), id: \.element.id) { index, host in
+            ForEach(hosts.enumerated(), id: \.element.id) { index, host in
                 if index > 0 { RowDivider() }
                 ListRow(
                     title: host.label,

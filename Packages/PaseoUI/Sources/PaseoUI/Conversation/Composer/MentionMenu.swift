@@ -160,7 +160,7 @@ struct MentionMenu: View {
                     .font(.glyph(.regular, weight: .light))
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(width: 20)
-                Text("@" + row.path.trimmingSuffix(while: { $0 == "/" }))
+                Text("@\(row.path.trimmingSuffix(while: { $0 == "/" }))")
                     .font(.paseo(.codeSmall))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)

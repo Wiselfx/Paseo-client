@@ -19,6 +19,8 @@ actor CodeHighlighter {
     private var order: [HighlightKey] = []
     private var cache: [HighlightKey: AttributedString] = [:]
     private var cost = 0
+    /// The cost each entry was stored with, so eviction subtracts exactly what was added.
+    private var costs: [HighlightKey: Int] = [:]
     private let countLimit = 64
     private let costLimit = 2_000_000
 
@@ -68,20 +70,18 @@ actor CodeHighlighter {
     }
 
     private func store(_ value: AttributedString, for key: HighlightKey, cost newCost: Int) {
-        if let existing = cache.removeValue(forKey: key),
-            let index = order.firstIndex(of: key)
-        {
+        if cache.removeValue(forKey: key) != nil, let index = order.firstIndex(of: key) {
             order.remove(at: index)
-            cost -= existing.characters.count * 2
+            cost -= costs.removeValue(forKey: key) ?? 0
         }
         cache[key] = value
+        costs[key] = newCost
         order.append(key)
         cost += newCost
         while order.count > countLimit || (cost > costLimit && order.count > 1) {
             let oldest = order.removeFirst()
-            if let removed = cache.removeValue(forKey: oldest) {
-                cost -= removed.characters.count * 2
-            }
+            cache.removeValue(forKey: oldest)
+            cost -= costs.removeValue(forKey: oldest) ?? 0
         }
     }
 }

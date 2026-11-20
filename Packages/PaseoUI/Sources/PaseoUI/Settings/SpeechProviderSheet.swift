@@ -211,7 +211,7 @@ struct SpeechProviderSheet: View {
                         .frame(minHeight: 52)
                 }
             } else {
-                ForEach(Array(kindModels.enumerated()), id: \.element.id) { index, model in
+                ForEach(kindModels.enumerated(), id: \.element.id) { index, model in
                     localModelRow(model)
                     if index < kindModels.count - 1 { RowDivider() }
                 }

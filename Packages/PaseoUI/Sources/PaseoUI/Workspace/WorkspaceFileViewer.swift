@@ -155,7 +155,7 @@ struct WorkspaceFileViewer: View {
             }
         }
         // `topRow` is the header (back, title, actions); the system bar would duplicate it.
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbarVisibility(.hidden, for: .navigationBar)
         .interactiveDismissDisabled(isDirty)
         .onGeometryChange(for: CGSize.self) { proxy in
             proxy.size

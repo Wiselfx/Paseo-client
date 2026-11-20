@@ -49,7 +49,7 @@ struct WorkspaceFilesView: View {
                     .background(Palette.panel)
                 }
                 // The panel header already owns the back chevron and the workspace title.
-                .toolbar(.hidden, for: .navigationBar)
+                .toolbarVisibility(.hidden, for: .navigationBar)
         }
         // The Files page and every pushed folder/file share the panel canvas (E2 §5): without
         // this the window's black shows through in dark and pure black.
@@ -207,7 +207,7 @@ private struct WorkspaceFilesDirectoryList: View {
             content
         }
         // Every pushed folder draws its own header row; the system bar would duplicate it.
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbarVisibility(.hidden, for: .navigationBar)
         // The page owns the canvas too: a NavigationStack's own background must never be what
         // shows in dark or pure black (E2 §5).
         .background(Palette.panel)
@@ -390,7 +390,7 @@ private struct WorkspaceFilesDirectoryList: View {
 
     private var hiddenCount: Int {
         guard case .success(let entries) = listing else { return 0 }
-        return entries.filter { $0.name.hasPrefix(".") }.count
+        return entries.count(where: { $0.name.hasPrefix(".") })
     }
 
     private var currentSort: FileSort { FileSort(rawValue: sortRaw) ?? .name }

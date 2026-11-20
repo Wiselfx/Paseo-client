@@ -34,9 +34,11 @@ struct WorkspaceCommitDiffView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(commit.files) { file in
-                        fileRow(file)
-                        if file.id != commit.files.last?.id {
-                            ClaudeDivider().padding(.leading, 46)
+                        VStack(spacing: 0) {
+                            fileRow(file)
+                            ClaudeDivider()
+                                .padding(.leading, 46)
+                                .opacity(file.id == commit.files.last?.id ? 0 : 1)
                         }
                     }
                 }

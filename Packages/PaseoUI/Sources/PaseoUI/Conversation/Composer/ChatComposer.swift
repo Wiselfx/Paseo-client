@@ -1244,7 +1244,7 @@ struct SlashMenu: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 8) {
-                                    Text("/" + command.name)
+                                    Text("/\(command.name)")
                                         .font(.paseo(.code, weight: .medium))
                                         .foregroundStyle(Palette.ink)
                                         .lineLimit(1)
@@ -1672,7 +1672,7 @@ struct DictationOverlay: View {
     /// Upstream `formatDuration`: zero-padded minutes and seconds.
     private var formattedDuration: String {
         let total = max(0, Int(duration))
-        return String(format: "%02d:%02d", total / 60, total % 60)
+        return Duration.seconds(total).formatted(.time(pattern: .minuteSecond(padMinuteToLength: 2)))
     }
 }
 

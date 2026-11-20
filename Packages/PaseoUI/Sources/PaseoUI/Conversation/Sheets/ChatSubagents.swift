@@ -17,10 +17,10 @@ struct SubagentTrackPill: View {
 
 
     var running: Int {
-        items.filter { $0.status == .running }.count + managed.filter { $0.status == .running }.count
+        items.count(where: { $0.status == .running }) + managed.count(where: { $0.status == .running })
     }
     var failed: Int {
-        items.filter { $0.status == .failed }.count + managed.filter { $0.status == .error }.count
+        items.count(where: { $0.status == .failed }) + managed.count(where: { $0.status == .error })
     }
     var total: Int { items.count + managed.count }
 
@@ -246,7 +246,7 @@ struct ChatSubagentsSheet: View {
                     .foregroundStyle(Palette.tertiaryInk)
             }
             .padding(.horizontal, 16)
-            .frame(height: 56)
+            .frame(minHeight: 56)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -304,6 +304,7 @@ struct ChatSubagentsSheet: View {
         .onTapGesture {
             onOpenAgent(agent.id)
         }
+        .accessibilityAddTraits(.isButton)
         .contextMenu {
             Button("Open agent", systemImage: "arrow.up.right.square") {
                 onOpenAgent(agent.id)
@@ -581,7 +582,7 @@ struct ChatSubagentTimelineView: View {
                 .lineSpacing(6)
                 .fixedSize(horizontal: false, vertical: true)
         case .reasoning(let reasoning):
-            Text(reasoning.text.replacingOccurrences(of: "\n", with: " "))
+            Text(reasoning.text.replacing("\n", with: " "))
                 .font(.paseo(.footnote))
                 .foregroundStyle(Palette.tertiaryInk)
                 .lineLimit(2)

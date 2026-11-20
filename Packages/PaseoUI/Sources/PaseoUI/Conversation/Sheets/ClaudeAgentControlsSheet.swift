@@ -183,7 +183,7 @@ struct ClaudeAgentControlsSheet: View {
                     .padding(.top, 24)
                 } else {
                     RowGroup {
-                        ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
+                        ForEach(models.enumerated(), id: \.element.id) { index, model in
                             ListRow(
                                 title: model.label,
                                 subtitle: model.description,
@@ -273,11 +273,11 @@ struct ClaudeAgentControlsSheet: View {
                         .padding(.top, 24)
                 } else {
                     RowGroup {
-                        ForEach(Array(toggleableFeatures.enumerated()), id: \.element.id) { index, toggle in
+                        ForEach(toggleableFeatures.enumerated(), id: \.element.id) { index, toggle in
                             featureToggleRow(toggle)
                             if index < toggleableFeatures.count - 1 || !selectableFeatures.isEmpty { RowDivider() }
                         }
-                        ForEach(Array(selectableFeatures.enumerated()), id: \.element.id) { index, select in
+                        ForEach(selectableFeatures.enumerated(), id: \.element.id) { index, select in
                             ListRow(
                                 title: select.label, subtitle: select.description,
                                 accessory: .value(selectValueLabel(select))
@@ -341,7 +341,7 @@ struct ClaudeAgentControlsSheet: View {
                             }
                             RowDivider()
                         }
-                        ForEach(Array(select.options.enumerated()), id: \.element.id) { index, option in
+                        ForEach(select.options.enumerated(), id: \.element.id) { index, option in
                             ListRow(
                                 title: option.label, subtitle: option.description,
                                 accessory: select.value == option.id
@@ -380,7 +380,7 @@ struct ClaudeAgentControlsSheet: View {
         ScrollView {
             VStack(spacing: 12) {
                 RowGroup {
-                    ForEach(Array(modes.enumerated()), id: \.element.id) { index, mode in
+                    ForEach(modes.enumerated(), id: \.element.id) { index, mode in
                         ListRow(
                             title: mode.label, subtitle: mode.description,
                             accessory: .checkmark(store.agent?.currentModeId == mode.id)

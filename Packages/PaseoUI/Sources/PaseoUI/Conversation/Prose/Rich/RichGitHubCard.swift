@@ -24,7 +24,6 @@ struct RichGitHubCard: View {
     let url: String
     let parsed: GitHubURL
 
-    @Environment(\.openURL) private var openURL
     @Environment(\.richActions) private var richActions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showSafari = false

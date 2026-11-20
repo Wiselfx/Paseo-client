@@ -24,7 +24,6 @@ struct VideoCard: View {
     let input: Input
 
     @Environment(\.richActions) private var richActions
-    @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.richViewportHeight) private var viewportHeight
     @Environment(\.richProseWidth) private var proseWidth
@@ -122,10 +121,9 @@ struct VideoCard: View {
 
     private static func timestamp(_ seconds: Double) -> String {
         let total = max(0, Int(seconds))
-        if total >= 3600 {
-            return String(format: "%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
-        }
-        return String(format: "%d:%02d", total / 60, total % 60)
+        let pattern: Duration.TimeFormatStyle.Pattern =
+            total >= 3600 ? .hourMinuteSecond : .minuteSecond
+        return Duration.seconds(total).formatted(.time(pattern: pattern))
     }
 
     var body: some View {
@@ -352,9 +350,11 @@ struct VideoCard: View {
         switch source {
         case .remote:
             switch condition.interface {
-            case .wifi, .wired where !condition.isRelay:
-                return .full
-            case .wifi, .wired, .cellular, .other:
+            // A `where` in a multi-pattern case binds to its last pattern only: the relay check
+            // has to be explicit, or a Wi-Fi relay link auto-fetched.
+            case .wifi, .wired:
+                return condition.isRelay ? .tap : .full
+            case .cellular, .other:
                 return .tap
             }
         case .daemon:

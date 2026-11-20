@@ -75,7 +75,7 @@ struct AgentProfilesSection: View {
                 .padding(.vertical, 12)
                 .frame(minHeight: 52, alignment: .leading)
             } else {
-                ForEach(Array(profiles.enumerated()), id: \.element.id) { index, profile in
+                ForEach(profiles.enumerated(), id: \.element.id) { index, profile in
                     profileRow(profile, index: index)
                     if index < profiles.count - 1 { RowDivider() }
                 }
@@ -135,7 +135,7 @@ struct AgentProfilesSection: View {
             } label: {
                 Image(systemName: "pencil")
                     .font(.glyph(.regular, weight: .light))
-                    .frame(width: 38, height: 44)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -147,7 +147,7 @@ struct AgentProfilesSection: View {
                 Image(systemName: "trash")
                     .font(.glyph(.regular, weight: .light))
                     .foregroundStyle(Palette.failureInk)
-                    .frame(width: 38, height: 44)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
