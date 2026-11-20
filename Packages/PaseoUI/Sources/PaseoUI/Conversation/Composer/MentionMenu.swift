@@ -173,7 +173,7 @@ struct MentionMenu: View {
                 }
             }
             .padding(.horizontal, 14)
-            .frame(minHeight: 38)
+            .frame(minHeight: 44)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

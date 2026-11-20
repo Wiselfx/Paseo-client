@@ -402,9 +402,13 @@ struct ComposerAttachmentPill: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.glyph(.small, weight: .medium))
                         .foregroundStyle(Palette.secondaryInk)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                // A full 44 pt target that reaches into the tile's own padding, so the tile keeps
+                // its height.
+                .padding(.vertical, -7)
                 .accessibilityLabel("Retry upload")
             }
         }

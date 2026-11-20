@@ -57,10 +57,11 @@ struct SubagentTrackPill: View {
                     .foregroundStyle(Palette.tertiaryInk)
             }
             .foregroundStyle(failed > 0 ? Palette.failureInk : Palette.secondaryInk)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 32)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
             .background(Palette.chip, in: .capsule)
-            .contentShape(.capsule)
+            .padding(.vertical, 4)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("transcript.subagents")

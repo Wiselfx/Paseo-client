@@ -108,11 +108,13 @@ struct ForgeSearchPicker: View {
                         .font(.paseo(.footnote, weight: kindFilter == filter ? .medium : .regular))
                         .foregroundStyle(
                             kindFilter == filter ? Palette.background : Palette.ink)
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 30)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 36)
                         .background(
                             kindFilter == filter ? Palette.ink : Palette.chip,
                             in: .capsule)
+                        .padding(.vertical, 4)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }

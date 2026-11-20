@@ -575,7 +575,7 @@ struct WorkspaceFileViewer: View {
                 previewSegment(false, label: "Preview")
                 previewSegment(true, label: "Source")
             }
-            .padding(2)
+            .padding(.horizontal, 4)
             .background(Palette.chip, in: .capsule)
             Spacer(minLength: 0)
             // Full screen is the only zoom the inline frame cannot give: the live
@@ -606,12 +606,15 @@ struct WorkspaceFileViewer: View {
                 withAnimation(Motion.disclosure.animation) { previewAsSource = source }
             }
         } label: {
+            // A 36 pt pill in a 44 pt track: the whole track height takes the tap.
             Text(label)
-                .font(.paseo(.caption, weight: .medium))
-                .padding(.horizontal, Space.md)
-                .frame(minHeight: 28)
+                .font(.paseo(.footnote, weight: .medium))
+                .padding(.horizontal, 14)
+                .frame(minHeight: 36)
                 .foregroundStyle(selected ? Palette.ink : Palette.secondaryInk)
                 .background(selected ? Palette.background : Color.clear, in: .capsule)
+                .padding(.vertical, 4)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])

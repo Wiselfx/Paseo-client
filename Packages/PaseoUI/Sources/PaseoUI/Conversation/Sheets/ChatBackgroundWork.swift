@@ -133,9 +133,11 @@ struct ChatBackgroundWorkSheet: View {
                 }
                 .font(.paseo(.footnote, weight: .medium))
                 .foregroundStyle(Palette.failureInk)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 32)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 36)
                 .background(Palette.adaptive(light: 0.96, dark: 0.18), in: .capsule)
+                .padding(.vertical, 4)
+                .contentShape(.rect)
                 .buttonStyle(.plain)
             }
         }

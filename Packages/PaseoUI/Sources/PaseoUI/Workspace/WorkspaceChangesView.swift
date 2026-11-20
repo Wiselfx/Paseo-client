@@ -534,7 +534,7 @@ struct WorkspaceChangesView: View {
             compareSegment(.uncommitted, label: "Uncommitted")
             compareSegment(.base, label: baseRef.map { "vs \($0)" } ?? "vs base")
         }
-        .padding(2)
+        .padding(.horizontal, 4)
         .background(Palette.chip, in: .capsule)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -546,13 +546,16 @@ struct WorkspaceChangesView: View {
             Haptics.selection()
             compare = value
         } label: {
+            // A 36 pt pill in a 44 pt track: the whole track height takes the tap.
             Text(label)
-                .font(.paseo(.caption, weight: .medium))
+                .font(.paseo(.footnote, weight: .medium))
                 .lineLimit(1)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 28)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 36)
                 .foregroundStyle(selected ? Palette.background : Palette.secondaryInk)
                 .background(selected ? Palette.ink : Color.clear, in: .capsule)
+                .padding(.vertical, 4)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityValue(selected ? "Selected" : "")
@@ -999,9 +1002,10 @@ struct WorkspaceChangesView: View {
                     .lineLimit(1)
             }
             .foregroundStyle(Palette.ink)
-            .padding(.horizontal, 12)
-            .frame(height: 30)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
             .background(Palette.chip, in: .capsule)
+            .padding(.vertical, 4)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
