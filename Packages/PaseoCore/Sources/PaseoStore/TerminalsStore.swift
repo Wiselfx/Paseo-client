@@ -236,25 +236,42 @@ public final class TerminalsStore {
         _ terminalId: String, size: TerminalSize,
         restore: TerminalRestoreOptions = .visibleSnapshot
     ) async -> AsyncStream<TerminalOutput> {
+        await attachOwned(terminalId, size: size, restore: restore).stream
+    }
+
+    /// `attach`, plus a token naming this attachment. A view that may be rebuilt passes the
+    /// token to `detach(_:token:)`, so tearing down an old view never detaches the stream a
+    /// newer view of the same terminal has just opened.
+    public func attachOwned(
+        _ terminalId: String, size: TerminalSize,
+        restore: TerminalRestoreOptions = .visibleSnapshot
+    ) async -> (token: UUID, stream: AsyncStream<TerminalOutput>) {
         let (stream, continuation) = AsyncStream<TerminalOutput>.makeStream(
             bufferingPolicy: .unbounded)
+        let token = UUID()
 
         guard capabilities.restoreModes else {
             continuation.yield(.exited(error: "Update the host to view terminals."))
             continuation.finish()
-            return stream
+            return (token, stream)
         }
 
         detach(terminalId)
         var options = restore
         options.size = size
         let attachment = Attachment(
-            id: UUID(), terminalId: terminalId, size: size, restore: options,
+            id: token, terminalId: terminalId, size: size, restore: options,
             continuation: continuation)
         attachments[terminalId] = attachment
 
         await establish(attachment, reportTransportFailure: true)
-        return stream
+        return (token, stream)
+    }
+
+    /// Detaches only when `token` still names the current attachment of `terminalId`.
+    public func detach(_ terminalId: String, token: UUID) {
+        guard attachments[terminalId]?.id == token else { return }
+        detach(terminalId)
     }
 
     /// Releases this view's subscription. Safe to call twice or before the subscribe response.

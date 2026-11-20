@@ -55,6 +55,11 @@ struct PaseoTerminalView: UIViewRepresentable {
     func makeUIView(context: Context) -> TerminalView {
         let view = TerminalView(frame: .zero, font: PaseoTerminalFont.current())
         view.terminalDelegate = context.coordinator
+        // SwiftUI owns the geometry: the frame already sits inside the safe area and above the
+        // keyboard and key bar. The emulator's own automatic inset counted the overlapping safe
+        // area a second time, and that inset moved while the keyboard animated, so the last
+        // rows jumped and the bottom spacing never settled.
+        view.contentInsetAdjustmentBehavior = .never
         let scrollback = PaseoTerminalScrollback.current()
         view.changeScrollback(scrollback)
         context.coordinator.appliedScrollback = scrollback
@@ -184,6 +189,8 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private var claimed = false
     private var lastSize: TerminalSize?
     private var attachedId: String?
+    /// The store's token for this attachment: teardown detaches only what this view opened.
+    private var attachedToken: UUID?
     private var attachedSize: TerminalSize?
     private var isAttaching = false
     private var isReplaying = false
@@ -283,9 +290,14 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
             return
         }
         Self.visibleTerminal = self
-        if let store, let terminalId, attachedId == terminalId, let size = attachedSize {
+        // Claim with the newest measured grid: a hidden tab holds its resizes until now.
+        if let store, let terminalId, attachedId == terminalId, !isReplaying,
+            let size = pendingResize ?? attachedSize
+        {
             store.resize(terminalId, to: size, intent: .claim)
             claimed = true
+            attachedSize = size
+            pendingResize = nil
         }
         Self.scheduleKeyboardHandoff()
     }
@@ -324,8 +336,9 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         pendingBytes.removeAll(keepingCapacity: false)
         lastFeedTime = 0
         lastActivityReport = 0
-        if let attachedId { store?.detach(attachedId) }
+        if let attachedId, let attachedToken { store?.detach(attachedId, token: attachedToken) }
         attachedId = nil
+        attachedToken = nil
         attachedSize = nil
         claimed = false
         isAttaching = false
@@ -380,15 +393,20 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         attachTask = Task { [weak self] in
             // Attaching with the measured size is what makes the daemon replay at this grid
             // (`terminal-rendering.md`: "The pane attaches with that size").
-            let stream = await store.attach(terminalId, size: size)
-            guard let self else { return }
+            let (token, stream) = await store.attachOwned(terminalId, size: size)
+            guard let self else {
+                store.detach(terminalId, token: token)
+                return
+            }
             self.attachTask = nil
-            guard self.terminalId == terminalId else {
-                // The user switched terminals while the subscribe was in flight.
-                store.detach(terminalId)
+            guard self.terminalId == terminalId, !Task.isCancelled else {
+                // The user switched terminals (or the view went away) while the subscribe was
+                // in flight.
+                store.detach(terminalId, token: token)
                 return
             }
             self.attachedId = terminalId
+            self.attachedToken = token
             self.attachedSize = size
             self.isAttaching = false
             // Attaching claims the PTY size; later geometry changes travel as `update`. A
@@ -526,6 +544,10 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
             pendingResize = nil
             return
         }
+        // A hidden tab shares the stage's frame, so the keyboard resizes it too. Sending that
+        // would make its program redraw for a grid nobody sees (and an inline redraw on the
+        // normal screen is what duplicated output); it keeps the size and claims it when shown.
+        guard isVisible else { return }
         // Only the terminal on screen claims the PTY size, and only once; later changes from this
         // attachment are updates. A retained hidden tab never claims.
         let intent: TerminalResizeIntent = isVisible && !claimed ? .claim : .update
