@@ -43,7 +43,6 @@ The app builds in Xcode on a Mac. Open `App/PaseoClient.xcodeproj` and run the `
 ## Docs
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): layers, rules and the reasons for them
-- [AGENTS.md](AGENTS.md): rules for coding agents
 - [docs/](docs): status, parity with Paseo and work orders
 
 Paseo itself is the specification for this client: [getpaseo/paseo](https://github.com/getpaseo/paseo).

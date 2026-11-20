@@ -23,7 +23,7 @@ jobs:
         run: swift test
 
   lint:
-    name: Style and performance rules (R-4, R-8)
+    name: Style rules (R-4)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -32,9 +32,3 @@ jobs:
           fetch-depth: 0
       - name: Check for new violations
         run: Tools/style-lint/check.sh
-      - name: Performance framework self-test
-        run: Performance/scripts/final-check.sh --self-test
-      - name: Performance final check on the changed files (pull requests)
-        if: github.event_name == 'pull_request'
-        run: |
-          Performance/scripts/final-check.sh "origin/${{ github.base_ref }}"

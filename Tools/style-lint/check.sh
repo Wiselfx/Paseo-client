@@ -36,7 +36,7 @@ while read -r file rule count; do
 done <<< "$current"
 
 if [ "$fail" -ne 0 ]; then
-  echo "style-lint: new violations. Fix them (Performance/RULES.md, AGENTS.md R-4/R-8)." >&2
+  echo "style-lint: new violations. Fix them (use the design tokens)." >&2
   exit 1
 fi
 echo "style-lint: no new violations ($(wc -l < "$baseline") baseline entries)"
