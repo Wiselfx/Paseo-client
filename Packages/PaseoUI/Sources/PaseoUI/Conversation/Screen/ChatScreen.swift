@@ -70,8 +70,9 @@ public struct ChatScreen: View {
             .overlay(alignment: .top) { statusBarFade }
             .safeAreaBar(edge: .top) { topChrome }
             .safeAreaBar(edge: .bottom) { bottomChrome }
-            .scrollEdgeEffectHidden(true, for: .top)
-            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            // The bottom edge is drawn by `ComposerUnderBlur`: the native soft edge did not
+            // show under this hierarchy, and two blurs must never stack.
+            .scrollEdgeEffectHidden(true, for: .all)
             // No background here: the shell's rounded card (`EdgeDrawerCard`) is the canvas, so
             // the corners stay display-radius when the card is pushed aside (UX-SPEC §1.1).
             .foregroundStyle(Palette.ink)
@@ -143,6 +144,7 @@ public struct ChatScreen: View {
                 mode: .conversation, store: store, controller: controller,
                 focused: $composerFocused)
         }
+        .background(alignment: .bottom) { ComposerUnderBlur() }
     }
 }
 

@@ -81,6 +81,21 @@ public final class HostSession {
     public var isRelayConnection: Bool {
         (client as? DaemonConnection)?.endpoint.relay != nil
     }
+
+    /// Reconnects without waiting: skips the backoff while reconnecting, and starts a fresh
+    /// connect after a refusal (the host may have come back with the same credentials). The
+    /// shell calls it on foreground, on a network change and on a slow timer while not connected.
+    public func reconnectNow() {
+        guard let connection = client as? DaemonConnection else { return }
+        switch self.connection {
+        case .reconnecting:
+            connection.reconnectNow()
+        case .failed:
+            Task { _ = try? await connection.connect() }
+        case .idle, .connecting, .connected:
+            break
+        }
+    }
     private var conversations: [String: ConversationStore] = [:]
     /// Parsed `updatedAt` per agent id, kept in step with `agents`, so the sort comparator and the
     /// binary-search insertion never parse a date string.
@@ -372,6 +387,8 @@ public final class HostSession {
             agentsSubscriptionId = nil
             timelineSubscriptionId = nil
         case .failed:
+            // A later `reconnectNow()` can bring the socket back: that connect must resync.
+            sawReconnect = true
             ownedEvents.disconnected()
             voiceSettings.stopModelPolling()
             await voiceSession.handle(connection: state)

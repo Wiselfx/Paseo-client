@@ -103,6 +103,7 @@ public struct ShellView: View {
                     session: session,
                     onAgentsChange: adoptAgents,
                     onDirectoryLoaded: directoryLoaded)
+                ConnectionStatusToast(session: session, toast: toastCenter)
                 if PaseoPerf.enabled {
                     ShellPerfProbes(session: session, conversation: conversation)
                 }
@@ -206,7 +207,6 @@ public struct ShellView: View {
     private var main: AnyView {
         root(
             VStack(spacing: 0) {
-                ConnectionBanner(session: session, onDisconnect: onDisconnect)
                 if let conversation {
                     ClaudeChatView(
                         session: session,
@@ -688,43 +688,75 @@ struct ShellPerfProbes: View {
     }
 }
 
-/// The one connection banner: the chat, the draft and the empty main all show it, below the
-/// status bar (audit C #2). It observes the connection in its own body.
-struct ConnectionBanner: View {
+/// The connection, as a standing toast: it never takes layout and never asks for a tap. The
+/// socket retries on its own; this view also nudges it on foreground, when the network comes
+/// back, and on a slow timer after a refusal. It observes the connection in its own body, so
+/// the shell body never does.
+struct ConnectionStatusToast: View {
     let session: HostSession
-    let onDisconnect: () -> Void
+    let toast: ToastCenter
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
-    private var isVisible: Bool {
+    private enum Phase: Equatable {
+        case connected
+        case reconnecting
+        case refused
+    }
+
+    private var phase: Phase {
         switch session.connection {
-        case .reconnecting, .failed: true
-        case .idle, .connecting, .connected: false
+        case .idle, .connected: .connected
+        case .connecting, .reconnecting: .reconnecting
+        case .failed: .refused
         }
     }
 
     var body: some View {
-        Group {
-            if isVisible { banner }
-        }
-        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: isVisible)
+        Color.clear
+            .accessibilityHidden(true)
+            .task(id: phase) { await drive(phase) }
+            .task { await watchNetwork() }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active { session.reconnectNow() }
+            }
+            .onDisappear { toast.setStatus(nil) }
     }
 
-    @ViewBuilder private var banner: some View {
-        switch session.connection {
+    private func drive(_ phase: Phase) async {
+        switch phase {
+        case .connected:
+            toast.setStatus(nil)
         case .reconnecting:
-            InlineBanner(.info, title: "Reconnecting…")
-                .overlay(alignment: .trailing) {
-                    InlineProgress().padding(.trailing, Space.lg)
-                }
-        case .failed:
-            InlineBanner(
-                .failure,
-                title: "Can't reach the host. Check that the daemon is running.",
-                action: ("Disconnect", onDisconnect))
-        case .idle, .connecting, .connected:
-            EmptyView()
+            // A blip that heals within a second never shows; an already showing status just
+            // changes its words.
+            if toast.status == nil {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+            }
+            toast.setStatus(.init(message: "Reconnecting…", systemImage: nil, showsProgress: true))
+        case .refused:
+            toast.setStatus(
+                .init(message: "Can't reach the host · retrying", systemImage: nil, showsProgress: true))
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
+                session.reconnectNow()
+            }
         }
+    }
+
+    /// A network that comes back is the best moment to retry, not the next backoff step.
+    private func watchNetwork() async {
+        let monitor = NetworkPathMonitor()
+        monitor.onChange = { _, _, _, offline in
+            if !offline { session.reconnectNow() }
+        }
+        // Lives as long as this view; cancellation ends the sleep and releases the monitor.
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(3600))
+        }
+        monitor.stop()
     }
 }
 

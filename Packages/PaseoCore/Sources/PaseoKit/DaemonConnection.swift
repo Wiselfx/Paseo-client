@@ -51,6 +51,8 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         var keepaliveTasks: [Task<Void, Never>] = []
         var reconnectTask: Task<Void, Never>?
         var attempt = 0
+        /// Set by `reconnectNow()`: the reconnect loop skips the rest of its backoff.
+        var backoffKicked = false
         var lastFrameAt = ContinuousClock.now
     }
 
@@ -779,7 +781,7 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
             else { return }
 
             do {
-                try await Task.sleep(for: delay)
+                if try await backoff(delay) { attempt = 0 }
             } catch {
                 return
             }
@@ -812,6 +814,31 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
                 }
                 lastError = connectionError
             }
+        }
+    }
+
+    /// Sleeps `delay` in short slices so `reconnectNow()` can cut it short. Returns true when it
+    /// was cut short, so the caller restarts its backoff from the first step.
+    private func backoff(_ delay: Duration) async throws -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now + delay
+        while clock.now < deadline {
+            let kicked = mutex.withLock { core in
+                defer { core.backoffKicked = false }
+                return core.backoffKicked
+            }
+            if kicked { return true }
+            try await Task.sleep(for: min(.milliseconds(250), deadline - clock.now))
+        }
+        return false
+    }
+
+    /// Retry now instead of waiting out the backoff: the app came to the foreground or the
+    /// network came back. A no-op unless the socket is reconnecting.
+    public func reconnectNow() {
+        mutex.withLock { core in
+            guard case .reconnecting = core.state else { return }
+            core.backoffKicked = true
         }
     }
 

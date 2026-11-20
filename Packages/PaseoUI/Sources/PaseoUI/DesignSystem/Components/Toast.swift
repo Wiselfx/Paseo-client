@@ -13,10 +13,25 @@ import UIKit
         let duration: Duration
     }
 
+    /// A standing message that stays until its owner clears it (the connection state). It
+    /// shares the toast's place and look, and sits above a transient toast when both show.
+    struct Status: Equatable {
+        let message: String
+        let systemImage: String?
+        let showsProgress: Bool
+    }
+
     private(set) var current: Item?
+    private(set) var status: Status?
     private var clearTask: Task<Void, Never>?
 
     init() {}
+
+    func setStatus(_ status: Status?) {
+        guard self.status != status else { return }
+        self.status = status
+        if let status { AccessibilityNotification.Announcement(status.message).post() }
+    }
 
     func show(
         _ message: String,
@@ -130,23 +145,54 @@ private struct ToastBanner: View {
     }
 }
 
-/// The window's content: the current toast, pinned to the top.
+/// A standing status: the same glass capsule, with a spinner while something is in progress.
+private struct ToastStatusBanner: View {
+    let status: ToastCenter.Status
+
+    var body: some View {
+        HStack(spacing: Space.sm) {
+            if status.showsProgress {
+                ProgressView().controlSize(.mini)
+            } else if let systemImage = status.systemImage {
+                Image(systemName: systemImage).font(.glyph(.small, weight: .medium))
+            }
+            Text(status.message)
+                .font(.paseo(.footnote, weight: .medium))
+                .lineLimit(1)
+                .contentTransition(.opacity)
+        }
+        .foregroundStyle(Palette.ink)
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, 10)
+        .glassEffect(in: .capsule)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The window's content: the standing status and the current toast, pinned to the top.
 private struct ToastHostRoot: View {
     let center: ToastCenter
     let onInteractiveRect: (CGRect) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Space.sm) {
+            if let status = center.status {
+                ToastStatusBanner(status: status)
+                    .transition(.offset(y: -6).combined(with: .opacity))
+            }
             if let item = center.current {
                 ToastBanner(item: item, onUndo: { center.performUndo(item) })
-                    .padding(.top, 56)
-                    .padding(.horizontal, Space.lg)
                     .transition(.offset(y: -6).combined(with: .opacity))
             }
             Spacer(minLength: 0)
         }
+        .padding(.top, 56)
+        .padding(.horizontal, Space.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(Motion.fade.animation, value: center.current?.id)
+        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: center.current?.id)
+        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: center.status)
         .onPreferenceChange(ToastRectKey.self) { onInteractiveRect($0) }
     }
 }
