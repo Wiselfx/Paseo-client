@@ -14,7 +14,8 @@ concurrency:
 
 jobs:
   ipa:
-    runs-on: macos-26
+    # The Xcode 27 image (macOS 27, Apple Silicon); runner labels are named by Xcode now.
+    runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +24,9 @@ jobs:
       - name: Select Xcode 27
         run: |
           ls -d /Applications/Xcode*.app
-          XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
+          # 27.1 matches local development; otherwise the newest 27.x release on the image.
+          XCODE=$(ls -d /Applications/Xcode_27.1*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
           if [ -z "$XCODE" ]; then
             echo "::error::No Xcode 27 on this runner image"
             exit 1
