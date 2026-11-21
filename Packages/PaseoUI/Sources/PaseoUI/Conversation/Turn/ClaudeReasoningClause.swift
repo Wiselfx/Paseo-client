@@ -200,7 +200,8 @@ enum ClaudeReasoningClause {
     }
 
     /// `[text](url)`, compiled once: the status line reads a clause on every body pass.
-    private static let markdownLink = /\[([^\]]*)\]\([^)]*\)/
+    /// `Regex` isn't `Sendable`; this one is immutable and only ever matched, never mutated.
+    nonisolated(unsafe) private static let markdownLink = /\[([^\]]*)\]\([^)]*\)/
 
     /// `[text](url)` → `text`, and the inline markers removed; a lone `*` or `_` stays.
     private static func stripMarkup(_ text: String) -> String {

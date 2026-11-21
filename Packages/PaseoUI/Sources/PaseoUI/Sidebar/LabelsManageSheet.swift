@@ -133,8 +133,12 @@ struct LabelsManageSheet: View {
         }
     }
 
+    /// A row's field: its pending rename, or the label's own name until one is typed. (A key path
+    /// can't carry `subscript(_:default:)`, whose default is an autoclosure.)
     private func draftBinding(_ name: String) -> Binding<String> {
-        $drafts[name, default: name]
+        Binding(
+            get: { drafts[name] ?? name },
+            set: { drafts[name] = $0 })
     }
 
     /// Applies every pending rename. Called once, when the sheet disappears.
