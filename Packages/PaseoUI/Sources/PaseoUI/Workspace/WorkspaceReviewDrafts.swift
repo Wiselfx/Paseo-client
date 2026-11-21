@@ -94,24 +94,4 @@ public final class WorkspaceReviewDrafts {
         return (try? JSONDecoder().decode(ReviewDraftsFile.self, from: data))?.drafts
     }
 }
-// MARK: - Attachment building (upstream's buildReviewAttachmentSnapshot)
-
-/// The context radius around the target line, in lines.
-let reviewContextRadius = 3
-// Small conveniences so the raw wire enums read naturally at call sites.
-private extension AgentAttachment.ReviewAttachment.Comment.Side {
-    init(rawValue: String) {
-        self = rawValue == "old" ? .old : .new
-    }
-}
-private extension AgentAttachment.ReviewAttachment.Mode {
-    init(rawValue: String) {
-        switch rawValue {
-        case "uncommitted": self = .uncommitted
-        case "base": self = .base
-        case "all": self = .all
-        case let other: self = .unknown(other)
-        }
-    }
-}
 #endif

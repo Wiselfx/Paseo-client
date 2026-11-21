@@ -57,7 +57,4 @@ struct ClaudeRichBlockView: View {
         }
     }
 }
-extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
-}
 #endif

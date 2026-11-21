@@ -41,6 +41,11 @@ extension EnvironmentValues {
     var showContextSheet = false
     var showFullScreenComposer = false
     var openFilePath: String?
+    /// `openFilePath` as the file-viewer sheet's presentation flag: dismissing clears the path.
+    var isFileViewerOpen: Bool {
+        get { openFilePath != nil }
+        set { if !newValue { openFilePath = nil } }
+    }
 
     // Find.
     let find = ChatFind()
@@ -131,11 +136,14 @@ extension EnvironmentValues {
     /// The shell's toast center, injected by `ChatScreen` (`@Environment(\.toast)`).
     var toastCenter: ToastCenter?
 
-    /// Re-arms itself on each agent/host capability change; see `startAvailabilityTracking`.
+    /// Follows each agent/host capability change; see `startAvailabilityTracking`.
     private var availabilityTask: Task<Void, Never>?
-    /// Inline images, by `(workspaceId, path)`. Bounded by count and bytes: a long conversation
-    /// full of screenshots must not hold every decoded bitmap for the life of the screen (H5
-    /// round 2). `loadImage` passes a real cost, or `totalCostLimit` could never bite.
+    /// The mirrors' observation loops (home directory, subagents, PR status, connection, workspace
+    /// registration). Each is one `for await` over `Observations`, cancelled with the controller.
+    private var mirrorTasks: [Task<Void, Never>] = []
+    /// Inline images, by `(workspaceId, path, width bucket)`. Bounded by count and bytes: a long
+    /// conversation full of screenshots must not hold every decoded bitmap for the life of the
+    /// screen (H5 round 2). `loadImage` passes a real cost, or `totalCostLimit` could never bite.
     private let imageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 64
@@ -253,14 +261,14 @@ extension EnvironmentValues {
     /// screen stop waiting the moment the id is known.
     private func startDaemonFetchRegistration() {
         syncDaemonFetchRegistration()
-        withObservationTracking { [weak self] in
-            _ = self?.store.agent?.workspaceId
-        } onChange: { [weak self] in
+        let store = self.store
+        mirrorTasks.append(
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.startDaemonFetchRegistration()
-            }
-        }
+                for await _ in Observations({ store.agent?.workspaceId }) {
+                    guard let self else { return }
+                    self.syncDaemonFetchRegistration()
+                }
+            })
     }
 
     private func syncDaemonFetchRegistration() {
@@ -346,8 +354,10 @@ extension EnvironmentValues {
     /// own token, so a dead controller never unregisters its successor.
     private let daemonFetchRegistration = DaemonFetchRegistration()
 
-    deinit {
+    isolated deinit {
         PaseoPerf.count("ChatController.deinit")
+        availabilityTask?.cancel()
+        for task in mirrorTasks { task.cancel() }
         // A dead controller must not resolve another screen's images. The actor hop
         // cannot run synchronously here, so the unregister rides an unstructured task
         // carrying only values (never self).
@@ -376,51 +386,52 @@ extension EnvironmentValues {
     /// never per scroll frame — the same mirror pattern as the PR status (R-1).
     private func startHomeDirectoryMirror() {
         richActions.homeDirectory = store.agent?.cwd
-        withObservationTracking { [weak self] in
-            _ = self?.store.agent?.cwd
-        } onChange: { [weak self] in
+        let store = self.store
+        mirrorTasks.append(
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.richActions.homeDirectory = self.store.agent?.cwd
-                self.startHomeDirectoryMirror()
-            }
-        }
+                for await cwd in Observations({ store.agent?.cwd }) {
+                    guard let self else { return }
+                    // The first value is the one already written above.
+                    if self.richActions.homeDirectory != cwd { self.richActions.homeDirectory = cwd }
+                }
+            })
     }
 
     /// Mirrors the provider subagents into the cards by tool call id (C4 §9.4): one
     /// write per list change, never per scroll frame. Cards read only the value (R-1).
     private func startSubagentsMirror() {
-        richActions.subagentsByCallId = Dictionary(
-            uniqueKeysWithValues: store.subagents.items.compactMap { item in
+        mirrorSubagents(store.subagents.items)
+        let subagents = store.subagents
+        mirrorTasks.append(
+            Task { @MainActor [weak self] in
+                for await items in Observations({ subagents.items }) {
+                    guard let self else { return }
+                    self.mirrorSubagents(items)
+                }
+            })
+    }
+
+    private func mirrorSubagents(_ items: [ProviderSubagent]) {
+        let byCallId = Dictionary(
+            uniqueKeysWithValues: items.compactMap { item in
                 item.toolCallId.map { ($0, item) }
             })
-        withObservationTracking { [weak self] in
-            _ = self?.store.subagents.items
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.richActions.subagentsByCallId = Dictionary(
-                    uniqueKeysWithValues: self.store.subagents.items.compactMap { item in
-                        item.toolCallId.map { ($0, item) }
-                    })
-                self.startSubagentsMirror()
-            }
-        }
+        // The loop's first value repeats the one written at start.
+        if richActions.subagentsByCallId != byCallId { richActions.subagentsByCallId = byCallId }
     }
 
     /// Mirrors the live PR status into the cards (C13): one write per change, never per
     /// scroll frame. Cards read only the value (R-1).
     private func startCheckoutPRMirror() {
         richActions.checkoutPR = currentCheckout?.prStatus
-        withObservationTracking { [weak self] in
-            _ = self?.currentCheckout?.prStatus
-        } onChange: { [weak self] in
+        mirrorTasks.append(
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.richActions.checkoutPR = self.currentCheckout?.prStatus
-                self.startCheckoutPRMirror()
-            }
-        }
+                for await status in Observations({ [weak self] in self?.currentCheckout?.prStatus }) {
+                    guard let self else { return }
+                    // The first value is the one already written at start.
+                    if self.richActions.checkoutPR != status { self.richActions.checkoutPR = status }
+                }
+            })
     }
 
     /// Same-repo GitHub link resolution through forge search (G9 C7), matched on number
@@ -461,18 +472,17 @@ extension EnvironmentValues {
     /// condition on every connection change. One write per change, never per frame;
     /// path changes arrive through the monitor and refresh the same way.
     private func startConnectionRefresh() {
-        withObservationTracking {
-            _ = session.connection
-        } onChange: { [weak self] in
+        let session = self.session
+        mirrorTasks.append(
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.refreshLinkCondition(
-                    interface: self.pathMonitor?.interface ?? .wifi,
-                    constrained: self.pathMonitor?.constrained ?? false,
-                    offline: self.pathMonitor?.offline ?? false)
-                self.startConnectionRefresh()
-            }
-        }
+                for await _ in Observations({ session.connection }) {
+                    guard let self else { return }
+                    self.refreshLinkCondition(
+                        interface: self.pathMonitor?.interface ?? .wifi,
+                        constrained: self.pathMonitor?.constrained ?? false,
+                        offline: self.pathMonitor?.offline ?? false)
+                }
+            })
     }
 
     private func startMediaLinkUpdates() {
@@ -518,23 +528,25 @@ extension EnvironmentValues {
             rewindInFlight: rewindInFlight)
     }
 
-    /// Publishes the value and re-arms observation of the three inputs that can change it: the
-    /// host features, this agent's snapshot (capabilities), and the workspace directory's
-    /// create support. One task per controller; changes are rare, so this costs nothing per
-    /// scroll frame or keystroke.
+    /// Publishes the value and follows the three inputs that can change it: the host features,
+    /// this agent's snapshot (capabilities), and the workspace directory's create support. One
+    /// task per controller; changes are rare, so this costs nothing per scroll frame or keystroke.
     private func startAvailabilityTracking() {
         guard availabilityTask == nil else { return }
+        // The loop reads the two stores, never `self`: a closed screen must deallocate, and the
+        // task is owned by it (cancelled in `deinit`).
+        let session = self.session
+        let store = self.store
         availabilityTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                // Never hold `self` across the wait: a closed screen must deallocate, and the
-                // task is owned by it.
-                let inputs = { [weak self] () -> (HostSession, ConversationStore)? in
-                    guard let self else { return nil }
-                    self.refreshAvailability()
-                    return (self.session, self.store)
-                }()
-                guard let (session, store) = inputs else { return }
-                await ChatController.nextAvailabilityChange(session: session, store: store)
+            let inputs = Observations {
+                (
+                    session.serverInfo, store.agent,
+                    session.workspaceDirectory.supportsWorkspaceCreate
+                )
+            }
+            for await _ in inputs {
+                guard let self else { return }
+                self.refreshAvailability()
             }
         }
     }
@@ -542,20 +554,6 @@ extension EnvironmentValues {
     private func refreshAvailability() {
         let next = turnActionAvailability
         if actions.availability != next { actions.availability = next }
-    }
-
-    private static func nextAvailabilityChange(
-        session: HostSession, store: ConversationStore
-    ) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            withObservationTracking {
-                _ = session.serverInfo
-                _ = store.agent
-                _ = session.workspaceDirectory.supportsWorkspaceCreate
-            } onChange: {
-                continuation.resume()
-            }
-        }
     }
 
     // MARK: Toast
@@ -607,6 +605,12 @@ extension EnvironmentValues {
     func archiveNow() async {
         let agentId = store.agentId
         await store.archive()
+        // `archive()` reports a failure only through `actionError` (and returns silently with no
+        // client): the snapshot carries `archivedAt` only when the daemon archived it.
+        guard store.agent?.archivedAt != nil else {
+            showToast(store.actionError ?? "Couldn't archive the agent.")
+            return
+        }
         await session.refreshAgents()
         showToast("Agent archived", undo: { [weak self] in
             guard let self else { return }
@@ -832,7 +836,7 @@ extension EnvironmentValues {
             return nil
         }
         let base = forkBaseBranch(in: project)
-        let branch = "workspace-\(Int(Date().timeIntervalSince1970))"
+        let branch = "workspace-\(Int(Date.now.timeIntervalSince1970))"
         let created = await directory.createWorkspace(
             in: project,
             source: .branchOff(
@@ -1193,19 +1197,22 @@ extension EnvironmentValues {
 
     /// Reads an inline image through `WorkspaceFiles.fetch` (never `read`, which writes the Files
     /// page's visible state) and decodes it off main at display resolution. Cached by
-    /// `(workspaceId, path)`.
+    /// `(workspaceId, path, width bucket)`.
     func loadImage(path: String) async -> UIImage? {
         guard let agent = store.agent, let workspaceId = agent.workspaceId,
             let descriptor = session.workspaceDirectory.workspace(id: workspaceId)
         else { return nil }
-        let key = "\(workspaceId)\u{0}\(path)" as NSString
+        // Decode at the width of the window this conversation is in; a different width (a resize,
+        // Split View) is a different cache entry, bucketed so a drag does not decode per frame.
+        let width = contentWidth > 0 ? contentWidth : Self.fallbackScreenWidth
+        let maxPixel = Double(width * displayScale)
+        let key = "\(workspaceId)\u{0}\(path)\u{0}\(Int(maxPixel / 256))" as NSString
         if let cached = imageCache.object(forKey: key) { return cached }
         let checkout = session.checkout(for: descriptor)
         guard let file = try? await checkout.files.fetch(path, maxBytes: 8 * 1024 * 1024),
             file.kind == .image, file.encoding == .base64, let content = file.content,
             let data = Data(base64Encoded: content)
         else { return nil }
-        let maxPixel = Double(screenWidth * displayScale)
         let image = await Task.detached(priority: .userInitiated) {
             ComposerImageProcessor.thumbnail(data: data, maxPixelSize: maxPixel)
         }.value
@@ -1219,21 +1226,14 @@ extension EnvironmentValues {
     /// `@Environment(\.displayScale)`.
     var displayScale: CGFloat = 2
 
-    /// A phone's width in points, for the rare case where no window scene is attached (previews,
-    /// a scene-less snapshot).
+    /// The width of the conversation's window in points, written by `ChatInputWiring` from the
+    /// view's geometry. Ignored by observation: it is read only when an image decodes, and a
+    /// resize must not re-evaluate anything.
+    @ObservationIgnored var contentWidth: CGFloat = 0
+
+    /// A phone's width in points, for the rare case where the view has not been measured yet
+    /// (an image requested before the first layout pass, previews).
     private static let fallbackScreenWidth: CGFloat = 430
-
-    /// The width of the screen we are on, in points. `UIScreen.main` is deprecated on iOS 26, so
-    /// the screen comes from the attached window scene (D1 §4).
-    private var screenWidth: CGFloat {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
-        guard let width = scene?.screen.bounds.width, width > 0 else {
-            return Self.fallbackScreenWidth
-        }
-        return width
-    }
-
 
     // MARK: Outline and end-of-transcript requests
 

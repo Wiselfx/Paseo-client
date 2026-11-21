@@ -9,7 +9,8 @@ struct WorkspaceTerminalFileSheet: View {
     let checkout: CheckoutStore
     let target: TerminalLinkedFile
 
-    @State private var text: String?
+    /// The file split once at load, off the main actor, not on every body pass.
+    @State private var lines: [String]?
     @State private var failure: String?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -19,8 +20,8 @@ struct WorkspaceTerminalFileSheet: View {
     var body: some View {
         SheetScaffold(WorkspaceFileFormat.lastComponent(target.path), detents: .mediumLarge) {
             Group {
-                if let text {
-                    linkedContent(text)
+                if let lines {
+                    TerminalLinkedFileLines(lines: lines, targetLine: target.line)
                         .transition(.opacity)
                 } else if let failure {
                     failureView(failure)
@@ -32,47 +33,10 @@ struct WorkspaceTerminalFileSheet: View {
             }
             // The file arrives a moment after the sheet does: it fades in where the spinner was
             // rather than snapping in under it.
-            .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: text)
+            .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: lines != nil)
             .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: failure)
         }
         .task { await load() }
-    }
-
-    private func linkedContent(_ text: String) -> some View {
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        return ScrollViewReader { proxy in
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                        let number = index + 1
-                        HStack(spacing: 10) {
-                            Text(verbatim: String(number))
-                                .font(.paseo(.codeCaption))
-                                .foregroundStyle(Palette.captionInk)
-                                .frame(width: 34, alignment: .trailing)
-                            Text(line)
-                                .font(.paseo(.codeSmall))
-                                .foregroundStyle(Palette.ink)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 1.5)
-                        .background(
-                            target.line == number
-                                ? Palette.chip
-                                : Color.clear)
-                        .id(number)
-                    }
-                }
-                .padding(.vertical, 8)
-                .textSelection(.enabled)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .onAppear {
-                if let line = target.line, line > 0 {
-                    proxy.scrollTo(line, anchor: .center)
-                }
-            }
-        }
     }
 
     private func failureView(_ message: String) -> some View {
@@ -87,10 +51,10 @@ struct WorkspaceTerminalFileSheet: View {
     private func load() async {
         await files.read(target.resolvedPath)
         if let file = files.file, let text = file.textContent {
-            self.text = text
+            self.lines = await Task.detached { text.splitLines() }.value
             self.failure = nil
         } else {
-            self.text = nil
+            self.lines = nil
             self.failure = files.error ?? "This file can't be shown here."
         }
     }

@@ -68,16 +68,29 @@ struct RichGitHubCard: View {
     var body: some View {
         Group {
             if let matchedPR {
-                prCard(matchedPR)
+                GitHubPRCard(pr: matchedPR, url: url, onOpen: openPRPane)
             } else if let info {
-                linkedRow(title: info.title, state: info.state)
+                GitHubLinkRow(
+                    glyph: glyph, title: info.title, slug: parsed.slug, state: info.state,
+                    url: url, onOpen: openSafari)
             } else {
-                unresolvedRow
+                // Before the lookup answers: slug, kind and glyph, no state yet.
+                GitHubLinkRow(
+                    glyph: glyph, title: "\(parsed.slug)\(kindSuffix)", slug: parsed.slug,
+                    state: nil, url: url, onOpen: openSafari)
             }
         }
         .task(id: lookupKey) { await lookup() }
         .animation(
             Motion.disclosure.resolved(reduceMotion: reduceMotion), value: cardShape)
+        // Attached above the branches: a lookup landing (or the checkout PR arriving) while
+        // Safari is up swaps the row for another view, and a cover hosted by the swapped-out
+        // row would be dismissed from under the reader.
+        .fullScreenCover(isPresented: $showSafari) {
+            if let target = URL(string: url) {
+                SafariView(url: target).ignoresSafeArea()
+            }
+        }
     }
 
     /// What the card is showing, as one value, so the taller live PR card grows
@@ -86,33 +99,6 @@ struct RichGitHubCard: View {
         if matchedPR != nil { return 2 }
         if info != nil { return 1 }
         return 0
-    }
-
-    /// Before the lookup answers: slug, kind and glyph, no state yet.
-    private var unresolvedRow: some View {
-        Button {
-            showSafari = true
-        } label: {
-            PaseoRowCard(
-                glyph: glyph, title: "\(parsed.slug)\(kindSuffix)",
-                meta: "github.com")
-        }
-        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-        .paseoCardMenu(
-            openTitle: "Open",
-            onOpen: { showSafari = true },
-            copyTitle: "Copy link",
-            copyText: url,
-            externalTitle: "Open on GitHub",
-            externalURL: URL(string: url))
-        .paseoCardAccessibility(
-            kind: "GitHub link", title: "\(parsed.slug)\(kindSuffix)",
-            meta: "github.com", isButton: true)
-        .fullScreenCover(isPresented: $showSafari) {
-            if let target = URL(string: url) {
-                SafariView(url: target).ignoresSafeArea()
-            }
-        }
     }
 
     /// One lookup per URL, through the controller's forge search — same repo only, and
@@ -146,189 +132,12 @@ struct RichGitHubCard: View {
         info = found
     }
 
-    // MARK: The live PR card (C13)
-
-    @ViewBuilder
-    private func prCard(_ pr: CheckoutPrStatus) -> some View {
-        let counts = checkCounts(pr.checks)
-        let resolution = reviewText(pr.reviewDecision)
-        Button {
-            openPRPane()
-        } label: {
-            PaseoCard(content:
-                VStack(alignment: .leading, spacing: Space.sm) {
-                    HStack(spacing: Space.sm) {
-                        Image(systemName: "arrow.triangle.pull")
-                            .font(.glyph(.regular, weight: .medium))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pr.title)
-                                .font(.paseo(.callout))
-                                .foregroundStyle(Palette.ink)
-                                .lineLimit(2)
-                            Text("#\(pr.number ?? 0) · \(pr.headRefName) → \(pr.baseRefName)")
-                                .font(.paseo(.caption))
-                                .foregroundStyle(Palette.secondaryInk)
-                                .lineLimit(1)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        StatePill(prStateLabel(pr), tone: prStateTone(pr))
-                    }
-                    HStack(spacing: Space.sm) {
-                        checkDot(count: counts.passed, color: Palette.successInk)
-                        checkDot(count: counts.failed, color: Palette.failureInk)
-                        checkDot(count: counts.pending, color: Palette.tertiaryInk)
-                        if let resolution {
-                            Text(resolution)
-                                .font(.paseo(.caption))
-                                .foregroundStyle(Palette.secondaryInk)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.glyph(.small, weight: .semibold))
-                            .foregroundStyle(Palette.tertiaryInk)
-                            .accessibilityHidden(true)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(checksSummary(counts, resolution: resolution))
-                }
-                .contentShape(.rect))
-        }
-        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-        .paseoCardMenu(
-            openTitle: "Open pull request",
-            onOpen: { openPRPane() },
-            copyTitle: "Copy link",
-            copyText: url,
-            externalTitle: "Open on GitHub",
-            externalURL: URL(string: url))
-        .paseoCardAccessibility(
-            kind: "Pull request", title: pr.title,
-            meta: "#\(pr.number ?? 0) \(prStateLabel(pr))", isButton: true)
-    }
-
     private func openPRPane() {
         richActions?.openPRPane()
     }
 
-    private struct CheckCounts: Equatable {
-        var passed = 0
-        var failed = 0
-        var pending = 0
-    }
-
-    /// Passed / failed / pending from the checkout's check states.
-    private func checkCounts(_ checks: [CheckoutPrCheck]) -> CheckCounts {
-        var counts = CheckCounts()
-        for check in checks {
-            switch check.status.lowercased() {
-            case "success", "passed", "pass", "neutral", "skipped":
-                counts.passed += 1
-            case "failure", "failed", "fail", "error", "timed_out", "action_required":
-                counts.failed += 1
-            default:
-                counts.pending += 1
-            }
-        }
-        return counts
-    }
-
-    private func checkDot(count: Int, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
-            Text("\(count)")
-                .font(.paseo(.caption, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
-                .monospacedDigit()
-        }
-        .accessibilityHidden(count == 0)
-    }
-
-    private func checksSummary(_ counts: CheckCounts, resolution: String?) -> String {
-        var parts = ["\(counts.passed) passed", "\(counts.failed) failed", "\(counts.pending) pending"]
-        if let resolution { parts.append(resolution) }
-        return parts.joined(separator: ", ")
-    }
-
-    /// Upstream wording (`en.ts` pull-request states): Open, Draft, Merged, Closed.
-    private func prStateLabel(_ pr: CheckoutPrStatus) -> String {
-        if pr.isMerged { return "Merged" }
-        if pr.isDraft == true { return "Draft" }
-        return switch pr.state.lowercased() {
-        case "closed": "Closed"
-        default: "Open"
-        }
-    }
-
-    private func prStateTone(_ pr: CheckoutPrStatus) -> StatePill.Tone {
-        if pr.isMerged { return .success }
-        if pr.isDraft == true { return .neutral }
-        return switch pr.state.lowercased() {
-        case "closed": .failure
-        default: .success
-        }
-    }
-
-    /// The review decision in the card's words (upstream `activity.*`, en.ts).
-    private func reviewText(_ decision: String?) -> String? {
-        switch decision?.lowercased() {
-        case "approved": "Approved"
-        case "changes_requested": "Changes requested"
-        case "commented": "Commented"
-        case "review_required": "Review required"
-        default: nil
-        }
-    }
-
-    // MARK: Same-repo siblings (C7)
-
-    private func linkedRow(title: String, state: String) -> some View {
-        Button {
-            showSafari = true
-        } label: {
-            PaseoRowCard(
-                glyph: glyph, title: title,
-                meta: "\(parsed.slug) · \(stateLabel(state))",
-                accessory: StatePill(stateLabel(state), tone: stateTone(state)))
-        }
-        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-        .paseoCardMenu(
-            openTitle: "Open",
-            onOpen: { showSafari = true },
-            copyTitle: "Copy link",
-            copyText: url,
-            externalTitle: "Open on GitHub",
-            externalURL: URL(string: url))
-        .paseoCardAccessibility(
-            kind: "GitHub link", title: title,
-            meta: "\(parsed.slug) \(stateLabel(state))", isButton: true)
-        .fullScreenCover(isPresented: $showSafari) {
-            if let target = URL(string: url) {
-                SafariView(url: target).ignoresSafeArea()
-            }
-        }
-    }
-
-    private func stateLabel(_ state: String) -> String {
-        return switch state.lowercased() {
-        case "open": "Open"
-        case "closed": "Closed"
-        case "merged": "Merged"
-        case "draft": "Draft"
-        default: state
-        }
-    }
-
-    private func stateTone(_ state: String) -> StatePill.Tone {
-        return switch state.lowercased() {
-        case "open", "merged": .success
-        case "closed": .failure
-        default: .neutral
-        }
+    private func openSafari() {
+        showSafari = true
     }
 }
 #endif

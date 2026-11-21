@@ -14,26 +14,28 @@ import SwiftUI
 /// footer; `LaunchSkeleton` and `EmptyMain` pass `HomeHeroRestingFooter`, which reserves the same
 /// resting strip. One structure, so the hero box is identical in every state.
 struct HomeHeroLayout<Header: View, Hero: View, Footer: View>: View {
-    private let header: () -> Header
-    private let hero: () -> Hero
-    private let footer: () -> Footer
+    // The built views, not escaping closures: the layout keeps the values it draws, built once
+    // where the layout is created.
+    private let header: Header
+    private let hero: Hero
+    private let footer: Footer
 
     init(
-        @ViewBuilder header: @escaping () -> Header,
-        @ViewBuilder hero: @escaping () -> Hero,
-        @ViewBuilder footer: @escaping () -> Footer
+        @ViewBuilder header: () -> Header,
+        @ViewBuilder hero: () -> Hero,
+        @ViewBuilder footer: () -> Footer
     ) {
-        self.header = header
-        self.hero = hero
-        self.footer = footer
+        self.header = header()
+        self.hero = hero()
+        self.footer = footer()
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            header()
-            hero()
+            header
+            hero
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            footer()
+            footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -42,8 +44,8 @@ extension HomeHeroLayout where Footer == HomeHeroRestingFooter {
     /// A home with no footer yet (launching, or no agent/draft to show): reserve the draft's
     /// resting chrome so the hero does not move when the final screen arrives.
     init(
-        @ViewBuilder header: @escaping () -> Header,
-        @ViewBuilder hero: @escaping () -> Hero
+        @ViewBuilder header: () -> Header,
+        @ViewBuilder hero: () -> Hero
     ) {
         self.init(header: header, hero: hero) { HomeHeroRestingFooter() }
     }

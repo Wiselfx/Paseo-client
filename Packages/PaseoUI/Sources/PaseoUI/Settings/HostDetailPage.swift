@@ -52,6 +52,19 @@ struct HostDetailPage: View {
                     }
                     .panelRow()
                     .accessibilityIdentifier("settings.hosts.remove")
+                    // On the trigger, not the page, so the dialog animates from the button.
+                    .confirmationDialog(
+                        "Remove host?",
+                        isPresented: $confirmRemove,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Remove host", role: .destructive) {
+                            context?.forgetHost(hostID)
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Removes this host and its saved connections from this device")
+                    }
                 } footer: {
                     Text("Removes this host and its saved connections from this device")
                 }
@@ -71,18 +84,6 @@ struct HostDetailPage: View {
                 context?.renameHost(hostID, trimmed)
             }
         }
-        .confirmationDialog(
-            "Remove host?",
-            isPresented: $confirmRemove,
-            titleVisibility: .visible
-        ) {
-            Button("Remove host", role: .destructive) {
-                context?.forgetHost(hostID)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Removes this host and its saved connections from this device")
-        }
     }
 
     private func connectionKind(_ host: HostSwitchEntry) -> String {
@@ -93,7 +94,7 @@ struct HostDetailPage: View {
     private func lastConnected(_ host: HostSwitchEntry) -> String {
         guard let date = host.lastConnectedAt else { return "Never connected on this device" }
         if host.isCurrent { return "Connected now" }
-        return "Last connected \(HostsPage.relative(date))"
+        return "Last connected \(PaseoFormat.relative(date))"
     }
 }
 #endif

@@ -28,8 +28,60 @@ struct ClaudeHistoryView: View {
     var body: some View {
         SheetScaffold("History", detents: .large, onClose: onClose) {
             VStack(spacing: 0) {
-                searchField
-                content
+                HistorySearchField(text: $searchText)
+                switch lifecycle.phase {
+                case .idle, .loading:
+                    LoadingState("Loading history…")
+                case .failed(let message):
+                    EmptyState(
+                        systemImage: "exclamationmark.circle",
+                        title: "Couldn't load agent history",
+                        message: message,
+                        action: (title: "Try again", run: { Task { await lifecycle.load(); rebuild() } })
+                    )
+                case .ready:
+                    if model.isEmpty {
+                        EmptyState(
+                            systemImage: "clock.arrow.2.circlepath",
+                            title: "No sessions yet",
+                            message: "Start one from the sidebar."
+                        )
+                    } else if model.groups.isEmpty {
+                        EmptyState(
+                            systemImage: "clock.arrow.2.circlepath",
+                            title: "No sessions match",
+                            message: "Try a different title."
+                        )
+                    } else {
+                        PageList {
+                            ForEach(model.groups) { group in
+                                Section {
+                                    ForEach(group.rows) { row in
+                                        HistoryRow(
+                                            row: row,
+                                            isUnarchiving: unarchivingAgentID == row.id,
+                                            onOpen: { requestOpen(row) },
+                                            onRename: { beginRename(row.agent) },
+                                            onCopyID: { copyID(row.agent) },
+                                            onArchive: { requestArchive(row.agent) },
+                                            onDelete: { agentPendingDelete = row.agent }
+                                        )
+                                    }
+                                } header: {
+                                    Text(group.label)
+                                }
+                            }
+                            if lifecycle.hasMore {
+                                HistoryLoadMoreRow(
+                                    isLoading: lifecycle.isLoadingMore, action: loadMore)
+                            }
+                        }
+                        .refreshable {
+                            await lifecycle.load()
+                            rebuild()
+                        }
+                    }
+                }
             }
         }
         .task {
@@ -39,8 +91,9 @@ struct ClaudeHistoryView: View {
                 rebuild()
             }
         }
-        .onChange(of: lifecycle.entries.count) { _, _ in rebuild() }
-        .onChange(of: lifecycle.entries.last?.id) { _, _ in rebuild() }
+        // Rename and archive patch an entry in place, so the count and last id stay the same:
+        // watch the entries themselves.
+        .onChange(of: lifecycle.entries) { rebuild() }
         .task(id: searchText) {
             // 120 ms debounce: the filter runs on the precomputed keys only.
             try? await Task.sleep(for: .milliseconds(120))
@@ -57,7 +110,7 @@ struct ClaudeHistoryView: View {
                 guard let agent = renamingAgent else { return }
                 let next = renameText
                 renamingAgent = nil
-                Task { await lifecycle.rename(agentId: agent.id, to: next) }
+                Task { await rename(agent, to: next) }
             }
         } message: { _ in
             Text("Choose a short name for this agent.")
@@ -89,199 +142,6 @@ struct ClaudeHistoryView: View {
             Button("Cancel", role: .cancel) { agentPendingDelete = nil }
         } message: { _ in
             Text("This removes its history for good.")
-        }
-    }
-
-    // MARK: Search
-
-    private var searchField: some View {
-        HStack(spacing: Space.sm) {
-            Image(systemName: "magnifyingglass")
-                .font(.glyph(.small))
-                .foregroundStyle(Palette.secondaryInk)
-            TextField("Search history", text: $searchText)
-                .font(.paseo(.callout))
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .accessibilityIdentifier("history.search")
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.glyph(.small))
-                        .foregroundStyle(Palette.tertiaryInk)
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, Space.md)
-        .frame(height: 44)
-        .background(Palette.chip, in: .rect(cornerRadius: Radius.sm))
-        .padding(.horizontal, Space.lg)
-        .padding(.bottom, Space.sm)
-    }
-
-    // MARK: Content
-
-    @ViewBuilder private var content: some View {
-        switch lifecycle.phase {
-        case .idle, .loading:
-            LoadingState("Loading history…")
-        case .failed(let message):
-            EmptyState(
-                systemImage: "exclamationmark.circle",
-                title: "Couldn't load agent history",
-                message: message,
-                action: (title: "Try again", run: { Task { await lifecycle.load(); rebuild() } })
-            )
-        case .ready:
-            if model.isEmpty {
-                emptyState
-            } else if model.groups.isEmpty {
-                EmptyState(
-                    systemImage: "clock.arrow.2.circlepath",
-                    title: "No sessions match",
-                    message: "Try a different title."
-                )
-            } else {
-                list
-            }
-        }
-    }
-
-    private var emptyState: some View {
-        EmptyState(
-            systemImage: "clock.arrow.2.circlepath",
-            title: "No sessions yet",
-            message: "Start one from the sidebar."
-        )
-    }
-
-    private var list: some View {
-        PageList {
-            ForEach(model.groups) { group in
-                Section {
-                    ForEach(group.rows) { row in
-                        rowView(row)
-                    }
-                } header: {
-                    Text(group.label)
-                }
-            }
-            if lifecycle.hasMore {
-                Button {
-                    Task {
-                        await lifecycle.loadMore()
-                        rebuild()
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if lifecycle.isLoadingMore {
-                            InlineProgress()
-                        } else {
-                            Text("Load more")
-                                .font(.paseo(.callout, weight: .medium))
-                                .foregroundStyle(Palette.secondaryInk)
-                        }
-                        Spacer()
-                    }
-                    .frame(minHeight: 44)
-                }
-                .panelRow(Palette.background)
-                .accessibilityLabel("Load more")
-            }
-        }
-        .refreshable {
-            await lifecycle.load()
-            rebuild()
-        }
-    }
-
-    // MARK: Rows
-
-    private func rowView(_ row: HistoryModel.Row) -> some View {
-        HStack(spacing: 0) {
-            ListRow(title: row.title, subtitle: row.subtitle, action: { requestOpen(row) })
-            trailing(row)
-        }
-        .panelRow()
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(row.archived ? "Archived agent" : "Open agent") \(row.title)")
-        .contextMenu { rowMenu(row) }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if row.archived {
-                Button(role: .destructive) {
-                    agentPendingDelete = row.agent
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            } else {
-                Button(role: .destructive) {
-                    requestArchive(row.agent)
-                } label: {
-                    Label("Archive", systemImage: "archivebox")
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private func trailing(_ row: HistoryModel.Row) -> some View {
-        if unarchivingAgentID == row.id {
-            InlineProgress()
-                .padding(.trailing, Space.lg)
-        } else {
-            VStack(alignment: .trailing, spacing: Space.xs) {
-                if row.archived {
-                    Text("Archived")
-                        .font(.paseo(.caption2, weight: .semibold))
-                        .foregroundStyle(Palette.tertiaryInk)
-                        .padding(.horizontal, Space.sm)
-                        .padding(.vertical, 2)
-                        .background(Palette.chip, in: .capsule)
-                }
-                Text(row.date.map(relativeAge) ?? "")
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(Palette.captionInk)
-            }
-            .padding(.trailing, Space.lg)
-        }
-    }
-
-    @ViewBuilder private func rowMenu(_ row: HistoryModel.Row) -> some View {
-        Button {
-            requestOpen(row)
-        } label: {
-            Label("Open", systemImage: "arrow.up.forward.app")
-        }
-        Button {
-            beginRename(row.agent)
-        } label: {
-            Label("Rename…", systemImage: "pencil")
-        }
-        Button {
-            Clipboard.copy(row.agent.id)
-            toast?.show("Agent ID copied")
-        } label: {
-            Label("Copy agent ID", systemImage: "doc.on.doc")
-        }
-        Divider()
-        if row.archived {
-            Button(role: .destructive) {
-                agentPendingDelete = row.agent
-            } label: {
-                Label("Delete permanently", systemImage: "trash")
-            }
-        } else {
-            Button(role: .destructive) {
-                requestArchive(row.agent)
-            } label: {
-                Label("Archive agent", systemImage: "archivebox")
-            }
         }
     }
 
@@ -339,14 +199,29 @@ struct ClaudeHistoryView: View {
         await session.refreshAgents()
     }
 
+    private func copyID(_ agent: AgentSnapshot) {
+        Clipboard.copy(agent.id)
+        toast?.show("Agent ID copied")
+    }
+
+    private func loadMore() {
+        Task {
+            await lifecycle.loadMore()
+            rebuild()
+        }
+    }
+
+    /// A failed rename (empty name, network) says so, like archive and delete do.
+    private func rename(_ agent: AgentSnapshot, to name: String) async {
+        guard await lifecycle.rename(agentId: agent.id, to: name) else {
+            toast?.show(lifecycle.actionError ?? "Couldn't rename the agent.")
+            return
+        }
+    }
+
     private func beginRename(_ agent: AgentSnapshot) {
         renameText = HistoryModel.title(for: agent)
         renamingAgent = agent
-    }
-
-    /// `2m ago`, `yesterday`: `PaseoFormat` owns the wording (UX-SPEC §0.2).
-    private func relativeAge(_ date: Date) -> String {
-        PaseoFormat.relative(date)
     }
 
     // MARK: Rebuild

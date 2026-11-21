@@ -18,6 +18,8 @@ struct WorkThoughtSection: View {
 
     @State private var userOpen: Bool?
     @State private var liveSince = Date.now
+    /// Counts the reader's taps so the haptic plays for them and not for a find opening the section.
+    @State private var toggleCount = 0
     @AppStorage("paseo.reasoning.alwaysExpand") private var alwaysExpand = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -51,12 +53,13 @@ struct WorkThoughtSection: View {
                     .transition(.opacity)
             }
         }
-        .background { WorkFindWash(highlighted: highlighted) }
+        .background { FindWash(highlighted: highlighted, bleed: 4) }
+        .paseoFeedback(.selection, trigger: toggleCount)
         .onChange(of: findTarget, initial: true) { _, target in reveal(target) }
     }
 
     private func toggle() {
-        Haptics.selection()
+        toggleCount += 1
         withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
             userOpen = !isOpen
         }

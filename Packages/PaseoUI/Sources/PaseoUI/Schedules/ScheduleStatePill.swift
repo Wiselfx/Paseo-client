@@ -9,10 +9,10 @@ struct ScheduleStatePill: View {
 
     var body: some View {
         Text(label)
-            .font(.paseo(.caption2, weight: .medium))
+            .font(.paseo(.caption, weight: .medium))
             .foregroundStyle(ink)
-            .padding(.horizontal, 8)
-            .frame(height: 18)
+            .padding(.horizontal, Space.sm)
+            .frame(minHeight: 18)
             .background(ink.opacity(0.16), in: .rect(cornerRadius: Radius.xs))
             .accessibilityLabel(label)
     }
@@ -44,45 +44,47 @@ struct ScheduleStatePill: View {
     return PaseoFormat.dateTime(date)
 }
 
-/// "In 3h", "Tomorrow at 09:00" for a next-run caption; "Not scheduled" when missing.
+/// "in 3 hr.", "Tomorrow at 09:00" for a next-run caption; "Not scheduled" when missing. The
+/// relative part comes from the system formatter, so units and plurals follow the locale.
 @MainActor func scheduleNextRun(_ iso: String?) -> String {
     guard let iso, let date = PaseoDate.parse(iso) else { return "Not scheduled" }
     let seconds = date.timeIntervalSinceNow
     if seconds < 0 { return "Overdue" }
-    if seconds < 3600 { return "In \(max(1, Int(seconds / 60))) min" }
-    if seconds < 86_400 { return "In \(Int(seconds / 3600))h" }
+    if seconds < 86_400 { return date.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated)) }
     let days = Int(seconds / 86_400)
     return days == 1
         ? "Tomorrow at \(PaseoFormat.time(date))"
-        : "In \(days) days · \(PaseoFormat.dateTime(date))"
+        : "\(date.formatted(.relative(presentation: .numeric, unitsStyle: .wide))) · \(PaseoFormat.dateTime(date))"
 }
 
 func scheduleDuration(_ start: String, _ end: String?) -> String {
     guard let startDate = PaseoDate.parse(start) else { return "—" }
-    let endDate = end.flatMap(PaseoDate.parse) ?? Date()
+    let endDate = end.flatMap(PaseoDate.parse) ?? .now
     let seconds = max(0, endDate.timeIntervalSince(startDate))
     if seconds < 1 { return "<1s" }
-    if seconds < 60 { return "\(Int(seconds))s" }
-    return "\(Int(seconds / 60))m \(Int(seconds.truncatingRemainder(dividingBy: 60)))s"
+    return Duration.seconds(seconds.rounded(.down))
+        .formatted(.units(allowed: [.minutes, .seconds], width: .narrow))
 }
 
 extension ScheduleCadence {
     /// The cadence line for the list: human words in the device time zone, never the raw expression.
-    var words: String {
+    /// Views pass `@Environment(\.timeZone)` and compute it once per body, since each call runs the
+    /// next-occurrence calendar math.
+    func words(now: Date = .now, timeZone: TimeZone = .current) -> String {
         switch self {
         case .every(let everyMs): ScheduleWords.cadence(everyMs: everyMs)
         case .cron(let expression, let timezone):
-            CronDescription.describe(expression: expression, scheduleTimeZone: timezone, now: Date(), deviceTimeZone: .current)
+            CronDescription.describe(expression: expression, scheduleTimeZone: timezone, now: now, deviceTimeZone: timeZone)
         case .unknown: CronDescription.custom
         }
     }
 
     /// The raw expression for the detail page only, when the cadence has no human words.
-    var detailRawExpression: String? {
+    func detailRawExpression(now: Date = .now, timeZone: TimeZone = .current) -> String? {
         switch self {
         case .every: nil
         case .cron(let expression, let timezone):
-            CronDescription.isCustom(expression: expression, scheduleTimeZone: timezone, now: Date(), deviceTimeZone: .current) ? expression : nil
+            CronDescription.isCustom(expression: expression, scheduleTimeZone: timezone, now: now, deviceTimeZone: timeZone) ? expression : nil
         case .unknown(let raw): raw
         }
     }
@@ -96,9 +98,10 @@ extension ScheduleCadence {
     }
 
     /// The detail-page cadence line: the list words plus the schedule time zone, when present.
-    var detailWords: String {
-        guard let scheduleTimeZone else { return words }
-        return "\(words) · \(scheduleTimeZone)"
+    func detailWords(now: Date = .now, timeZone: TimeZone = .current) -> String {
+        let line = words(now: now, timeZone: timeZone)
+        guard let scheduleTimeZone else { return line }
+        return "\(line) · \(scheduleTimeZone)"
     }
 }
 

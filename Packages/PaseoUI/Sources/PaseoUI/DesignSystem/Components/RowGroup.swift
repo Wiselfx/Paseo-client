@@ -3,10 +3,14 @@ import SwiftUI
 
 /// A grouped block of rows: the panel fill at `Radius.group`, with `RowDivider` between rows.
 struct RowGroup<Content: View>: View {
-    @ViewBuilder var content: () -> Content
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
 
     var body: some View {
-        VStack(spacing: 0, content: content)
+        VStack(spacing: 0) { content }
             .background(Palette.panel, in: .rect(cornerRadius: Radius.group))
     }
 }

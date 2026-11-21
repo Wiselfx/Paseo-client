@@ -20,13 +20,13 @@ struct ChatSheets: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(item: $controller.sheet) { item in
-                sheet(item)
+                ChatSheetRouter(item: item, store: store, session: session, controller: controller)
             }
             .sheet(isPresented: $controller.showContextSheet) {
                 ClaudeContextSheet(store: store)
             }
-            .sheet(isPresented: openFilePathBinding) {
-                fileSheetContent
+            .sheet(isPresented: $controller.isFileViewerOpen) {
+                ChatFileSheet(store: store, session: session, controller: controller)
             }
             .fullScreenCover(item: $controller.inlineImage) { item in
                 InlineProseImageViewer(item: item) { controller.inlineImage = nil }
@@ -82,62 +82,5 @@ struct ChatSheets: ViewModifier {
 
     /// Re-runs the marking task when the snapshot first says this agent is a managed subagent.
     private var openAgentTabKey: String? { isManagedSubagent ? store.agentId : nil }
-
-    @ViewBuilder private func sheet(_ item: ClaudeChatSheet) -> some View {
-        switch item {
-        case .controls:
-            ClaudeAgentControlsSheet(session: session, store: store)
-        case .subagents:
-            ChatSubagentsSheet(
-                session: session, parentAgentId: store.agentId, subagents: store.subagents,
-                hiddenIds: $controller.hiddenSubagentIds,
-                onOpenAgent: { agentId in
-                    controller.sheet = nil
-                    controller.onOpenAgent?(agentId)
-                })
-        case .backgroundWork:
-            ChatBackgroundWorkSheet(backgroundWork: store.backgroundWork)
-        case .media:
-            ChatMediaSheet(store: store)
-        case .turnNav:
-            ChatTurnNavSheet(
-                store: store, items: controller.outlineItems,
-                activeSeq: store.promptOutline.activeSeq
-            ) { seq in
-                controller.sheet = nil
-                controller.jumpToPrompt(seq)
-            }
-        }
-    }
-
-    private var openFilePathBinding: Binding<Bool> {
-        Binding(
-            get: { controller.openFilePath != nil },
-            set: { if !$0 { controller.openFilePath = nil } })
-    }
-
-    @ViewBuilder private var fileSheetContent: some View {
-        if let agent = store.agent,
-            let workspaceId = agent.workspaceId,
-            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
-        {
-            NavigationStack {
-                WorkspaceFileViewer(
-                    checkout: session.checkout(for: workspace),
-                    relPath: controller.openFilePath ?? "",
-                    onBack: { controller.openFilePath = nil },
-                    backLabel: "Files")
-            }
-            .presentationDetents([.large])
-            .presentationDragIndicator(.hidden)
-        } else {
-            // The agent's workspace isn't loaded (rare: directory fetch pending).
-            EmptyState(
-                systemImage: "exclamationmark.triangle", title: "Workspace not available",
-                message: nil,
-                action: (title: "Close", run: { controller.openFilePath = nil }))
-                .presentationDetents([.height(240)])
-        }
-    }
 }
 #endif

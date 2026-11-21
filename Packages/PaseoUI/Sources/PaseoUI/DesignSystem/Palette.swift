@@ -25,50 +25,42 @@ extension EnvironmentValues {
 /// `docs/research/08-dsh-live-observation.md` §5, which overrides doc 06).
 enum Palette {
     /// The chat canvas: #151515 in dark, #FCFCFB in light (OCU §12.4, §12.5).
-    static var background: Color {
-        Color(uiColor: UIColor { traits in
-            if traits[PureBlackTrait.self] {
-                return UIColor(white: 0, alpha: 1)
-            }
-            return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 21 / 255, green: 21 / 255, blue: 21 / 255, alpha: 1)
-                : UIColor(red: 252 / 255, green: 252 / 255, blue: 251 / 255, alpha: 1)
-        })
-    }
+    static let background = Color(uiColor: UIColor { traits in
+        if traits[PureBlackTrait.self] {
+            return UIColor(white: 0, alpha: 1)
+        }
+        return traits.userInterfaceStyle == .dark
+            ? UIColor(red: 21 / 255, green: 21 / 255, blue: 21 / 255, alpha: 1)
+            : UIColor(red: 252 / 255, green: 252 / 255, blue: 251 / 255, alpha: 1)
+    })
     /// The sidebar's canvas, one step below the chat: #0B0B0B in dark, #F4F3EF in light
     /// (Claude's sidebar; OCU §12.4, §12.5).
-    static var sidebar: Color {
-        Color(uiColor: UIColor { traits in
-            if traits[PureBlackTrait.self] {
-                return UIColor(white: 7 / 255, alpha: 1)
-            }
-            return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 11 / 255, green: 11 / 255, blue: 11 / 255, alpha: 1)
-                : UIColor(red: 244 / 255, green: 243 / 255, blue: 239 / 255, alpha: 1)
-        })
-    }
+    static let sidebar = Color(uiColor: UIColor { traits in
+        if traits[PureBlackTrait.self] {
+            return UIColor(white: 7 / 255, alpha: 1)
+        }
+        return traits.userInterfaceStyle == .dark
+            ? UIColor(red: 11 / 255, green: 11 / 255, blue: 11 / 255, alpha: 1)
+            : UIColor(red: 244 / 255, green: 243 / 255, blue: 239 / 255, alpha: 1)
+    })
     /// Cards: #FFFFFF in light, #1A1A19 in dark (OCU §12.4).
-    static var panel: Color {
-        Color(uiColor: UIColor { traits in
-            if traits[PureBlackTrait.self] {
-                return UIColor(white: 15 / 255, alpha: 1)
-            }
-            return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 26 / 255, green: 26 / 255, blue: 25 / 255, alpha: 1)
-                : UIColor(white: 1, alpha: 1)
-        })
-    }
+    static let panel = Color(uiColor: UIColor { traits in
+        if traits[PureBlackTrait.self] {
+            return UIColor(white: 15 / 255, alpha: 1)
+        }
+        return traits.userInterfaceStyle == .dark
+            ? UIColor(red: 26 / 255, green: 26 / 255, blue: 25 / 255, alpha: 1)
+            : UIColor(white: 1, alpha: 1)
+    })
     /// A lifted gray composer card, #20201F in dark (OCU §12.4).
-    static var composer: Color {
-        Color(uiColor: UIColor { traits in
-            if traits[PureBlackTrait.self] {
-                return UIColor(white: 18 / 255, alpha: 1)
-            }
-            return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 32 / 255, green: 32 / 255, blue: 31 / 255, alpha: 1)
-                : UIColor(white: 0.99, alpha: 1)
-        })
-    }
+    static let composer = Color(uiColor: UIColor { traits in
+        if traits[PureBlackTrait.self] {
+            return UIColor(white: 18 / 255, alpha: 1)
+        }
+        return traits.userInterfaceStyle == .dark
+            ? UIColor(red: 32 / 255, green: 32 / 255, blue: 31 / 255, alpha: 1)
+            : UIColor(white: 0.99, alpha: 1)
+    })
     static let composerBorder = Color(
         uiColor: UIColor {
             $0.userInterfaceStyle == .dark
@@ -98,32 +90,28 @@ enum Palette {
     /// The accent fill: the send button and live voice. Claude is the clay in both themes;
     /// Paseo is upstream's `#20744A`, one step lighter in dark so it keeps contrast on #151515.
     /// Brand marks keep `orange`.
-    static var accent: Color {
-        Color(uiColor: UIColor { traits in
-            switch traits[AccentTrait.self] {
-            case .claude:
-                return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
-            case .paseo:
-                return traits.userInterfaceStyle == .dark
-                    ? UIColor(red: 46 / 255, green: 138 / 255, blue: 92 / 255, alpha: 1)
-                    : UIColor(red: 32 / 255, green: 116 / 255, blue: 74 / 255, alpha: 1)
-            }
-        })
-    }
+    static let accent = Color(uiColor: UIColor { traits in
+        switch traits[AccentTrait.self] {
+        case .claude:
+            return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
+        case .paseo:
+            return traits.userInterfaceStyle == .dark
+                ? UIColor(red: 46 / 255, green: 138 / 255, blue: 92 / 255, alpha: 1)
+                : UIColor(red: 32 / 255, green: 116 / 255, blue: 74 / 255, alpha: 1)
+        }
+    })
 
     /// Accent-coloured glyphs and text. Paseo's dark value is upstream's `accentBright`.
-    static var accentInk: Color {
-        Color(uiColor: UIColor { traits in
-            switch traits[AccentTrait.self] {
-            case .claude:
-                return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
-            case .paseo:
-                return traits.userInterfaceStyle == .dark
-                    ? UIColor(red: 124 / 255, green: 203 / 255, blue: 160 / 255, alpha: 1)
-                    : UIColor(red: 32 / 255, green: 116 / 255, blue: 74 / 255, alpha: 1)
-            }
-        })
-    }
+    static let accentInk = Color(uiColor: UIColor { traits in
+        switch traits[AccentTrait.self] {
+        case .claude:
+            return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
+        case .paseo:
+            return traits.userInterfaceStyle == .dark
+                ? UIColor(red: 124 / 255, green: 203 / 255, blue: 160 / 255, alpha: 1)
+                : UIColor(red: 32 / 255, green: 116 / 255, blue: 74 / 255, alpha: 1)
+        }
+    })
 
     /// The glyph on an accent fill: white in both themes, for both accents.
     static let onAccent = Color(uiColor: UIColor { _ in .white })
@@ -156,16 +144,14 @@ enum Palette {
                 : UIColor(red: 24 / 255, green: 79 / 255, blue: 149 / 255, alpha: 1)
         })
     /// The code-block surface: #FFFFFF light / #212121 dark (`--dsw-alias-markdown-code-block`).
-    static var codeSurface: Color {
-        Color(uiColor: UIColor { traits in
-            if traits[PureBlackTrait.self] {
-                return UIColor(white: 17 / 255, alpha: 1)
-            }
-            return traits.userInterfaceStyle == .dark
-                ? UIColor(red: 33 / 255, green: 33 / 255, blue: 33 / 255, alpha: 1)
-                : UIColor(white: 1, alpha: 1)
-        })
-    }
+    static let codeSurface = Color(uiColor: UIColor { traits in
+        if traits[PureBlackTrait.self] {
+            return UIColor(white: 17 / 255, alpha: 1)
+        }
+        return traits.userInterfaceStyle == .dark
+            ? UIColor(red: 33 / 255, green: 33 / 255, blue: 33 / 255, alpha: 1)
+            : UIColor(white: 1, alpha: 1)
+    })
     /// `--dsh-claude-inline-code-bg`: rgba(6,6,6,0.05) light / rgba(255,255,255,0.05) dark.
     static let inlineCodeFill = Color(
         uiColor: UIColor {
@@ -234,18 +220,16 @@ enum Palette {
         })
     /// The send button (and live voice, the same morphing button): iMessage blue in Paseo, the clay in
     /// Claude.
-    static var sendFill: Color {
-        Color(uiColor: UIColor { traits in
-            switch traits[AccentTrait.self] {
-            case .claude:
-                return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
-            case .paseo:
-                return traits.userInterfaceStyle == .dark
-                    ? UIColor(red: 10 / 255, green: 132 / 255, blue: 255 / 255, alpha: 1)
-                    : UIColor(red: 0, green: 122 / 255, blue: 255 / 255, alpha: 1)
-            }
-        })
-    }
+    static let sendFill = Color(uiColor: UIColor { traits in
+        switch traits[AccentTrait.self] {
+        case .claude:
+            return UIColor(red: 217 / 255, green: 119 / 255, blue: 87 / 255, alpha: 1)
+        case .paseo:
+            return traits.userInterfaceStyle == .dark
+                ? UIColor(red: 10 / 255, green: 132 / 255, blue: 255 / 255, alpha: 1)
+                : UIColor(red: 0, green: 122 / 255, blue: 255 / 255, alpha: 1)
+        }
+    })
     /// `--dsh-claude-chip`, the hover/pressed plate. The selected sidebar row reads through this
     /// token; on the darker #F4F3EF canvas the plate steps down to 0.93 so the pill stays visible
     /// (was 0.965 on #F9F9F7).

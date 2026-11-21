@@ -1,4 +1,6 @@
 #if canImport(UIKit)
+import SwiftUI
+
 /// One fenced code block, highlighted **after** first paint (R9 §1).
 ///
 /// The plain mono text is what mounts; the actor's tokens arrive a moment later and replace it with
@@ -19,11 +21,13 @@ struct ClaudeHighlightedCode: View {
         colorScheme == .dark ? .dark : .light
     }
 
-    /// Identity of the request: language, theme and the text's length. The actor caches on the
-    /// source hash, so two revisions of different length are two entries, and a re-render of the
-    /// same block asks for the same one.
+    /// Identity of the request: language, theme, the text's length and whether the turn is still
+    /// streaming. The actor caches on the source hash, so two revisions of different length are two
+    /// entries, and a re-render of the same block asks for the same one. Including the stream flag
+    /// makes the task restart when the turn ends, so the final highlight runs in the same
+    /// cancellable task instead of an unstructured one.
     private var requestKey: String {
-        "\(syntaxTheme.rawValue)/\(language ?? "")/\(content.utf16.count)"
+        "\(syntaxTheme.rawValue)/\(language ?? "")/\(content.utf16.count)/\(isStreaming)"
     }
 
     var body: some View {
@@ -34,15 +38,7 @@ struct ClaudeHighlightedCode: View {
                 guard !isStreaming else { return }
                 let result = await CodeHighlighter.shared.highlight(
                     content, language: language, theme: syntaxTheme)
-                if highlighted != result { highlighted = result }
-            }
-            .onChange(of: isStreaming) { _, streaming in
-                guard !streaming else { return }
-                Task {
-                    let result = await CodeHighlighter.shared.highlight(
-                        content, language: language, theme: syntaxTheme)
-                    if highlighted != result { highlighted = result }
-                }
+                if !Task.isCancelled, highlighted != result { highlighted = result }
             }
     }
 }

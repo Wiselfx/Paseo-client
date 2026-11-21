@@ -33,6 +33,8 @@ struct RichFileCard: View {
     @State private var showShare = false
     @State private var overLimit = false
     @State private var loadFailed = false
+    /// Bumped when a tap starts a download: the light haptic, once per tap.
+    @State private var downloadTap = 0
 
     private var fileExtension: String {
         (path as NSString).pathExtension.lowercased()
@@ -68,23 +70,13 @@ struct RichFileCard: View {
 
     private var metaText: String? {
         guard let size = resolvedSize else { return parentDirectory }
-        return "\(parentDirectory) · \(Self.byteCount(size))"
+        return "\(parentDirectory) · \(size.formatted(.byteCount(style: .file)))"
     }
 
     /// The raw parent path for the daemon listing (never the truncated display form).
     private var rawParentDirectory: String {
         let parent = (path as NSString).deletingLastPathComponent
         return parent.isEmpty ? "/" : parent
-    }
-
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
-
-    private static func byteCount(_ bytes: Int64) -> String {
-        byteFormatter.string(fromByteCount: bytes)
     }
 
     private var ref: DaemonFileRef? {
@@ -124,55 +116,13 @@ struct RichFileCard: View {
     }
 
     var body: some View {
-        Button {
-            open()
-        } label: {
+        // Read once: until the size lands each read searches the cached directory listing.
+        let meta = metaText
+        Button(action: open) {
             PaseoCard(content:
-                HStack(spacing: Space.sm) {
-                    if let pdfThumbnail {
-                        Image(uiImage: pdfThumbnail)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 44, height: 44)
-                            .clipShape(.rect(cornerRadius: Radius.sm, style: .continuous))
-                            .accessibilityHidden(true)
-                    } else {
-                        Image(systemName: glyph)
-                            .font(.glyph(.regular, weight: .medium))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .frame(width: Metrics.hitSize - Space.md, alignment: .center)
-                            .accessibilityHidden(true)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(fileName)
-                            .font(.paseo(.callout))
-                            .foregroundStyle(Palette.ink)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        if let metaText {
-                            Text(metaText)
-                                .font(.paseo(.caption))
-                                .foregroundStyle(Palette.secondaryInk)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    if downloading {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(Palette.secondaryInk)
-                            .frame(width: Metrics.hitSize, height: Metrics.hitSize)
-                            .accessibilityLabel("Downloading file")
-                    } else {
-                        Image(systemName: "chevron.right")
-                            .font(.glyph(.small, weight: .semibold))
-                            .foregroundStyle(Palette.tertiaryInk)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .frame(minHeight: Metrics.rowCardMinHeight - Space.md * 2)
-                .contentShape(.rect))
+                RichFileRow(
+                    fileName: fileName, meta: meta, glyph: glyph,
+                    thumbnail: pdfThumbnail, downloading: downloading))
         }
         .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
         .paseoCardMenu(
@@ -182,7 +132,8 @@ struct RichFileCard: View {
             copyTitle: "Copy path",
             copyText: path,
             filePath: path)
-        .paseoCardAccessibility(kind: "File", title: fileName, meta: metaText, isButton: true)
+        .paseoCardAccessibility(kind: "File", title: fileName, meta: meta, isButton: true)
+        .paseoFeedback(.light, trigger: downloadTap)
         .task(id: path) { await loadMetadata() }
         .fullScreenCover(isPresented: $showQuickLook) {
             if let downloadedURL {
@@ -234,14 +185,7 @@ struct RichFileCard: View {
         else { return }
         guard case .bytes(let bytes) = await MediaPipeline.shared.fetchDaemonFile(ref: ref, maxBytes: 5 * 1024 * 1024) else { return }
         let width = 44 * displayScale
-        let thumbnail = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            guard let document = PDFDocument(data: bytes.data), let page = document.page(at: 0) else {
-                return nil
-            }
-            let box = page.bounds(for: .mediaBox)
-            let ratio = box.width / max(box.height, 1)
-            return page.thumbnail(of: CGSize(width: width, height: max(width / max(ratio, 0.01), 1)), for: .mediaBox)
-        }.value
+        let thumbnail = await RichPDFThumbnail.render(data: bytes.data, width: width)
         guard !Task.isCancelled else { return }
         pdfThumbnail = thumbnail
     }
@@ -255,15 +199,8 @@ struct RichFileCard: View {
         }
         // The 64 MB cap row and the failure row both retry on tap: the cap retries
         // into the same honest answer, a failure retries the fetch.
-        if overLimit || loadFailed {
-            overLimit = false
-            Haptics.light()
-            Task { @MainActor in
-                await downloadAndPreview()
-            }
-            return
-        }
-        Haptics.light()
+        overLimit = false
+        downloadTap += 1
         Task { @MainActor in
             await downloadAndPreview()
         }

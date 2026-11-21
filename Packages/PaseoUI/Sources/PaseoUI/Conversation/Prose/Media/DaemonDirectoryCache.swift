@@ -34,7 +34,7 @@ final class DaemonDirectoryCache {
     func cached(workspaceID: String, dir: String) -> [FileExplorerEntry]? {
         guard let entry = table[key(workspaceID: workspaceID, dir: dir)],
             let result = entry.result,
-            Date().timeIntervalSince(entry.at) < ttl
+            Date.now.timeIntervalSince(entry.at) < ttl
         else { return nil }
         return result
     }
@@ -56,7 +56,7 @@ final class DaemonDirectoryCache {
         // Direct await, no Task: the fetch closure is workspace-scoped and
         // non-Sendable, and this cache never leaves the main actor.
         let result = await fetch(workspaceID, dir)
-        table[cacheKey] = Entry(result: result, at: Date())
+        table[cacheKey] = Entry(result: result, at: Date.now)
         for waiter in waiters[cacheKey, default: []] {
             waiter.resume(returning: result)
         }

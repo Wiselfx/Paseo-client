@@ -142,20 +142,20 @@ struct ClaudeTurnView: View {
     /// the answer below it is never clipped, so there is no separate "Show more".
     var turnSummaryLabel: String { TurnSummary(turn: turn).detailsLabel }
 
-    /// "Sent by {{name}}" above the bubble (upstream `user-message/index.tsx:95`, rendered
-    /// from `message.tsx:481`), named by `agentTitle` (see `ClaudeSentByLine`).
-    @ViewBuilder func sentByLine(_ sender: TimelineItem.AgentMessage.Sender) -> some View {
-        ClaudeSentByLine(sender: sender)
-    }
-
     var body: some View {
         let _ = PaseoPerf.body("TurnView")
         let _ = PaseoPerf.why(Self.self)
-        if showsCollapsedTurn {
-            collapsedTurn
-        } else {
-            fullTurn
+        // The haptics sit outside the branch: opening the folded turn removes `collapsedTurn`
+        // from the tree, and a modifier attached inside it would go with it.
+        Group {
+            if showsCollapsedTurn {
+                collapsedTurn
+            } else {
+                fullTurn
+            }
         }
+        .paseoFeedback(.selection, trigger: userExpanded) { _, new in new != nil }
+        .paseoFeedback(.selection, trigger: userExpandedTurn) { _, new in new != nil }
     }
 
     /// The folded turn: the prompt plus the turn summary, then the answer in full.
@@ -163,26 +163,14 @@ struct ClaudeTurnView: View {
     @ViewBuilder private var collapsedTurn: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
-                if let sender = message.sender { sentByLine(sender) }
-                // Upstream shows the rewind control only on an acknowledged message with text
-                // (message.tsx:422 showTrailingRow, :514 hasText, :530 messageId).
-                let rewindable = message.messageId != nil && !message.text.isEmpty
-                    && !row.isPending && !rewindChoices.isEmpty
-                ClaudeUserBubble(
-                    text: message.text, isPending: row.isPending,
-                    rewindChoices: rewindable ? rewindChoices : [],
-                    onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
-                    rewindInFlight: rewindInFlight,
-                    clientMessageId: message.clientMessageId,
-                    sentAt: PaseoDate.parse(row.timestamp)
-                )
-                .rowAnchor(row.seqEnd)
-                .background(findHighlight(row.seqEnd))
+                TurnPrompt(
+                    row: row, message: message,
+                    rewindChoices: rewindChoices, rewindInFlight: rewindInFlight,
+                    isHighlighted: highlightedSeq == row.seqEnd, onRewind: onRewind)
             }
             // Upstream TurnSummaryLine sits under the user message, above the final reply, and
             // opens the turn's work.
             Button {
-                Haptics.selection()
                 withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                     userExpandedTurn = true
                 }
@@ -199,6 +187,8 @@ struct ClaudeTurnView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(turnSummaryLabel)
+            .accessibilityValue("Collapsed")
+            .accessibilityHint("Shows the work in this turn")
             // Messages sent mid-turn and compaction markers stay visible while the work is folded.
             ForEach(visibleRows) { row in
                 ClaudeVisibleRow(row: row, highlightedSeq: highlightedSeq)
@@ -225,22 +215,10 @@ struct ClaudeTurnView: View {
     private var fullTurn: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let row = turn.userMessage, case .userMessage(let message) = row.item {
-                // The provider has to acknowledge the prompt before it can be rewound to.
-                if let sender = message.sender { sentByLine(sender) }
-                // Upstream shows the rewind control only on an acknowledged message with text
-                // (message.tsx:422 showTrailingRow, :514 hasText, :530 messageId).
-                let rewindable = message.messageId != nil && !message.text.isEmpty
-                    && !row.isPending && !rewindChoices.isEmpty
-                ClaudeUserBubble(
-                    text: message.text, isPending: row.isPending,
-                    rewindChoices: rewindable ? rewindChoices : [],
-                    onRewind: rewindable ? { scope in onRewind?(scope, message.messageId ?? "") } : nil,
-                    rewindInFlight: rewindInFlight,
-                    clientMessageId: message.clientMessageId,
-                    sentAt: PaseoDate.parse(row.timestamp)
-                )
-                .rowAnchor(row.seqEnd)
-                .background(findHighlight(row.seqEnd))
+                TurnPrompt(
+                    row: row, message: message,
+                    rewindChoices: rewindChoices, rewindInFlight: rewindInFlight,
+                    isHighlighted: highlightedSeq == row.seqEnd, onRewind: onRewind)
             }
             if showsHeader { header }
             if isExpanded, !bodySegments.isEmpty {
@@ -265,7 +243,7 @@ struct ClaudeTurnView: View {
             if let answerProse, case .assistantMessage(let message) = answerProse.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: isRunning)
                     .rowAnchor(answerProse.seqEnd)
-                    .background(findHighlight(answerProse.seqEnd))
+                    .background { FindWash(highlighted: highlightedSeq == answerProse.seqEnd) }
             }
             if let todoState = turn.todoState {
                 // One card per turn for its todos and plan (live while running).
@@ -295,13 +273,6 @@ struct ClaudeTurnView: View {
                 withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { userExpanded = nil }
             }
         }
-    }
-
-    /// A brief wash on the matched row; `findHighlight` reads the view's flash parameter.
-    func findHighlight(_ seqEnd: Int) -> some View {
-        RoundedRectangle(cornerRadius: Radius.md)
-            .fill(Palette.warning.opacity(highlightedSeq == seqEnd ? 0.18 : 0))
-            .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
     }
 
     var copyText: String {
@@ -388,7 +359,6 @@ struct ClaudeTurnView: View {
     }
 
     func toggleWork() {
-        Haptics.selection()
         withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
             userExpanded = !isExpanded
         }

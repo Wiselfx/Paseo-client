@@ -18,7 +18,7 @@ struct SubagentPill: View {
             SubagentTrackPill(items: visible, managed: managed) {
                 controller.sheet = .subagents
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Space.lg)
             .padding(.bottom, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
         }

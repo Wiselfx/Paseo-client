@@ -683,10 +683,8 @@ public final class HostSettingsStore {
         }
     }
 
-    private static func timestamp(_ date: Date = Date()) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+    private static func timestamp(_ date: Date = .now) -> String {
+        date.ISO8601Format(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
     }
 }
 

@@ -187,18 +187,9 @@ final class VoiceAudioEngine {
     /// capture has already latched it.
     private func enableVoiceProcessingOffMain() async {
         guard !voiceProcessingEnabled else { return }
-        nonisolated(unsafe) let input = engine.inputNode
+        let box = VoiceInputNodeBox(node: engine.inputNode)
         do {
-            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    do {
-                        try input.setVoiceProcessingEnabled(true)
-                        cont.resume()
-                    } catch {
-                        cont.resume(throwing: error)
-                    }
-                }
-            }
+            try await Self.reconfigureInputOffMain(box)
             voiceProcessingEnabled = true
             // Upstream mutes the voice-processing input whenever it is not recording, so a lane
             // that only plays audio never holds the mic open.
@@ -209,6 +200,12 @@ final class VoiceAudioEngine {
             VoiceLog.log.error(
                 "capture: voice processing unavailable, continuing without AEC — \(nsError.domain, privacy: .public) \(nsError.code)")
         }
+    }
+
+    /// `@concurrent`: the blocking reconfigure runs off the main actor, stated once here. The input
+    /// node travels in `VoiceInputNodeBox` (see that type for why it is `Sendable`).
+    @concurrent nonisolated private static func reconfigureInputOffMain(_ box: VoiceInputNodeBox) async throws {
+        try box.node.setVoiceProcessingEnabled(true)
     }
 
     /// Echo cancellation (E1 §3.3). Without it the speaker's audio comes back through the mic:
@@ -547,7 +544,7 @@ final class VoiceAudioEngine {
         VoiceLog.log.info(
             "capture: AEC warm-up window armed by \(source.rawValue, privacy: .public) — dropping mic for \(VoiceCapturePipeline.warmupDiscardSeconds) s")
         capturePipeline.discardInput(
-            until: Date().timeIntervalSince1970 + VoiceCapturePipeline.warmupDiscardSeconds)
+            until: Date.now.timeIntervalSince1970 + VoiceCapturePipeline.warmupDiscardSeconds)
     }
 
     /// Settings → Diagnostics "Test audio". Upstream plays the thinking-tone blob here
@@ -732,8 +729,7 @@ final class VoiceAudioEngine {
 
     /// mp3/wav chunks arrive as a whole file; decode it through a temp file.
     private static func decodedFileBuffer(data: Data, suffix: String) -> AVAudioPCMBuffer? {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("paseo-audio-\(UUID().uuidString).\(suffix)")
+        let url = URL.temporaryDirectory.appending(path: "paseo-audio-\(UUID().uuidString).\(suffix)")
         defer { try? FileManager.default.removeItem(at: url) }
         guard (try? data.write(to: url)) != nil,
             let file = try? AVAudioFile(forReading: url),

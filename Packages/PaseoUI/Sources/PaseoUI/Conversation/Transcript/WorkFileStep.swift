@@ -43,7 +43,10 @@ struct WorkFileStep: View {
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center, spacing: 7) {
-                    toggle {
+                    WorkDisclosureButton(
+                        isExpanded: isExpanded, accessibilityLabel: "\(verb) \(call.fileName)",
+                        accessibilityDetails: spokenDetails, action: toggleExpanded
+                    ) {
                         Text(verb)
                             .font(.paseo(.processTitle, weight: .medium))
                             .foregroundStyle(Palette.secondaryInk)
@@ -73,7 +76,12 @@ struct WorkFileStep: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open \(call.fileName)")
-                    toggle {
+                    // The verb toggle above speaks for this one; its outcome and diff stat are in
+                    // that toggle's value.
+                    WorkDisclosureButton(
+                        isExpanded: isExpanded, accessibilityLabel: "\(verb) \(call.fileName)",
+                        hidesFromVoiceOver: true, action: toggleExpanded
+                    ) {
                         HStack(spacing: 8) {
                             Spacer(minLength: 4)
                             if let last, last.status == .failed { WorkOutcome(call: last) }
@@ -101,17 +109,25 @@ struct WorkFileStep: View {
         .paseoFeedback(.selection, trigger: userExpanded)
     }
 
-    private func toggle<Label: View>(@ViewBuilder label: () -> Label) -> some View {
-        Button {
-            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                userExpanded = !isExpanded
-            }
-        } label: {
-            label()
+    /// The diff stat and a failure, which the trailing part of the line draws and the spoken label
+    /// would otherwise leave out.
+    private var spokenDetails: [String] {
+        var details: [String] = []
+        if let stat = call.diffStat,
+            let text = WorkDiffStat.spokenText(added: stat.added, removed: stat.removed)
+        {
+            details.append(text)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(verb) \(call.fileName)")
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+        if let last, last.status == .failed, let text = WorkOutcome(call: last).accessibilityText {
+            details.append(text)
+        }
+        return details
+    }
+
+    private func toggleExpanded() {
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
+            userExpanded = !isExpanded
+        }
     }
 }
 #endif

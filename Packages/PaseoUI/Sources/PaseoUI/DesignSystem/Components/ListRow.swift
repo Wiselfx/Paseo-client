@@ -45,6 +45,8 @@ struct ListRow: View {
             }
             .buttonStyle(.paseoRow)
             .accessibilityElement(children: .combine)
+            // The checkmark is hidden from VoiceOver, so the selected state is announced instead.
+            .accessibilityAddTraits(isChecked ? .isSelected : [])
         } else {
             row
         }
@@ -57,6 +59,7 @@ struct ListRow: View {
                     .font(.glyph(.regular, weight: .light))
                     .foregroundStyle(Palette.tertiaryInk)
                     .frame(width: 24)
+                    .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -71,7 +74,7 @@ struct ListRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            accessoryView
+            ListRowAccessoryView(accessory: accessory)
         }
         .padding(.horizontal, Space.lg)
         .padding(.vertical, Space.md)
@@ -81,52 +84,13 @@ struct ListRow: View {
         .alignmentGuide(.listRowSeparatorLeading) { _ in titleLeading }
     }
 
+    private var isChecked: Bool {
+        if case .checkmark(true) = accessory { true } else { false }
+    }
+
     /// Where the title starts: past the glyph and its gap when the row has one.
     private var titleLeading: CGFloat {
         systemImage == nil ? Space.lg : Space.lg + 24 + Space.md
-    }
-
-    @ViewBuilder private var accessoryView: some View {
-        switch accessory {
-        case .none:
-            EmptyView()
-        case .chevron:
-            Image(systemName: "chevron.right")
-                .font(.glyph(.small, weight: .semibold))
-                .foregroundStyle(Palette.tertiaryInk)
-        case .disclosure(let text):
-            HStack(spacing: Space.sm) {
-                if let text {
-                    Text(text)
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(1)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.tertiaryInk)
-            }
-        case .checkmark(let isOn):
-            if isOn {
-                Image(systemName: "checkmark")
-                    .font(.glyph(.regular, weight: .semibold))
-                    .foregroundStyle(Palette.selection)
-                    .accessibilityHidden(true)
-            }
-        case .value(let text):
-            Text(text)
-                .font(.paseo(.callout))
-                .foregroundStyle(Palette.secondaryInk)
-                .lineLimit(1)
-        case .toggle(let isOn):
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(Palette.toggleTint)
-        case .badge(let text):
-            StatePill(text, tone: .neutral)
-        case .progress:
-            InlineProgress()
-        }
     }
 }
 

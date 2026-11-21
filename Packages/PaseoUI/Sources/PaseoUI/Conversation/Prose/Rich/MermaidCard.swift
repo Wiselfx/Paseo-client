@@ -85,9 +85,9 @@ struct MermaidCard: View {
     var body: some View {
         PaseoCard(content:
             VStack(alignment: .leading, spacing: 10) {
-                header
+                RichCardSourceHeader(title: "Diagram", showSource: $showSource, hideLabel: "View diagram")
                 if showSource {
-                    source
+                    RichSourcePanel(code: code, role: .codeSmall)
                 } else if let errorMessage, errorMessage == Self.unavailable {
                     unavailableStage
                 } else if let errorMessage {
@@ -101,44 +101,24 @@ struct MermaidCard: View {
         .task(id: renderKey) { await render() }
     }
 
-    private var header: some View {
-        HStack {
-            Text("Diagram")
-                .font(.paseo(.caption, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
-            Button {
-                showSource.toggle()
-            } label: {
-                Text(showSource ? "View diagram" : "View source")
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.vertical, Metrics.cardHeaderVPadding)
-                    .padding(.horizontal, Metrics.cardHeaderHPadding)
-                    .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showSource ? "View diagram" : "View source")
-        }
-    }
-
     @ViewBuilder private var diagram: some View {
         if let image {
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: heightCap)
-                .contentShape(.rect)
-                .modifier(ArtifactZoomSource(id: viewerSourceID, namespace: artifactZoom))
-                .onTapGesture { openViewer() }
-                .accessibilityLabel("Diagram, tap to open")
-                .accessibilityAddTraits(.isButton)
-                .paseoCardMenu(
-                    copyTitle: "Copy source",
-                    copyText: code,
-                    viewSourceTitle: "View source",
-                    onViewSource: { showSource.toggle() })
+            Button(action: openViewer) {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: heightCap)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .modifier(ArtifactZoomSource(id: viewerSourceID, namespace: artifactZoom))
+            .accessibilityLabel("Diagram")
+            .accessibilityHint("Opens the diagram full screen")
+            .paseoCardMenu(
+                copyTitle: "Copy source",
+                copyText: code,
+                viewSourceTitle: "View source",
+                onViewSource: { showSource.toggle() })
         } else {
             Rectangle()
                 .fill(Palette.codeSurface)
@@ -174,7 +154,7 @@ struct MermaidCard: View {
             Text("Couldn't render diagram")
                 .font(.paseo(.caption, weight: .medium))
                 .foregroundStyle(Palette.failureInk)
-            source
+            RichSourcePanel(code: code, role: .codeSmall)
             // V2.4 — the renderer's own message, already reduced to one line: never a bare
             // "A JavaScript exception occurred".
             Text(message)
@@ -192,39 +172,10 @@ struct MermaidCard: View {
             Text("Couldn't render diagram")
                 .font(.paseo(.caption, weight: .medium))
                 .foregroundStyle(Palette.failureInk)
-            source
+            RichSourcePanel(code: code, role: .codeSmall)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Diagram could not be rendered.")
-    }
-
-    private var source: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ScrollView {
-                Text(code)
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.ink)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: Metrics.sourcePreviewMaxHeight)
-            HStack {
-                Spacer(minLength: 0)
-                Button {
-                    if let richActions {
-                        richActions.copyText(code)
-                    } else {
-                        UIPasteboard.general.string = code
-                        Haptics.light()
-                    }
-                } label: {
-                    Label("Copy source", systemImage: "doc.on.doc")
-                        .font(.paseo(.caption, weight: .medium))
-                        .foregroundStyle(Palette.secondaryInk)
-                }
-                .buttonStyle(.plain)
-            }
-        }
     }
 
     private func openViewer() {

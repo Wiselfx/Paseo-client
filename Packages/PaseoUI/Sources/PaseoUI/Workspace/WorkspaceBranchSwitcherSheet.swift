@@ -62,43 +62,24 @@ struct WorkspaceBranchSwitcherSheet: View {
             await extras.loadBranchSuggestions(limit: 200)
             hasLoaded = true
         }
-        .alert("Uncommitted changes", isPresented: stashPromptBinding) {
-            Button("Stash & Switch") {
-                if let branch = pendingStashSwitch { stashAndSwitch(to: branch) }
-            }
-            Button("Cancel", role: .cancel) { pendingStashSwitch = nil }
-        } message: {
+        .alert("Uncommitted changes", item: $pendingStashSwitch) { branch in
+            Button("Stash & Switch") { stashAndSwitch(to: branch) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
             Text("You have uncommitted changes. Stash them before switching branches?")
         }
-        .alert("Restore stashed changes?", isPresented: restorePromptBinding) {
-            Button("Restore") {
-                if let stash = pendingRestore { restoreStash(stash) }
-            }
-            Button("Later", role: .cancel) {
-                pendingRestore = nil
-                completeSwitch()
-            }
-        } message: {
+        .alert("Restore stashed changes?", item: $pendingRestore) { stash in
+            Button("Restore") { restoreStash(stash) }
+            Button("Later", role: .cancel) { completeSwitch() }
+        } message: { _ in
             Text(
                 "This branch has stashed changes from a previous session. Would you like to restore them?"
             )
         }
     }
 
-    private var stashPromptBinding: Binding<Bool> {
-        Binding(
-            get: { pendingStashSwitch != nil },
-            set: { if !$0 { pendingStashSwitch = nil } })
-    }
-
-    private var restorePromptBinding: Binding<Bool> {
-        Binding(
-            get: { pendingRestore != nil },
-            set: { if !$0 { pendingRestore = nil } })
-    }
-
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.sm) {
             Image(systemName: "magnifyingglass")
                 .font(.glyph(.small, weight: .medium))
                 .foregroundStyle(Palette.secondaryInk)
@@ -112,9 +93,9 @@ struct WorkspaceBranchSwitcherSheet: View {
             }
         }
         .padding(.horizontal, 14)
-        .frame(height: 38)
+        .frame(minHeight: 38)
         .background(Palette.chip, in: .capsule)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Space.lg)
     }
 
     @ViewBuilder private var content: some View {
@@ -164,7 +145,7 @@ struct WorkspaceBranchSwitcherSheet: View {
         return Button {
             switchTo(branch.name)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Space.md) {
                 Image(systemName: "arrow.triangle.branch")
                     .font(.glyph(.small, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
@@ -183,8 +164,8 @@ struct WorkspaceBranchSwitcherSheet: View {
                         .accessibilityLabel("Current branch")
                 }
             }
-            .padding(.horizontal, 20)
-            .frame(height: 46)
+            .padding(.horizontal, Space.xl)
+            .frame(minHeight: 46)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

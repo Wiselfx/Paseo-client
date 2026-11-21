@@ -24,9 +24,12 @@ public final class GitExtrasStore {
     public private(set) var supportsLegacyAutoMerge = false
 
     private let client: any DaemonClient
-    private var workspaces: [String: WorkspaceGitExtras] = [:]
-    private var gitActions: [String: WorkspaceGitActions] = [:]
-    private var timelines: [String: PullRequestTimelineStore] = [:]
+    // Pure get-or-create memo caches. They are not observed: the lookups run inside view
+    // bodies, so tracking them would mutate observed state mid-update and make every reader
+    // depend on the whole dictionary.
+    @ObservationIgnored private var workspaces: [String: WorkspaceGitExtras] = [:]
+    @ObservationIgnored private var gitActions: [String: WorkspaceGitActions] = [:]
+    @ObservationIgnored private var timelines: [String: PullRequestTimelineStore] = [:]
 
     public init(client: any DaemonClient) {
         self.client = client

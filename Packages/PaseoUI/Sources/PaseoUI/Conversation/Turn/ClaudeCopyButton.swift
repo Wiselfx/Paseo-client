@@ -9,6 +9,9 @@ struct ClaudeCopyButton: View {
     let text: () -> String
     var label = "Copy"
     @State private var copied = false
+    /// Counts taps, so every copy restarts the confirmation wait and fires its haptic, including a
+    /// second tap while "Copied" already shows.
+    @State private var copies = 0
 
     init(text: @autoclosure @escaping () -> String, label: String = "Copy") {
         self.text = text
@@ -16,15 +19,7 @@ struct ClaudeCopyButton: View {
     }
 
     var body: some View {
-        Button {
-            UIPasteboard.general.string = text()
-            Haptics.light()
-            copied = true
-            Task {
-                try? await Task.sleep(for: .seconds(2.5))
-                copied = false
-            }
-        } label: {
+        Button(action: copy) {
             Image(systemName: copied ? "checkmark" : "square.on.square")
                 .font(.glyph(.regular, weight: .light))
                 .foregroundStyle(copied ? Palette.ink : Palette.tertiaryInk)
@@ -34,6 +29,21 @@ struct ClaudeCopyButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(copied ? "Copied" : label)
+        // Keyed by the tap count: a later copy cancels the earlier wait, so it never resets early,
+        // and the task cancels with the view.
+        .task(id: copies) {
+            guard copies > 0 else { return }
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            copied = false
+        }
+        .paseoFeedback(.light, trigger: copies)
+    }
+
+    private func copy() {
+        Clipboard.copy(text())
+        copied = true
+        copies += 1
     }
 }
 #endif

@@ -19,9 +19,9 @@ struct WorkspaceArchiveDialogs: ViewModifier {
                 Button("Archive", role: .destructive) {
                     archive.confirmWarning(session: session, toast: toast)
                 }
-                Button("Cancel", role: .cancel) { archive.pendingWarning = nil }
-            } message: { _ in
-                Text(archive.pendingWarning?.message ?? "")
+                Button("Cancel", role: .cancel) {}
+            } message: { warning in
+                Text(warning.message)
             }
             .confirmationDialog(
                 "Archive workspace?",
@@ -31,7 +31,7 @@ struct WorkspaceArchiveDialogs: ViewModifier {
                 Button("Archive", role: .destructive) {
                     archive.confirmPending(session: session, toast: toast)
                 }
-                Button("Cancel", role: .cancel) { archive.pendingConfirmation = nil }
+                Button("Cancel", role: .cancel) {}
             } message: { _ in
                 Text("Its agents and terminals stop. This host can't undo an archive.")
             }

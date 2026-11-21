@@ -32,7 +32,7 @@ struct MediaViewerView: View {
     /// Set by the pager's Live Text analysis (off main): the button appears only when found.
     @State private var liveTextAvailable = false
     @State private var liveTextMode = false
-    @State private var shareImage: UIImage?
+    @State private var shareItem: ShareableImage?
 
     private var clampedSelection: Int {
         min(max(selection, 0), max(items.count - 1, 0))
@@ -55,7 +55,28 @@ struct MediaViewerView: View {
                 onClose: onClose,
                 reduceMotion: reduceMotion)
                 .ignoresSafeArea()
-            chrome
+            if chromeVisible {
+                VStack {
+                    MediaViewerTopBar(
+                        position: clampedSelection, count: items.count,
+                        fileName: currentItem?.fileName,
+                        announcement: pageAnnouncement, onClose: onClose)
+                    Spacer(minLength: 0)
+                    MediaViewerBottomBar(
+                        hasImage: currentImage != nil,
+                        canCopy: currentImage != nil || currentItem?.fullSource != nil,
+                        showsFiles: currentItem?.filePath != nil,
+                        showsLiveText: liveTextAvailable,
+                        liveTextMode: liveTextMode,
+                        onShare: shareCurrentImage,
+                        onCopy: copyCurrentImage,
+                        onSave: saveCurrentImage,
+                        onShowInFiles: showCurrentInFiles,
+                        onToggleLiveText: { liveTextMode.toggle() },
+                        onAddToChat: addCurrentToChat)
+                }
+                .transition(.opacity)
+            }
         }
         .background(.clear)
         .environment(\.colorScheme, .dark)
@@ -71,13 +92,8 @@ struct MediaViewerView: View {
             UIAccessibility.post(
                 notification: .announcement, argument: pageAnnouncement)
         }
-        .sheet(isPresented: Binding(
-            get: { shareImage != nil },
-            set: { if !$0 { shareImage = nil } }
-        )) {
-            if let shareImage {
-                ActivityView(items: [shareImage])
-            }
+        .sheet(item: $shareItem) { item in
+            ActivityView(items: [item.image])
         }
         .accessibilityIdentifier("media.viewer")
     }
@@ -88,113 +104,25 @@ struct MediaViewerView: View {
         return alt.isEmpty ? position : "\(position), \(alt)"
     }
 
-    // MARK: Chrome
+    // MARK: Actions
 
-    @ViewBuilder
-    private var chrome: some View {
-        if chromeVisible {
-            VStack {
-                topBar
-                Spacer(minLength: 0)
-                bottomBar
-            }
-            .transition(.opacity)
+    private func shareCurrentImage() {
+        shareItem = currentImage.map { ShareableImage(image: $0) }
+    }
+
+    private func saveCurrentImage() {
+        guard let currentImage else { return }
+        if let richActions {
+            richActions.saveImage(currentImage)
+        } else {
+            UIImageWriteToSavedPhotosAlbum(currentImage, nil, nil, nil)
         }
     }
 
-    private var topBar: some View {
-        HStack {
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.paseo(.body))
-                    .frame(width: Metrics.hitSize, height: Metrics.hitSize)
-                    .contentShape(.circle)
-            }
-            .glassEffect(in: .circle)
-            .accessibilityLabel("Close viewer")
-            .accessibilityIdentifier("media.viewer.close")
-            Spacer(minLength: 8)
-            if items.count > 1, let currentItem {
-                Text("\(clampedSelection + 1) of \(items.count)")
-                    .font(.paseo(.footnote))
-                    .monospacedDigit()
-                    .foregroundStyle(.white)
-                    .accessibilityLabel(pageAnnouncement)
-                    .accessibilityAddTraits(.isHeader)
-            } else if let currentItem {
-                Text(currentItem.fileName)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            // Balance: the close circle's width, so a lone title stays centred.
-            Color.clear.frame(width: Metrics.hitSize, height: Metrics.hitSize)
-                .accessibilityHidden(true)
+    private func showCurrentInFiles() {
+        if let path = currentItem?.filePath {
+            richActions?.openFile(path)
         }
-        .padding(.horizontal, Space.md)
-        .padding(.top, Space.md)
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 0) {
-            viewerButton(systemImage: "square.and.arrow.up", label: "Share image") {
-                if let currentImage { shareImage = currentImage }
-            }
-            .disabled(currentImage == nil)
-            viewerButton(systemImage: "doc.on.doc", label: "Copy image") {
-                copyCurrentImage()
-            }
-            .disabled(currentImage == nil && currentItem?.fullSource == nil)
-            viewerButton(systemImage: "photo", label: "Save to Photos") {
-                if let currentImage {
-                    if let richActions {
-                        richActions.saveImage(currentImage)
-                    } else {
-                        UIImageWriteToSavedPhotosAlbum(currentImage, nil, nil, nil)
-                    }
-                }
-            }
-            .disabled(currentImage == nil)
-            if currentItem?.filePath != nil {
-                viewerButton(systemImage: "folder", label: "Show in Files") {
-                    if let path = currentItem?.filePath {
-                        richActions?.openFile(path)
-                    }
-                }
-            }
-            if liveTextAvailable {
-                viewerButton(
-                    systemImage: "text.viewfinder",
-                    label: liveTextMode ? "Hide text" : "Show text"
-                ) {
-                    liveTextMode.toggle()
-                }
-            }
-            viewerButton(systemImage: "plus.bubble", label: "Add to chat") {
-                addCurrentToChat()
-            }
-            .disabled(currentImage == nil)
-        }
-        .glassEffect(in: .capsule)
-        .padding(.horizontal, Space.md)
-        .padding(.bottom, Space.md)
-    }
-
-    private func viewerButton(
-        systemImage: String, label: String, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.paseo(.body))
-                .frame(width: Metrics.viewerChromeButtonWidth, height: Metrics.hitSize)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.white)
-        .accessibilityLabel(label)
     }
 
     private func copyCurrentImage() {

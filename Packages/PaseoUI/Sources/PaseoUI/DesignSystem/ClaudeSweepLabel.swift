@@ -25,7 +25,7 @@ struct ClaudeSweepLabel<Label: View>: View {
                     if let phase = ClaudeSweep.phase(
                         startedAt: startedAt, at: context.date.addingTimeInterval(0.001))
                     {
-                        label(band).mask(ClaudeSweep.windowGradient(phase: phase))
+                        label(band).mask { ClaudeSweep.windowGradient(phase: phase) }
                     }
                 }
                 .allowsHitTesting(false)

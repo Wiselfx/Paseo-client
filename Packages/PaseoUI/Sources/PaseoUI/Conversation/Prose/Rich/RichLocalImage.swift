@@ -35,7 +35,8 @@ struct RichLocalImage: View {
     private var slotWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
 
     private var fileName: String {
-        (path as NSString).lastPathComponent.nilIfEmpty ?? "image"
+        let name = (path as NSString).lastPathComponent
+        return name.isEmpty ? "image" : name
     }
 
     /// The zoom-transition source, stable per card.
@@ -88,42 +89,34 @@ struct RichLocalImage: View {
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .mediaSlot(width: slotWidth, heightCap: heightCap)
-                    .background(Palette.codeSurface)
-                    .clipShape(.rect(cornerRadius: Radius.md))
-                    .contentShape(.rect)
-                    .matchedTransitionSource(id: viewerSourceID, in: zoom)
-                    .onTapGesture {
-                        showViewer = true
-                    }
-                    .accessibilityLabel(alt.isEmpty ? fileName : alt)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityHint("Opens the image full screen")
-            } else if let failure {
+                Button(action: openViewer) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .mediaSlot(width: slotWidth, heightCap: heightCap)
+                        .background(Palette.codeSurface)
+                        .clipShape(.rect(cornerRadius: Radius.md))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .matchedTransitionSource(id: viewerSourceID, in: zoom)
+                .accessibilityLabel(alt.isEmpty ? fileName : alt)
+                .accessibilityHint("Opens the image full screen")
+            } else if failure != nil {
                 if keepsFailureBox {
-                    boxedFailure(failure)
+                    // The kept box with the failure line, like the remote card: the reader
+                    // watched the placeholder, so the box stays and only the inside is honest.
+                    // Retry refetches.
+                    MediaFailureBox(aspect: reservedAspect, width: slotWidth, heightCap: heightCap) {
+                        MediaFailureContent(detail: path, onRetry: retry)
+                    }
                 } else {
                     RichPathChip(path: path, glyph: "photo")
                 }
             } else {
-                Rectangle()
-                    .fill(Palette.codeSurface)
-                    .aspectRatio(reservedAspect, contentMode: .fit)
-                    .mediaSlot(width: slotWidth, heightCap: heightCap)
-                    .clipShape(.rect(cornerRadius: Radius.md))
-                    .overlay {
-                        if let progress = downloadProgress {
-                            ProgressView(value: progress)
-                                .controlSize(.small)
-                                .tint(Palette.secondaryInk)
-                        } else {
-                            ProgressView().controlSize(.small).tint(Palette.secondaryInk)
-                        }
-                    }
-                    .accessibilityLabel(alt.isEmpty ? "Loading image" : "Loading image: \(alt)")
+                MediaPlaceholder(
+                    aspect: reservedAspect, width: slotWidth, heightCap: heightCap,
+                    progress: downloadProgress, alt: alt)
             }
         }
         .background { widthReader }
@@ -161,41 +154,8 @@ struct RichLocalImage: View {
             }
     }
 
-    /// The kept box with the failure line, like the remote card: the reader watched the
-    /// placeholder, so the box stays and only the inside is honest. Retry refetches.
-    private func boxedFailure(_ failure: MediaFailure) -> some View {
-        Rectangle()
-            .fill(Palette.codeSurface)
-            .aspectRatio(reservedAspect, contentMode: .fit)
-            .mediaSlot(width: slotWidth, heightCap: heightCap)
-            .clipShape(.rect(cornerRadius: Radius.md))
-            .overlay {
-                HStack(alignment: .center, spacing: Space.sm) {
-                    Image(systemName: "photo")
-                        .font(.glyph(.large, weight: .light))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: Space.xs) {
-                        Text("Couldn't load image")
-                            .font(.paseo(.caption, weight: .medium))
-                            .foregroundStyle(Palette.ink)
-                        Text(path)
-                            .font(.paseo(.codeCaption))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Spacer(minLength: Space.sm)
-                    Button("Retry") { retry() }
-                        .buttonStyle(.plain)
-                        .font(.paseo(.caption, weight: .medium))
-                        .foregroundStyle(Palette.ink)
-                        .frame(minWidth: Metrics.hitSize, minHeight: Metrics.hitSize)
-                        .accessibilityLabel("Try loading the image again")
-                }
-                .padding(.horizontal, Space.md)
-                .accessibilityElement(children: .contain)
-            }
+    private func openViewer() {
+        showViewer = true
     }
 
     private func retry() {
@@ -267,7 +227,8 @@ struct RichLocalImage: View {
             let rendered = await RichSnapshotQueue.shared.snapshot(
                 html: html, width: width, scale: displayScale)
         else {
-            failure = .decoding
+            // A render skipped because the card scrolled away is not a decoding failure.
+            if !Task.isCancelled { failure = .decoding }
             return
         }
         guard !Task.isCancelled else { return }

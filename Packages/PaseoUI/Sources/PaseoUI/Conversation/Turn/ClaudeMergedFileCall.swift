@@ -52,7 +52,8 @@ struct ClaudeMergedFileCall: Hashable {
         rowSeqEnds.append(seqEnd)
     }
 
-    /// The cached per-call parse. `NSCache` drops entries under memory pressure.
+    /// The cached per-call parse. `NSCache` drops entries under memory pressure. Keyed by content
+    /// (hash plus UTF-8 length, which is O(1) on native strings, unlike the grapheme `count`).
     @MainActor private static let diffStatCache = NSCache<NSString, DiffStatBox>()
 
     @MainActor
@@ -60,11 +61,11 @@ struct ClaudeMergedFileCall: Hashable {
         guard case .edit(_, let oldString, let newString, let unifiedDiff) = call.detail else { return nil }
         let key: NSString
         if let diff = unifiedDiff, !diff.isEmpty {
-            key = "diff:\(diff.hashValue):\(diff.count)" as NSString
+            key = "diff:\(diff.hashValue):\(diff.utf8.count)" as NSString
         } else {
             let old = oldString ?? ""
             let new = newString ?? ""
-            key = "pair:\(old.hashValue):\(old.count):\(new.hashValue):\(new.count)" as NSString
+            key = "pair:\(old.hashValue):\(old.utf8.count):\(new.hashValue):\(new.utf8.count)" as NSString
         }
         if let hit = diffStatCache.object(forKey: key) { return (hit.added, hit.removed) }
         let stat = computeDiffStat(oldString: oldString, newString: newString, unifiedDiff: unifiedDiff)

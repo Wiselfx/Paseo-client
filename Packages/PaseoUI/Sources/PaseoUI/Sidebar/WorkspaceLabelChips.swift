@@ -20,7 +20,7 @@ struct WorkspaceLabelChips: View {
                     Text("+\(PaseoFormat.integer(extra))")
                         .font(.paseo(.caption2, weight: .medium))
                         .foregroundStyle(Palette.captionInk)
-                        .accessibilityLabel("\(extra) more labels")
+                        .accessibilityLabel(extra == 1 ? "1 more label" : "\(extra) more labels")
                 }
             }
         }

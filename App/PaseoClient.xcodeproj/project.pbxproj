@@ -7,26 +7,56 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		017D4CD4EC10A8FCDD27176E /* WidgetNewAgentIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25AD9BCA2BE0299401422515 /* WidgetNewAgentIntent.swift */; };
+		01F6EAAA309A60D24FF5895A /* MediumAgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD38D7CB6C829994442E80CB /* MediumAgentsView.swift */; };
 		021D7A4965E87D4DB3C858D1 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A6CDB060911D3A7AA1CF59 /* AppModel.swift */; };
 		049611178B625E349F188C4E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5BA54415A9997E52BAA8657 /* RootView.swift */; };
+		0D5AF9AAC7AA743D6A3F60C9 /* AgentDirectoryEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3DDBA24529C879CDF487A5 /* AgentDirectoryEntry.swift */; };
+		0FB7227448ED11DA8907334B /* WidgetFamily+Accessory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D44A954520D0FFE34ADBE1F /* WidgetFamily+Accessory.swift */; };
+		1332A6BF45C295E9BAE72980 /* UserDefaultsRelayPinStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3EC5A464F35D89783C7098B /* UserDefaultsRelayPinStore.swift */; };
 		13ED90D46385376ABC5FBBCF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9088EF8AC3E2485FA76459E0 /* Assets.xcassets */; };
 		163D2B79F260845816B7D239 /* PaseoUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEB9E350154B5E1D385B2F63 /* PaseoUITestSupport.swift */; };
 		205C4B6177546CED803DB3AB /* PaseoWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53DE4116B84C675AF45EA705 /* PaseoWidgets.swift */; };
+		260DCB763E84A02BEA0067DF /* NotificationDelegateProxy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103B572A783E45EA6804F3C1 /* NotificationDelegateProxy.swift */; };
+		29E35D86065D29F375EE6DC5 /* NewAgentControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11339F53489DD26CB6A8019 /* NewAgentControl.swift */; };
+		2B5FD301B57C8A34C8C3DF6F /* GlanceMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7933B10877758212FEA6E78C /* GlanceMirror.swift */; };
+		3AC9D3F9860CD1D34CAE7FE0 /* VoiceControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5DDD75B309818B427B28AB3 /* VoiceControl.swift */; };
+		3B75828C4ADE4CF6C58D1152 /* CompletionBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5DF24EB39CEF4064D9509B4 /* CompletionBox.swift */; };
+		3DA52027713ED1204FE0363D /* PaseoShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = C94FD13BFEDD4FE9437F005D /* PaseoShortcuts.swift */; };
+		3DC8EF6892B862DCAB2698E6 /* InlineAgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 675F9C16A7F72D8493E2791A /* InlineAgentsView.swift */; };
+		498B6330F27CBB7F3DEF688B /* SmallAgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 821C37491BF6A65569BD6CA5 /* SmallAgentsView.swift */; };
+		5106A4B3334DB886078146FF /* WidgetVoiceIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4FD570A9A9976BA34B72989 /* WidgetVoiceIntent.swift */; };
+		544E7A119732D9909567E8B9 /* AgentLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3DAF4B2AACFB6D327B33536 /* AgentLink.swift */; };
 		57436A836FCA8CAF191560A7 /* PaseoStore in Frameworks */ = {isa = PBXBuildFile; productRef = F6A7FCB2B479A9CC8D1703B5 /* PaseoStore */; };
+		5747D6A1240DA26E67279E36 /* AttentionDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E00476D9B2DF51DDC2901A /* AttentionDelivery.swift */; };
+		57AC5C72676CBAE47F6B9FF0 /* SavedHostRelaySecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35CC268A032AECD42C7238E /* SavedHostRelaySecrets.swift */; };
+		5FD0A57992C1E6666AC92EA5 /* AgentStatusMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = F053DE120111F1CE71034CAF /* AgentStatusMark.swift */; };
+		60012D1955F6285BA970D96F /* PendingPermissionAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F3DD2247BD536714FFEF8E /* PendingPermissionAction.swift */; };
 		64CC4FC98F63D9055290C03D /* GlanceEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30AA9F81CB0D401959EA7278 /* GlanceEntry.swift */; };
 		6741E75B9FEE62984B78B1ED /* LaunchSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65470003A10A656E33EA0750 /* LaunchSmokeTests.swift */; };
+		6B79F86922091AA3FE72703D /* PairingSheetContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3392A0DC4CBCF9DC81AB00 /* PairingSheetContent.swift */; };
+		779496A3973ACA006DA2ED23 /* AgentsWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73951DEB9E4D639EE5C56990 /* AgentsWidgetView.swift */; };
+		7868A30125E8FD717E8911F1 /* AgentEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 844E063F02DD467805C82D36 /* AgentEntity.swift */; };
 		7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */; };
+		82136186FD1E512E8F684CD4 /* CircularAgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 049CDFAA89CD9285862BBA41 /* CircularAgentsView.swift */; };
 		82B1916018A96D666618150F /* RewindKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD84518A87C0E4A539A989A1 /* RewindKeyboardTests.swift */; };
 		873FB425FA59049A656672C1 /* WidgetTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE98F4E6F9B3C2D8C166E9A /* WidgetTokens.swift */; };
 		8AF165246D8AE2E6D0B15C24 /* RewindComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59A878B1A76E3605AC9E747F /* RewindComposerTests.swift */; };
 		8EA2C4203BFC6D5F3E4D36FB /* SavedHosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */; };
+		92FF791F75F45139BA9E2EE2 /* BackgroundTaskBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B1122ABB133DAAA4CC535E4 /* BackgroundTaskBox.swift */; };
+		97586563F6366F33414D882B /* UIUserInterfaceStyle+ClaudeAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD93A2D12ED7797F2C3DC950 /* UIUserInterfaceStyle+ClaudeAppearance.swift */; };
 		A171A48B81A851AF22D95177 /* PaseoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 63BF84ADEB1A8868F43ED3F6 /* PaseoUI */; };
+		B65032560E2F4EB220588CF7 /* OpenAgentIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1B565A70CF831735562DEE /* OpenAgentIntent.swift */; };
 		BD7EE413467BC9F20E8C33C3 /* AgentDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB7D7187DB3305BFFBE378E /* AgentDirectory.swift */; };
 		C3820ADA9A162AE49F3CCFF0 /* WindowAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905593B3877EF01FF916BC8D /* WindowAppearance.swift */; };
-		C747E80867BDD9BD71FC8B6B /* AgentIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49AFF0D471630BA44685EC6B /* AgentIntents.swift */; };
-		C9C616099F1004A8772E9146 /* AgentsControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD8E64F3E4DAE2D40D534BBA /* AgentsControls.swift */; };
+		C89384BA43B9E42C281EC53C /* WindowAppearanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 154553E08606173ADB6F1FDC /* WindowAppearanceView.swift */; };
 		CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64108FA9FC10EE10BE16975 /* Keychain.swift */; };
+		D53AB7A5A45A887A85EC41DA /* GlanceTimelineProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400F1FEC71C1763168ED213B /* GlanceTimelineProvider.swift */; };
+		D5BB1B1E2F5F807246C567D9 /* RectangularAgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB7BBF1E39AC520CE891C4B /* RectangularAgentsView.swift */; };
+		DE52AED845D1FAFDF545E844 /* AgentQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E492B938E6168766140AE14E /* AgentQuery.swift */; };
+		DF6FC3AF122D24E780D42AB6 /* NewAgentIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F67FA68697BC3FA54180658 /* NewAgentIntent.swift */; };
 		FE9768F7EBE6971D19A0BABA /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */; };
+		FEACCC09355D746C5CC473D5 /* AgentDirectorySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = C180033EF0938082AB1388F2 /* AgentDirectorySnapshot.swift */; };
 		FFADFC02861BE2DBDD9A2BF5 /* AgentsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C70B264A7541A03BA3004D5 /* AgentsWidget.swift */; };
 /* End PBXBuildFile section */
 
@@ -41,32 +71,62 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		049CDFAA89CD9285862BBA41 /* CircularAgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircularAgentsView.swift; sourceTree = "<group>"; };
 		08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedHosts.swift; sourceTree = "<group>"; };
 		0EB7D7187DB3305BFFBE378E /* AgentDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDirectory.swift; sourceTree = "<group>"; };
+		103B572A783E45EA6804F3C1 /* NotificationDelegateProxy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDelegateProxy.swift; sourceTree = "<group>"; };
 		114450C635D0AE4E08B8CFE2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		154553E08606173ADB6F1FDC /* WindowAppearanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAppearanceView.swift; sourceTree = "<group>"; };
+		1B1122ABB133DAAA4CC535E4 /* BackgroundTaskBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTaskBox.swift; sourceTree = "<group>"; };
+		25AD9BCA2BE0299401422515 /* WidgetNewAgentIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetNewAgentIntent.swift; sourceTree = "<group>"; };
 		30AA9F81CB0D401959EA7278 /* GlanceEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlanceEntry.swift; sourceTree = "<group>"; };
 		3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationCoordinator.swift; sourceTree = "<group>"; };
+		35F3DD2247BD536714FFEF8E /* PendingPermissionAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingPermissionAction.swift; sourceTree = "<group>"; };
+		400F1FEC71C1763168ED213B /* GlanceTimelineProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlanceTimelineProvider.swift; sourceTree = "<group>"; };
 		417005487002A9CAD893F8C3 /* PaseoWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PaseoWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		49AFF0D471630BA44685EC6B /* AgentIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIntents.swift; sourceTree = "<group>"; };
 		53DE4116B84C675AF45EA705 /* PaseoWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaseoWidgets.swift; sourceTree = "<group>"; };
 		59A878B1A76E3605AC9E747F /* RewindComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindComposerTests.swift; sourceTree = "<group>"; };
+		5AB7BBF1E39AC520CE891C4B /* RectangularAgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RectangularAgentsView.swift; sourceTree = "<group>"; };
+		5F1B565A70CF831735562DEE /* OpenAgentIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAgentIntent.swift; sourceTree = "<group>"; };
 		65470003A10A656E33EA0750 /* LaunchSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSmokeTests.swift; sourceTree = "<group>"; };
+		675F9C16A7F72D8493E2791A /* InlineAgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineAgentsView.swift; sourceTree = "<group>"; };
 		67A6CDB060911D3A7AA1CF59 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		73951DEB9E4D639EE5C56990 /* AgentsWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsWidgetView.swift; sourceTree = "<group>"; };
+		75E00476D9B2DF51DDC2901A /* AttentionDelivery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttentionDelivery.swift; sourceTree = "<group>"; };
+		7933B10877758212FEA6E78C /* GlanceMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlanceMirror.swift; sourceTree = "<group>"; };
+		7D3392A0DC4CBCF9DC81AB00 /* PairingSheetContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingSheetContent.swift; sourceTree = "<group>"; };
+		821C37491BF6A65569BD6CA5 /* SmallAgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmallAgentsView.swift; sourceTree = "<group>"; };
+		844E063F02DD467805C82D36 /* AgentEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEntity.swift; sourceTree = "<group>"; };
+		8D44A954520D0FFE34ADBE1F /* WidgetFamily+Accessory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetFamily+Accessory.swift; sourceTree = "<group>"; };
+		8F67FA68697BC3FA54180658 /* NewAgentIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAgentIntent.swift; sourceTree = "<group>"; };
 		905593B3877EF01FF916BC8D /* WindowAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAppearance.swift; sourceTree = "<group>"; };
 		9088EF8AC3E2485FA76459E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		93A7A34FF872890A0D7B1BE1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9C70B264A7541A03BA3004D5 /* AgentsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsWidget.swift; sourceTree = "<group>"; };
-		AD8E64F3E4DAE2D40D534BBA /* AgentsControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsControls.swift; sourceTree = "<group>"; };
+		A35CC268A032AECD42C7238E /* SavedHostRelaySecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedHostRelaySecrets.swift; sourceTree = "<group>"; };
+		A3DAF4B2AACFB6D327B33536 /* AgentLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLink.swift; sourceTree = "<group>"; };
+		A5DDD75B309818B427B28AB3 /* VoiceControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceControl.swift; sourceTree = "<group>"; };
+		B11339F53489DD26CB6A8019 /* NewAgentControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewAgentControl.swift; sourceTree = "<group>"; };
 		B588CF3701396881BDA29431 /* PaseoWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaseoWidgets.entitlements; sourceTree = "<group>"; };
 		B5BA54415A9997E52BAA8657 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		B64108FA9FC10EE10BE16975 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		BCEFB31882A82F9E16F569FB /* PaseoUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PaseoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C180033EF0938082AB1388F2 /* AgentDirectorySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDirectorySnapshot.swift; sourceTree = "<group>"; };
 		C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaseoClientApp.swift; sourceTree = "<group>"; };
+		C94FD13BFEDD4FE9437F005D /* PaseoShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaseoShortcuts.swift; sourceTree = "<group>"; };
+		CD38D7CB6C829994442E80CB /* MediumAgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediumAgentsView.swift; sourceTree = "<group>"; };
 		CD84518A87C0E4A539A989A1 /* RewindKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindKeyboardTests.swift; sourceTree = "<group>"; };
 		D583D4EC5FCF8C4E46667749 /* PaseoCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaseoCore; path = ../Packages/PaseoCore; sourceTree = SOURCE_ROOT; };
 		E0973B3517160F9D49A8F309 /* PaseoClient.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PaseoClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E3EC5A464F35D89783C7098B /* UserDefaultsRelayPinStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsRelayPinStore.swift; sourceTree = "<group>"; };
+		E492B938E6168766140AE14E /* AgentQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentQuery.swift; sourceTree = "<group>"; };
+		E4FD570A9A9976BA34B72989 /* WidgetVoiceIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetVoiceIntent.swift; sourceTree = "<group>"; };
 		E534C96E3E952966814440BD /* PaseoUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaseoUI; path = ../Packages/PaseoUI; sourceTree = SOURCE_ROOT; };
+		E5DF24EB39CEF4064D9509B4 /* CompletionBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionBox.swift; sourceTree = "<group>"; };
+		EA3DDBA24529C879CDF487A5 /* AgentDirectoryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDirectoryEntry.swift; sourceTree = "<group>"; };
+		F053DE120111F1CE71034CAF /* AgentStatusMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusMark.swift; sourceTree = "<group>"; };
 		FBE98F4E6F9B3C2D8C166E9A /* WidgetTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetTokens.swift; sourceTree = "<group>"; };
+		FD93A2D12ED7797F2C3DC950 /* UIUserInterfaceStyle+ClaudeAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIUserInterfaceStyle+ClaudeAppearance.swift; sourceTree = "<group>"; };
 		FEB9E350154B5E1D385B2F63 /* PaseoUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaseoUITestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -86,13 +146,27 @@
 		59EB7B63E1C578F8093C4B0D /* PaseoWidgets */ = {
 			isa = PBXGroup;
 			children = (
-				AD8E64F3E4DAE2D40D534BBA /* AgentsControls.swift */,
+				A3DAF4B2AACFB6D327B33536 /* AgentLink.swift */,
+				F053DE120111F1CE71034CAF /* AgentStatusMark.swift */,
 				9C70B264A7541A03BA3004D5 /* AgentsWidget.swift */,
+				73951DEB9E4D639EE5C56990 /* AgentsWidgetView.swift */,
+				049CDFAA89CD9285862BBA41 /* CircularAgentsView.swift */,
 				30AA9F81CB0D401959EA7278 /* GlanceEntry.swift */,
+				7933B10877758212FEA6E78C /* GlanceMirror.swift */,
+				400F1FEC71C1763168ED213B /* GlanceTimelineProvider.swift */,
 				114450C635D0AE4E08B8CFE2 /* Info.plist */,
+				675F9C16A7F72D8493E2791A /* InlineAgentsView.swift */,
+				CD38D7CB6C829994442E80CB /* MediumAgentsView.swift */,
+				B11339F53489DD26CB6A8019 /* NewAgentControl.swift */,
 				B588CF3701396881BDA29431 /* PaseoWidgets.entitlements */,
 				53DE4116B84C675AF45EA705 /* PaseoWidgets.swift */,
+				5AB7BBF1E39AC520CE891C4B /* RectangularAgentsView.swift */,
+				821C37491BF6A65569BD6CA5 /* SmallAgentsView.swift */,
+				A5DDD75B309818B427B28AB3 /* VoiceControl.swift */,
+				8D44A954520D0FFE34ADBE1F /* WidgetFamily+Accessory.swift */,
+				25AD9BCA2BE0299401422515 /* WidgetNewAgentIntent.swift */,
 				FBE98F4E6F9B3C2D8C166E9A /* WidgetTokens.swift */,
+				E4FD570A9A9976BA34B72989 /* WidgetVoiceIntent.swift */,
 			);
 			path = PaseoWidgets;
 			sourceTree = "<group>";
@@ -110,14 +184,30 @@
 			isa = PBXGroup;
 			children = (
 				0EB7D7187DB3305BFFBE378E /* AgentDirectory.swift */,
-				49AFF0D471630BA44685EC6B /* AgentIntents.swift */,
+				EA3DDBA24529C879CDF487A5 /* AgentDirectoryEntry.swift */,
+				C180033EF0938082AB1388F2 /* AgentDirectorySnapshot.swift */,
+				844E063F02DD467805C82D36 /* AgentEntity.swift */,
+				E492B938E6168766140AE14E /* AgentQuery.swift */,
 				67A6CDB060911D3A7AA1CF59 /* AppModel.swift */,
+				75E00476D9B2DF51DDC2901A /* AttentionDelivery.swift */,
+				1B1122ABB133DAAA4CC535E4 /* BackgroundTaskBox.swift */,
+				E5DF24EB39CEF4064D9509B4 /* CompletionBox.swift */,
 				B64108FA9FC10EE10BE16975 /* Keychain.swift */,
+				8F67FA68697BC3FA54180658 /* NewAgentIntent.swift */,
 				3162FA22631B3F907BB94364 /* NotificationCoordinator.swift */,
+				103B572A783E45EA6804F3C1 /* NotificationDelegateProxy.swift */,
+				5F1B565A70CF831735562DEE /* OpenAgentIntent.swift */,
+				7D3392A0DC4CBCF9DC81AB00 /* PairingSheetContent.swift */,
 				C2383E414515A4C4897BBA3D /* PaseoClientApp.swift */,
+				C94FD13BFEDD4FE9437F005D /* PaseoShortcuts.swift */,
+				35F3DD2247BD536714FFEF8E /* PendingPermissionAction.swift */,
 				B5BA54415A9997E52BAA8657 /* RootView.swift */,
+				A35CC268A032AECD42C7238E /* SavedHostRelaySecrets.swift */,
 				08CA493B3017CC61E3DCEB6E /* SavedHosts.swift */,
+				FD93A2D12ED7797F2C3DC950 /* UIUserInterfaceStyle+ClaudeAppearance.swift */,
+				E3EC5A464F35D89783C7098B /* UserDefaultsRelayPinStore.swift */,
 				905593B3877EF01FF916BC8D /* WindowAppearance.swift */,
+				154553E08606173ADB6F1FDC /* WindowAppearanceView.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -289,14 +379,30 @@
 			buildActionMask = 2147483647;
 			files = (
 				BD7EE413467BC9F20E8C33C3 /* AgentDirectory.swift in Sources */,
-				C747E80867BDD9BD71FC8B6B /* AgentIntents.swift in Sources */,
+				0D5AF9AAC7AA743D6A3F60C9 /* AgentDirectoryEntry.swift in Sources */,
+				FEACCC09355D746C5CC473D5 /* AgentDirectorySnapshot.swift in Sources */,
+				7868A30125E8FD717E8911F1 /* AgentEntity.swift in Sources */,
+				DE52AED845D1FAFDF545E844 /* AgentQuery.swift in Sources */,
 				021D7A4965E87D4DB3C858D1 /* AppModel.swift in Sources */,
+				5747D6A1240DA26E67279E36 /* AttentionDelivery.swift in Sources */,
+				92FF791F75F45139BA9E2EE2 /* BackgroundTaskBox.swift in Sources */,
+				3B75828C4ADE4CF6C58D1152 /* CompletionBox.swift in Sources */,
 				CDC23E6B21A62828EDD43E0F /* Keychain.swift in Sources */,
+				DF6FC3AF122D24E780D42AB6 /* NewAgentIntent.swift in Sources */,
 				FE9768F7EBE6971D19A0BABA /* NotificationCoordinator.swift in Sources */,
+				260DCB763E84A02BEA0067DF /* NotificationDelegateProxy.swift in Sources */,
+				B65032560E2F4EB220588CF7 /* OpenAgentIntent.swift in Sources */,
+				6B79F86922091AA3FE72703D /* PairingSheetContent.swift in Sources */,
 				7C8C2AF8D9ABFE560932EA53 /* PaseoClientApp.swift in Sources */,
+				3DA52027713ED1204FE0363D /* PaseoShortcuts.swift in Sources */,
+				60012D1955F6285BA970D96F /* PendingPermissionAction.swift in Sources */,
 				049611178B625E349F188C4E /* RootView.swift in Sources */,
+				57AC5C72676CBAE47F6B9FF0 /* SavedHostRelaySecrets.swift in Sources */,
 				8EA2C4203BFC6D5F3E4D36FB /* SavedHosts.swift in Sources */,
+				97586563F6366F33414D882B /* UIUserInterfaceStyle+ClaudeAppearance.swift in Sources */,
+				1332A6BF45C295E9BAE72980 /* UserDefaultsRelayPinStore.swift in Sources */,
 				C3820ADA9A162AE49F3CCFF0 /* WindowAppearance.swift in Sources */,
+				C89384BA43B9E42C281EC53C /* WindowAppearanceView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -315,11 +421,25 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C9C616099F1004A8772E9146 /* AgentsControls.swift in Sources */,
+				544E7A119732D9909567E8B9 /* AgentLink.swift in Sources */,
+				5FD0A57992C1E6666AC92EA5 /* AgentStatusMark.swift in Sources */,
 				FFADFC02861BE2DBDD9A2BF5 /* AgentsWidget.swift in Sources */,
+				779496A3973ACA006DA2ED23 /* AgentsWidgetView.swift in Sources */,
+				82136186FD1E512E8F684CD4 /* CircularAgentsView.swift in Sources */,
 				64CC4FC98F63D9055290C03D /* GlanceEntry.swift in Sources */,
+				2B5FD301B57C8A34C8C3DF6F /* GlanceMirror.swift in Sources */,
+				D53AB7A5A45A887A85EC41DA /* GlanceTimelineProvider.swift in Sources */,
+				3DC8EF6892B862DCAB2698E6 /* InlineAgentsView.swift in Sources */,
+				01F6EAAA309A60D24FF5895A /* MediumAgentsView.swift in Sources */,
+				29E35D86065D29F375EE6DC5 /* NewAgentControl.swift in Sources */,
 				205C4B6177546CED803DB3AB /* PaseoWidgets.swift in Sources */,
+				D5BB1B1E2F5F807246C567D9 /* RectangularAgentsView.swift in Sources */,
+				498B6330F27CBB7F3DEF688B /* SmallAgentsView.swift in Sources */,
+				3AC9D3F9860CD1D34CAE7FE0 /* VoiceControl.swift in Sources */,
+				0FB7227448ED11DA8907334B /* WidgetFamily+Accessory.swift in Sources */,
+				017D4CD4EC10A8FCDD27176E /* WidgetNewAgentIntent.swift in Sources */,
 				873FB425FA59049A656672C1 /* WidgetTokens.swift in Sources */,
+				5106A4B3334DB886078146FF /* WidgetVoiceIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

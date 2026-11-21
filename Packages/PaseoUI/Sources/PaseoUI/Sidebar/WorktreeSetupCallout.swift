@@ -42,7 +42,8 @@ extension PaseoSidebar {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Set up worktree scripts. Opens the project page.")
+                .accessibilityLabel("Set up worktree scripts")
+                .accessibilityHint("Opens the project page.")
                 Button {
                     dismissWorktreeSetupCallout(group.project.projectId)
                 } label: {

@@ -29,6 +29,8 @@ struct ProjectSettingsView: View {
     @State private var savedPulse = false
     @State private var photoItem: PhotosPickerItem?
     @State private var pickingFile = false
+    /// Why the last picked photo or file could not be read, shown in the icon group.
+    @State private var iconLoadError: String?
     @State private var hasCustomIcon: Bool
     @State private var didSeed = false
 
@@ -69,35 +71,13 @@ struct ProjectSettingsView: View {
             Text("Empty restores the folder name.")
         }
         .confirmationDialog(
-            "Remove project?",
-            isPresented: $confirmRemove,
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                Task {
-                    let ok = await session.workspaceDirectory.removeProject(project.projectId)
-                    if ok {
-                        Haptics.success()
-                        dismiss()
-                    } else {
-                        Haptics.failure()
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The project and its workspaces will be unregistered on this host. Files on disk will not be changed.")
-        }
-        .confirmationDialog(
             "Remove script?",
             item: $pendingDeleteScript
-        ) { _ in
+        ) { script in
             Button("Remove", role: .destructive) {
-                guard let script = pendingDeleteScript else { return }
-                pendingDeleteScript = nil
                 scripts.removeAll { $0.id == script.id }
             }
-            Button("Cancel", role: .cancel) { pendingDeleteScript = nil }
+            Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("This only removes the script from paseo.json when you save.")
         }
@@ -141,24 +121,89 @@ struct ProjectSettingsView: View {
 
     @ViewBuilder private var content: some View {
         if store.phase == .failed && store.config == nil && store.sendError != nil {
-            loadFailure
+            ProjectLoadFailure(
+                message: store.error?.userMessage ?? store.sendError ?? "Something went wrong. Try again."
+            ) {
+                Task {
+                    await store.load(repoRoot: project.projectRootPath)
+                    seed()
+                }
+            }
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    hero
-                    nameGroup
-                    iconGroup
-                    worktreeGroup
-                    scriptsGroup
-                    staleCallout
-                    writeFailedCallout
-                    storeErrors
-                    removeButton
-                    saveButton
+                    ProjectHero(title: title, path: project.projectRootPath, image: iconImage)
+                    ProjectNameGroup(session: session, project: project) {
+                        renameText = project.projectCustomName ?? project.projectDisplayName
+                        renaming = true
+                    }
+                    ProjectIconGroup(
+                        icons: icons,
+                        projectId: project.projectId,
+                        hasCustomIcon: $hasCustomIcon,
+                        photoItem: $photoItem,
+                        pickingFile: $pickingFile,
+                        loadError: iconLoadError
+                    )
+                    WorktreeCommandsGroup(
+                        hasUncommittedChanges: store.hasUncommittedWorktreeSetupChanges,
+                        setup: $setupText,
+                        teardown: $teardownText
+                    )
+                    ProjectScriptsGroup(
+                        scripts: scripts,
+                        issue: scriptsIssue,
+                        onAdd: {
+                            let draft = ProjectScriptDraft(name: "", command: "")
+                            scripts.append(draft)
+                            editingScript = draft
+                        },
+                        onEdit: { editingScript = $0 },
+                        onRemove: { pendingDeleteScript = $0 }
+                    )
+                    ProjectConfigCallouts(
+                        store: store,
+                        onSave: { Task { await save() } },
+                        onReload: { Task { await reloadFromHost() } }
+                    )
+                    HStack {
+                        if let error = session.workspaceDirectory.actionError {
+                            Text(error)
+                                .font(.paseo(.footnote))
+                                .foregroundStyle(Palette.failureInk)
+                                .padding(.leading, Space.lg)
+                        }
+                    }
+                    ProjectRemoveButton { confirmRemove = true }
+                        // On the trigger, not the page, so the dialog animates from the button.
+                        .confirmationDialog(
+                            "Remove project?",
+                            isPresented: $confirmRemove,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Remove", role: .destructive) {
+                                Task {
+                                    let ok = await session.workspaceDirectory.removeProject(project.projectId)
+                                    if ok {
+                                        Haptics.success()
+                                        dismiss()
+                                    } else {
+                                        Haptics.failure()
+                                    }
+                                }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("The project and its workspaces will be unregistered on this host. Files on disk will not be changed.")
+                        }
+                    ProjectSaveButton(isSaving: store.isSaving, savedPulse: savedPulse) {
+                        Task { await save() }
+                    }
+                    .disabled(!canSave)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 24)
+                .padding(.horizontal, Space.lg)
+                .padding(.top, Space.xs)
+                .padding(.bottom, Space.xxl)
             }
             .scrollIndicators(.hidden)
             .overlay {
@@ -169,477 +214,9 @@ struct ProjectSettingsView: View {
         }
     }
 
-    private var loadFailure: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Image(systemName: "exclamationmark.triangle")
-                .font(.glyph(.xlarge, weight: .light))
-                .foregroundStyle(Palette.warning)
-            Text("Couldn't read paseo.json")
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-            Text(store.error?.userMessage ?? store.sendError ?? "Something went wrong. Try again.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .multilineTextAlignment(.center)
-            Button {
-                Task {
-                    await store.load(repoRoot: project.projectRootPath)
-                    seed()
-                }
-            } label: {
-                Text("Try again")
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(Palette.background)
-                    .padding(.horizontal, 24)
-                    .frame(minHeight: 44)
-                    .background(Palette.ink, in: .capsule)
-            }
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 32)
-    }
-
-    // MARK: Hero
-
-    private var hero: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(Palette.chip)
-                    .frame(width: 60, height: 60)
-                if let image = iconImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 60, height: 60)
-                        .clipShape(Circle())
-                } else {
-                    Text(String(title.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                        .font(.paseo(.largeTitle))
-                        .foregroundStyle(Palette.ink)
-                }
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.paseo(.title))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                Text(project.projectRootPath)
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: 8)
-        }
-        .padding(.vertical, 2)
-    }
-
     /// Decoded once per icon: the page re-evaluates for every keystroke in its text fields.
     private var iconImage: UIImage? {
         icons.iconData.flatMap { iconMemo.image(for: $0) }
-    }
-
-    // MARK: Name
-
-    private var nameGroup: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Name")
-            RowGroup {
-                HStack(spacing: 14) {
-                    Button {
-                        renameText = project.projectCustomName ?? project.projectDisplayName
-                        renaming = true
-                    } label: {
-                        HStack(spacing: 14) {
-                            Text(title)
-                                .font(.paseo(.body))
-                                .foregroundStyle(Palette.ink)
-                                .lineLimit(1)
-                            Spacer(minLength: 8)
-                            if project.projectCustomName == nil {
-                                Image(systemName: "chevron.right")
-                                    .font(.glyph(.regular))
-                                    .foregroundStyle(Palette.secondaryInk)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(minHeight: 51)
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Rename project")
-                    if project.projectCustomName != nil {
-                        Button {
-                            Task {
-                                let ok = await session.workspaceDirectory.renameProject(
-                                    project.projectId, to: nil)
-                                if ok { Haptics.success() } else { Haptics.failure() }
-                            }
-                        } label: {
-                            Text("Reset")
-                                .font(.paseo(.footnote, weight: .medium))
-                                .foregroundStyle(Palette.secondaryInk)
-                                .padding(.horizontal, 12)
-                                .frame(minHeight: 30)
-                                .background(Palette.chip, in: .capsule)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Reset to the folder name")
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
-        }
-    }
-
-    // MARK: Icon
-
-    private var iconGroup: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Icon")
-            RowGroup {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Icon")
-                            .font(.paseo(.body))
-                            .foregroundStyle(Palette.ink)
-                        Text(hasCustomIcon ? "Custom" : "Automatic")
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.secondaryInk)
-                    }
-                    Spacer(minLength: 8)
-                    if icons.isSaving {
-                        ProgressView().controlSize(.small)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .frame(minHeight: 51)
-                RowDivider()
-                HStack(spacing: 8) {
-                    PhotosPicker(selection: $photoItem, matching: .images) {
-                        Label("Photos", systemImage: "photo")
-                            .font(.paseo(.footnote, weight: .medium))
-                            .foregroundStyle(Palette.ink)
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 36)
-                            .background(Palette.chip, in: .capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!icons.supportsCustomIcon)
-                    .opacity(icons.supportsCustomIcon ? 1 : 0.45)
-                    .accessibilityLabel("Choose a photo for the project icon")
-                    Button {
-                        pickingFile = true
-                    } label: {
-                        Label("Files", systemImage: "doc")
-                            .font(.paseo(.footnote, weight: .medium))
-                            .foregroundStyle(Palette.ink)
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 36)
-                            .background(Palette.chip, in: .capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!icons.supportsCustomIcon)
-                    .opacity(icons.supportsCustomIcon ? 1 : 0.45)
-                    .accessibilityLabel("Choose a file for the project icon")
-                    if hasCustomIcon {
-                        Button {
-                            Task {
-                                let ok = await icons.reset(projectId: project.projectId)
-                                if ok {
-                                    hasCustomIcon = false
-                                    Haptics.success()
-                                } else {
-                                    Haptics.failure()
-                                }
-                            }
-                        } label: {
-                            Text("Reset")
-                                .font(.paseo(.footnote, weight: .medium))
-                                .foregroundStyle(Palette.secondaryInk)
-                                .padding(.horizontal, 14)
-                                .frame(minHeight: 36)
-                                .background(Palette.chip, in: .capsule)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!icons.supportsCustomIcon)
-                        .accessibilityLabel("Reset the project icon to automatic")
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 16)
-                .frame(minHeight: 51)
-                if !icons.supportsCustomIcon {
-                    Text("This host can't set project icons.")
-                        .font(.paseo(.caption))
-                        .foregroundStyle(Palette.tertiaryInk)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                }
-                if let error = icons.error {
-                    Text(error)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.failureInk)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                }
-            }
-        }
-    }
-
-    // MARK: Worktree
-
-    private var worktreeGroup: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Worktree")
-            if store.hasUncommittedWorktreeSetupChanges {
-                HStack(spacing: 8) {
-                    Image(systemName: "clock.badge.exclamationmark")
-                        .foregroundStyle(Palette.warning)
-                    Text("This worktree setup has uncommitted changes.")
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-            }
-            RowGroup {
-                configField(title: "Setup", text: $setupText, placeholder: "npm install")
-                RowDivider()
-                configField(title: "Teardown", text: $teardownText, placeholder: "docker compose down")
-            }
-            Text("One command per line, run in order. Saved to paseo.json on this host.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.tertiaryInk)
-                .padding(.leading, 16)
-        }
-    }
-
-    private func configField(title: String, text: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.paseo(.footnote, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
-            ZStack(alignment: .topLeading) {
-                if text.wrappedValue.isEmpty {
-                    Text(placeholder)
-                        .font(.paseo(.code))
-                        .foregroundStyle(Palette.tertiaryInk)
-                        .allowsHitTesting(false)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 8)
-                }
-                TextEditor(text: text)
-                    .font(.paseo(.code))
-                    .foregroundStyle(Palette.ink)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 64, maxHeight: 160)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-
-    // MARK: Scripts
-
-    private var scriptsGroup: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                sectionLabel("Scripts")
-                Spacer()
-                Button {
-                    let draft = ProjectScriptDraft(name: "", command: "")
-                    scripts.append(draft)
-                    editingScript = draft
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.glyph(.regular, weight: .medium))
-                        .foregroundStyle(Palette.ink)
-                        .frame(width: 30, height: 30)
-                        .frame(width: 44, height: 44)
-                        .background(Palette.chip, in: .circle)
-                }
-                .padding(.trailing, 16)
-                .accessibilityLabel("Add script")
-            }
-            RowGroup {
-                if scripts.isEmpty {
-                    Text("No scripts. Scripts run on demand from the workspace panel.")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                } else {
-                    ForEach(scripts.enumerated(), id: \.element.id) { index, script in
-                        scriptRow(script)
-                        if index < scripts.count - 1 { RowDivider() }
-                    }
-                }
-            }
-            if let issue = scriptsIssue {
-                Text(issue)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .padding(.leading, 16)
-            }
-        }
-    }
-
-    private func scriptRow(_ script: ProjectScriptDraft) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(script.name.isEmpty ? "Unnamed script" : script.name)
-                    .font(.paseo(.code, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                Text(script.command.isEmpty ? "No command" : script.command)
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: 8)
-            Menu {
-                Button("Edit", systemImage: "pencil") { editingScript = script }
-                Button("Remove", systemImage: "trash", role: .destructive) {
-                    pendingDeleteScript = script
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.glyph(.regular, weight: .medium))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
-            }
-            .accessibilityLabel("Script actions")
-        }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 51)
-    }
-
-    // MARK: Save / errors
-
-    private var staleCallout: some View {
-        Group {
-            if store.stale, store.error != nil {
-                callout(
-                    title: "This file changed on the host.",
-                    detail: "Your edits were not saved. Reloading shows the latest paseo.json.",
-                    actionLabel: "Reload") {
-                        Task { await reloadFromHost() }
-                    }
-            }
-        }
-    }
-
-    private var writeFailedCallout: some View {
-        Group {
-            if !store.stale, let error = store.error {
-                callout(
-                    title: "The change couldn't be saved.",
-                    detail: error.userMessage,
-                    actionLabel: "Try again") {
-                        Task { await save() }
-                    }
-            } else if let sendError = store.sendError {
-                callout(
-                    title: "The change couldn't be saved.",
-                    detail: sendError,
-                    actionLabel: "Reload") {
-                        Task { await reloadFromHost() }
-                    }
-            }
-        }
-    }
-
-    private var storeErrors: some View {
-        HStack {
-            if let error = session.workspaceDirectory.actionError {
-                Text(error)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.failureInk)
-                    .padding(.leading, 16)
-            }
-        }
-    }
-
-    private func callout(
-        title: String, detail: String, actionLabel: String, action: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.paseo(.callout, weight: .semibold))
-                .foregroundStyle(Palette.failureInk)
-            Text(detail)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(action: action) {
-                Text(actionLabel)
-                    .font(.paseo(.footnote, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 34)
-                    .background(Palette.chip, in: .capsule)
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Palette.quoteWash, in: .rect(cornerRadius: Radius.lg))
-    }
-
-    private var removeButton: some View {
-        Button {
-            confirmRemove = true
-        } label: {
-            Text("Remove project…")
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.failureInk)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 48)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Remove project")
-    }
-
-    private var saveButton: some View {
-        Button {
-            Task { await save() }
-        } label: {
-            Group {
-                if store.isSaving {
-                    ProgressView().controlSize(.small)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                } else if savedPulse {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark")
-                        Text("Saved")
-                    }
-                    .font(.paseo(.callout, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 48)
-                } else {
-                    Text("Save changes")
-                        .font(.paseo(.callout, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 48)
-                }
-            }
-            .foregroundStyle(Palette.background)
-            .background(
-                Palette.ink.opacity(canSave ? 1 : 0.35), in: .capsule)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canSave)
-        .accessibilityLabel("Save project settings")
     }
 
     private var scriptsIssue: String? {
@@ -691,23 +268,35 @@ struct ProjectSettingsView: View {
     }
 
     private func setUpload(fromPhotoItem item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self) else {
+        iconLoadError = nil
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                iconLoadError = "That photo couldn't be read."
+                Haptics.failure()
+                return
+            }
+            await setUpload(data: data)
+        } catch {
+            iconLoadError = error.localizedDescription
             Haptics.failure()
-            return
         }
-        await setUpload(data: data)
     }
 
     private func setUpload(fromFileURL url: URL) async {
+        iconLoadError = nil
         // Read off the main actor: an icon picked from an iCloud Drive folder still has to
         // download, and this ran that read on the main actor (`PickedFileLoader`).
-        guard case .success(let file) = await PickedFileLoader.load(
-            url, maxBytes: ConversationUpload.maxBytes)
-        else {
+        switch await PickedFileLoader.load(url, maxBytes: ConversationUpload.maxBytes) {
+        case .success(let file):
+            await setUpload(data: file.data)
+        case .failure(let failure):
+            if case .tooLarge = failure {
+                iconLoadError = "That file is too large for a project icon."
+            } else {
+                iconLoadError = "That file couldn't be read."
+            }
             Haptics.failure()
-            return
         }
-        await setUpload(data: file.data)
     }
 
     private func setUpload(data: Data) async {
@@ -718,13 +307,6 @@ struct ProjectSettingsView: View {
         } else {
             Haptics.failure()
         }
-    }
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
     }
 }
 #endif

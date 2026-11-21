@@ -113,7 +113,7 @@ public final class RelayHostPins: Sendable {
     /// Records a completed relay connection. Returns what changed about the host's identity so the
     /// caller can ask before replacing a pin.
     @discardableResult
-    public func record(_ offer: ConnectionOffer, at date: Date = Date()) -> RelayIdentityChange {
+    public func record(_ offer: ConnectionOffer, at date: Date = .now) -> RelayIdentityChange {
         let change: RelayIdentityChange
         if let existing = store.pin(serverID: offer.serverID) {
             change =
@@ -170,7 +170,7 @@ extension ConnectionOffer {
 // MARK: - In-memory implementations
 
 /// Test/preview implementation of `RelayPinStore`. Thread-safe, no persistence.
-public final class InMemoryRelayPinStore: RelayPinStore, @unchecked Sendable {
+public final class InMemoryRelayPinStore: RelayPinStore, Sendable {
     private let mutex = Mutex<[String: RelayPinnedHost]>([:])
 
     public init() {}
@@ -193,7 +193,7 @@ public final class InMemoryRelayPinStore: RelayPinStore, @unchecked Sendable {
 }
 
 /// Test implementation of `RelaySecretStore`. Stands in for the app's Keychain.
-public final class InMemoryRelaySecretStore: RelaySecretStore, @unchecked Sendable {
+public final class InMemoryRelaySecretStore: RelaySecretStore, Sendable {
     private let mutex = Mutex<[String: String]>([:])
 
     public init() {}

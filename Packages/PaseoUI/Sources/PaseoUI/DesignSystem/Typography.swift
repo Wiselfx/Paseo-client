@@ -15,8 +15,8 @@ extension Font {
     }
 }
 /// Face and font resolution: the bundled faces are resolved once, fonts are cached by role,
-/// and the fallback keeps the requested size (scaled through `UIFontMetrics`, never a
-/// `.system(style)` that would lose it).
+/// and the fallback keeps the requested size (the text style's system font scaled by
+/// `size / base`, so SwiftUI still resolves it against the Dynamic Type environment).
 enum Typography {
     /// Claude iOS's chat body (V5): assistant prose, your bubbles and the composer all sit at
     /// 17 pt, and everything around them is measured from it. Outside prose, name this, not
@@ -93,11 +93,30 @@ enum Typography {
         }
     }
 
-    /// The fallback face, scaled through `UIFontMetrics` so the role's size survives.
+    /// The fallback face at the role's size, as a `Font`. A size that is its text style's own default
+    /// (`.body` 17, `.footnote` 13, `.title3` 20 ...) takes that style's system `Font`, which SwiftUI
+    /// resolves against the Dynamic Type environment, so the `.dynamicTypeSize` shift that code
+    /// containers apply reaches it. Any other size stays a fixed face built once through
+    /// `UIFontMetrics`: SwiftUI has no public way to scale a system face by a ratio.
     static func scaledSystem(
         size: CGFloat, relativeTo style: Font.TextStyle, design: UIFontDescriptor.SystemDesign,
         weight: Font.Weight, italic: Bool = false
     ) -> Font {
+        let base = UIFont.preferredFont(
+            forTextStyle: style.uiTextStyle,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: .large)
+        ).pointSize
+        if abs(size - base) < 0.01 {
+            let swiftDesign: Font.Design =
+                switch design {
+                case .serif: .serif
+                case .monospaced: .monospaced
+                case .rounded: .rounded
+                default: .default
+                }
+            let font = Font.system(style, design: swiftDesign, weight: weight)
+            return italic ? font.italic() : font
+        }
         let system = UIFont.systemFont(ofSize: size, weight: weight.uiWeight)
         var descriptor = system.fontDescriptor.withDesign(design) ?? system.fontDescriptor
         if italic { descriptor = descriptor.withSymbolicTraits(.traitItalic) ?? descriptor }

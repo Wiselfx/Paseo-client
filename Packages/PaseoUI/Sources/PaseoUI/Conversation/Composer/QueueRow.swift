@@ -31,8 +31,8 @@ struct QueueRow: View {
                 Image(systemName: "pencil")
                     .font(.glyph(.small, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 36, height: 36)
-                    .frame(width: 44, height: 44)
+                    .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
+                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                     .contentShape(.rect)
             }
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
@@ -43,8 +43,8 @@ struct QueueRow: View {
                 Image(systemName: "arrow.up")
                     .font(.glyph(.small, weight: .semibold))
                     .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 36, height: 36)
-                    .frame(width: 44, height: 44)
+                    .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
+                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                     .contentShape(.rect)
             }
             .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))

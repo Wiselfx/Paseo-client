@@ -104,10 +104,13 @@ public final class SoundCuePlayer {
         let synthesisRate = sampleRate
         let duration = (voices.map(\.offset).max() ?? 0) + 0.2
         let frameCount = AVAudioFrameCount(duration * synthesisRate)
-        let format = AVAudioFormat(standardFormatWithSampleRate: synthesisRate, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: synthesisRate, channels: 1),
+            let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
+            let channels = buffer.floatChannelData
+        else {
+            fatalError("SoundCuePlayer: could not allocate a mono float buffer at \(synthesisRate) Hz")
+        }
         buffer.frameLength = frameCount
-        let channels = buffer.floatChannelData!
         for voice in voices {
             let attack = 0.003 * synthesisRate
             let decay = 0.09 * synthesisRate

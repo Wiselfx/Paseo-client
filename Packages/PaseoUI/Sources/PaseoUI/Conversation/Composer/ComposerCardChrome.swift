@@ -24,14 +24,11 @@ struct ComposerCardChrome: ViewModifier {
             .padding(.vertical, expanded ? ComposerMetrics.verticalInset : 0)
             .frame(minHeight: ComposerMetrics.pillHeight)
             .background {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                RoundedRectangle(cornerRadius: radius)
                     .fill(Palette.composer)
+                    .stroke(Palette.composerBorder, lineWidth: ComposerMetrics.hairline)
                     .shadow(color: shadow, radius: ComposerMetrics.shadowRadius,
                             y: ComposerMetrics.shadowY)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Palette.composerBorder, lineWidth: ComposerMetrics.hairline)
             }
     }
 }

@@ -16,9 +16,9 @@ struct WelcomeAppearanceSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     AppearancePicker(identifierPrefix: "welcome.appearance")
                     scaleRow("Content size", options: ClaudeTextScale.Content.allCases,
-                             current: contentTextSize) { contentTextSize = $0.rawValue }
+                             selection: $contentTextSize)
                     scaleRow("Code size", options: ClaudeTextScale.Code.allCases,
-                             current: codeFontSize) { codeFontSize = $0.rawValue }
+                             selection: $codeFontSize)
                 }
                 .padding(16)
             }
@@ -31,38 +31,27 @@ struct WelcomeAppearanceSheet: View {
     }
 
 
+    /// A `Picker` rather than a hand-built menu: VoiceOver gets the row's title and the selected size.
     private func scaleRow<Option: CaseIterable & RawRepresentable & Equatable>(
-        _ title: String, options: [Option], current: String,
-        onSelect: @escaping (Option) -> Void
+        _ title: String, options: [Option], selection: Binding<String>
     ) -> some View where Option.RawValue == String {
         HStack {
             Text(title)
                 .font(.paseo(.body))
             Spacer(minLength: 8)
-            Menu {
+            Picker(title, selection: selection) {
                 ForEach(Array(options), id: \.rawValue) { option in
-                    Button {
-                        Haptics.selection()
-                        onSelect(option)
-                    } label: {
-                        Label(
-                            option.rawValue,
-                            systemImage: current == option.rawValue ? "checkmark" : "circle")
-                    }
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Text(current)
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.glyph(.small, weight: .semibold))
-                        .foregroundStyle(Palette.secondaryInk)
+                    Text(option.rawValue).tag(option.rawValue)
                 }
             }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .tint(Palette.secondaryInk)
+            .paseoFeedback(.selection, trigger: selection.wrappedValue)
         }
         .padding(.horizontal, 16)
-        .frame(height: 52)
+        .padding(.vertical, Space.sm)
+        .frame(minHeight: 52)
         .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
     }
 }

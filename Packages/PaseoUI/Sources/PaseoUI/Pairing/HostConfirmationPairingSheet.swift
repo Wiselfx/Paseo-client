@@ -1,9 +1,6 @@
 #if canImport(UIKit)
-import AVFoundation
 import PaseoStore
 import SwiftUI
-import UIKit
-import VisionKit
 
 // MARK: - Confirmation
 
@@ -38,13 +35,13 @@ public struct HostConfirmationPairingSheet: View {
                         .font(.paseo(.callout))
                         .foregroundStyle(Palette.secondaryInk)
                     RowGroup {
-                        detailRow(label: "Host", value: offer.serverID)
+                        HostConfirmationDetailRow(label: "Host", value: offer.serverID)
                         RowDivider()
-                        detailRow(
+                        HostConfirmationDetailRow(
                             label: "Key fingerprint",
                             value: HostConfirmation.keyFingerprint(offer.daemonPublicKeyB64))
                         RowDivider()
-                        detailRow(label: "Relay", value: offer.relayEndpoint)
+                        HostConfirmationDetailRow(label: "Relay", value: offer.relayEndpoint)
                     }
                     HStack(spacing: 10) {
                         Button("Cancel") { dismiss() }
@@ -55,16 +52,10 @@ public struct HostConfirmationPairingSheet: View {
                         Button {
                             onConnect()
                         } label: {
-                            if isAttempting {
-                                ProgressView().controlSize(.small).tint(Palette.background)
-                            } else {
-                                Text("Connect")
-                            }
+                            Text("Connect")
+                                .frame(maxWidth: .infinity)
                         }
-                        .font(.paseo(.callout, weight: .semibold))
-                        .buttonStyle(.borderedProminent)
-                        .tint(Palette.ink)
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.paseoPrimary(isWorking: isAttempting))
                         .disabled(isAttempting)
                         .accessibilityIdentifier("pairing.confirm.connect")
                     }
@@ -74,22 +65,6 @@ public struct HostConfirmationPairingSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-    }
-
-    private func detailRow(label: String, value: String) -> some View {
-        HStack(spacing: 12) {
-            Text(label)
-                .font(.paseo(.callout))
-            Spacer(minLength: 8)
-            Text(value)
-                .font(.paseo(.code))
-                .foregroundStyle(Palette.secondaryInk)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-        }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 52, alignment: .leading)
     }
 }
 #endif

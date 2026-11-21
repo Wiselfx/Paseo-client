@@ -49,14 +49,14 @@ public enum UsageOverviewBuilder {
     /// Rolls the agent list up into overview figures. `now` is injectable for tests; the
     /// day window is the last `dayCount` calendar days including today (local time).
     public static func compute(
-        agents: [AgentSnapshot], dayCount: Int = 14, now: Date = Date()
+        agents: [AgentSnapshot], dayCount: Int = 14, now: Date = .now
     ) -> UsageOverview {
         var calendar = Calendar.current
         calendar.timeZone = TimeZone.autoupdatingCurrent
         let startOfToday = calendar.startOfDay(for: now)
 
         var tokens = 0
-        var activeDayKeys = Set<String>()
+        var activeDays = Set<Date>()
         var hourCounts = [Int](repeating: 0, count: 24)
         var perDay: [Date: Int] = [:]
         var perModel: [String: Int] = [:]
@@ -66,13 +66,14 @@ public enum UsageOverviewBuilder {
                 perModel[cost.key, default: 0] += cost.tokens
             }
             guard let date = PaseoDate.parse(agent.updatedAt) else { continue }
-            activeDayKeys.insert(dayKey(date, calendar: calendar))
+            let startOfDay = calendar.startOfDay(for: date)
+            activeDays.insert(startOfDay)
             hourCounts[calendar.component(.hour, from: date)] += 1
-            perDay[calendar.startOfDay(for: date), default: 0] += agentTokens(agent)
+            perDay[startOfDay, default: 0] += agentTokens(agent)
         }
 
         let days = (0..<dayCount).map { offset in
-            let day = calendar.date(byAdding: .day, value: -(dayCount - 1 - offset), to: startOfToday)!
+            let day = calendar.date(byAdding: .day, value: -(dayCount - 1 - offset), to: startOfToday) ?? startOfToday
             return UsageOverview.Day(date: day, tokens: perDay[day] ?? 0)
         }
         let bestHour = hourCounts.enumerated().max { $0.element < $1.element }?.offset
@@ -80,7 +81,7 @@ public enum UsageOverviewBuilder {
         return UsageOverview(
             sessions: agents.count,
             tokens: tokens,
-            activeDays: activeDayKeys.count,
+            activeDays: activeDays.count,
             peakHour: hourTotal > 0 ? bestHour : nil,
             favoriteModel: perModel.max { $0.value < $1.value }?.key,
             days: days,
@@ -94,14 +95,6 @@ public enum UsageOverviewBuilder {
         guard let usage = agent.lastUsage else { return 0 }
         return (usage.inputTokens ?? 0) + (usage.cachedInputTokens ?? 0)
             + (usage.cacheWriteTokens ?? 0) + (usage.outputTokens ?? 0)
-    }
-
-    private static func dayKey(_ date: Date, calendar: Calendar) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter.string(from: date)
     }
 }
 

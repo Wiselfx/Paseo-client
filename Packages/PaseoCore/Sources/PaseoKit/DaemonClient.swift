@@ -111,29 +111,29 @@ extension ConnectionError {
         switch self {
         case .rejected(let reason):
             switch reason {
-            case "password_required": return "This host needs a password."
-            case "incorrect_password": return "Wrong password."
-            case "incompatible_protocol": return "This host's version isn't compatible. Update Paseo."
-            default: return "The host refused the connection (\(reason))."
+            case "password_required": "This host needs a password."
+            case "incorrect_password": "Wrong password."
+            case "incompatible_protocol": "This host's version isn't compatible. Update Paseo."
+            default: "The host refused the connection (\(reason))."
             }
         case .timeout:
-            return "The host didn't answer. Check the address and that it's running."
+            "The host didn't answer. Check the address and that it's running."
         case .transport(let message):
-            return "Couldn't reach the host: \(message)"
+            "Couldn't reach the host: \(message)"
         case .closed(let code, let reason):
             switch code {
             case 4002:
                 // Terminal (R17): protected handshake failed — relinking the same way will fail again.
-                return "The pairing link didn't work. Ask the host to show a new pairing code."
+                "The pairing link didn't work. Ask the host to show a new pairing code."
             case 4003:
-                return "The encrypted connection failed. Check the pairing link and try again."
+                "The encrypted connection failed. Check the pairing link and try again."
             default:
-                return "Connection closed (\(code)) \(reason)"
+                "Connection closed (\(code)) \(reason)"
             }
         case .protocolViolation(let message):
-            return "Unexpected reply from the host: \(message)"
+            "Unexpected reply from the host: \(message)"
         case .disconnected:
-            return "Disconnected."
+            "Disconnected."
         }
     }
 }

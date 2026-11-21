@@ -1,4 +1,6 @@
 #if canImport(UIKit)
+import SwiftUI
+
     /// Theme values follow `docs/research/08-dsh-live-observation.md` §6: serif body, 12 pt between
     /// blocks, mono code. Sizes are measured at Claude's 17 pt body (V5); headings and code are
     /// ratios of `bodySize`, so the whole ladder follows the size setting and Dynamic Type.
@@ -58,9 +60,9 @@
 
         public static var artifact: Self {
             var theme = Self()
-            theme.bodyFont = .system(size: 17)
+            theme.bodyFont = ProseFonts.sans(size: 17)
             theme.bodySize = 17
-            theme.codeFont = .system(size: 13, design: .monospaced)
+            theme.codeFont = ProseFonts.mono(size: 13)
             theme.lineSpacing = 6
             return theme
         }

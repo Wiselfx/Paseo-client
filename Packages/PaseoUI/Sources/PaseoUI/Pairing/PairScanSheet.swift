@@ -1,8 +1,6 @@
 #if canImport(UIKit)
 import AVFoundation
-import PaseoStore
 import SwiftUI
-import UIKit
 import VisionKit
 
 // MARK: - Scan
@@ -19,7 +17,6 @@ public struct PairScanSheet: View {
         self.onScanned = onScanned
         self.onUsePaste = onUsePaste
     }
-    @Environment(\.dismiss) private var dismiss
 
     @State private var failed = false
     @State private var permissionDenied = false
@@ -42,10 +39,7 @@ public struct PairScanSheet: View {
                 QRScannerView(
                     onPayload: { payload in
                         guard !didAccept else { return }
-                        guard
-                            payload.contains("#offer=") || payload.contains("#connect=")
-                                || payload.hasPrefix("relay://")
-                        else { return }
+                        guard PairingLink.looksValid(payload) else { return }
                         didAccept = true
                         onScanned(payload)
                     },
@@ -58,29 +52,22 @@ public struct PairScanSheet: View {
                     .padding(.vertical, 10)
             }
         }
-        .onAppear {
-            Task {
-                guard DataScannerViewController.isSupported else {
-                    failed = true
-                    return
-                }
-                guard DataScannerViewController.isAvailable else {
-                    failed = true
-                    return
-                }
-                let status = AVCaptureDevice.authorizationStatus(for: .video)
-                switch status {
-                case .denied, .restricted: permissionDenied = true
-                case .authorized: granted = true
-                case .notDetermined:
-                    let grantedAccess = await AVCaptureDevice.requestAccess(for: .video)
-                    if grantedAccess { granted = true } else { permissionDenied = true }
-                @unknown default: failed = true
-                }
-                if !DataScannerViewController.isSupported {
-                    failed = true
-                }
-            }
+        .task { await prepareScanner() }
+    }
+
+    /// Checks the scanner and the camera permission; the sheet starts scanning once `granted`.
+    private func prepareScanner() async {
+        guard DataScannerViewController.isSupported, DataScannerViewController.isAvailable else {
+            failed = true
+            return
+        }
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .denied, .restricted: permissionDenied = true
+        case .authorized: granted = true
+        case .notDetermined:
+            let grantedAccess = await AVCaptureDevice.requestAccess(for: .video)
+            if grantedAccess { granted = true } else { permissionDenied = true }
+        @unknown default: failed = true
         }
     }
 

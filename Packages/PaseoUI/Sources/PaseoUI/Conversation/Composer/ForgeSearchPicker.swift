@@ -25,7 +25,6 @@ struct ForgeSearchPicker: View {
     @State private var result: ForgeSearchResult?
     @State private var isSearching = false
     @State private var searchError: String?
-    @State private var searchTask: Task<Void, Never>?
 
     private var store: ForgeSearchStore { session.forgeSearch }
 
@@ -42,6 +41,8 @@ struct ForgeSearchPicker: View {
             }
         }
     }
+
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var title: String { isMergeRequest ? "Attach issue or MR" : "Attach issue or PR" }
     private var placeholder: String {
@@ -63,7 +64,9 @@ struct ForgeSearchPicker: View {
         .foregroundStyle(Palette.ink)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .onDisappear { searchTask?.cancel() }
+        // Debounced like the Add project search (300 ms); the store picks the transport. The task
+        // is cancelled by SwiftUI when the key changes or the sheet goes away.
+        .task(id: ForgeSearchKey(query: query, kind: kindFilter)) { await search() }
     }
 
     private var searchField: some View {
@@ -71,24 +74,21 @@ struct ForgeSearchPicker: View {
             Image(systemName: "magnifyingglass")
                 .font(.glyph(.regular))
                 .foregroundStyle(Palette.secondaryInk)
-            TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(Palette.secondaryInk))
+            // The title is the field's VoiceOver name; the prompt is only drawn while it is empty.
+            TextField(placeholder, text: $query, prompt: Text(placeholder).foregroundStyle(Palette.secondaryInk))
                 .font(.paseo(.body))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
-                .onChange(of: query) { _, value in scheduleSearch(value) }
             if isSearching {
                 ProgressView().controlSize(.small)
             } else if !query.isEmpty {
-                Button {
-                    query = ""
-                    scheduleSearch("")
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.glyph(.regular))
-                        .foregroundStyle(Palette.tertiaryInk)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear")
+                Button("Clear", systemImage: "xmark.circle.fill") { query = "" }
+                    .labelStyle(.iconOnly)
+                    .font(.glyph(.regular))
+                    .foregroundStyle(Palette.tertiaryInk)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+                    .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 12)
@@ -101,7 +101,6 @@ struct ForgeSearchPicker: View {
             ForEach(KindFilter.allCases, id: \.self) { filter in
                 Button {
                     kindFilter = filter
-                    scheduleSearch(query)
                 } label: {
                     Text(filterLabel(filter))
                         .font(.paseo(.footnote, weight: kindFilter == filter ? .medium : .regular))
@@ -116,6 +115,7 @@ struct ForgeSearchPicker: View {
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(kindFilter == filter ? .isSelected : [])
             }
         }
         .paseoFeedback(.selection, trigger: kindFilter)
@@ -148,13 +148,13 @@ struct ForgeSearchPicker: View {
         if let result {
             if result.items.isEmpty {
                 if !isSearching {
-                    Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? "Type to search."
-                        : "No results found.")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 24)
+                    if trimmedQuery.isEmpty {
+                        ContentUnavailableView(
+                            isMergeRequest ? "Search issues and MRs" : "Search issues and PRs",
+                            systemImage: "magnifyingglass")
+                    } else {
+                        ContentUnavailableView.search(text: trimmedQuery)
+                    }
                 }
             } else {
                 ScrollView {
@@ -238,7 +238,7 @@ struct ForgeSearchPicker: View {
                         .lineLimit(1)
                     if !item.labels.isEmpty {
                         Text(item.labels.joined(separator: " · "))
-                            .font(.paseo(.caption2))
+                            .font(.paseo(.caption))
                             .foregroundStyle(Palette.tertiaryInk)
                             .lineLimit(1)
                     }
@@ -266,29 +266,25 @@ struct ForgeSearchPicker: View {
         return "#\(number) \(item.title)"
     }
 
-    /// Debounced like the Add project search (300 ms); the store picks the transport.
-    private func scheduleSearch(_ value: String) {
-        searchTask?.cancel()
-        searchTask = Task {
-            do {
-                try await Task.sleep(for: .milliseconds(300))
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else {
-                result = nil
-                searchError = nil
-                return
-            }
-            isSearching = true
-            let found = await store.search(cwd: cwd, query: trimmed, kinds: kindFilter.kinds)
-            guard !Task.isCancelled else { return }
+    /// The search for the current `query` and filter, run by `task(id:)`. A cancelled run leaves
+    /// `isSearching` to its successor, and the empty-query branch always clears it, so backspacing
+    /// to an empty field mid-search cannot leave the spinner up.
+    private func search() async {
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled else { return }
+        let trimmed = trimmedQuery
+        guard !trimmed.isEmpty else {
             isSearching = false
-            result = found
-            searchError = store.error
+            result = nil
+            searchError = nil
+            return
         }
+        isSearching = true
+        let found = await store.search(cwd: cwd, query: trimmed, kinds: kindFilter.kinds)
+        guard !Task.isCancelled else { return }
+        isSearching = false
+        result = found
+        searchError = store.error
     }
 }
 #endif

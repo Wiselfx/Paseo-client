@@ -1,6 +1,4 @@
 #if canImport(UIKit)
-import AVFoundation
-import PaseoStore
 import SwiftUI
 import UIKit
 import VisionKit

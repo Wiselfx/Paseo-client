@@ -21,6 +21,7 @@ struct ClaudeCompactionMarker: View {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: "scissors").font(.glyph(.small, weight: .regular))
+                        .accessibilityHidden(true)
                 }
                 Text(Self.label(status: status, trigger: trigger, preTokens: preTokens))
                     .font(.paseo(.footnote))

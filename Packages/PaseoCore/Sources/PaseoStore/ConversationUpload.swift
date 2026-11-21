@@ -187,9 +187,7 @@ public final class ConversationUpload {
     }
 
     private static func iso8601Now() -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: Date())
+        Date.now.ISO8601Format(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
     }
 }
 

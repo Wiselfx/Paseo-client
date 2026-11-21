@@ -17,8 +17,14 @@ struct NewLabelSheet: View {
 
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
+        SheetScaffold(
+            "New label",
+            confirm: SheetConfirm(
+                "Create", isEnabled: canCreate, isWorking: session.labels.isWorking
+            ) {
+                submit()
+            }
+        ) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     fieldHint
@@ -31,23 +37,6 @@ struct NewLabelSheet: View {
                         .frame(minHeight: 44)
                         .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
                     colorRow
-                    Button(action: submit) {
-                        HStack {
-                            Spacer()
-                            if session.labels.isWorking {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Text("Create")
-                                    .font(.paseo(.callout, weight: .semibold))
-                            }
-                            Spacer()
-                        }
-                        .frame(height: 46)
-                        .background(canCreate ? Palette.unread : Palette.chip, in: .rect(cornerRadius: Radius.md))
-                        .foregroundStyle(canCreate ? Color.white : Palette.secondaryInk)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canCreate)
                     if let error = session.labels.actionError {
                         Text(error)
                             .font(.paseo(.footnote))
@@ -65,8 +54,6 @@ struct NewLabelSheet: View {
             }
             .scrollIndicators(.hidden)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(Palette.panel)
     }
 
     private var canCreate: Bool {
@@ -102,28 +89,6 @@ struct NewLabelSheet: View {
             }
         }
         .paseoFeedback(.selection, trigger: color)
-    }
-
-    private var header: some View {
-        ZStack {
-            Text("New label")
-                .font(.paseo(.title, weight: .semibold))
-            HStack {
-                Button {
-                    onClose()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.glyph(.large, weight: .light))
-                        .frame(width: 44, height: 44)
-                }
-                .glassEffect(in: .circle)
-                .accessibilityLabel("Close")
-                Spacer()
-            }
-        }
-        .frame(height: 56)
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
     }
 
     private func submit() {

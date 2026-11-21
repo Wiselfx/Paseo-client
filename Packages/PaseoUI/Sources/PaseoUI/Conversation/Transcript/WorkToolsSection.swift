@@ -22,6 +22,8 @@ struct WorkToolsSection: View {
     @State private var isOpen = false
     @State private var showsEarlier = false
     @State private var liveSince = Date.now
+    /// Counts the reader's taps so the haptic plays for them and not for a find landing in the run.
+    @State private var feedbackTaps = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Past this many steps the opened run folds its older ones away…
@@ -35,7 +37,8 @@ struct WorkToolsSection: View {
 
     private var accessibilityText: String {
         if let live { return [live.verb, live.target].compactMap { $0 }.joined(separator: " ") }
-        return [title, summary].filter { !$0.isEmpty }.joined(separator: ", ")
+        let failed = failures > 0 ? "\(PaseoFormat.integer(failures)) failed" : ""
+        return [title, summary, failed].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
     var body: some View {
@@ -57,6 +60,7 @@ struct WorkToolsSection: View {
                     .transition(.opacity)
             }
         }
+        .paseoFeedback(.selection, trigger: feedbackTaps)
         .onChange(of: findTarget, initial: true) { _, target in reveal(target) }
     }
 
@@ -87,14 +91,14 @@ struct WorkToolsSection: View {
     }
 
     private func toggle() {
-        Haptics.selection()
+        feedbackTaps += 1
         withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
             isOpen.toggle()
         }
     }
 
     private func showEarlier() {
-        Haptics.selection()
+        feedbackTaps += 1
         withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
             showsEarlier = true
         }

@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
-import UIKit
 
 /// The Schedules sheet: `SheetScaffold` provides the header and the `NavigationStack`, so the
 /// detail and editor pages push and swipe-back returns to the list. Backed by `SchedulesStore`
@@ -37,7 +36,10 @@ struct ClaudeSchedulesView: View {
 
     var body: some View {
         SheetScaffold("Schedules", detents: .large) {
-            SchedulesListPage(session: session, onNew: { editorRequest = .empty })
+            SchedulesListPage(
+                session: session,
+                onNew: { editorRequest = .empty },
+                onEdit: { editorRequest = $0 })
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .detail(let id):
@@ -51,12 +53,9 @@ struct ClaudeSchedulesView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
-                        Button {
+                        Button("New schedule", systemImage: "plus") {
                             editorRequest = .empty
-                        } label: {
-                            Image(systemName: "plus")
                         }
-                        .accessibilityLabel("New schedule")
                         .accessibilityIdentifier("schedules.new")
                     }
                 }

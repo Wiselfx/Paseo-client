@@ -25,6 +25,7 @@ extension PaseoSidebar {
             .truncationMode(.tail)
             .padding(.top, 18)
             .padding(.bottom, 6)
+            .accessibilityAddTraits(.isHeader)
     }
 
     /// Builds the shared tables once per body evaluation. `activityDate` parses up to five
@@ -204,7 +205,7 @@ extension PaseoSidebar {
                 ClaudeChevron(expanded: showHidden)
             }
             .padding(.top, 12)
-            .frame(height: 46)
+            .frame(minHeight: 46)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -240,10 +241,6 @@ extension PaseoSidebar {
     
 
     // MARK: Visibility and ordering
-
-    var sidebarSort: SidebarSort {
-        SidebarSort(rawValue: sortRaw) ?? .activity
-    }
 
     /// Hidden rows show up only while the "Hidden workspaces" row is expanded.
     func isVisible(_ workspace: WorkspaceDescriptor) -> Bool {

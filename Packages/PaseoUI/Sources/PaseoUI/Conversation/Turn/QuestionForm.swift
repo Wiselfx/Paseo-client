@@ -13,10 +13,6 @@ import UIKit
 struct QuestionForm: Equatable {
     var questions: [QuestionFormQuestion]
 
-    static func == (lhs: QuestionForm, rhs: QuestionForm) -> Bool {
-        lhs.questions.map(\.question) == rhs.questions.map(\.question)
-    }
-
     init?(input: JSONValue?) {
         guard let input, case .object(let object) = input,
             case .array(let items)? = object["questions"], !items.isEmpty

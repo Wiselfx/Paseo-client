@@ -22,6 +22,7 @@ extension PaseoSidebar {
                         .truncationMode(.tail)
                     Spacer(minLength: 0)
                 }
+                .frame(minHeight: 44)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)

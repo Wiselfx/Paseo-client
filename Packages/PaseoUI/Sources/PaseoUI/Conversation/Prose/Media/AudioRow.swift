@@ -36,6 +36,14 @@ struct AudioRow: View {
     @State private var loadFailure = false
     /// A tap while the bytes are on their way: the time slot says so once, not per frame.
     @State private var loading = false
+    /// The tap's load-and-play. Held so a second tap while it runs is ignored (it would build
+    /// a second player and orphan the first) and so the row can cancel it when it goes away.
+    @State private var playTask: Task<Void, Never>?
+    /// Bumped per load: a cancelled load can finish after a newer tap started its own, and
+    /// must not clear that load's handle.
+    @State private var playGeneration = 0
+    /// Bumped per tap: the trigger for the touch feedback.
+    @State private var playTaps = 0
 
     private var isPlaying: Bool { playing }
 
@@ -61,6 +69,10 @@ struct AudioRow: View {
             condition: richActions?.linkCondition ?? .assumed)
     }
 
+    private var playLabel: LocalizedStringKey {
+        isPlaying ? "Pause audio" : "Play audio"
+    }
+
     private var timeText: String {
         "\(Self.timestamp(elapsed)) / \(Self.timestamp(duration))"
     }
@@ -81,10 +93,9 @@ struct AudioRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 HStack(spacing: Space.sm) {
-                    Button {
-                        togglePlay()
-                    } label: {
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    Button(action: togglePlay) {
+                        Label(playLabel, systemImage: isPlaying ? "pause.fill" : "play.fill")
+                            .labelStyle(.iconOnly)
                             .font(.paseo(.body, weight: .semibold))
                             .foregroundStyle(Palette.ink)
                             .frame(width: Metrics.hitSize, height: Metrics.hitSize)
@@ -92,9 +103,16 @@ struct AudioRow: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(policy == .cacheOnly)
-                    .accessibilityLabel(isPlaying ? "Pause audio" : "Play audio")
                     .accessibilityHint(loadFailure ? "Retries loading \(fileName)" : fileName)
-                    waveform
+                    AudioWaveform(
+                        bars: bars,
+                        progress: duration > 0 ? elapsed / duration : 0,
+                        valueText: timeText,
+                        onSeek: { fraction in
+                            guard duration > 0 else { return }
+                            seek(to: fraction * duration)
+                        },
+                        onScrub: scrubBy(seconds:))
                     if loading {
                         Text("Loading…")
                             .font(.paseo(.caption))
@@ -118,14 +136,29 @@ struct AudioRow: View {
             }
             .frame(minHeight: Metrics.rowCardMinHeight - Space.md * 2, alignment: .leading)
             .contentShape(.rect))
-            .paseoCardAccessibility(kind: "Audio", title: fileName, meta: timeText, isButton: true)
-            .onDisappear { pause() }
+            // The row keeps its play button and adjustable waveform as separate elements:
+            // combining the card would swallow both, and its label would change every second.
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Audio, \(fileName)")
+            .paseoFeedback(.light, trigger: playTaps)
+            .onDisappear {
+                cancelPendingPlay()
+                pause()
+            }
             .onScrollVisibilityChange(threshold: 0.05) { visible in
                 // Far enough off screen: pause rather than keep playing unseen.
-                if !visible { pause() }
+                if !visible {
+                    cancelPendingPlay()
+                    pause()
+                }
             }
             .onChange(of: MediaPlaybackCoordinator.shared.activeID) { _, activeID in
-                if activeID != cardID { pause() }
+                if activeID != cardID {
+                    // Another player took over: a load still in flight must not start over
+                    // it. A cleared id (the other player just stopped) leaves a load alone.
+                    if activeID != nil { cancelPendingPlay() }
+                    pause()
+                }
             }
             .task(id: isPlaying) {
                 // The elapsed clock: one small body pass per second while playing,
@@ -151,43 +184,7 @@ struct AudioRow: View {
             }
     }
 
-    // MARK: Waveform
-
-    /// 48 RMS buckets across the whole file, computed off main once per card.
-    /// Tap seeks (a tap never steals the transcript's vertical scroll; a drag would —
-    /// R-3), and VoiceOver adjusts in 10 s steps.
-    private var waveform: some View {
-        GeometryReader { proxy in
-            let count = max(bars.count, 1)
-            let step = max(proxy.size.width / CGFloat(count), 1)
-            let played = duration > 0 ? elapsed / duration : 0
-            Canvas { context, size in
-                for (index, level) in bars.enumerated() {
-                    let x = CGFloat(index) * step + 1
-                    let height = max(2, level * size.height)
-                    let y = (size.height - height) / 2
-                    let playedBar = Double(index) / Double(count) <= played
-                    context.fill(
-                        Path(CGRect(x: x, y: y, width: max(step - 2, 1), height: height)),
-                        with: .color(playedBar ? Palette.ink : Palette.tertiaryInk))
-                }
-            }
-            .gesture(SpatialTapGesture().onEnded { value in
-                guard duration > 0, proxy.size.width > 0 else { return }
-                seek(to: Double(min(max(value.location.x / proxy.size.width, 0), 1))
-                    * duration)
-            })
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Audio waveform")
-            .accessibilityAdjustableAction { direction in
-                scrubBy(seconds: direction == .increment ? 10 : -10)
-            }
-            .accessibilityValue(timeText)
-        }
-        .frame(height: Metrics.audioWaveformHeight)
-        .frame(maxWidth: .infinity)
-    }
-
+    /// 10 s steps for VoiceOver on the waveform, and the scrub callback's seek.
     private func scrubBy(seconds: Double) {
         seek(to: max(0, elapsed + seconds))
     }
@@ -195,16 +192,26 @@ struct AudioRow: View {
     // MARK: Playback
 
     private func togglePlay() {
-        Haptics.light()
+        playTaps += 1
         if isPlaying {
             pause()
             MediaPlaybackCoordinator.shared.stop(cardID)
         } else {
-            Task { @MainActor in
+            guard playTask == nil else { return }
+            playGeneration += 1
+            let generation = playGeneration
+            playTask = Task { @MainActor in
+                // Clear only our own handle: a cancelled earlier load may still finish.
+                defer { if generation == playGeneration { playTask = nil } }
                 loading = true
                 loadFailure = false
                 await ensurePlayer()
                 loading = false
+                // The row went away (or paused) mid-load: stay silent and idle.
+                guard !Task.isCancelled else {
+                    loadFailure = false
+                    return
+                }
                 // Nothing to play: the row says so and the next tap retries, instead of a
                 // button that silently does nothing (V1.4).
                 guard localPlayer != nil || streamPlayer != nil else {
@@ -213,12 +220,23 @@ struct AudioRow: View {
                 }
                 MediaPlaybackCoordinator.shared.play(cardID)
                 await MediaAudioSession.activateForPlayback()
+                guard !Task.isCancelled else {
+                    MediaPlaybackCoordinator.shared.stop(cardID)
+                    return
+                }
                 localPlayer?.volume = 1
                 localPlayer?.play()
                 streamPlayer?.play()
                 playing = true
             }
         }
+    }
+
+    /// A load still in flight must not start playback after the row went away or lost the floor.
+    @MainActor
+    private func cancelPendingPlay() {
+        playTask?.cancel()
+        playTask = nil
     }
 
     /// No Now Playing entry: without `MPRemoteCommandCenter` handlers the Lock
@@ -278,7 +296,7 @@ struct AudioRow: View {
             // (V1.1). Wait a moment for it; a row is not the place to wait forever, so the
             // tap ends in an honest failure when the id never arrives.
             var attempts = 0
-            while workspaceID == nil, attempts < 20 {
+            while workspaceID == nil, attempts < 20, !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(200))
                 workspaceID = richActions?.daemonWorkspaceID
                 attempts += 1

@@ -6,7 +6,7 @@
         let title: String
         var back = false
         var trailing: String?
-        var controlDiameter: CGFloat = 42
+        var controlDiameter: CGFloat = Metrics.hitSize
         var titleMaxWidth: CGFloat = 200
         let close: () -> Void
         var trailingAction: (() -> Void)?
@@ -15,12 +15,19 @@
                 Text(title).font(.paseo(.headline, weight: .semibold)).lineLimit(1).frame(maxWidth: titleMaxWidth)
                 HStack {
                     Button(action: close) {
-                        Image(systemName: back ? "chevron.left" : "xmark").font(.system(size: 21, weight: .light))
+                        Image(systemName: back ? "chevron.left" : "xmark").font(.glyph(.large, weight: .light))
                             .frame(width: controlDiameter, height: controlDiameter)
+                            .contentShape(.circle)
                     }.glassEffect(in: .circle).accessibilityLabel(back ? "Back" : "Close").accessibilityIdentifier(
                         "sheet.close.\(title)")
                     Spacer()
-                    if let trailing { Button(trailing) { trailingAction?() }.font(.paseo(.callout)) }
+                    if let trailing {
+                        Button {
+                            trailingAction?()
+                        } label: {
+                            Text(trailing).frame(minHeight: Metrics.hitSize).contentShape(.rect)
+                        }.font(.paseo(.callout))
+                    }
                 }
             }.frame(height: 58).padding(.horizontal, 16).padding(.top, 7)
         }

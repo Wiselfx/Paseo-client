@@ -25,14 +25,13 @@ struct MascotCrab: View {
                         usage.totalCostUsd != nil || usage.inputTokens != nil
                             || usage.outputTokens != nil
                     {
-                        costBubble(usage: usage)
+                        Button(action: dismissCostBubble) { CostBubble(usage: usage) }
+                            .buttonStyle(.plain)
                             .fixedSize()
                             .alignmentGuide(.top) { $0[.bottom] + 6 }
                             .transition(
                                 .opacity.combined(with: .scale(scale: 0.96, anchor: .bottomTrailing))
                             )
-                            .onTapGesture { controller.showCostBubble = false }
-                            .accessibilityAddTraits(.isButton)
                             .accessibilityHint("Dismisses the cost")
                             .task {
                                 try? await Task.sleep(for: .seconds(4))
@@ -48,40 +47,8 @@ struct MascotCrab: View {
         }
     }
 
-    private func costBubble(usage: ContextUsage) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("Session cost")
-                .font(.paseo(.caption2))
-                .foregroundStyle(Palette.secondaryInk)
-            if let cost = usage.totalCostUsd {
-                Text(ClaudeContextSheet.cost(cost))
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-            }
-            if let tokens = tokenTotal(usage) {
-                Text("\(PaseoFormat.compactCount(tokens)) tokens")
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Session cost")
-    }
-
-    private func tokenTotal(_ usage: ContextUsage) -> Int? {
-        switch (usage.inputTokens, usage.outputTokens) {
-        case let (i?, o?): i + o
-        case let (i?, nil): i
-        case let (nil, o?): o
-        case (nil, nil): nil
-        }
+    private func dismissCostBubble() {
+        controller.showCostBubble = false
     }
 }
 #endif

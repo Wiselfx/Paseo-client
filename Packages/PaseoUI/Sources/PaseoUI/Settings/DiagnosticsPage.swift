@@ -211,7 +211,7 @@ struct DiagnosticsPage: View {
 
     // MARK: Report
 
-    static func makeReport(session: HostSession, now: Date = Date()) -> String {
+    static func makeReport(session: HostSession, now: Date = .now) -> String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = info?["CFBundleVersion"] as? String ?? "unknown"
@@ -232,7 +232,7 @@ struct DiagnosticsPage: View {
         if let last = lastConnectionError(session) {
             lines.append("Last connection error: \(last)")
         }
-        lines.append("Generated: \(iso8601(now))")
+        lines.append("Generated: \(now.formatted(.iso8601))")
         return lines.joined(separator: "\n")
     }
 
@@ -257,7 +257,8 @@ struct DiagnosticsPage: View {
             hash ^= UInt64(byte)
             hash = hash &* 0x100000001b3
         }
-        return String(format: "host-%08x", UInt32(truncatingIfNeeded: hash))
+        let hex = String(UInt32(truncatingIfNeeded: hash), radix: 16)
+        return "host-" + String(repeating: "0", count: 8 - hex.count) + hex
     }
 
     private static func enabledFeatures(_ session: HostSession) -> String {
@@ -296,12 +297,5 @@ struct DiagnosticsPage: View {
             "disconnected"
         }
     }
-
-    private static func iso8601(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.string(from: date)
-    }
-
 }
 #endif

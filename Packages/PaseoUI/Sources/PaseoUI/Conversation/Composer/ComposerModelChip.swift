@@ -34,7 +34,11 @@ struct ComposerModelChip: View {
         // The chip wins its space before the fixed-size controls take theirs, so it shrinks
         // rather than pushing the mic and the primary off the row.
         .layoutPriority(1)
-        .accessibilityLabel("Model, thinking and mode")
+        // The label names the control; the value is what is selected, so VoiceOver reads the
+        // current model, and Voice Control can say the model's visible name.
+        .accessibilityLabel("Model")
+        .accessibilityValue([providerLabel, modelLabel, thinkingLabel].compactMap { $0 }.formatted())
+        .accessibilityInputLabels([Text("Model"), Text(modelLabel)])
         .accessibilityIdentifier("composer.model")
     }
 

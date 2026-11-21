@@ -200,11 +200,7 @@ public final class DraftStore {
     }
 
     public nonisolated static var defaultFileURL: URL? {
-        guard
-            let support = FileManager.default.urls(
-                for: .applicationSupportDirectory, in: .userDomainMask).first
-        else { return nil }
-        return support.appendingPathComponent("Paseo/drafts.json")
+        URL.applicationSupportDirectory.appending(path: "Paseo/drafts.json", directoryHint: .notDirectory)
     }
 
     // MARK: Reading

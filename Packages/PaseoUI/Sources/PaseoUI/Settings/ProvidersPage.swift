@@ -136,7 +136,8 @@ struct ProvidersPage: View {
 
     private func detailLine(_ provider: ProviderSnapshotEntry) -> String {
         let modelCount = provider.models?.count ?? 0
-        let countLine = "\(modelCount) \(modelCount == 1 ? "model" : "models")"
+        let countLine = String(
+            AttributedString(localized: "^[\(modelCount) model](inflect: true)", bundle: #bundle).characters)
         if hostSettings.config != nil, !hostSettings.isProviderEnabled(provider.provider) {
             return "\(countLine) · Disabled"
         }

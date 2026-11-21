@@ -29,7 +29,7 @@ struct RootView: View {
     /// land in the same place.
     @State private var deepLinkTarget: DeepLink?
     /// A plain message for a link we cannot route (unsupported route, unknown host, no hosts).
-    @State private var deepLinkMessage: String?
+    @State private var deepLinkMessage: DeepLinkNotice?
 
     /// One deep-link host question. `id` is fresh per request so re-opening the chooser for a
     /// second link always presents.
@@ -45,6 +45,13 @@ struct RootView: View {
         let id = UUID()
         let offer: ConnectionOffer
         let kind: HostConfirmationKind
+    }
+
+    /// One deep-link message for the alert. `alert(_:item:)` needs an identity, and a fresh
+    /// `id` per message presents a repeated message again.
+    struct DeepLinkNotice: Identifiable {
+        let id = UUID()
+        let message: String
     }
 
     enum PairingSheet: Identifiable {
@@ -130,12 +137,7 @@ struct RootView: View {
                 // Glance snapshot on backgrounding (G14): the widgets show what
                 // the app last saw, honestly timestamped.
                 .onChange(of: scenePhase) { _, phase in
-                    guard phase == .background else { return }
-                    // Draft writes are coalesced (200 ms); leaving the app flushes the last
-                    // keystrokes whatever screen is up (R1.A; upstream flushes its draft storage
-                    // on AppState, `packages/app/src/app/_layout.tsx:997`).
-                    DraftStore.shared.flush()
-                    Task { await model.publishGlanceSnapshot(session: session, force: true) }
+                    handleScenePhase(phase, session: session)
                 }
 
             }
@@ -160,36 +162,18 @@ struct RootView: View {
                 onPaste: { model.addHostRequested = false; pairingSheet = .paste(error: nil) })
         }
         .sheet(item: $pairingSheet) { sheet in
-            switch sheet {
-            case .scan:
-                PairScanSheet(
-                    onScanned: { payload in
-                        stagePairing(payload)
-                    },
-                    onUsePaste: { pairingSheet = .paste(error: nil) })
-            case .paste(let error):
-                PastePairingSheet(error: error) { payload in
-                    stagePairing(payload)
-                }
-            case .confirm(let pending):
-                HostConfirmationPairingSheet(
-                    offer: pending.offer, kind: pending.kind,
-                    isAttempting: pairingAttempt != nil) {
-                        attemptPairing(pending, password: nil, fromPassword: false)
-                    }
-            case .password(let pending, let error):
-                PairingPasswordSheet(
-                    host: displayName(for: pending.offer),
-                    error: error,
-                    isAttempting: pairingAttempt != nil) { entered in
-                        attemptPairing(pending, password: entered, fromPassword: true)
-                    }
-            case .chooseHost(let choice):
-                HostChooserSheet(hosts: choice.hosts) { host in
+            PairingSheetContent(
+                sheet: sheet, isAttempting: pairingAttempt != nil,
+                hostName: { offer in displayName(for: offer) },
+                onPayload: { payload in stagePairing(payload) },
+                onUsePaste: { pairingSheet = .paste(error: nil) },
+                onPair: { pending, password, fromPassword in
+                    attemptPairing(pending, password: password, fromPassword: fromPassword)
+                },
+                onChooseHost: { choice, host in
                     pairingSheet = nil
                     openDeepLink(choice.link, on: host)
-                }
-            }
+                })
         }
         // Launch's expensive half: the Keychain, the host migration, the snapshot, the first
         // connect. `init` stays cheap so this frame is on screen first (§1).
@@ -200,22 +184,10 @@ struct RootView: View {
         // A Spotlight agent result routes through the same deep-link path (G16):
         // the id carries no host, so the persisted directory resolves it.
         .onContinueUserActivity(CSSearchableItemActionType) { activity in
-            guard
-                let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
-                id.hasPrefix("paseo-agent:"),
-                let entry = AgentDirectory.load().agents.first(where: {
-                    AgentDirectory.spotlightID(for: $0.id) == id
-                })
-            else { return }
-            routeDeepLink(.agent(serverID: entry.hostServerID, agentID: entry.id))
+            handleSpotlight(activity)
         }
-        .alert(
-            deepLinkMessage ?? "",
-            isPresented: Binding(
-                get: { deepLinkMessage != nil },
-                set: { if !$0 { deepLinkMessage = nil } })
-        ) {
-            Button("OK", role: .cancel) { deepLinkMessage = nil }
+        .alert(deepLinkMessage?.message ?? "", item: $deepLinkMessage) { _ in
+            Button("OK", role: .cancel) {}
         }
         .onChange(of: model.relayPasswordRequest) { _, request in
             guard let request else { return }
@@ -225,6 +197,28 @@ struct RootView: View {
             pairingSheet = .password(
                 PendingPairing(offer: request.offer, kind: .newHost), error: nil)
         }
+    }
+
+    /// Draft writes are coalesced (200 ms); leaving the app flushes the last keystrokes
+    /// whatever screen is up (R1.A; upstream flushes its draft storage on AppState,
+    /// `packages/app/src/app/_layout.tsx:997`), and writes the glance snapshot (G14).
+    private func handleScenePhase(_ phase: ScenePhase, session: HostSession) {
+        guard phase == .background else { return }
+        DraftStore.shared.flush()
+        Task { await model.publishGlanceSnapshot(session: session, force: true) }
+    }
+
+    /// A Spotlight agent result routes through the same deep-link path (G16): the id carries
+    /// no host, so the persisted directory resolves it.
+    private func handleSpotlight(_ activity: NSUserActivity) {
+        guard
+            let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+            id.hasPrefix("paseo-agent:"),
+            let entry = AgentDirectory.load().agents.first(where: {
+                AgentDirectory.spotlightID(for: $0.id) == id
+            })
+        else { return }
+        routeDeepLink(.agent(serverID: entry.hostServerID, agentID: entry.id))
     }
 
     /// The daemon's shown name for the password title (`Password for {{host}}`, en.ts:1837).
@@ -267,7 +261,7 @@ struct RootView: View {
         case .offer(let offer):
             stagePairing(offer)
         case .unsupported:
-            deepLinkMessage = "This link isn't supported on this device."
+            deepLinkMessage = DeepLinkNotice(message: "This link isn't supported on this device.")
         case .agent, .workspace, .host, .openProject, .newAgent:
             routeDeepLink(link)
         }
@@ -284,11 +278,12 @@ struct RootView: View {
             pairingSheet = .chooseHost(HostChoice(link: link, hosts: hosts))
         case .unknownHost:
             // Upstream `host.daemon.picker.notFound` (en.ts:2899).
-            deepLinkMessage = "Host not found"
+            deepLinkMessage = DeepLinkNotice(message: "Host not found")
         case .noHosts:
             // Upstream `agentPanel.unavailable.addHost` (en.ts:268).
-            deepLinkMessage =
-                "Add the host in Settings or open an agent on a configured server to continue."
+            deepLinkMessage = DeepLinkNotice(
+                message:
+                    "Add the host in Settings or open an agent on a configured server to continue.")
         }
     }
 
@@ -343,32 +338,4 @@ struct RootView: View {
         }
     }
 
-}
-
-/// Drains queued attention intents into the notification coordinator, in its own body: the shell
-/// and the root never observe the attention queue (R5 §4.6).
-private struct AttentionDelivery: ViewModifier {
-    let session: HostSession
-    let scenePhase: ScenePhase
-    let notifications: NotificationCoordinator
-
-    func body(content: Content) -> some View {
-        content
-            .onAppear { deliver() }
-            .onChange(of: session.attention.pending) { _, _ in deliver() }
-            .onChange(of: scenePhase) { _, _ in deliver() }
-    }
-
-    /// Drains queued attention intents and hands them to the notification coordinator. Runs on
-    /// every change, on appear, and when the app returns to the foreground.
-    private func deliver() {
-        let intents = session.attention.drain()
-        guard !intents.isEmpty else { return }
-        // Sound cues (M12): foreground only, and AttentionCenter already dropped the agent
-        // the user is looking at.
-        if scenePhase == .active {
-            SoundCuePlayer.shared.playCues(for: intents)
-        }
-        Task { await notifications.deliver(intents) }
-    }
 }

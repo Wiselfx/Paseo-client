@@ -46,12 +46,9 @@ struct HostsPage: View {
             "Remove host?",
             item: $removeTarget,
             titleVisibility: .visible
-        ) { _ in
-            Button("Remove host", role: .destructive) {
-                if let id = removeTarget?.id { context?.forgetHost(id) }
-                removeTarget = nil
-            }
-            Button("Cancel", role: .cancel) { removeTarget = nil }
+        ) { target in
+            Button("Remove host", role: .destructive) { context?.forgetHost(target.id) }
+            Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("Removes this host and its saved connections from this device")
         }
@@ -59,12 +56,9 @@ struct HostsPage: View {
             "Switch host",
             item: $switchTarget,
             titleVisibility: .visible
-        ) { _ in
-            Button("Switch host") {
-                if let id = switchTarget?.id { context?.switchTo(id) }
-                switchTarget = nil
-            }
-            Button("Cancel", role: .cancel) { switchTarget = nil }
+        ) { target in
+            Button("Switch host") { context?.switchTo(target.id) }
+            Button("Cancel", role: .cancel) {}
         } message: { _ in
             // The existing disconnect wording: switching closes this host's connection.
             Text("The connection to the host will be closed. Your settings are kept.")
@@ -79,6 +73,7 @@ struct HostsPage: View {
                 accessory: ListRow.Accessory.checkmark(host.isCurrent),
                 action: { requestSwitch(host) }
             )
+            .accessibilityAddTraits(host.isCurrent ? .isSelected : [])
             .accessibilityIdentifier("settings.hosts.row.\(host.id.uuidString)")
             NavigationLink(value: SettingsRoute.hostDetail(host.id)) {
                 Image(systemName: "info.circle")
@@ -110,17 +105,6 @@ struct HostsPage: View {
         } else {
             context?.switchTo(host.id)
         }
-    }
-}
-extension HostsPage {
-    /// `just now`, `5m ago`, `yesterday`, `3d ago`: the list's age line.
-    static func relative(_ date: Date, now: Date = Date()) -> String {
-        let seconds = Int(now.timeIntervalSince(date))
-        if seconds < 60 { return "just now" }
-        if seconds < 3600 { return "\(seconds / 60)m ago" }
-        if seconds < 86400 { return "\(seconds / 3600)h ago" }
-        let days = seconds / 86400
-        return days == 1 ? "yesterday" : "\(days)d ago"
     }
 }
 #endif

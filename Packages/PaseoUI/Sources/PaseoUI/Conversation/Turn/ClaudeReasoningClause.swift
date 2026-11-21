@@ -199,10 +199,12 @@ enum ClaudeReasoningClause {
         return phrase
     }
 
+    /// `[text](url)`, compiled once: the status line reads a clause on every body pass.
+    private static let markdownLink = /\[([^\]]*)\]\([^)]*\)/
+
     /// `[text](url)` → `text`, and the inline markers removed; a lone `*` or `_` stays.
     private static func stripMarkup(_ text: String) -> String {
-        var result = text.replacingOccurrences(
-            of: #"\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
+        var result = text.replacing(markdownLink) { $0.output.1 }
         for marker in ["`", "**", "__", "~~"] {
             result = result.replacing(marker, with: "")
         }

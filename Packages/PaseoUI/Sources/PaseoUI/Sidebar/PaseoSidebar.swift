@@ -23,22 +23,44 @@ struct PaseoSidebar: View {
     /// Set by a deep link's `open-project` route (M20): present the Add project sheet once.
     @Binding var addProjectRequest: Bool
 
-    @State var sheet: PaseoSidebarSheet?
-    @State var showHidden = false
-    @State var renamingWorkspace: WorkspaceDescriptor?
-    @State var renamingProject: WorkspaceProjectDescriptor?
-    @State var projectPendingRemoval: WorkspaceProjectDescriptor?
-    @State var renameText = ""
+    /// Created once; the properties below forward to it so the sidebar's extensions read them
+    /// as before (see `SidebarState`).
+    @State private var state = SidebarState()
+    var sheet: PaseoSidebarSheet? {
+        get { state.sheet }
+        nonmutating set { state.sheet = newValue }
+    }
+    var showHidden: Bool {
+        get { state.showHidden }
+        nonmutating set { state.showHidden = newValue }
+    }
+    var renamingWorkspace: WorkspaceDescriptor? {
+        get { state.renamingWorkspace }
+        nonmutating set { state.renamingWorkspace = newValue }
+    }
+    var renamingProject: WorkspaceProjectDescriptor? {
+        get { state.renamingProject }
+        nonmutating set { state.renamingProject = newValue }
+    }
+    var projectPendingRemoval: WorkspaceProjectDescriptor? {
+        get { state.projectPendingRemoval }
+        nonmutating set { state.projectPendingRemoval = newValue }
+    }
+    var renameText: String {
+        get { state.renameText }
+        nonmutating set { state.renameText = newValue }
+    }
     /// The comma-joined preferences, parsed once (§3).
-    @State var preferences = SidebarPreferences()
+    var preferences: SidebarPreferences { state.preferences }
     /// The workspace archive flow: the risk check and the two confirmations.
-    @State var archive = WorkspaceArchiveActions()
+    var archive: WorkspaceArchiveActions { state.archive }
     @AppStorage(PaseoSettingsKeys.yourName) private var name = ""
-    @AppStorage("paseo.sidebar.sort") var sortRaw = SidebarSort.activity.rawValue
+    @AppStorage("paseo.sidebar.sort") var sidebarSort: SidebarSort = .activity
     @AppStorage("paseo.sidebar.showBranch") var showBranch = true
     @AppStorage("paseo.sidebar.showDiffStats") var showDiffStats = true
     @AppStorage("paseo.sidebar.showPRBadge") var showPRBadge = true
-    @AppStorage("paseo.sidebar.groupBy") var groupByRaw = SidebarGrouping.project.rawValue
+    /// Unknown stored values fall back to project.
+    @AppStorage("paseo.sidebar.groupBy") var sidebarGrouping: SidebarGrouping = .project
     /// Running workspaces float to the top of their group. Default on.
     @AppStorage("paseo.sidebar.activeFirst") var activeFirst = true
     /// The sidebar label filter: the raw label name, or "" for All (one at a time, by design).
@@ -70,7 +92,7 @@ struct PaseoSidebar: View {
                 displayOptionsMenu
             }
             .padding(.horizontal, 16)
-            .frame(height: 52)
+            .frame(minHeight: 52)
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -115,7 +137,7 @@ struct PaseoSidebar: View {
         .onChange(of: addProjectRequest) { _, _ in
             consumeAddProjectRequest()
         }
-        let sheeted = chrome.sheet(item: $sheet) { sheetContent($0) }
+        let sheeted = chrome.sheet(item: $state.sheet) { sheetContent($0) }
         return withArchiveDialogs(withRenameAlerts(sheeted))
     }
 
@@ -186,48 +208,21 @@ struct PaseoSidebar: View {
         content
         .alert(
             "Rename workspace",
-            item: $renamingWorkspace
-        ) { _ in
-            TextField("Name", text: $renameText)
-            Button("Cancel", role: .cancel) { renamingWorkspace = nil }
-            Button("Rename") {
-                let target = renamingWorkspace
-                let title = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                renamingWorkspace = nil
-                guard let target, !title.isEmpty else { return }
-                Task {
-                    let renamed = await session.workspaceDirectory.renameWorkspace(
-                        target.id, title: title)
-                    if !renamed {
-                        showToast(
-                            session.workspaceDirectory.actionError ?? "Couldn't rename the workspace.")
-                    }
-                }
-            }
+            item: $state.renamingWorkspace
+        ) { workspace in
+            TextField("Name", text: $state.renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") { renameWorkspace(workspace, to: renameText) }
         } message: { _ in
             Text("Choose a short name for this workspace.")
         }
         .alert(
             "Rename project",
-            item: $renamingProject
-        ) { _ in
-            TextField("Folder name", text: $renameText)
-            Button("Cancel", role: .cancel) { renamingProject = nil }
-            Button("Rename") {
-                let target = renamingProject
-                let title = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                renamingProject = nil
-                guard let target else { return }
-                Task {
-                    let renamed = await session.workspaceDirectory.renameProject(
-                        target.projectId, to: title)
-                    if !renamed {
-                        showToast(
-                            session.workspaceDirectory.actionError
-                                ?? "Couldn't rename the project.")
-                    }
-                }
-            }
+            item: $state.renamingProject
+        ) { project in
+            TextField("Folder name", text: $state.renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") { renameProject(project, to: renameText) }
         } message: { _ in
             Text("Empty restores the folder name.")
         }
@@ -238,17 +233,43 @@ struct PaseoSidebar: View {
             .workspaceArchiveDialogs(archive, session: session)
             .confirmationDialog(
                 ProjectActions.removeTitle,
-            item: $projectPendingRemoval,
+            item: $state.projectPendingRemoval,
             titleVisibility: .visible
-        ) { _ in
+        ) { project in
             Button("Remove", role: .destructive) {
-                guard let project = projectPendingRemoval else { return }
-                projectPendingRemoval = nil
                 ProjectActions.remove(project, session: session, toast: toast)
             }
-            Button("Cancel", role: .cancel) { projectPendingRemoval = nil }
+            Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text(ProjectActions.removeMessage)
+        }
+    }
+
+    /// An empty name keeps the workspace as it was.
+    private func renameWorkspace(_ target: WorkspaceDescriptor, to text: String) {
+        let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        Task {
+            let renamed = await session.workspaceDirectory.renameWorkspace(
+                target.id, title: title)
+            if !renamed {
+                showToast(
+                    session.workspaceDirectory.actionError ?? "Couldn't rename the workspace.")
+            }
+        }
+    }
+
+    /// An empty name restores the folder name.
+    private func renameProject(_ target: WorkspaceProjectDescriptor, to text: String) {
+        let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            let renamed = await session.workspaceDirectory.renameProject(
+                target.projectId, to: title)
+            if !renamed {
+                showToast(
+                    session.workspaceDirectory.actionError
+                        ?? "Couldn't rename the project.")
+            }
         }
     }
 

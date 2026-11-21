@@ -30,10 +30,8 @@ struct WorkspaceCodeView: View, Equatable {
 
     private var isLong: Bool { lines.count > 500 }
 
-    private var gutterWidth: CGFloat {
-        let digits = max(2, String(max(lines.count, 1)).count)
-        return CGFloat(digits) * 8 + 4
-    }
+    /// Digits of the widest line number, at least two.
+    private var gutterDigits: Int { max(2, String(max(lines.count, 1)).count) }
 
     var body: some View {
         if isLong {
@@ -68,12 +66,10 @@ struct WorkspaceCodeView: View, Equatable {
     private var longContent: some View {
         ScrollView([.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                    ForEach(lines.enumerated(), id: \.offset) { index, line in
                         HStack(alignment: .firstTextBaseline, spacing: Space.sm) {
-                            Text(verbatim: String(index + 1))
-                                .font(.paseo(.codeCaption))
-                                .foregroundStyle(Palette.captionInk)
-                                .frame(width: gutterWidth, alignment: .trailing)
+                            CodeLineNumber(
+                                number: index + 1, digits: gutterDigits, font: .paseo(.codeCaption))
                             Text(line.isEmpty ? " " : line)
                                 .font(.paseo(.codeSmall))
                                 .foregroundStyle(Palette.ink)
@@ -95,19 +91,14 @@ struct WorkspaceCodeView: View, Equatable {
         var body: some View {
             VStack(alignment: .trailing, spacing: 6) {
                 ForEach(1...max(count, 1), id: \.self) { number in
-                    Text(verbatim: String(number))
-                        .font(.paseo(.codeSmall))
-                        .foregroundStyle(Palette.captionInk)
-                        .frame(width: CGFloat(gutterWidth), alignment: .trailing)
+                    CodeLineNumber(number: number, digits: digits, font: .paseo(.codeSmall))
                 }
             }
             .accessibilityHidden(true)
         }
 
-        private var gutterWidth: CGFloat {
-            let digits = max(2, String(count).count)
-            return CGFloat(digits) * 8 + 4
-        }
+        /// Digits of the widest line number, at least two.
+        private var digits: Int { max(2, String(count).count) }
     }
 }
 #endif

@@ -29,89 +29,17 @@ struct TurnChangesCard: View, Equatable {
         lhs.summary == rhs.summary && lhs.turnID == rhs.turnID
     }
 
-    private var fileCountLabel: String {
-        "\(summary.fileCount) files changed"
-    }
-
-    private var metaText: String? {
-        let names = summary.files.prefix(2).map(\.path)
-        guard !names.isEmpty else { return nil }
-        let rest = summary.fileCount - names.count
-        if rest > 0 {
-            return names.joined(separator: ", ") + " and \(rest) more"
-        }
-        return names.joined(separator: ", ")
-    }
-
     var body: some View {
         PaseoCard(content:
             VStack(alignment: .leading, spacing: 0) {
-                Button {
-                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                        expanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: Space.sm) {
-                        Image(systemName: "doc.badge.ellipsis")
-                            .font(.glyph(.regular, weight: .medium))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(fileCountLabel)
-                                .font(.paseo(.callout))
-                                .foregroundStyle(Palette.ink)
-                            if let metaText {
-                                Text(metaText)
-                                    .font(.paseo(.caption))
-                                    .foregroundStyle(Palette.secondaryInk)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        DiffStat(added: summary.added, removed: summary.removed, compact: true)
-                        Image(systemName: "chevron.down")
-                            .font(.glyph(.small, weight: .semibold))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .rotationEffect(.degrees(expanded ? 180 : 0))
-                            .accessibilityHidden(true)
-                    }
-                    .frame(minHeight: Metrics.rowCardMinHeight - Space.md * 2)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-                .accessibilityLabel("\(fileCountLabel). \(metaText ?? "")")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint(expanded ? "Collapses the file list" : "Expands the file list")
+                TurnChangesHeader(summary: summary, expanded: expanded, action: toggleExpanded)
                 if expanded {
                     VStack(alignment: .leading, spacing: 0) {
                         Divider().background(Palette.divider)
                         ForEach(summary.files, id: \.path) { file in
-                            Button {
+                            TurnChangedFileRow(file: file) {
                                 richActions?.openDiff(turnID, file.path)
-                            } label: {
-                                HStack(spacing: Space.sm) {
-                                    Text(file.path)
-                                        .font(.paseo(.codeSmall))
-                                        .foregroundStyle(Palette.ink)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    DiffStat(
-                                        added: file.added, removed: file.removed,
-                                        compact: true)
-                                    Image(systemName: "chevron.right")
-                                        .font(.glyph(.small, weight: .semibold))
-                                        .foregroundStyle(Palette.tertiaryInk)
-                                        .accessibilityHidden(true)
-                                }
-                                .padding(.vertical, Space.sm)
-                                .contentShape(.rect)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Open diff for \(file.path)")
-                            .accessibilityHint(
-                                "Shows what changed in this file")
                         }
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -122,6 +50,12 @@ struct TurnChangesCard: View, Equatable {
             .animation(
                 Motion.disclosure.resolved(reduceMotion: reduceMotion), value: summary)
             .paseoFeedback(.selection, trigger: expanded)
+    }
+
+    private func toggleExpanded() {
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
+            expanded.toggle()
+        }
     }
 }
 #endif

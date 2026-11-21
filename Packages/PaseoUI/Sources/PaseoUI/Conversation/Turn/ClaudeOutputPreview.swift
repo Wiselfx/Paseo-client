@@ -18,6 +18,8 @@ struct ClaudeOutputPreview: View {
         var maxLines = 0
         var head = ""
         var lineCount = 0
+        /// The sheet's text, built the first time the sheet opens and kept until the text changes.
+        var sheetHead: String?
     }
 
     @State private var memo = Memo()
@@ -29,8 +31,17 @@ struct ClaudeOutputPreview: View {
             memo.maxLines = maxLines
             memo.head = Self.head(of: text, lines: maxLines)
             memo.lineCount = Self.lineCount(of: text)
+            memo.sheetHead = nil
         }
         return (memo.head, memo.lineCount)
+    }
+
+    /// The first `sheetLines` lines, scanned once per text rather than on every sheet re-evaluation.
+    private var sheetHead: String {
+        if let cached = memo.sheetHead { return cached }
+        let head = Self.head(of: text, lines: Self.sheetLines)
+        memo.sheetHead = head
+        return head
     }
 
     var body: some View {
@@ -42,7 +53,7 @@ struct ClaudeOutputPreview: View {
                     .foregroundStyle(Palette.ink.opacity(0.85))
                     .textSelection(.enabled)
                     .fixedSize()
-                    .padding(12)
+                    .padding(Space.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.hidden)
@@ -52,27 +63,15 @@ struct ClaudeOutputPreview: View {
                     .font(.paseo(.caption, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
                     .frame(minHeight: Metrics.hitSize)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, Space.md)
                     .sheet(isPresented: $showsAll) {
-                        SheetScaffold("Output", detents: .large) {
-                            VStack(alignment: .leading, spacing: 0) {
-                                if preview.lines > Self.sheetLines {
-                                    Text("Showing the first \(PaseoFormat.integer(Self.sheetLines)) of \(PaseoFormat.integer(preview.lines)) lines")
-                                        .font(.paseo(.caption))
-                                        .foregroundStyle(Palette.secondaryInk)
-                                        .padding(.horizontal, Space.md)
-                                        .padding(.vertical, Space.sm)
-                                }
-                                ScrollView([.vertical, .horizontal]) {
-                                    Text(Self.head(of: text, lines: Self.sheetLines))
-                                        .font(.paseo(.codeSmall))
-                                        .textSelection(.enabled)
-                                        .fixedSize()
-                                        .padding(Space.md)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
+                        OutputSheet(
+                            note: preview.lines > Self.sheetLines
+                                ? Text(
+                                    "Showing the first \(PaseoFormat.integer(Self.sheetLines)) of \(PaseoFormat.integer(preview.lines)) lines")
+                                : nil,
+                            copyAll: nil,
+                            content: Text(sheetHead))
                     }
             }
         }

@@ -69,24 +69,25 @@ struct SettingsRoot: View {
                     }
                     .panelRow()
                     .accessibilityIdentifier("settings.disconnect")
+                    // On the trigger, not the sheet, so the dialog animates from the button.
+                    .confirmationDialog(
+                        "Disconnect from this host?",
+                        isPresented: $confirmDisconnect,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Disconnect", role: .destructive) {
+                            onDisconnect()
+                            dismiss()
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("The connection to the host will be closed. Your settings are kept.")
+                    }
                 }
             }
             .navigationDestination(for: SettingsRoute.self) { route in
                 destination(route)
             }
-        }
-        .confirmationDialog(
-            "Disconnect from this host?",
-            isPresented: $confirmDisconnect,
-            titleVisibility: .visible
-        ) {
-            Button("Disconnect", role: .destructive) {
-                onDisconnect()
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The connection to the host will be closed. Your settings are kept.")
         }
         .task {
             if hostSettings.config == nil, hostSettings.phase != .loading {
@@ -170,12 +171,14 @@ struct SettingsRoot: View {
 
     private var projectCountLine: String {
         let count = session.workspaceDirectory.projects.count
-        return count == 1 ? "1 project" : "\(count) projects"
+        return String(
+            AttributedString(localized: "^[\(count) project](inflect: true)", bundle: #bundle).characters)
     }
 
     private var providersSummary: String {
         let count = session.agentControl.providers.count
-        return "\(count) provider\(count == 1 ? "" : "s")"
+        return String(
+            AttributedString(localized: "^[\(count) provider](inflect: true)", bundle: #bundle).characters)
     }
 
     private var voiceSummary: String {

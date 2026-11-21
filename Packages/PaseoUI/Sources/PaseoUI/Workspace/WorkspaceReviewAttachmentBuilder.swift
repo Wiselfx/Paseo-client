@@ -8,6 +8,9 @@ import UIKit
 /// no longer exists in the parsed diff are skipped, matching upstream ("Saved comments no
 /// longer match this diff" surfaces when none survive).
 public enum WorkspaceReviewAttachmentBuilder {
+    /// The context radius around the target line, in lines.
+    static let contextRadius = 3
+
     /// Matches `comments` (all files) against the parsed diff, returning the attachment and the
     /// drafts that made it in (for the clear-after-send step). Drafts whose anchor no longer
     /// exists in the diff are skipped — upstream shows "Saved comments no longer match this
@@ -107,8 +110,8 @@ public enum WorkspaceReviewAttachmentBuilder {
                 }
             }
             guard let matchIndex else { continue }
-            let start = max(0, matchIndex - reviewContextRadius)
-            let end = min(indexed.count, matchIndex + reviewContextRadius + 1)
+            let start = max(0, matchIndex - contextRadius)
+            let end = min(indexed.count, matchIndex + contextRadius + 1)
             let toLine: (IndexedLine) -> AgentAttachment.ReviewAttachment.Line = { line in
                 let type: AgentAttachment.ReviewAttachment.Line.LineType
                 switch line.type {
@@ -126,6 +129,24 @@ public enum WorkspaceReviewAttachmentBuilder {
             return (header, targetLine, lines)
         }
         return nil
+    }
+}
+
+// Small conveniences so the raw wire enums read naturally at call sites.
+private extension AgentAttachment.ReviewAttachment.Comment.Side {
+    init(rawValue: String) {
+        self = rawValue == "old" ? .old : .new
+    }
+}
+
+private extension AgentAttachment.ReviewAttachment.Mode {
+    init(rawValue: String) {
+        switch rawValue {
+        case "uncommitted": self = .uncommitted
+        case "base": self = .base
+        case "all": self = .all
+        case let other: self = .unknown(other)
+        }
     }
 }
 #endif

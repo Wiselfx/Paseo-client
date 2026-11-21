@@ -10,7 +10,9 @@ struct QuestionSection: View {
     let question: QuestionFormQuestion
     @Binding var state: QuestionFormState
 
-    private var segments: Bool { question.multiSelect }
+    /// Counts option taps so the selection haptic fires for a tap, not for the "Other" field
+    /// clearing the selection as the user types.
+    @State private var selectionTicks = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -20,8 +22,14 @@ struct QuestionSection: View {
                 .foregroundStyle(Palette.tertiaryInk)
                 .padding(.horizontal, 8)
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(question.options.enumerated()), id: \.offset) { optionIndex, option in
-                    optionRow(option, index: optionIndex)
+                ForEach(question.options.enumerated(), id: \.offset) { optionIndex, option in
+                    QuestionOptionRow(
+                        option: option,
+                        selected: (state.selections[index] ?? []).contains(optionIndex),
+                        multiSelect: question.multiSelect
+                    ) {
+                        toggle(optionIndex)
+                    }
                     if optionIndex < question.options.count - 1 {
                         ClaudeDivider().padding(.leading, 42)
                     }
@@ -39,7 +47,7 @@ struct QuestionSection: View {
                 .background(Palette.chip, in: .rect(cornerRadius: Radius.sm))
                 .padding(.top, 4)
                 .padding(.horizontal, 8)
-                .accessibilityLabel("Other answer")
+                .accessibilityLabel(question.options.isEmpty ? "Answer" : "Other answer")
                 // A single-select "Other" clears the option selection, matching Claude Code.
                 .onChange(of: state.texts[index] ?? "") { _, text in
                     if !question.multiSelect, !text.isEmpty {
@@ -49,67 +57,25 @@ struct QuestionSection: View {
             }
         }
         .accessibilityElement(children: .contain)
+        .paseoFeedback(.selection, trigger: selectionTicks)
     }
 
-    @ViewBuilder private func optionRow(_ option: QuestionFormOption, index optionIndex: Int) -> some View {
-        let selected = (state.selections[index] ?? []).contains(optionIndex)
-        Button {
-            Haptics.selection()
-            if question.multiSelect {
-                var current = state.selections[index] ?? []
-                if selected { current.remove(optionIndex) } else { current.insert(optionIndex) }
-                state.selections[index] = current
+    /// Applies a tap on option `optionIndex`: toggles it in multi-select, otherwise selects it
+    /// (or clears it when it already is the selection) and empties the "Other" text.
+    private func toggle(_ optionIndex: Int) {
+        selectionTicks += 1
+        if question.multiSelect {
+            var current = state.selections[index] ?? []
+            if current.contains(optionIndex) { current.remove(optionIndex) } else { current.insert(optionIndex) }
+            state.selections[index] = current
+        } else {
+            if state.selections[index] == [optionIndex] {
+                state.selections[index] = []
             } else {
-                if state.selections[index] == [optionIndex] {
-                    state.selections[index] = []
-                } else {
-                    state.selections[index] = [optionIndex]
-                    state.texts[index] = ""
-                }
+                state.selections[index] = [optionIndex]
+                state.texts[index] = ""
             }
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    if segments {
-                        RoundedRectangle(cornerRadius: Radius.xs)
-                            .stroke(selected ? Palette.ink : Palette.tertiaryInk, lineWidth: 1.5)
-                            .frame(width: 16, height: 16)
-                        if selected {
-                            Image(systemName: "checkmark")
-                                .font(.glyph(.small, weight: .bold))
-                                .foregroundStyle(Palette.ink)
-                        }
-                    } else {
-                        Circle()
-                            .stroke(selected ? Palette.ink : Palette.tertiaryInk, lineWidth: 1.5)
-                            .frame(width: 16, height: 16)
-                        if selected {
-                            Circle().fill(Palette.ink).frame(width: 8, height: 8)
-                        }
-                    }
-                }
-                .frame(width: 20, height: 20)
-                .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(option.label)
-                        .font(.paseo(.callout, weight: .medium))
-                        .foregroundStyle(Palette.ink)
-                    if let description = option.description, !description.isEmpty {
-                        Text(description)
-                            .font(.paseo(.footnote))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 8)
-            .background(selected ? Palette.adaptive(light: 0.965, dark: 0.10) : .clear)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 #endif

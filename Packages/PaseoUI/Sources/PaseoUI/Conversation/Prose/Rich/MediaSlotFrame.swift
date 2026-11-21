@@ -37,15 +37,17 @@ struct MediaSlotFrame: ViewModifier {
     var width: CGFloat
     var heightCap: CGFloat
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if width > 1 {
-            // `minWidth` and `maxWidth` together pin the width, so the frame proposes exactly
-            // `width` (and the cap) to the child — the letterboxing fit a tall image needs.
-            content.frame(minWidth: width, maxWidth: width, maxHeight: heightCap)
-        } else {
-            content.frame(maxWidth: .infinity, maxHeight: heightCap)
-        }
+        // One frame whose values change, not an if/else of two: a card whose column is measured
+        // after the first layout (the file viewer, previews) keeps its identity when `width`
+        // flips from 0 to the measurement. `minWidth` and `maxWidth` together pin the width, so
+        // the frame proposes exactly `width` (and the cap) to the child — the letterboxing fit a
+        // tall image needs. Without a column, the flexible slot.
+        let pinned = width > 1
+        return content.frame(
+            minWidth: pinned ? width : nil,
+            maxWidth: pinned ? width : CGFloat.infinity,
+            maxHeight: heightCap)
     }
 }
 

@@ -28,6 +28,8 @@ final class MediaViewerPageController: UIViewController {
     /// VisionKit Live Text, attached once the full image lands (G3 §4.6).
     private var textInteraction: ImageAnalysisInteraction?
     private var analyzerTask: Task<Void, Never>?
+    /// The animated-frames decode. Held so a page swiped away stops installing its result.
+    private var animationTask: Task<Void, Never>?
 
     /// The sharpest bitmap this page holds: the full fetch, the animated frames, or the
     /// thumbnail when the source needs no fetch.
@@ -91,6 +93,7 @@ final class MediaViewerPageController: UIViewController {
     deinit {
         fullTask?.cancel()
         analyzerTask?.cancel()
+        animationTask?.cancel()
     }
 
     // MARK: Image
@@ -109,6 +112,11 @@ final class MediaViewerPageController: UIViewController {
         scrollView.bounces = false
         imageView.contentMode = .scaleAspectFit
         imageView.isUserInteractionEnabled = true
+        // The page's picture is what the reader opened the viewer for: VoiceOver can focus it
+        // and read its alt text (or the file name when there is none).
+        imageView.isAccessibilityElement = true
+        imageView.accessibilityTraits = .image
+        imageView.accessibilityLabel = item.alt.isEmpty ? item.fileName : item.alt
         scrollView.addSubview(imageView)
         view.addSubview(scrollView)
     }
@@ -210,13 +218,14 @@ final class MediaViewerPageController: UIViewController {
     private func setAnimatedImage(data: Data) {
         let width = max(scrollView.bounds.width, 1)
             * (view.window?.screen.scale ?? 2)
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let animated = AnimatedImageDecoder.animatedImage(data: data, pixelWidth: width)
-            await MainActor.run { [weak self] in
-                guard let self, let animated else { return }
-                self.setImage(animated, animated: !self.reduceMotion)
-                self.startTextAnalysis(image: animated)
-            }
+        animationTask?.cancel()
+        animationTask = Task { @MainActor [weak self] in
+            let animated = await Task.detached(priority: .userInitiated) {
+                AnimatedImageDecoder.animatedImage(data: data, pixelWidth: width)
+            }.value
+            guard let self, !Task.isCancelled, let animated else { return }
+            self.setImage(animated, animated: !self.reduceMotion)
+            self.startTextAnalysis(image: animated)
         }
     }
 
@@ -238,7 +247,7 @@ final class MediaViewerPageController: UIViewController {
             // The decoded bitmaps already carry EXIF orientation, so `.up` is exact.
             let found = !(analysis?.transcript.isEmpty ?? true)
             await MainActor.run { [weak self] in
-                guard let self, let analysis, found else { return }
+                guard let self, !Task.isCancelled, let analysis, found else { return }
                 if self.textInteraction == nil {
                     let interaction = ImageAnalysisInteraction()
                     interaction.preferredInteractionTypes = .automatic

@@ -21,7 +21,9 @@ struct ChatTurnNavSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(items.enumerated(), id: \.element.id) { index, item in
-                        row(index: index, item: item)
+                        ChatTurnNavRow(
+                            number: index + 1, item: item, isCurrent: item.seq == activeSeq
+                        ) { select(item) }
                         if item.id != items.last?.id {
                             ClaudeDivider().padding(.leading, 56)
                         }
@@ -42,37 +44,9 @@ struct ChatTurnNavSheet: View {
         .task { store.promptOutline.refresh(timelineEpoch: store.timeline.epoch) }
     }
 
-    private func row(index: Int, item: ChatOutlineItem) -> some View {
-        let isCurrent = item.seq == activeSeq
-        return Button {
-            onJump(item.seq)
-            dismiss()
-        } label: {
-            HStack(spacing: 12) {
-                Text(PaseoFormat.integer(index + 1))
-                    .font(.paseo(.codeSmall, weight: isCurrent ? .semibold : .regular))
-                    .foregroundStyle(isCurrent ? Palette.ink : Palette.secondaryInk)
-                    .frame(width: 32, height: 32)
-                    .background(isCurrent ? Palette.ink.opacity(0.10) : .clear, in: .circle)
-                Text(item.preview)
-                    .font(.paseo(.callout))
-                    .foregroundStyle(isCurrent ? Palette.ink : Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 8)
-                if isCurrent {
-                    Image(systemName: "checkmark")
-                        .font(.glyph(.small, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                }
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 48)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("turnNav.\(index + 1)")
-        .accessibilityLabel(isCurrent ? "Message \(index + 1), current" : "Jump to message \(index + 1)")
+    private func select(_ item: ChatOutlineItem) {
+        onJump(item.seq)
+        dismiss()
     }
 }
 #endif

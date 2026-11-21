@@ -58,6 +58,9 @@ struct ClaudeRevealProse: View {
         let length: Int
         /// The last Markdown piece: the one still arriving while the turn streams.
         var isTailMarkdown: Bool
+        /// The trimmed source of a Markdown piece, computed once with the split instead of on every
+        /// body pass. Empty for blocks and files.
+        let text: String
 
         /// Stable identity (G1 §1.4): a block is its kind plus its start offset, so a newly
         /// detected block mid-stream never re-runs an older card's entrance; Markdown chunks
@@ -124,15 +127,17 @@ struct ClaudeRevealProse: View {
                 length = blockLength
             }
             defer { offset += length }
-            // Whitespace-only Markdown draws nothing: it is left out here, so every row of the
-            // body is exactly one view.
-            if case .markdown(let chunk) = piece,
-                chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                continue
+            var text = ""
+            if case .markdown(let chunk) = piece {
+                text = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Whitespace-only Markdown draws nothing: it is left out here, so every row of the
+                // body is exactly one view.
+                if text.isEmpty { continue }
             }
             refs.append(
-                PieceRef(id: index, piece: piece, start: offset, length: length, isTailMarkdown: false))
+                PieceRef(
+                    id: index, piece: piece, start: offset, length: length, isTailMarkdown: false,
+                    text: text))
         }
         if let last = refs.lastIndex(where: {
             if case .markdown = $0.piece { true } else { false }
@@ -150,11 +155,9 @@ struct ClaudeRevealProse: View {
         VStack(alignment: .leading, spacing: theme.blockSpacing) {
             ForEach(refs, id: \.stableIdentity) { ref in
                 switch ref.piece {
-                case .markdown(let chunk):
+                case .markdown:
                     ClaudeMarkdownView(
-                        document: document(
-                            chunk.trimmingCharacters(in: .whitespacesAndNewlines),
-                            open: isStreaming && ref.isTailMarkdown),
+                        document: document(ref.text, open: isStreaming && ref.isTailMarkdown),
                         theme: theme,
                         // Only the open piece can be still arriving. A settled piece sees
                         // `false` while the turn runs, so its code highlights as soon as its

@@ -10,12 +10,13 @@ import SwiftUI
 struct SchedulesListPage: View {
     let session: HostSession
     let onNew: () -> Void
+    /// Opens the editor for a stored schedule; the parent owns the single editor destination.
+    let onEdit: (ClaudeSchedulesView.EditorSeed) -> Void
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.toast) private var toast
 
-    @State private var now = Date()
-    @State private var editorRequest: ClaudeSchedulesView.EditorSeed?
+    @State private var now = Date.now
     @State private var deleteRequest: ScheduleSummary?
 
     private var schedules: SchedulesStore { session.schedules }
@@ -49,35 +50,21 @@ struct SchedulesListPage: View {
         .background(Palette.background)
         .navigationTitle("Schedules")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(item: $editorRequest) { seed in
-            ScheduleEditorPage(session: session, seed: seed)
-        }
-        .task {
-            // No push events for schedules: the captions tick every 5 s from the local
-            // `now`, and the list itself reloads every 30 s (minute-granularity data) plus on
-            // appear, pull-to-refresh and every mutation. The store publishes only on real
-            // change, so a quiet poll never re-evaluates the rows.
-            var tick = 0
-            while !Task.isCancelled {
-                if scenePhase == .active {
-                    now = Date()
-                    if tick % 6 == 0 { await schedules.load() }
-                    tick += 1
-                }
-                try? await Task.sleep(for: .seconds(5))
-            }
+        .task(id: scenePhase) {
+            // Restarted on every scene phase change, so the loop never polls while the app is
+            // inactive or in the background, and reloads at once when it becomes active again.
+            guard scenePhase == .active else { return }
+            await poll()
         }
         .confirmationDialog(
             "Delete schedule?",
             item: $deleteRequest,
             titleVisibility: .visible
-        ) { _ in
+        ) { summary in
             Button("Delete", role: .destructive) {
-                guard let summary = deleteRequest else { return }
-                deleteRequest = nil
                 Task { await delete(summary) }
             }
-            Button("Cancel", role: .cancel) { deleteRequest = nil }
+            Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("Runs that already started finish, but no new runs will be created.")
         }
@@ -94,7 +81,14 @@ struct SchedulesListPage: View {
             Section {
                 let known = knownAgentIds()
                 ForEach(schedules.schedules) { summary in
-                    row(summary, knownAgentIds: known)
+                    ScheduleListRow(
+                        summary: summary,
+                        knownAgentIds: known,
+                        now: now,
+                        onSetPaused: { paused in Task { await setPaused(summary, paused: paused) } },
+                        onRunNow: { Task { await runNow(summary) } },
+                        onEdit: { Task { await edit(summary) } },
+                        onDelete: { deleteRequest = summary })
                 }
             }
         }
@@ -104,65 +98,21 @@ struct SchedulesListPage: View {
         .refreshable { await schedules.load() }
     }
 
-    private func row(_ summary: ScheduleSummary, knownAgentIds: Set<String>?) -> some View {
-        let state = summary.state(now: now, knownAgentIds: knownAgentIds)
-        return NavigationLink(value: ClaudeSchedulesView.Route.detail(summary.id)) {
-            HStack(spacing: 0) {
-                ListRow(title: title(summary), subtitle: summary.cadence.words)
-                VStack(alignment: .trailing, spacing: Space.xs) {
-                    ScheduleStatePill(state: state)
-                    Text(nextCaption(summary, state: state))
-                        .font(.paseo(.caption2))
-                        .foregroundStyle(Palette.captionInk)
-                }
-                .padding(.trailing, Space.lg)
-            }
-        }
-        .panelRow()
-        .accessibilityLabel("Schedule \(title(summary))")
-        .accessibilityValue("\(summary.cadence.words), \(nextCaption(summary, state: state))")
-        .contextMenu {
-            rowMenu(summary)
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                deleteRequest = summary
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-    }
-
-    @ViewBuilder private func rowMenu(_ summary: ScheduleSummary) -> some View {
-        let isPaused = summary.status == .paused
-        Button {
-            Haptics.selection()
-            Task { await setPaused(summary, paused: !isPaused) }
-        } label: {
-            Label(isPaused ? "Resume schedule" : "Pause schedule", systemImage: isPaused ? "play" : "pause")
-        }
-        if summary.target.newAgentConfig != nil {
-            Button {
-                Haptics.light()
-                Task { await runNow(summary) }
-            } label: {
-                Label("Run now", systemImage: "play.fill")
-            }
-        }
-        Button {
-            Task { await edit(summary) }
-        } label: {
-            Label("Edit", systemImage: "pencil")
-        }
-        Divider()
-        Button(role: .destructive) {
-            deleteRequest = summary
-        } label: {
-            Label("Delete schedule", systemImage: "trash")
-        }
-    }
-
     // MARK: Actions
+
+    /// No push events for schedules: the captions tick every 5 s from the local `now`, and the
+    /// list itself reloads every 30 s (minute-granularity data) plus on appear, pull-to-refresh
+    /// and every mutation. The store publishes only on real change, so a quiet poll never
+    /// re-evaluates the rows.
+    private func poll() async {
+        var tick = 0
+        while !Task.isCancelled {
+            now = .now
+            if tick % 6 == 0 { await schedules.load() }
+            tick += 1
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
 
     private func setPaused(_ summary: ScheduleSummary, paused: Bool) async {
         let ok = paused
@@ -185,7 +135,7 @@ struct SchedulesListPage: View {
             toast?.show(schedules.actionError ?? "Still loading this schedule.")
             return
         }
-        editorRequest = ClaudeSchedulesView.EditorSeed(stored: stored, isHeartbeat: isHeartbeat)
+        onEdit(ClaudeSchedulesView.EditorSeed(stored: stored, isHeartbeat: isHeartbeat))
     }
 
     private func runNow(_ summary: ScheduleSummary) async {
@@ -202,24 +152,6 @@ struct SchedulesListPage: View {
             toast?.show("Schedule deleted")
         } else {
             toast?.show(schedules.actionError ?? "Couldn't delete the schedule.")
-        }
-    }
-
-    // MARK: Text
-
-    private func title(_ summary: ScheduleSummary) -> String {
-        if let name = summary.name, !name.isEmpty { return name }
-        let firstLine = summary.prompt.split(
-            separator: "\n", maxSplits: 1, omittingEmptySubsequences: true
-        ).first
-        return firstLine.map(String.init) ?? "Untitled schedule"
-    }
-
-    private func nextCaption(_ summary: ScheduleSummary, state: ScheduleState) -> String {
-        switch state {
-        case .paused: return "Paused"
-        case .expired, .finished: return "No upcoming run"
-        default: return scheduleNextRun(summary.nextRunAt)
         }
     }
 

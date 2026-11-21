@@ -17,6 +17,8 @@ struct InlineAVPlayer: UIViewControllerRepresentable {
         return controller
     }
 
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {}
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        if controller.player !== player { controller.player = player }
+    }
 }
 #endif

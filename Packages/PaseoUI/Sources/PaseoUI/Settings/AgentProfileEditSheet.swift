@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
-import UIKit
 
 /// The profile editor: name, provider, model, mode, thinking, notes. Seeded from an existing
 /// profile in edit mode; empty in create mode. Saves by writing the whole list through
@@ -99,22 +98,77 @@ struct AgentProfileEditSheet: View {
         ) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.lg) {
-                    sectionLabel("Name")
+                    SettingsSectionLabel(title: "Name")
                     RowGroup { nameField }
-                    sectionLabel("Provider")
-                    RowGroup { providerRow }
-                    sectionLabel("Model")
-                    RowGroup { modelRow }
-                    sectionLabel("Mode")
-                    RowGroup { modeRow }
-                    sectionLabel("Thinking")
-                    RowGroup { thinkingRow }
-                    sectionLabel("When to use")
+                    SettingsSectionLabel(title: "Provider")
+                    RowGroup {
+                        ProfileOptionPicker(
+                            title: "Provider",
+                            current: providerID.isEmpty ? "Choose" : providerLabel(providerID),
+                            selection: $providerID
+                        ) {
+                            if providerOptions.isEmpty {
+                                Text("No providers reported")
+                            } else {
+                                ForEach(providerOptions) { option in
+                                    Text(option.label ?? option.provider).tag(option.provider)
+                                }
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("settings.profiles.provider")
+                    }
+                    SettingsSectionLabel(title: "Model")
+                    RowGroup {
+                        ProfileOptionPicker(
+                            title: "Model",
+                            current: modelLabel(model),
+                            selection: $model
+                        ) {
+                            Text("Provider default").tag(String?.none)
+                            ForEach(models) { option in
+                                Text(option.label).tag(Optional(option.id))
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("settings.profiles.model")
+                    }
+                    SettingsSectionLabel(title: "Mode")
+                    RowGroup {
+                        ProfileOptionPicker(
+                            title: "Mode",
+                            current: modeLabel(modeId),
+                            selection: $modeId
+                        ) {
+                            Text("Provider default").tag(String?.none)
+                            ForEach(modeOptions, id: \.id) { option in
+                                Text(option.label).tag(Optional(option.id))
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("settings.profiles.mode")
+                    }
+                    SettingsSectionLabel(title: "Thinking")
+                    RowGroup {
+                        ProfileOptionPicker(
+                            title: "Thinking",
+                            current: thinkingLabel(thinkingOptionId),
+                            selection: $thinkingOptionId
+                        ) {
+                            Text("Provider default").tag(String?.none)
+                            ForEach(thinkingOptions) { option in
+                                Text(option.label).tag(Optional(option.id))
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("settings.profiles.thinking")
+                    }
+                    SettingsSectionLabel(title: "When to use")
                     RowGroup { notesField }
                     Text("Free text surfaced to orchestrating agents, so they can pick the right profile.")
                         .font(.paseo(.footnote))
                         .foregroundStyle(Palette.secondaryInk)
-                        .padding(.leading, 16)
+                        .padding(.leading, Space.lg)
                     if let saveError {
                         InlineBanner(.failure, title: saveError)
                             .padding(.horizontal, Space.lg)
@@ -127,6 +181,14 @@ struct AgentProfileEditSheet: View {
         }
         .onAppear(perform: seedIfNeeded)
         .paseoFeedback(.selection, trigger: providerID) { old, _ in !old.isEmpty }
+        .onChange(of: providerID) { old, _ in
+            // A new provider has its own models, modes and thinking levels, so the old picks go.
+            // The first value is the seed, not a choice.
+            guard !old.isEmpty else { return }
+            model = nil
+            modeId = nil
+            thinkingOptionId = nil
+        }
     }
 
     // MARK: Fields
@@ -134,7 +196,7 @@ struct AgentProfileEditSheet: View {
     private var nameField: some View {
         TextField("Profile name", text: $name)
             .font(.paseo(.body))
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Space.lg)
             .frame(minHeight: 52)
             .textInputAutocapitalization(.words)
             .submitLabel(.done)
@@ -145,98 +207,10 @@ struct AgentProfileEditSheet: View {
         TextField("When to use this profile…", text: $notes, axis: .vertical)
             .font(.paseo(.callout))
             .lineLimit(2...5)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Space.lg)
+            .padding(.vertical, Space.md)
             .frame(minHeight: 52)
             .accessibilityIdentifier("settings.profiles.notes.field")
-    }
-
-    private func pickerRow(
-        title: String, current: String,
-        @ViewBuilder content: () -> some View
-    ) -> some View {
-        HStack(spacing: 12) {
-            Text(title)
-                .font(.paseo(.body))
-            Spacer(minLength: 8)
-            Menu {
-                content()
-            } label: {
-                HStack(spacing: 5) {
-                    Text(current)
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.glyph(.small, weight: .semibold))
-                        .foregroundStyle(Palette.tertiaryInk)
-                }
-                .padding(.trailing, 2)
-            }
-        }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 52)
-    }
-
-    private var providerRow: some View {
-        pickerRow(
-            title: "Provider",
-            current: providerID.isEmpty ? "Choose" : providerLabel(providerID)
-        ) {
-            if providerOptions.isEmpty {
-                Text("No providers reported")
-            } else {
-                ForEach(providerOptions) { option in
-                    Button(option.label ?? option.provider) {
-                        selectProvider(option.provider)
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("settings.profiles.provider")
-    }
-
-    private var modelRow: some View {
-        pickerRow(
-            title: "Model",
-            current: modelLabel(model)
-        ) {
-            Button("Provider default") { model = nil }
-            ForEach(models) { option in
-                Button(option.label) { model = option.id }
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("settings.profiles.model")
-    }
-
-    private var modeRow: some View {
-        pickerRow(
-            title: "Mode",
-            current: modeLabel(modeId)
-        ) {
-            Button("Provider default") { modeId = nil }
-            ForEach(modeOptions, id: \.id) { option in
-                Button(option.label) { modeId = option.id }
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("settings.profiles.mode")
-    }
-
-    private var thinkingRow: some View {
-        pickerRow(
-            title: "Thinking",
-            current: thinkingLabel(thinkingOptionId)
-        ) {
-            Button("Provider default") { thinkingOptionId = nil }
-            ForEach(thinkingOptions) { option in
-                Button(option.label) { thinkingOptionId = option.id }
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("settings.profiles.thinking")
     }
 
     // MARK: Labels
@@ -284,14 +258,6 @@ struct AgentProfileEditSheet: View {
         entries.first { $0.status == .ready }?.provider ?? entries.first?.provider ?? ""
     }
 
-    private func selectProvider(_ id: String) {
-        guard id != providerID else { return }
-        providerID = id
-        model = nil
-        modeId = nil
-        thinkingOptionId = nil
-    }
-
     // MARK: Save
 
 
@@ -324,17 +290,6 @@ struct AgentProfileEditSheet: View {
                 saveError = session.hostSettings.error ?? "The host rejected that profile."
             }
         }
-    }
-
-    // MARK: Shared bits
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
-            .padding(.top, 8)
-            .padding(.bottom, -8)
     }
 }
 #endif

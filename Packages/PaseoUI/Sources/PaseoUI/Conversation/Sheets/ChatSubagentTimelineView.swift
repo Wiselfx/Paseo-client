@@ -59,11 +59,11 @@ struct ChatSubagentTimelineView: View {
                             action: ("Try again", { retryOlder() }))
                     }
                     ForEach(rows, id: \.seq) { row in
-                        timelineRow(row)
+                        SubagentTimelineRow(row: row)
                     }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Space.lg)
             .padding(.vertical, 18)
         }
         .scrollPosition($scrollPosition)
@@ -128,7 +128,7 @@ struct ChatSubagentTimelineView: View {
         else { return }
         loadingOlder = true
         olderAnchor = OlderAnchor(
-            contentHeight: metrics.contentHeight, offsetY: metrics.offsetY, startedAt: Date())
+            contentHeight: metrics.contentHeight, offsetY: metrics.offsetY, startedAt: .now)
         Task { await fetchOlder(cursor: cursor) }
     }
 
@@ -136,7 +136,7 @@ struct ChatSubagentTimelineView: View {
     /// Returns true when it scrolled, so the trigger check is skipped for that frame.
     private func restoreOlderAnchor(_ metrics: Metrics) -> Bool {
         guard let anchor = olderAnchor else { return false }
-        if Date().timeIntervalSince(anchor.startedAt) > 2 {
+        if Date.now.timeIntervalSince(anchor.startedAt) > 2 {
             olderAnchor = nil
             return false
         }
@@ -191,56 +191,6 @@ struct ChatSubagentTimelineView: View {
             error = subagents.error ?? "Couldn't load the timeline."
         }
         loading = false
-    }
-
-    @ViewBuilder
-    private func timelineRow(_ row: ProviderSubagentTimelineRequest.Response.Row) -> some View {
-        switch row.item {
-        case .userMessage(let message):
-            VStack(alignment: .leading, spacing: 4) {
-                Text("TASK")
-                    .font(.paseo(.caption2, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(Palette.tertiaryInk)
-                Text(message.text)
-                    .font(.paseo(.processTitle))
-                    .foregroundStyle(Palette.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        case .assistantMessage(let message):
-            Text(message.text)
-                .font(.paseo(.processTitle))
-                .foregroundStyle(Palette.ink)
-                .lineSpacing(6)
-                .fixedSize(horizontal: false, vertical: true)
-        case .reasoning(let reasoning):
-            Text(reasoning.text.replacing("\n", with: " "))
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.tertiaryInk)
-                .lineLimit(2)
-        case .toolCall(let call):
-            ToolCallLine(call: call)
-        case .todo(let list):
-            Text("Todo · \(PaseoFormat.integer(list.items.count)) item\(list.items.count == 1 ? "" : "s")")
-                .font(.paseo(.codeSmall))
-                .foregroundStyle(Palette.tertiaryInk)
-        case .error(let message):
-            Text(message)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.failureInk)
-        case .notification(let level, let message):
-            Text("\(level) · \(message)")
-                .font(.paseo(.caption))
-                .foregroundStyle(Palette.tertiaryInk)
-        case .compaction:
-            Text("Compacted")
-                .font(.paseo(.caption))
-                .foregroundStyle(Palette.tertiaryInk)
-        case .unknown:
-            Text("Unknown item")
-                .font(.paseo(.caption))
-                .foregroundStyle(Palette.tertiaryInk)
-        }
     }
 }
 #endif

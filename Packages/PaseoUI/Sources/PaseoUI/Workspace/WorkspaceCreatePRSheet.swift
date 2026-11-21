@@ -43,10 +43,9 @@ struct WorkspaceCreatePRSheet: View {
                         .focused($focused)
                 }
                 ClaudeCard {
-                    TextEditor(text: $prBody)
+                    TextField("Description", text: $prBody, axis: .vertical)
                         .font(.paseo(.callout))
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 100, maxHeight: 160)
+                        .lineLimit(4...8)
                         .accessibilityLabel("Pull request description")
                 }
                 Text("Opens from \(branch) into \(baseRef ?? "base").")

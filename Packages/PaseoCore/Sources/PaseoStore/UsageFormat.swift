@@ -130,7 +130,7 @@ public enum UsageFormat {
     /// When a window resets, as a countdown: "resets in 4h 59m" / "resetting now".
     /// A retained report has already reset, so it says so instead (format.ts:103-115).
     public static func resetLabel(
-        _ iso: String?, retained: Bool = false, now: Date = Date()
+        _ iso: String?, retained: Bool = false, now: Date = .now
     ) -> String? {
         guard let iso, let duration = relativeDuration(iso, now: now) else { return nil }
         switch duration {
@@ -146,7 +146,7 @@ public enum UsageFormat {
     /// "Oct 31, 3:00 PM" after that, and nothing for a time that has passed
     /// (format.ts:117-140). Names follow the app language (English); the clock follows the device.
     public static func resetTime(
-        _ iso: String?, now: Date = Date(), locale: Locale = .current, timeZone: TimeZone = .current
+        _ iso: String?, now: Date = .now, locale: Locale = .current, timeZone: TimeZone = .current
     ) -> String? {
         guard let iso, let target = PaseoDate.parse(iso) else { return nil }
         let diff = target.timeIntervalSince(now)
@@ -160,7 +160,7 @@ public enum UsageFormat {
     }
 
     /// A quota that will not last: "runs out in 2h 5m" / "runs out now" (format.ts:142-152).
-    public static func runsOutLabel(_ iso: String?, now: Date = Date()) -> String? {
+    public static func runsOutLabel(_ iso: String?, now: Date = .now) -> String? {
         guard let iso, let duration = relativeDuration(iso, now: now) else { return nil }
         switch duration {
         case .now: return Copy.runsOutNow
@@ -172,7 +172,7 @@ public enum UsageFormat {
 
     /// How long ago a report was fetched: "just now", "37m ago", "5h ago", "3d ago"
     /// (format.ts:154-182).
-    public static func ago(_ iso: String?, now: Date = Date()) -> String? {
+    public static func ago(_ iso: String?, now: Date = .now) -> String? {
         guard let iso, let date = PaseoDate.parse(iso) else { return nil }
         let diff = now.timeIntervalSince(date)
         guard diff.isFinite else { return nil }
@@ -188,7 +188,7 @@ public enum UsageFormat {
     /// The card's freshness line: "Updated 5m ago" for a live report, "Last updated 5m ago" over
     /// retained data, and "No successful update" when the host never got one
     /// (Upstream: packages/app/src/usage/card.tsx:255-280).
-    public static func freshness(_ successfulAt: String?, retained: Bool, now: Date = Date())
+    public static func freshness(_ successfulAt: String?, retained: Bool, now: Date = .now)
         -> String
     {
         guard let relative = ago(successfulAt, now: now) else { return Copy.noSuccessfulUpdate }
@@ -231,17 +231,14 @@ public enum UsageFormat {
         _ value: Double, minimumFractionDigits: Int, maximumFractionDigits: Int,
         suffix: String = "", currency: Bool = false
     ) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = displayLocale
-        formatter.numberStyle = currency ? .currency : .decimal
+        let fractionDigits = minimumFractionDigits...maximumFractionDigits
         if currency {
-            formatter.currencyCode = "USD"
-            formatter.currencySymbol = "$"
+            return value.formatted(
+                .currency(code: "USD").precision(.fractionLength(fractionDigits))
+                    .locale(displayLocale))
         }
-        formatter.minimumFractionDigits = minimumFractionDigits
-        formatter.maximumFractionDigits = maximumFractionDigits
-        let text = formatter.string(from: NSNumber(value: value)) ?? String(value)
-        return text + suffix
+        return value.formatted(
+            .number.precision(.fractionLength(fractionDigits)).locale(displayLocale)) + suffix
     }
 
     // MARK: - Window and balance labels (format.ts:7-27)
@@ -273,44 +270,28 @@ public enum UsageFormat {
 
     /// Grouped digits for counts inside copy ("1,204d ago").
     private static func countText(_ value: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = displayLocale
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+        value.formatted(.number.locale(displayLocale))
     }
 
     /// The device's 12/24-hour choice, as upstream's `formatTimeOfDay` (utils/time.ts:129-131).
     private static func timeOfDay(_ date: Date, locale: Locale, timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale, timeZone: timeZone))
     }
 
     private static func weekday(_ date: Date, timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = displayLocale
-        formatter.timeZone = timeZone
-        formatter.setLocalizedDateFormatFromTemplate("EEE")
-        return formatter.string(from: date)
+        date.formatted(
+            Date.FormatStyle(locale: displayLocale, timeZone: timeZone).weekday(.abbreviated))
     }
 
     private static func dayAndMonth(_ date: Date, timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = displayLocale
-        formatter.timeZone = timeZone
-        formatter.setLocalizedDateFormatFromTemplate("MMM d")
-        return formatter.string(from: date)
+        date.formatted(
+            Date.FormatStyle(locale: displayLocale, timeZone: timeZone).month(.abbreviated).day())
     }
 
     // MARK: - Problem sentences (Upstream: packages/app/src/usage/copy.ts:8-19)
 
     /// The sentence behind an `unavailable` report, with the host's own remedy when it has one.
-    public static func problem(_ problem: UsageProblem, now: Date = Date()) -> String {
+    public static func problem(_ problem: UsageProblem, now: Date = .now) -> String {
         switch problem {
         case .noQuota(let detail):
             return detail

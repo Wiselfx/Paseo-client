@@ -12,12 +12,12 @@ import SwiftUI
 struct ClaudeLiveStatusLine: View {
     let turn: Turn
     @State private var activity: ClaudeActivity
-    @State private var wordingChangedAt = Date()
+    @State private var wordingChangedAt = Date.now
     /// A wording of the call's own words seen during a stand, held to be written first when it ends.
     @State private var pendingDetail: ClaudeActivity?
     /// The clause the model last said it was on, held across the gaps between clauses.
     @State private var lastModelWords: String?
-    @State private var lastActivityAt = Date()
+    @State private var lastActivityAt = Date.now
     @State private var overtime = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -43,34 +43,36 @@ struct ClaudeLiveStatusLine: View {
                     .foregroundStyle(Palette.warning)
                     .padding(.horizontal, 6)
                     .padding(.leading, 2)
-                    .frame(height: 16)
+                    .frame(minHeight: 16)
                     .background(Palette.warning.opacity(0.16), in: .rect(cornerRadius: Radius.sm))
                     .transition(.offset(y: 4).combined(with: .scale(scale: 0.92)).combined(with: .opacity))
             }
             Spacer(minLength: 0)
         }
-        .frame(height: 24)
+        .frame(minHeight: 24)
         .animation(Motion.swap.resolved(reduceMotion: reduceMotion), value: activity)
         // OCU §12: the overtime badge settles critically damped, like every surface.
         .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: overtime)
-        .onChange(of: next) { _, _ in advanceActivity(at: Date()) }
-        .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date() }
+        .onChange(of: next) { _, _ in advanceActivity(at: Date.now) }
+        .onChange(of: turn.claudeActivityKey) { _, _ in lastActivityAt = Date.now }
         // The wording lock: whatever arrived during the stand is written when it ends.
         .task(id: wordingChangedAt) {
             try? await Task.sleep(for: .seconds(ClaudeMotion.wordLock))
             guard !Task.isCancelled else { return }
-            advanceActivity(at: Date())
+            advanceActivity(at: Date.now)
         }
         // Silence: the badge appears after `overtime` seconds with nothing new.
         .task(id: lastActivityAt) {
             if overtime { overtime = false }
-            let remaining = ClaudeMotion.overtime - Date().timeIntervalSince(lastActivityAt)
+            let remaining = ClaudeMotion.overtime - Date.now.timeIntervalSince(lastActivityAt)
             if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
             guard !Task.isCancelled else { return }
             overtime = true
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(activity.text)
+        // The label replaces the combined children's, so the stall warning is spoken as the value.
+        .accessibilityValue(overtime ? "No response yet" : "")
     }
 
     /// The wording lock: a wording stands for a second so a fast turn reads as one line, not a

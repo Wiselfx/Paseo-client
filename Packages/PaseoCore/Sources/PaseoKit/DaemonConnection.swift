@@ -10,7 +10,7 @@ import Synchronization
 /// unsolicited-event routing, keepalive and automatic reconnection.
 ///
 /// IMPLEMENTATION TICKET: docs/tickets/T1-daemon-connection.md
-public final class DaemonConnection: DaemonClient, @unchecked Sendable {
+public final class DaemonConnection: DaemonClient, Sendable {
     public let endpoint: DaemonEndpoint
     public let clientId: String
     public let appVersion: String?
@@ -135,12 +135,12 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
     private static func isTerminal(_ error: ConnectionError) -> Bool {
         switch error {
         case .rejected:
-            return true
+            true
         case .closed(let code, _):
-            return code == 4401 || code == RelayCloseCode.protectedHandshakeFailed
+            code == 4401 || code == RelayCloseCode.protectedHandshakeFailed
                 || code == RelayCloseCode.recordFailed
         default:
-            return false
+            false
         }
     }
 
@@ -199,6 +199,10 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
         failAllPending(with: .disconnected)
         transport?.close(code: 1000)
         setState(.idle)
+        // Closes for good: end both streams so consumers' `for await` loops exit instead of
+        // waiting forever and keeping this connection alive.
+        stateContinuation.finish()
+        eventContinuation.finish()
     }
 
     public func initiate<R: PaseoRequest>(_ request: R, timeout: Duration) async throws -> InitiatedResponse<R> {
@@ -486,26 +490,21 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
     private func transition(
         generation: Int, to newState: ConnectionState, skipIfIdle: Bool = false
     ) -> Bool {
-        let changed = mutex.withLock { core -> Bool in
+        // Yield under the lock (non-blocking) so consumers see states in the order they applied.
+        mutex.withLock { core -> Bool in
             guard core.generation == generation else { return false }
             if skipIfIdle, case .idle = core.state { return false }
             guard core.state != newState else { return false }
             core.state = newState
+            stateContinuation.yield(newState)
             return true
         }
-        if changed {
-            stateContinuation.yield(newState)
-        }
-        return changed
     }
 
     private func setState(_ newState: ConnectionState) {
-        let changed = mutex.withLock { core -> Bool in
-            guard core.state != newState else { return false }
+        mutex.withLock { core in
+            guard core.state != newState else { return }
             core.state = newState
-            return true
-        }
-        if changed {
             stateContinuation.yield(newState)
         }
     }
@@ -979,7 +978,7 @@ public final class DaemonConnection: DaemonClient, @unchecked Sendable {
 
 /// One-shot handshake waiter. Resolution is idempotent; the timeout is an ordinary race rather
 /// than a task-group because the frame router owns the other side of the race.
-private final class HelloWaiter: @unchecked Sendable {
+private final class HelloWaiter: Sendable {
     private struct Box {
         var continuation: CheckedContinuation<ServerInfo, any Error>?
         var result: Result<ServerInfo, ConnectionError>?
@@ -1065,7 +1064,7 @@ private struct FileReadReply: Encodable {
 }
 
 /// One pending request. A late response finds no entry and is dropped.
-private final class RequestWaiter: @unchecked Sendable {
+private final class RequestWaiter: Sendable {
     private struct Box {
         /// Buffered result, for when the response (or timeout) beats the wait() call.
         var result: Result<Data, ConnectionError>?

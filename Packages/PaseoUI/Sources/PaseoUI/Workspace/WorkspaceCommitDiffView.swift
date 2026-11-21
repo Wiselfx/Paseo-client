@@ -42,7 +42,7 @@ struct WorkspaceCommitDiffView: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, Space.xs)
             }
         }
         .background(Palette.panel)
@@ -60,7 +60,7 @@ struct WorkspaceCommitDiffView: View {
                 .font(.paseo(.callout, weight: .medium))
                 .foregroundStyle(Palette.ink)
                 .lineLimit(2)
-            HStack(spacing: 8) {
+            HStack(spacing: Space.sm) {
                 Text(commit.shortSha)
                     .font(.paseo(.codeSmall))
                     .foregroundStyle(Palette.secondaryInk)
@@ -74,8 +74,8 @@ struct WorkspaceCommitDiffView: View {
                     .foregroundStyle(Palette.tertiaryInk)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.md)
     }
 
     private func fileRow(_ file: CheckoutCommitFile) -> some View {
@@ -83,7 +83,7 @@ struct WorkspaceCommitDiffView: View {
         return Button {
             Task { await openDiff(for: file) }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Space.md) {
                 Text(style.letter)
                     .font(.paseo(.codeCaption, weight: .semibold))
                     .foregroundStyle(style.tint)
@@ -99,7 +99,7 @@ struct WorkspaceCommitDiffView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 DiffStat(added: file.additions, removed: file.deletions)
                 if loadingPath == file.path {
-                    ProgressView().controlSize(.small)
+                    InlineProgress()
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.glyph(.small, weight: .medium))

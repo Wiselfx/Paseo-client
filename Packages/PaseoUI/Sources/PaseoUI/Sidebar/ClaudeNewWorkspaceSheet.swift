@@ -128,19 +128,21 @@ struct ClaudeNewWorkspaceSheet: View {
                             .font(.paseo(.callout))
                         }
                         .padding(.horizontal, 16)
-                        .frame(height: 52)
+                        .frame(minHeight: 52)
                         RowDivider()
                         HStack(spacing: 12) {
+                            // The field carries the name VoiceOver reads; the visible label would repeat it.
                             Text("Name")
                                 .font(.paseo(.body))
+                                .accessibilityHidden(true)
                             Spacer(minLength: 8)
-                            TextField("Optional", text: $name)
+                            TextField("Name", text: $name, prompt: Text("Optional"))
                                 .font(.paseo(.body))
                                 .multilineTextAlignment(.trailing)
                                 .textInputAutocapitalization(.words)
                         }
                         .padding(.horizontal, 16)
-                        .frame(height: 52)
+                        .frame(minHeight: 52)
                     }
                     isolationSection
                     if isolation == .worktree {
@@ -191,8 +193,12 @@ struct ClaudeNewWorkspaceSheet: View {
                                 isolation == option ? Palette.ink : Color.clear, in: .capsule)
                             .opacity(
                                 option == .worktree && !directory.supportsWorkspaceCreate ? 0.4 : 1)
+                            // The capsule stays 32 pt; the tap target around it is 44.
+                            .frame(minHeight: 44)
+                            .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isolation == option ? .isSelected : [])
                     .disabled(option == .worktree && !directory.supportsWorkspaceCreate)
                     .accessibilityLabel(option.title)
                 }
@@ -218,9 +224,10 @@ struct ClaudeNewWorkspaceSheet: View {
                 HStack(spacing: 12) {
                     Text("Branch")
                         .font(.paseo(.body))
+                        .accessibilityHidden(true)
                     Spacer(minLength: 8)
                     TextField(
-                        "", text: $baseBranchText,
+                        "Branch", text: $baseBranchText,
                         prompt: Text("main").foregroundStyle(Palette.secondaryInk)
                     )
                     .font(.paseo(.code))
@@ -229,7 +236,7 @@ struct ClaudeNewWorkspaceSheet: View {
                     .textInputAutocapitalization(.never)
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 52)
+                .frame(minHeight: 52)
             }
             Text("The new worktree forks from this branch. The host reports no branch list here; type one.")
                 .font(.paseo(.caption))
@@ -244,10 +251,11 @@ struct ClaudeNewWorkspaceSheet: View {
                 .font(.paseo(.footnote, weight: .medium))
                 .foregroundStyle(Palette.secondaryInk)
                 .padding(.leading, 4)
+                .accessibilityHidden(true)
             RowGroup {
                 VStack(alignment: .leading, spacing: 6) {
                     TextField(
-                        "", text: $prompt,
+                        "First prompt", text: $prompt,
                         prompt: Text("What should the agent do?").foregroundStyle(Palette.secondaryInk),
                         axis: .vertical
                     )

@@ -15,11 +15,6 @@ enum SidebarSort: String, CaseIterable, Identifiable {
     }
 }
 extension PaseoSidebar {
-    /// The grouping mode persisted by `paseo.sidebar.groupBy`; unknown values fall back to project.
-    var sidebarGrouping: SidebarGrouping {
-        SidebarGrouping(rawValue: groupByRaw) ?? .project
-    }
-
     /// The rows inside the "Labels" submenu of the display options: "All", then one row per
     /// known label (one at a time), then a way into the manage sheet.
     @ViewBuilder var labelsFilterContent: some View {
@@ -64,9 +59,7 @@ extension PaseoSidebar {
         Menu {
             Picker(
                 "Sort",
-                selection: Binding(
-                    get: { sidebarSort },
-                    set: { sortRaw = $0.rawValue })
+                selection: $sidebarSort
             ) {
                 ForEach(SidebarSort.allCases) { sort in
                     Text(sort.title).tag(sort)
@@ -78,9 +71,7 @@ extension PaseoSidebar {
             Toggle("Show PR badge", isOn: $showPRBadge).tint(Palette.toggleTint)
             Picker(
                 "Group by",
-                selection: Binding(
-                    get: { sidebarGrouping },
-                    set: { groupByRaw = $0.rawValue })
+                selection: $sidebarGrouping
             ) {
                 ForEach(SidebarGrouping.allCases) { grouping in
                     Text(grouping.title).tag(grouping)
@@ -96,12 +87,12 @@ extension PaseoSidebar {
                 }
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            Label("Sidebar options", systemImage: "ellipsis.circle")
+                .labelStyle(.iconOnly)
                 .font(.glyph(.large, weight: .light))
                 .foregroundStyle(Palette.tertiaryInk)
                 .frame(width: 44, height: 44)
         }
-        .accessibilityLabel("Sidebar options")
     }
 
     

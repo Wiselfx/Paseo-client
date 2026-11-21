@@ -11,21 +11,21 @@ struct ShellHeader<Title: View, Trailing: View>: View {
     }
 
     private let leading: Leading
-    private let title: () -> Title
-    private let trailing: () -> Trailing
+    private let title: Title
+    private let trailing: Trailing
     /// False (the default, every other screen): the row centres its items. True: the row aligns
     /// its items to the top, so the buttons stay on the top row while a title grows taller (N6 C).
     private let alignsControlsToTop: Bool
 
     init(
         leading: Leading,
-        @ViewBuilder title: @escaping () -> Title,
-        @ViewBuilder trailing: @escaping () -> Trailing,
+        @ViewBuilder title: () -> Title,
+        @ViewBuilder trailing: () -> Trailing,
         alignsControlsToTop: Bool = false
     ) {
         self.leading = leading
-        self.title = title
-        self.trailing = trailing
+        self.title = title()
+        self.trailing = trailing()
         self.alignsControlsToTop = alignsControlsToTop
     }
 
@@ -35,10 +35,10 @@ struct ShellHeader<Title: View, Trailing: View>: View {
             spacing: Space.sm
         ) {
             leadingButton
-            title()
+            title
                 .frame(maxWidth: .infinity)
             HStack(spacing: Space.sm) {
-                trailing()
+                trailing
             }
             .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
         }

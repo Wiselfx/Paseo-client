@@ -52,10 +52,14 @@ struct InlineBanner: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if let action {
-                Button(action.0, action: action.1)
-                    .font(.paseo(.footnote, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                    .buttonStyle(.plain)
+                Button(action: action.1) {
+                    Text(action.0)
+                        .frame(minWidth: Metrics.hitSize, minHeight: Metrics.hitSize)
+                        .contentShape(.rect)
+                }
+                .font(.paseo(.footnote, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .buttonStyle(.plain)
             }
             if let onDismiss {
                 Button(action: onDismiss) {
@@ -70,7 +74,7 @@ struct InlineBanner: View {
             }
         }
         .padding(.horizontal, Space.md)
-        .padding(.vertical, onDismiss == nil ? Space.md : 0)
+        .padding(.vertical, onDismiss == nil && action == nil ? Space.md : 0)
         .frame(minHeight: 44)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(fill, in: .rect(cornerRadius: Radius.md))

@@ -124,8 +124,7 @@ actor MediaPipeline {
 
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
-        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-            .map { $0.appending(path: "RemoteImages", directoryHint: .isDirectory) }
+        let directory = URL.cachesDirectory.appending(path: "RemoteImages", directoryHint: .isDirectory)
         configuration.urlCache = URLCache(
             memoryCapacity: 32 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024, directory: directory)
         configuration.requestCachePolicy = .useProtocolCachePolicy
@@ -222,12 +221,10 @@ actor MediaPipeline {
     /// never happen on the main actor. Same SHA naming as the image disk cache, with
     /// the file name kept so the system can sniff the kind.
     static func cacheDaemonFile(data: Data, ref: DaemonFileRef) async -> URL? {
-        guard
-            let url = diskDirectory()?.appending(
-                path: diskKey(ref: ref, revision: nil) + "-"
-                    + (ref.path as NSString).lastPathComponent,
-                directoryHint: .notDirectory)
-        else { return nil }
+        let url = diskDirectory().appending(
+            path: diskKey(ref: ref, revision: nil) + "-"
+                + (ref.path as NSString).lastPathComponent,
+            directoryHint: .notDirectory)
         return await Task.detached(priority: .userInitiated) { () -> URL? in
             do {
                 try FileManager.default.createDirectory(
@@ -305,7 +302,7 @@ actor MediaPipeline {
     /// A failure this key is still remembered for, or nil when it is unknown or expired.
     static func cachedFailure(for key: String) -> MediaFailure? {
         guard let memo = failures.object(forKey: key as NSString),
-            Date().timeIntervalSince(memo.at) < failureTTL
+            Date.now.timeIntervalSince(memo.at) < failureTTL
         else { return nil }
         return memo.failure
     }
@@ -546,7 +543,7 @@ actor MediaPipeline {
             Self.forgetFailure(key)
             Self.forgetFailure(identity)
         case .failure(let failure):
-            let memo = MediaFailureMemo(failure: failure, at: Date())
+            let memo = MediaFailureMemo(failure: failure, at: Date.now)
             Self.failures.setObject(memo, forKey: key as NSString)
             Self.failures.setObject(memo, forKey: identity as NSString)
         case .svg:
@@ -884,19 +881,17 @@ actor MediaPipeline {
 
     // MARK: Daemon disk cache (off main, LRU 500 MB)
 
-    private static func diskDirectory() -> URL? {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-            .appending(path: "daemon-media", directoryHint: .isDirectory)
+    private static func diskDirectory() -> URL {
+        URL.cachesDirectory.appending(path: "daemon-media", directoryHint: .isDirectory)
     }
 
     /// Reads the disk entry and refreshes its age, so a scroll-back keeps what it uses.
     private static func diskRead(key: String) -> Data? {
-        guard let url = diskDirectory()?.appending(path: key, directoryHint: .notDirectory),
-            let data = try? Data(contentsOf: url)
-        else { return nil }
+        let url = diskDirectory().appending(path: key, directoryHint: .notDirectory)
+        guard let data = try? Data(contentsOf: url) else { return nil }
         // best-effort: a touch failure must never fail the read.
         try? FileManager.default.setAttributes(
-            [.modificationDate: Date()], ofItemAtPath: url.path)
+            [.modificationDate: Date.now], ofItemAtPath: url.path)
         return data
     }
 
@@ -905,18 +900,16 @@ actor MediaPipeline {
     /// Writes one text sidecar (the daemon's revision, for a later stat-based
     /// validation). Best-effort like every disk write here.
     private static func diskWriteText(_ text: String, key: String) {
-        guard let directory = diskDirectory(),
-            let url = Optional(directory.appending(path: key, directoryHint: .notDirectory)),
-            let data = text.data(using: .utf8)
-        else { return }
+        let directory = diskDirectory()
+        let url = directory.appending(path: key, directoryHint: .notDirectory)
+        guard let data = text.data(using: .utf8) else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
     }
 
     private static func diskWrite(data: Data, key: String) {
-        guard let directory = diskDirectory(),
-            let url = Optional(directory.appending(path: key, directoryHint: .notDirectory))
-        else { return }
+        let directory = diskDirectory()
+        let url = directory.appending(path: key, directoryHint: .notDirectory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
         evictDiskIfNeeded(directory: directory)

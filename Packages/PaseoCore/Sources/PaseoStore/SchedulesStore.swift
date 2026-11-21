@@ -442,7 +442,7 @@ public enum ScheduleState: Sendable, Hashable {
 extension ScheduleSummary {
     /// `knownAgentIds` nil means the agent directory has not loaded yet, so a missing `agent`
     /// target is not proof the agent is gone.
-    public func state(now: Date = Date(), knownAgentIds: Set<String>? = nil) -> ScheduleState {
+    public func state(now: Date = .now, knownAgentIds: Set<String>? = nil) -> ScheduleState {
         if let expiresAt, let date = PaseoDate.parse(expiresAt), date <= now {
             return .expired
         }
@@ -459,7 +459,7 @@ extension ScheduleSummary {
 }
 
 extension StoredSchedule {
-    public func state(now: Date = Date(), knownAgentIds: Set<String>? = nil) -> ScheduleState {
+    public func state(now: Date = .now, knownAgentIds: Set<String>? = nil) -> ScheduleState {
         summary.state(now: now, knownAgentIds: knownAgentIds)
     }
 }

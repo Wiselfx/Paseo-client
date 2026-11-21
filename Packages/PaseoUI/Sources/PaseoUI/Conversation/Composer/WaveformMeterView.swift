@@ -74,7 +74,7 @@ final class WaveformMeterView: UIView {
         } else {
             stop()
         }
-        draw(at: Date().timeIntervalSince1970)
+        draw(at: Date.now.timeIntervalSince1970)
     }
 
     // MARK: Layout
@@ -82,7 +82,7 @@ final class WaveformMeterView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         recomputeBarCount()
-        draw(at: Date().timeIntervalSince1970)
+        draw(at: Date.now.timeIntervalSince1970)
     }
 
     /// Slot count for the width we were given: once per layout, never per tick.
@@ -129,7 +129,7 @@ final class WaveformMeterView: UIView {
     }
 
     func tick(_ link: CADisplayLink) {
-        let now = Date().timeIntervalSince1970
+        let now = Date.now.timeIntervalSince1970
         // Wall-clock instants, not `link.timestamp`: the audio thread stamps pushes with the
         // same clock, and the two must agree for the scroll progress to mean anything.
         guard lastDraw == 0 || now - lastDraw >= Self.tickInterval * 0.5 else { return }
@@ -194,7 +194,7 @@ final class WaveformMeterView: UIView {
     /// tree is not rebuilt 30 times a second.
     private func updateAccessibilityValue(level: Float) {
         guard accessibilityText != nil else { return }
-        let now = Date().timeIntervalSince1970
+        let now = Date.now.timeIntervalSince1970
         guard lastAccessibilityUpdate == 0 || now - lastAccessibilityUpdate >= 1 else { return }
         lastAccessibilityUpdate = now
         accessibilityValue = "\(Int((Double(level) * 100).rounded())) percent"

@@ -44,16 +44,16 @@ struct MascotDriver: ViewModifier {
                 controller.failedToolCallsChanged(calls)
             }
             .onChange(of: store.timeline.runningSubAgentCount) { _, count in
-                controller.feedMascot(.subagentsChanged(count: count, at: Date()))
+                controller.feedMascot(.subagentsChanged(count: count, at: Date.now))
             }
             .onChange(of: store.timeline.lastCompactionStatus) { _, _ in
                 controller.compactionChanged()
             }
             .onChange(of: session.runningAgentCount) { _, count in
-                controller.feedMascot(.busySessionsChanged(count: count, at: Date()))
+                controller.feedMascot(.busySessionsChanged(count: count, at: Date.now))
             }
             .onChange(of: session.pendingPermissionCount) { _, count in
-                controller.feedMascot(.pendingInteractionsChanged(count: count, at: Date()))
+                controller.feedMascot(.pendingInteractionsChanged(count: count, at: Date.now))
             }
             .onChange(of: session.attentionCount) { _, _ in
                 controller.attentionChanged()
@@ -77,7 +77,7 @@ struct MascotDriver: ViewModifier {
 extension ChatController {
     /// Advances the machine's clock (expiring moments, falling asleep).
     func tickMascot() {
-        mascot.tick(now: Date())
+        mascot.tick(now: Date.now)
         publishMascotState()
     }
 
@@ -96,7 +96,7 @@ extension ChatController {
     func seedMascotBaselines() {
         guard !mascotSeeded else { return }
         mascotSeeded = true
-        let now = Date()
+        let now = Date.now
         // The oldest row present is the floor: anything below it is history, not a live event.
         mascotSeqFloor = store.timeline.rows.first?.seqStart ?? 0
         signalledToolFailureIds = Set(allFailedToolCallIds)
@@ -128,7 +128,7 @@ extension ChatController {
     /// to nil as history loads is not news (UX spec §4.4).
     func turnBoundaryChanged(_ newId: String?) {
         guard mascotSeeded else { return }
-        let now = Date()
+        let now = Date.now
         if let newId {
             mascotLiveTurnId = newId
             feedMascot(.turnStarted(at: now))
@@ -146,8 +146,8 @@ extension ChatController {
     func activityChanged() {
         guard mascotSeeded, store.timeline.latestRowId != nil else { return }
         switch store.timeline.latestRowKind {
-        case .reasoning: feedMascot(.activityChanged(.reasoning, at: Date()))
-        case .toolCall: feedMascot(.activityChanged(.working, at: Date()))
+        case .reasoning: feedMascot(.activityChanged(.reasoning, at: Date.now))
+        case .toolCall: feedMascot(.activityChanged(.working, at: Date.now))
         default: break
         }
     }
@@ -159,13 +159,13 @@ extension ChatController {
         }
         let unseen = liveFailedToolCallIds.filter { !signalledToolFailureIds.contains($0) }
         guard !unseen.isEmpty else { return }
-        for _ in unseen { feedMascot(.toolFailed(at: Date())) }
+        for _ in unseen { feedMascot(.toolFailed(at: Date.now)) }
         signalledToolFailureIds.formUnion(unseen)
     }
 
     func compactionChanged() {
         let status = store.timeline.lastCompactionStatus
-        let now = Date()
+        let now = Date.now
         if status == "loading" {
             if !compactionOpen {
                 compactionOpen = true
@@ -179,7 +179,7 @@ extension ChatController {
 
     func attentionChanged() {
         let active = session.attentionCount > 0
-        if active, !attentionActive { feedMascot(.attention(at: Date())) }
+        if active, !attentionActive { feedMascot(.attention(at: Date.now)) }
         attentionActive = active
     }
 }

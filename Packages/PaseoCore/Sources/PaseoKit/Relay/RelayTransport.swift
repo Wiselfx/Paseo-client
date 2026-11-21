@@ -66,9 +66,7 @@ public struct ClosedTransport: WebSocketTransport, Sendable {
 /// | `flushing` | queued, drained by the flusher | records |
 /// | `open` | encrypted and written | records |
 /// | `closed` | throws `WebSocketClosed` | nothing |
-public final class RelayWebSocketTransport: WebSocketTransport, RelaySecurityReporting,
-    @unchecked Sendable
-{
+public final class RelayWebSocketTransport: WebSocketTransport, RelaySecurityReporting, Sendable {
     public struct Configuration: Sendable {
         /// The hello is resent byte-for-byte this often until a ready arrives.
         public var handshakeRetryInterval: Duration = .seconds(1)
@@ -120,8 +118,8 @@ public final class RelayWebSocketTransport: WebSocketTransport, RelaySecurityRep
     private let base: any WebSocketTransport
     private let configuration: Configuration
     private let mutex: Mutex<State>
-    /// `Failure` is `any Error` because only that form of `AsyncThrowingStream` exists here; the
-    /// only error ever sent is `WebSocketClosed`.
+    /// `Failure` is `any Error` to match `WebSocketTransport.receive()`, which throws untyped
+    /// errors; the only error ever sent is `WebSocketClosed`.
     private let stream: AsyncThrowingStream<WebSocketFrame, any Error>
     private let continuation: AsyncThrowingStream<WebSocketFrame, any Error>.Continuation
     private let taskLock = Mutex<[Task<Void, Never>]>([])
@@ -148,13 +146,8 @@ public final class RelayWebSocketTransport: WebSocketTransport, RelaySecurityRep
         let helloText = Self.helloText(
             message1: message1, legacyPublicKey: legacyEphemeral.publicKey)
 
-        var continuation: AsyncThrowingStream<WebSocketFrame, any Error>.Continuation?
-        let stream = AsyncThrowingStream<WebSocketFrame, any Error>(bufferingPolicy: .unbounded) {
-            continuation = $0
-        }
-        guard let continuation else {
-            throw WebSocketClosed(code: RelayCloseCode.neverOpened, reason: "no stream")
-        }
+        let (stream, continuation) = AsyncThrowingStream<WebSocketFrame, any Error>.makeStream(
+            bufferingPolicy: .unbounded)
         self.stream = stream
         self.continuation = continuation
         self.mutex = Mutex(State(handshake: handshake, helloText: helloText))

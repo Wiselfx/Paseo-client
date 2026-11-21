@@ -222,7 +222,7 @@ struct ChatOutlineRail: View {
     }
 
     private func tick() {
-        let now = Date()
+        let now = Date.now
         // Dense rails (slots under ~6 pt) would buzz; sparse ones tick on every crossing.
         if slot < 6, let lastTickAt, now.timeIntervalSince(lastTickAt) < Self.tickInterval { return }
         lastTickAt = now

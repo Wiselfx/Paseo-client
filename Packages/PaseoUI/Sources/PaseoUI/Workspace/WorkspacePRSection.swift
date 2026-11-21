@@ -28,15 +28,15 @@ struct WorkspacePRSection: View {
     var body: some View {
         if let status, !status.url.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
+                HStack(spacing: Space.sm) {
                     Text("Pull request")
                         .font(.paseo(.footnote, weight: .medium))
                         .foregroundStyle(Palette.secondaryInk)
                     Spacer(minLength: 8)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 8)
+                .padding(.horizontal, Space.lg)
+                .padding(.top, Space.xs)
+                .padding(.bottom, Space.sm)
                 stateRow(status)
                 if !status.checks.isEmpty { checksBlock(status) }
                 openOnForgeRow(status)
@@ -52,7 +52,7 @@ struct WorkspacePRSection: View {
     private func stateRow(_ status: CheckoutPrStatus) -> some View {
         HStack(alignment: .top, spacing: 10) {
             StatePill(stateLabel(status), tone: stateTone(status))
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Space.xs) {
                 Text("#\(String(status.number ?? 0)) · \(status.title)")
                     .font(.paseo(.callout, weight: .semibold))
                     .foregroundStyle(Palette.ink)
@@ -66,7 +66,7 @@ struct WorkspacePRSection: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Space.lg)
         .padding(.bottom, 10)
     }
 
@@ -102,7 +102,7 @@ struct WorkspacePRSection: View {
             Text("Checks")
                 .font(.paseo(.caption, weight: .medium))
                 .foregroundStyle(Palette.secondaryInk)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, Space.lg)
                 .padding(.bottom, 6)
             ForEach(Array(status.checks.enumerated()), id: \.offset) { _, check in
                 checkRow(check, prNumber: status.number ?? 0)
@@ -111,8 +111,8 @@ struct WorkspacePRSection: View {
                 Text(rollup)
                     .font(.paseo(.caption))
                     .foregroundStyle(Palette.secondaryInk)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                    .padding(.horizontal, Space.lg)
+                    .padding(.top, Space.sm)
             }
         }
         .padding(.bottom, 10)
@@ -137,7 +137,7 @@ struct WorkspacePRSection: View {
                         .lineLimit(1)
                     if let workflow = check.workflow, !workflow.isEmpty {
                         Text(workflow)
-                            .font(.paseo(.caption2))
+                            .font(.paseo(.caption))
                             .foregroundStyle(Palette.tertiaryInk)
                             .lineLimit(1)
                     }
@@ -149,7 +149,7 @@ struct WorkspacePRSection: View {
                         .foregroundStyle(Palette.secondaryInk)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Space.lg)
             .padding(.vertical, 6)
             .contentShape(.rect)
         }
@@ -224,7 +224,7 @@ struct WorkspacePRSection: View {
                         .truncationMode(.middle)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Space.lg)
             .padding(.vertical, 10)
             .contentShape(.rect)
         }
@@ -255,21 +255,20 @@ struct WorkspacePRSection: View {
         #endif
     }
 
-    private func nestedComments(of review: PullRequestTimelineReview) -> [PullRequestTimelineComment] {
-        comments.filter { $0.reviewId == review.id }
-    }
-
-    private var standaloneComments: [PullRequestTimelineComment] {
+    private func activityBlock(_ status: CheckoutPrStatus) -> some View {
+        // Group once per evaluation: each review's replies, and the comments that belong to no
+        // listed review.
+        let reviews = self.reviews
+        let comments = self.comments
         let reviewIds = Set(reviews.map(\.id))
-        return comments.filter { comment in
+        let repliesByReview = Dictionary(
+            grouping: comments.filter { $0.reviewId != nil }, by: { $0.reviewId ?? "" })
+        let standaloneComments = comments.filter { comment in
             guard let reviewId = comment.reviewId else { return true }
             return !reviewIds.contains(reviewId)
         }
-    }
-
-    private func activityBlock(_ status: CheckoutPrStatus) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Space.sm) {
                 Text("Activity")
                     .font(.paseo(.caption, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
@@ -291,8 +290,8 @@ struct WorkspacePRSection: View {
                     .accessibilityLabel("Refresh timeline")
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
+            .padding(.horizontal, Space.lg)
+            .padding(.top, Space.xs)
             .padding(.bottom, 6)
 
             if let error = timeline.error {
@@ -302,13 +301,13 @@ struct WorkspacePRSection: View {
                     Text("No reviews yet.")
                         .font(.paseo(.footnote))
                         .foregroundStyle(Palette.tertiaryInk)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, Space.lg)
                         .padding(.bottom, 10)
                 }
             } else {
                 ForEach(reviews) { review in
                     reviewRow(review, prNumber: status.number ?? 0)
-                    ForEach(nestedComments(of: review)) { comment in
+                    ForEach(repliesByReview[review.id] ?? []) { comment in
                         commentRow(comment, prNumber: status.number ?? 0, indented: true)
                     }
                 }
@@ -320,16 +319,16 @@ struct WorkspacePRSection: View {
                         Text("Unsupported item · \(kind)")
                             .font(.paseo(.codeCaption))
                             .foregroundStyle(Palette.captionInk)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, Space.lg)
+                            .padding(.vertical, Space.xs)
                     }
                 }
                 if timeline.truncated {
                     Text("Only some items are shown.")
                         .font(.paseo(.caption2))
                         .foregroundStyle(Palette.tertiaryInk)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, Space.lg)
+                        .padding(.vertical, Space.xs)
                 }
             }
         }
@@ -350,9 +349,10 @@ struct WorkspacePRSection: View {
             }
             .font(.paseo(.caption, weight: .medium))
             .foregroundStyle(Palette.ink)
+            .frame(minHeight: 44)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.sm)
         .accessibilityLabel("Timeline error")
     }
 
@@ -372,7 +372,7 @@ struct WorkspacePRSection: View {
     // MARK: Timeline rows
 
     private func reviewRow(_ review: PullRequestTimelineReview, prNumber: Int) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Space.md) {
             AuthorAvatar(author: review.author)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -383,7 +383,7 @@ struct WorkspacePRSection: View {
                     StatePill(verdictLabel(review.reviewState), tone: verdictTone(review.reviewState))
                     Spacer(minLength: 4)
                     Text(relativeTime(review.createdAt))
-                        .font(.paseo(.caption2))
+                        .font(.paseo(.caption))
                         .foregroundStyle(Palette.tertiaryInk)
                 }
                 if !review.body.isEmpty {
@@ -399,12 +399,12 @@ struct WorkspacePRSection: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.sm)
     }
 
     private func commentRow(_ comment: PullRequestTimelineComment, prNumber: Int, indented: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Space.md) {
             if indented {
                 Rectangle()
                     .fill(Palette.divider)
@@ -421,7 +421,7 @@ struct WorkspacePRSection: View {
                         .lineLimit(1)
                     Spacer(minLength: 4)
                     Text(relativeTime(comment.createdAt))
-                        .font(.paseo(.caption2))
+                        .font(.paseo(.caption))
                         .foregroundStyle(Palette.tertiaryInk)
                 }
                 Text(comment.body)
@@ -441,20 +441,20 @@ struct WorkspacePRSection: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Space.lg)
+        .padding(.vertical, Space.sm)
     }
 
     private func addToChatButton(action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: Space.xs) {
                 Image(systemName: "at")
                     .font(.glyph(.small, weight: .medium))
                 Text("Add to chat")
-                    .font(.paseo(.caption2, weight: .medium))
+                    .font(.paseo(.caption, weight: .medium))
             }
             .foregroundStyle(Palette.secondaryInk)
-            .padding(.vertical, 2)
+            .frame(minHeight: 44, alignment: .leading)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -489,7 +489,8 @@ struct WorkspacePRSection: View {
 
     private func singleLineExcerpt(_ body: String, limit: Int = 160) -> String {
         let single = body
-            .replacingOccurrences(of: "\n", with: " ")
+            .split(whereSeparator: \.isNewline)
+            .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return single.count > limit ? String(single.prefix(limit)) + "…" : single
     }

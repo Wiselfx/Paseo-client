@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import Observation
 import PaseoStore
+import Photos
 import SwiftUI
 import UIKit
 
@@ -76,10 +77,23 @@ final class RichActions {
     /// Adds an image to the composer tray (G3): the file name plus JPEG bytes, through the
     /// existing attachment path. No-op until the host sets it.
     var addImageToChat: (String, Data) -> Void = { _, _ in }
-    /// Saves an image to Photos. Needs `NSPhotoLibraryAddUsageDescription` (G3 adds it);
-    /// until then the system prompt speaks for itself on first use.
+    /// Saves an image to Photos. Needs `NSPhotoLibraryAddUsageDescription`; the system asks for
+    /// add-only access on first use. The outcome is felt (the success or failure haptic) instead of
+    /// vanishing, as it did through the callback-less UIKit call.
     var saveImage: (UIImage) -> Void = { image in
-        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        RichActions.writeToPhotos(image)
+    }
+
+    /// Writes the image to the library. Nonisolated, so Photos' completion, which arrives off the main
+    /// actor, does not inherit the class's isolation; only the haptic hops back to the main actor.
+    nonisolated static func writeToPhotos(_ image: UIImage) {
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.creationRequestForAsset(from: image)
+        }) { success, _ in
+            Task { @MainActor in
+                if success { Haptics.success() } else { Haptics.failure() }
+            }
+        }
     }
 }
 #endif

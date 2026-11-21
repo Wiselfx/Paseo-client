@@ -37,7 +37,7 @@ public enum MarkdownTablePlan {
         {
             cleaned.removeFirst()
         }
-        cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+        cleaned = cleaned.replacing(",", with: "")
         cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         return Double(cleaned) != nil
     }

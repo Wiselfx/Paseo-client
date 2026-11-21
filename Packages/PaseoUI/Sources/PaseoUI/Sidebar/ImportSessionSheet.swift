@@ -95,7 +95,7 @@ struct ImportSessionSheet: View {
             Image(systemName: "magnifyingglass")
                 .font(.glyph(.regular))
                 .foregroundStyle(Palette.secondaryInk)
-            TextField("", text: $search, prompt: Text("Search sessions…").foregroundStyle(Palette.tertiaryInk))
+            TextField("Search sessions", text: $search, prompt: Text("Search sessions…").foregroundStyle(Palette.tertiaryInk))
                 .font(.paseo(.body))
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -110,13 +110,15 @@ struct ImportSessionSheet: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.glyph(.regular))
                         .foregroundStyle(Palette.tertiaryInk)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear")
             }
         }
         .padding(.horizontal, 12)
-        .frame(height: 44)
+        .frame(minHeight: 44)
         .background(Palette.chip, in: .capsule)
     }
 
@@ -162,8 +164,12 @@ struct ImportSessionSheet: View {
                 .frame(minHeight: 30)
                 .background(
                     selectedProvider == id ? Palette.ink : Palette.chip, in: .capsule)
+                // The capsule stays 30 pt; the tap target around it is 44.
+                .frame(minHeight: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selectedProvider == id ? .isSelected : [])
         .paseoFeedback(.selection, trigger: selectedProvider == id) { _, new in new }
     }
 
@@ -187,6 +193,8 @@ struct ImportSessionSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Space.lg)
         } else {
+            // Filtered once: it feeds the empty check, the rows and the divider test.
+            let entries = visibleEntries
             if !store.providerErrors.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(store.providerErrors, id: \.provider) { error in
@@ -198,13 +206,13 @@ struct ImportSessionSheet: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if visibleEntries.isEmpty {
+            if entries.isEmpty {
                 quietText(emptyText)
             } else {
                 RowGroup {
-                    ForEach(visibleEntries.enumerated(), id: \.element.id) { index, entry in
+                    ForEach(entries.enumerated(), id: \.element.id) { index, entry in
                         sessionRow(entry)
-                        if index < visibleEntries.count - 1 { RowDivider() }
+                        if index < entries.count - 1 { RowDivider() }
                     }
                 }
                 if store.hasMore {

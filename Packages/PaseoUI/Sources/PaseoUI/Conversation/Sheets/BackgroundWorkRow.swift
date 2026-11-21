@@ -11,18 +11,16 @@ struct BackgroundWorkRow: View {
     let items: [BackgroundWorkItem]
     let action: () -> Void
 
-    /// "2 background tasks" / "1 background task".
-    private var text: String {
-        items.count == 1 ? "1 background task" : "\(items.count) background tasks"
+    /// "2 background tasks" / "1 background task", inflected by the system.
+    private var label: Text {
+        Text("^[\(items.count) background task](inflect: true)")
     }
 
     var body: some View {
-        Button {
-            action()
-        } label: {
-            HStack(spacing: 8) {
+        Button(action: action) {
+            HStack(spacing: Space.sm) {
                 WorkIcon(kind: .shell)
-                Text(text)
+                label
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.secondaryInk)
                 Spacer(minLength: 0)
@@ -30,14 +28,16 @@ struct BackgroundWorkRow: View {
                     .font(.glyph(.small, weight: .semibold))
                     .foregroundStyle(Palette.tertiaryInk)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, Space.md)
             .frame(minHeight: 36)
             .background(Palette.adaptive(light: 0.96, dark: 0.10), in: .rect(cornerRadius: Radius.sm))
+            // 36 + 8 = 44 pt hit area, as SubagentTrackPill does.
+            .padding(.vertical, Space.xs)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("transcript.backgroundWork")
-        .accessibilityLabel(text)
+        .accessibilityLabel(label)
     }
 }
 #endif

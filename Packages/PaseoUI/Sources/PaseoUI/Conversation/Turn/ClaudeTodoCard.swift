@@ -21,20 +21,29 @@ struct ClaudeTodoCard: View {
                         .foregroundStyle(Palette.secondaryInk)
                 }
                 ClaudeDivider()
-                ForEach(Array(list.items.enumerated()), id: \.offset) { _, todo in
+                ForEach(list.items.enumerated(), id: \.offset) { _, todo in
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Image(systemName: symbol(for: todo))
                             .font(.glyph(.small))
                             .foregroundStyle(todo.completed ? Palette.successInk : Palette.secondaryInk)
+                            .accessibilityHidden(true)
                         Text(todo.status == "in_progress" ? (todo.activeForm ?? todo.text) : todo.text)
                             .font(.paseo(.callout))
                             .foregroundStyle(todo.completed ? Palette.secondaryInk : Palette.ink)
                             .strikethrough(todo.completed, color: Palette.tertiaryInk)
                     }
+                    // The state shows as an icon, colour and strikethrough; VoiceOver hears it here.
+                    .accessibilityElement(children: .combine)
+                    .accessibilityValue(state(of: todo))
                 }
             }
             .padding(12)
         }
+    }
+
+    private func state(of todo: TimelineItem.TodoList.Todo) -> LocalizedStringKey {
+        if todo.completed { return "Completed" }
+        return todo.status == "in_progress" ? "In progress" : "Not started"
     }
 
     private func symbol(for todo: TimelineItem.TodoList.Todo) -> String {

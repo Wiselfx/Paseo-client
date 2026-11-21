@@ -15,10 +15,15 @@ struct ComposerSheets: ViewModifier {
     @Binding var showFileImporter: Bool
     @Binding var showForgePicker: Bool
     @Binding var showCameraPicker: Bool
-    @Binding var attachmentViewerImage: UIImage?
+    @Binding var viewedImage: ViewedAttachmentImage?
     let forgeIsGitLab: Bool
     let onFileURLs: ([URL]) -> Void
-    let onCameraImage: (Data) -> Void
+    /// A failed file import, said where the composer's mode says its errors (a toast in a
+    /// conversation, the line under the field in a draft).
+    let onFileImportError: (String) -> Void
+    /// The captured frame as it came from the camera: encoding it is the receiver's job, off the
+    /// main actor (`ComposerImageProcessor.jpegData(of:)`).
+    let onCameraImage: (UIImage) -> Void
     let onForgePick: (ForgeSearchItem) -> Void
 
     func body(content: Content) -> some View {
@@ -29,7 +34,7 @@ struct ComposerSheets: ViewModifier {
             ) { result in
                 switch result {
                 case .success(let urls): onFileURLs(urls)
-                case .failure(let error): controller?.showToast(error.localizedDescription)
+                case .failure(let error): onFileImportError(error.localizedDescription)
                 }
             }
             .sheet(isPresented: $showForgePicker) {
@@ -45,24 +50,14 @@ struct ComposerSheets: ViewModifier {
                 CameraCaptureView(
                     onCapture: { image in
                         showCameraPicker = false
-                        guard let data = image.jpegData(compressionQuality: 1.0) else {
-                            controller?.showToast("Couldn't read that photo.")
-                            return
-                        }
-                        onCameraImage(data)
+                        onCameraImage(image)
                     },
                     onCancel: { showCameraPicker = false }
                 )
                 .ignoresSafeArea()
             }
-            .fullScreenCover(
-                isPresented: Binding(
-                    get: { attachmentViewerImage != nil },
-                    set: { if !$0 { attachmentViewerImage = nil } })
-            ) {
-                if let image = attachmentViewerImage {
-                    AttachmentImageViewer(image: image)
-                }
+            .fullScreenCover(item: $viewedImage) { viewed in
+                AttachmentImageViewer(image: viewed.image)
             }
     }
 

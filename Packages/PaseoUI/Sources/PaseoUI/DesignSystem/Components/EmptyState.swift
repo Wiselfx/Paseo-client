@@ -20,31 +20,33 @@ struct EmptyState: View {
         self.action = action
     }
 
+    /// The system's own empty-content layout, restyled onto the palette. It centres itself and
+    /// adds its own padding.
     var body: some View {
-        VStack(spacing: Space.md) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.glyph(.xlarge, weight: .light))
-                    .foregroundStyle(Palette.tertiaryInk)
+        ContentUnavailableView {
+            Label {
+                Text(title)
+                    .font(.paseo(.callout, weight: .medium))
+                    .foregroundStyle(Palette.ink)
+            } icon: {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.glyph(.xlarge, weight: .light))
+                        .foregroundStyle(Palette.tertiaryInk)
+                }
             }
-            Text(title)
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-                .multilineTextAlignment(.center)
+        } description: {
             if let message {
                 Text(message)
                     .font(.paseo(.footnote))
                     .foregroundStyle(Palette.secondaryInk)
-                    .multilineTextAlignment(.center)
             }
+        } actions: {
             if let action {
                 Button(action.title, action: action.run)
                     .buttonStyle(.paseoSecondary)
-                    .padding(.top, Space.xs)
             }
         }
-        .frame(maxWidth: 320)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

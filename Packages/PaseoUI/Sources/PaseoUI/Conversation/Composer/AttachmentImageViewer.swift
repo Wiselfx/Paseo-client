@@ -6,22 +6,25 @@ import UIKit
 import UniformTypeIdentifiers
 import PaseoStore
 
-/// Minimal full-screen image viewer for attachment pills: dark canvas, tap to dismiss.
+/// Minimal full-screen image viewer for attachment pills: dark canvas, a visible close button.
 struct AttachmentImageViewer: View {
     let image: UIImage
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
             Image(uiImage: image)
                 .resizable()
                 .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Attached image")
+            Button("Close", systemImage: "xmark") { dismiss() }
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
         }
-        .onTapGesture { dismiss() }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Image viewer, tap to dismiss")
-        .accessibilityAddTraits(.isButton)
     }
 }
 #endif

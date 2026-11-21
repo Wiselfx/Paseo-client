@@ -57,7 +57,7 @@ enum ClaudeGreeting {
     /// One classic hero welcome: the current slot's pool and the any-hour lines, picked by `draw`
     /// in [0, 1). The caller holds the draw, so the line stays put between passes and changes only
     /// when the draw or the slot does.
-    static func pick(username: String, draw: Double, date: Date = Date()) -> String {
+    static func pick(username: String, draw: Double, date: Date = .now) -> String {
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
         let calendar = Calendar.current
         let hour = calendar.component(.hour, from: date)

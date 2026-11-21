@@ -41,9 +41,9 @@ public enum SavedHostMerge {
 
     private static func later(_ left: Date?, _ right: Date?) -> Date? {
         switch (left, right) {
-        case (nil, nil): return nil
-        case (let date?, nil), (nil, let date?): return date
-        case (let first?, let second?): return max(first, second)
+        case (nil, nil): nil
+        case (let date?, nil), (nil, let date?): date
+        case (let first?, let second?): max(first, second)
         }
     }
 }

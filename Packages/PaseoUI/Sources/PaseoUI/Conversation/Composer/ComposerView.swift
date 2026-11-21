@@ -56,13 +56,9 @@ struct ComposerView: View {
     @Binding var focused: Bool
 
     /// Draft mode's own tray: there is no agent id to key the shared store by yet, and a draft
-    /// uploads through the session's channel before the create request.
-    @State private var localTray: [ComposerAttachmentItem] = []
-    /// The draft's tray while creation is in flight: it comes back if the shell reports a
-    /// failure (D2 §3). Never written after an `await`.
-    @State private var stashedTray: [ComposerAttachmentItem] = []
-    @State private var uploadPumpRunning = false
-    @State private var localAttachmentError: String?
+    /// uploads through the session's channel before the create request. Its loading, upload pump
+    /// and stash for a failed create live in `DraftAttachmentTray`, not here.
+    @State private var draftTray = DraftAttachmentTray()
     /// The draft's own dictation, built on first use (W1): `State(initialValue:)` runs its argument on
     /// every parent pass, and a conversation never touches this one.
     @State private var draftDictationHolder = LazyDictation()
@@ -74,7 +70,7 @@ struct ComposerView: View {
     @State private var showCameraPicker = false
     @State private var showFileImporter = false
     @State private var showForgePicker = false
-    @State private var attachmentViewerImage: UIImage?
+    @State private var viewedImage: ViewedAttachmentImage?
     @State private var surfaceHeight: CGFloat = 0
     /// Whether the tall draft's expand control is in the card's corner, and with it whether the
     /// field reserves the corner's trailing column. **Written by the field** from its own laid-out
@@ -84,7 +80,6 @@ struct ComposerView: View {
     @State private var expandVisible = false
 
     @Environment(\.composerFocusRequested) private var composerFocusRequested
-    @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
 
@@ -121,7 +116,11 @@ struct ComposerView: View {
             if !isDraft, let store, let controller {
                 // The only part of the composer that reads the text on every keystroke.
                 ComposerMenus(store: store, controller: controller, focused: $focused)
-                queueStack
+                if controller.isQueueNonEmpty {
+                    ComposerQueueStack(controller: controller, focused: $focused)
+                        .transition(
+                            reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
+                }
             }
             composerCard
         }
@@ -149,9 +148,8 @@ struct ComposerView: View {
         .onChange(of: draftSession?.error) { _, error in
             // Creation failed in the shell: the draft stayed on screen, so the tray comes back.
             // Anything attached in the meantime wins over the stash.
-            guard error != nil, !stashedTray.isEmpty else { return }
-            if localTray.isEmpty { localTray = stashedTray }
-            stashedTray = []
+            guard error != nil else { return }
+            draftTray.restoreStash()
         }
         .onAppear {
             guard isDraft else { return }
@@ -207,7 +205,7 @@ struct ComposerView: View {
 
 
     private var trayItems: [ComposerAttachmentItem] {
-        controller?.trayItems ?? localTray
+        controller?.trayItems ?? draftTray.items
     }
 
     private var hasUploadingAttachment: Bool {
@@ -243,7 +241,7 @@ struct ComposerView: View {
     /// What the card shows under the field when something went wrong.
     private var errorText: String? {
         if let store { return store.actionError }
-        return localAttachmentError ?? draftSession?.error
+        return draftTray.error ?? draftSession?.error
     }
 
     /// Asked once: the answer cannot change while the app runs, and the call costs 1 to 2 ms, which
@@ -338,11 +336,29 @@ struct ComposerView: View {
     private var composerCard: some View {
         VStack(alignment: .leading, spacing: composerExpanded ? ComposerMetrics.fieldRowGap : 0) {
             if let dictation = activeDictation, dictation.isListening {
-                dictationOverlay(dictation)
+                DictationOverlay(
+                    dictation: dictation,
+                    onCancel: { dictation.cancel() },
+                    onAccept: { dictation.stop(keepingDraft: true) },
+                    onAcceptAndSend: {
+                        dictation.stop(keepingDraft: true)
+                        send()
+                    })
             } else {
-                if composerExpanded { attachmentTray }
-                if composerExpanded { dictationDeniedBanner }
-                if composerExpanded { dictationFailureBanner }
+                if composerExpanded, !trayItems.isEmpty {
+                    ComposerAttachmentTray(
+                        items: trayItems,
+                        uploads: store?.uploads ?? draftHost?.fileUploader,
+                        onRemove: removeAttachment,
+                        onRetry: retryAttachment,
+                        onTapImage: { image in viewedImage = ViewedAttachmentImage(image: image) })
+                }
+                if composerExpanded, activeDictation?.isDenied == true {
+                    ComposerDictationDeniedBanner()
+                }
+                if composerExpanded, let failure = activeDictation?.failure {
+                    ComposerDictationFailureBanner(failure: failure, onRetry: retryDictation)
+                }
                 if composerExpanded, let error = errorText {
                     Text(error)
                         .font(.paseo(.footnote))
@@ -393,12 +409,11 @@ struct ComposerView: View {
             showFileImporter: $showFileImporter,
             showForgePicker: $showForgePicker,
             showCameraPicker: $showCameraPicker,
-            attachmentViewerImage: $attachmentViewerImage,
+            viewedImage: $viewedImage,
             forgeIsGitLab: forgeIsGitLab,
             onFileURLs: attachFileURLs,
-            onCameraImage: { data in
-                attachImage(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
-            },
+            onFileImportError: reportAttachmentError,
+            onCameraImage: attachCameraImage,
             onForgePick: { item in
                 toggleForgeAttachment(item)
                 showForgePicker = false
@@ -446,7 +461,7 @@ struct ComposerView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            expandComposerButton
+            ComposerExpandButton(isShown: expandControlShown, action: expandComposer)
                 // Up into the card's padding, the same 8 pt the card's own padding is, so the
                 // control sits in the card's corner — not 8 pt below it (E1 §4).
                 .padding(.top, -ComposerMetrics.verticalInset)
@@ -483,33 +498,11 @@ struct ComposerView: View {
         controller?.composerPrompt ?? "Message, @files, /commands"
     }
 
-    /// Upstream `message.dictation.failed`: "Dictation failed: {{error}}", with `retry`.
-    @ViewBuilder private var dictationFailureBanner: some View {
-        if let failure = activeDictation?.failure {
-            InlineBanner(
-                .failure, title: failure.title, message: failure.message, systemImage: "mic.slash",
-                action: ("Retry dictation", {
-                    activeDictation?.dismissFailure()
-                    if let dictation = activeDictation {
-                        dictation.toggle(currentDraft: text)
-                    }
-                }))
-                .accessibilityIdentifier("composer.dictation.failed")
-        }
-    }
-
-    @ViewBuilder private var dictationDeniedBanner: some View {
-        if activeDictation?.isDenied == true {
-            InlineBanner(
-                .failure, title: "Dictation is off.",
-                message: "Enable Microphone and Speech Recognition in Settings.",
-                systemImage: "mic.slash",
-                action: ("Settings", {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        openURL(url)
-                    }
-                }))
-                .accessibilityIdentifier("composer.dictation.settings")
+    /// The failure banner's retry: clears the note and starts again.
+    private func retryDictation() {
+        activeDictation?.dismissFailure()
+        if let dictation = activeDictation {
+            dictation.toggle(currentDraft: text)
         }
     }
 
@@ -534,43 +527,17 @@ struct ComposerView: View {
     }
 
     private var composerAddMenu: some View {
-        Menu {
-            PhotosPicker(selection: $photoSelection, maxSelectionCount: 10, matching: .images) {
-                Label("Photo library", systemImage: "photo.on.rectangle")
-            }
-            if cameraAvailable {
-                Button("Camera", systemImage: "camera") { showCameraPicker = true }
-            }
-            Button("Files", systemImage: "folder") { showFileImporter = true }
-            // The field takes ⌘V; the menu offers the same thing for discovery, and attaches
-            // every image on the pasteboard (D2 §2).
-            if PasteboardImageState.shared.hasImages {
-                Button("Paste image", systemImage: "doc.on.clipboard") { pasteImageFromClipboard() }
-            }
-            Button(
-                forgeIsGitLab ? "Add issue or MR" : "Add issue or PR",
-                systemImage: "arrow.triangle.branch"
-            ) {
-                openForgePicker()
-            }
-            Button("Mention a file", systemImage: "at") { mentionFile() }
-            Divider()
-            Button("New agent", systemImage: "plus.bubble") {
-                controller?.newAgent(draft: text)
-            }
-            Button("Copy agent ID", systemImage: "doc.on.doc") {
-                controller?.copyAgentId()
-            }
-        } label: {
-            Image(systemName: "plus")
-                .font(.glyph(.regular, weight: .regular))
-                .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
-                .foregroundStyle(Palette.ink)
-                .background(Palette.chip, in: .circle)
-                .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
-                .contentShape(.rect)
-        }
-        .accessibilityLabel("Add to agent")
+        ComposerAddMenu(
+            photoSelection: $photoSelection,
+            showCameraPicker: $showCameraPicker,
+            showFileImporter: $showFileImporter,
+            cameraAvailable: cameraAvailable,
+            forgeIsGitLab: forgeIsGitLab,
+            onPasteImage: pasteImageFromClipboard,
+            onAddForge: openForgePicker,
+            onMentionFile: mentionFile,
+            onNewAgent: { controller?.newAgent(draft: text) },
+            onCopyAgentId: { controller?.copyAgentId() })
     }
 
     private var composerModelChip: some View {
@@ -604,25 +571,9 @@ struct ComposerView: View {
 
     @ViewBuilder private var fastModeChip: some View {
         if fastModeActive {
-            Button {
-                Haptics.selection()
+            ComposerFastModeChip {
                 Task { await store?.setFeatureToggle(featureId: "fast_mode", value: false) }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "bolt.fill")
-                        .font(.glyph(.small, weight: .semibold))
-                    Text("Fast")
-                        .font(.paseo(.footnote, weight: .semibold))
-                }
-                .foregroundStyle(Palette.ink)
-                .padding(.horizontal, ComposerMetrics.chipPadding)
-                .frame(minHeight: ComposerMetrics.controlSize)
-                .background(Palette.chip, in: .capsule)
-                .frame(minHeight: ComposerMetrics.hitSize)
             }
-            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
-            .accessibilityLabel("Fast mode on; turn off")
-            .accessibilityIdentifier("composer.fastmode")
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
         }
     }
@@ -661,18 +612,6 @@ struct ComposerView: View {
                 }
             }
         }
-    }
-
-    private func dictationOverlay(_ dictation: DictationController) -> some View {
-        DictationOverlay(
-            buffer: dictation.waveform,
-            duration: dictation.duration,
-            onCancel: { dictation.cancel() },
-            onAccept: { dictation.stop(keepingDraft: true) },
-            onAcceptAndSend: {
-                dictation.stop(keepingDraft: true)
-                send()
-            })
     }
 
     @ViewBuilder private var voiceBar: some View {
@@ -762,15 +701,14 @@ struct ComposerView: View {
         if let draft = draftSession {
             guard canSend else { return }
             draftDictation.stop(keepingDraft: true)
-            localAttachmentError = nil
+            draftTray.error = nil
             draft.clearError()
             Haptics.send()
             // The tray leaves the field before the hop, with a copy kept for a failed create:
             // once the shell swaps the conversation in, this view's state is never written again
             // (D2 §3). The shell runs the create from a task it owns.
             let submission = DraftSubmission(text: draft.text, attachments: readyAttachments)
-            stashedTray = localTray
-            localTray = []
+            draftTray.stashForSubmission()
             onSubmit?(submission)
             return
         }
@@ -786,140 +724,66 @@ struct ComposerView: View {
 
     // MARK: Attachments
 
-    @ViewBuilder private var attachmentTray: some View {
-        if !trayItems.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(trayItems) { item in
-                        ComposerAttachmentPill(
-                            item: item,
-                            uploadProgress: uploadProgress,
-                            onRemove: { removeAttachment(item.id) },
-                            onRetry: { retryAttachment(item.id) },
-                            onTapImage: { image in attachmentViewerImage = image })
-                    }
-                }
-                .padding(.vertical, 2)
-                .padding(.horizontal, 1)
-            }
-        }
-    }
-
-    private var uploadProgress: Double {
-        if let store { return store.uploads.progress }
-        return draftHost?.fileUploader.progress ?? 0
-    }
-
     private func attachFileURLs(_ urls: [URL]) {
         if let controller {
             controller.attachFileURLs(urls)
             return
         }
-        // The picker's files are read off the main actor (`PickedFileLoader`): a 40 MB file, or an
-        // iCloud file that still has to download, used to freeze this screen inside
-        // `Data(contentsOf:)`. Each tile is in the tray from the tap — `.decoding` also holds Send
-        // while the bytes load, so a tap cannot overtake the file.
-        Task {
-            for url in urls {
-                let name = url.lastPathComponent
-                var item = ComposerAttachmentItem(
-                    fileName: name, mimeType: "application/octet-stream", byteCount: 0,
-                    data: Data(), thumbnail: nil, phase: .decoding)
-                localTray.append(item)
-                switch await PickedFileLoader.load(url, maxBytes: ConversationUpload.maxBytes) {
-                case .success(let file):
-                    item.mimeType = file.mimeType
-                    item.data = file.data
-                    item.byteCount = file.data.count
-                    item.phase = .pending
-                    // A tile the user removed while it loaded stays removed.
-                    if let index = localTray.firstIndex(where: { $0.id == item.id }) {
-                        localTray[index] = item
-                    }
-                case .failure(.unopenable):
-                    localTray.removeAll { $0.id == item.id }
-                    localAttachmentError = "Couldn't open \(name)."
-                case .failure(.unreadable):
-                    localTray.removeAll { $0.id == item.id }
-                    localAttachmentError = "Couldn't read \(name)."
-                case .failure(.tooLarge):
-                    localTray.removeAll { $0.id == item.id }
-                    localAttachmentError = "\(name) is too large (50 MB max)."
-                }
-            }
-            pumpLocalUploads()
-        }
+        guard let session = draftHost else { return }
+        draftTray.addFiles(urls, session: session)
     }
 
     private func handlePickedPhotos(_ selection: [PhotosPickerItem]) {
         Task {
+            var failed = 0
             for picked in selection {
                 guard let data = try? await picked.loadTransferable(type: Data.self) else {
+                    failed += 1
                     continue
                 }
                 attachImage(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
             }
             photoSelection = []
+            // A photo that would not load (an iCloud photo offline, an unsupported asset) is said
+            // so, as the file and paste paths say theirs.
+            guard failed > 0 else { return }
+            reportAttachmentError(
+                failed == 1 ? "Couldn't load that photo." : "Couldn't load \(failed) photos.")
+        }
+    }
+
+    /// A camera frame: encoded off the main actor (a full-resolution frame is tens to hundreds of
+    /// milliseconds of JPEG work), then through the same path as a picked photo.
+    private func attachCameraImage(_ image: UIImage) {
+        Task {
+            guard let data = await ComposerImageProcessor.jpegData(of: image) else {
+                reportAttachmentError("Couldn't read that photo.")
+                return
+            }
+            attachImage(data, fileName: "photo-\(UUID().uuidString.prefix(8)).jpg")
+        }
+    }
+
+    /// A failed pick, said where this mode says its errors: a toast in a conversation, the line
+    /// under the field in a draft.
+    private func reportAttachmentError(_ message: String) {
+        if let controller {
+            controller.showToast(message)
+        } else {
+            draftTray.error = message
         }
     }
 
     /// A picked or pasted image: the conversation hands it to its controller (which decodes off
-    /// main into the shared tray); a draft shows the `.decoding` tile and does the same here.
+    /// main into the shared tray); a draft shows the `.decoding` tile and does the same in its
+    /// own tray.
     private func attachImage(_ data: Data, fileName: String) {
         if let controller {
             controller.attachImageData(data, fileName: fileName)
             return
         }
-        let item = ComposerAttachmentItem(
-            fileName: fileName, mimeType: "image/jpeg", byteCount: data.count, data: Data(),
-            thumbnail: nil, phase: .decoding)
-        localTray.append(item)
-        Task {
-            let processed = await Task.detached(priority: .userInitiated) {
-                ComposerImageProcessor.downscaledJPEG(data: data)
-            }.value
-            guard let index = localTray.firstIndex(where: { $0.id == item.id }) else { return }
-            guard let processed else {
-                localTray[index].phase = .failed("Couldn't read that image.")
-                return
-            }
-            localTray[index].data = processed.data
-            localTray[index].thumbnail = processed.image
-            localTray[index].byteCount = processed.data.count
-            localTray[index].phase = .pending
-            pumpLocalUploads()
-        }
-    }
-
-    /// Draft only: one upload at a time through the session's shared channel; the files ride the
-    /// create request as `uploadedFile`s.
-    private func pumpLocalUploads() {
-        guard let session = draftHost, !uploadPumpRunning else { return }
-        uploadPumpRunning = true
-        Task {
-            defer { uploadPumpRunning = false }
-            while let pending = localTray.first(where: { item in
-                if case .pending = item.phase { true } else { false }
-            }) {
-                markLocal(pending.id, .uploading)
-                let result = await session.fileUploader.upload(
-                    data: pending.data, fileName: pending.fileName, mimeType: pending.mimeType)
-                guard let index = localTray.firstIndex(where: { $0.id == pending.id }) else {
-                    continue
-                }
-                if let result {
-                    localTray[index].phase = .done(result)
-                } else {
-                    localTray[index].phase = .failed(
-                        session.fileUploader.error ?? "The upload failed.")
-                }
-            }
-        }
-    }
-
-    private func markLocal(_ id: UUID, _ phase: ComposerAttachmentPhase) {
-        guard let index = localTray.firstIndex(where: { $0.id == id }) else { return }
-        localTray[index].phase = phase
+        guard let session = draftHost else { return }
+        draftTray.addImage(data, fileName: fileName, session: session)
     }
 
     private func removeAttachment(_ id: UUID) {
@@ -927,7 +791,7 @@ struct ComposerView: View {
             controller.removeAttachment(id)
             return
         }
-        localTray.removeAll { $0.id == id }
+        draftTray.remove(id)
     }
 
     private func retryAttachment(_ id: UUID) {
@@ -935,8 +799,8 @@ struct ComposerView: View {
             controller.retryAttachment(id)
             return
         }
-        markLocal(id, .pending)
-        pumpLocalUploads()
+        guard let session = draftHost else { return }
+        draftTray.retry(id, session: session)
     }
 
     private func pasteImageFromClipboard() {
@@ -947,7 +811,7 @@ struct ComposerView: View {
     /// Pasted images, in pasteboard order, through the same path a picked photo takes.
     private func attachPastedImages(_ images: [Data]) {
         guard !images.isEmpty else {
-            localAttachmentError = "Failed to paste image"
+            reportAttachmentError("Failed to paste image")
             return
         }
         for data in images {
@@ -1052,74 +916,14 @@ struct ComposerView: View {
 
     // MARK: Slash and mentions
 
-    // MARK: Queue
-
-    @ViewBuilder private var queueStack: some View {
-        if let controller, controller.isQueueNonEmpty {
-            let queue = controller.composerQueue.queue(for: controller.store.agentId)
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(queue.messages.prefix(3)) { message in
-                    QueueRow(
-                        message: message,
-                        onEdit: {
-                            if controller.editQueuedMessage(message) { focused = true }
-                        },
-                        onSendNow: { controller.sendQueuedNow(message) })
-                }
-                if queue.count > 3 {
-                    Text("+\(PaseoFormat.integer(queue.count - 3)) more")
-                        .font(.paseo(.caption))
-                        .foregroundStyle(Palette.tertiaryInk)
-                        .frame(minHeight: 24)
-                        .padding(.leading, 27)
-                        .accessibilityLabel("\(queue.count - 3) more queued messages")
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
-            .padding(.bottom, 6)
-            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
-        }
-    }
-
     // MARK: Expand and mascot
 
-    /// The tall draft's expand control, in the card's top-trailing corner (H3 §2).
-    ///
-    /// It used to sit `.padding(.trailing, 104)` to the left — "the crab's spot" — although the
-    /// crab's 72 pt frame stands *above* the card, so the control floated a crab's width from the
-    /// corner it belongs to, over the first line of text, at whatever that literal happened to
-    /// make on the current model. The `1` on its top edge was the same kind of guess.
-    ///
-    /// Now nothing is hard-coded except tokens: the 44 pt hit frame is flush with the card's
-    /// corner (it hangs `verticalInset` up into the card's padding, see `fieldRow`) and its 28 pt
-    /// circle lands `(hitSize − expandSize) / 2 = 8` pt inside, the same 8 pt the row's 36 pt
-    /// circles keep (E1 §4). The field gives back exactly that column while the control is shown
-    /// (`ComposerUITextView.applyTrailingInset`), so no glyph ever runs under it.
-    ///
-    /// It can never meet the crab: the crab's feet are on the card's top edge and its 104 × 72 pt
-    /// frame is above it, while this control is inside the card — no width, type size, mode or
-    /// mascot state brings them together, so the crab does not have to move.
-    @ViewBuilder private var expandComposerButton: some View {
-        if expandControlShown {
-            Button {
-                if controller != nil {
-                    controller?.showFullScreenComposer = true
-                } else {
-                    showDraftFullScreen = true
-                }
-            } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.glyph(.small, weight: .medium))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: ComposerMetrics.expandSize, height: ComposerMetrics.expandSize)
-                    .background(Palette.chip, in: .circle)
-                    .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(ComposerPressStyle(reduceMotion: reduceMotion))
-            .accessibilityLabel("Expand composer")
-            .transition(.opacity)
+    /// The tall draft's expand control (`ComposerExpandButton`).
+    private func expandComposer() {
+        if controller != nil {
+            controller?.showFullScreenComposer = true
+        } else {
+            showDraftFullScreen = true
         }
     }
 

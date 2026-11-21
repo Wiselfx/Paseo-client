@@ -127,9 +127,7 @@ extension ComposerAttachmentStore {
             thumbnail: nil, phase: .decoding)
         add(item, to: id, store: store)
         Task { @MainActor [weak self] in
-            let processed = await Task.detached(priority: .userInitiated) {
-                ComposerImageProcessor.downscaledJPEG(data: data)
-            }.value
+            let processed = await ComposerImageProcessor.downscaledJPEG(data: data)
             guard let self else { return }
             guard let processed else {
                 self.setPhase(.failed("Couldn't read that image."), for: item.id, in: id)

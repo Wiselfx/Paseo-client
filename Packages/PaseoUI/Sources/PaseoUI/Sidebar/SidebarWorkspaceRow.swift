@@ -22,7 +22,7 @@ struct SidebarWorkspaceRow: View, Equatable {
                         .font(.paseo(.callout, weight: .medium))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    metaRow
+                    SidebarRowMetaLine(model: model)
                 }
                 Spacer(minLength: 0)
                 if model.attention {
@@ -36,9 +36,7 @@ struct SidebarWorkspaceRow: View, Equatable {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(
-            model.manuallyUnread
-                ? "Manually marked unread" : (model.attention ? "Needs attention" : ""))
+        .accessibilityValue(spokenValue)
         .accessibilityAddTraits(model.selected ? .isSelected : [])
         .contextMenu {
             // PLAN §RH order: open-variants, edit verbs, copy, hide, then the destructive verb.
@@ -60,7 +58,7 @@ struct SidebarWorkspaceRow: View, Equatable {
             }
             if model.supportsLabels {
                 Menu("Labels", systemImage: "tag") {
-                    labelsSubmenu
+                    SidebarRowLabelsMenu(model: model, actions: actions)
                 }
             }
             Button("Copy path", systemImage: "doc.on.doc") { actions.copyPath(workspace) }
@@ -80,101 +78,39 @@ struct SidebarWorkspaceRow: View, Equatable {
         }
     }
 
-    /// The labels submenu: checkmark for assignments, "New label…" to mint one (and assign it) in place.
-    @ViewBuilder private var labelsSubmenu: some View {
-        let workspace = model.workspace
-        if model.labelCatalog.isEmpty {
-            Text("No labels yet")
-        }
-        ForEach(model.labelCatalog, id: \.name) { label in
-            Button {
-                actions.toggleLabel(label, on: workspace)
-            } label: {
-                HStack(spacing: 8) {
-                    WorkspaceLabelDot(color: label.color)
-                    Text(label.name)
-                    Spacer(minLength: 12)
-                    if (workspace.labels ?? []).contains(where: {
-                        $0.caseInsensitiveCompare(label.name) == .orderedSame
-                    }) {
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-        }
-        Divider()
-        Button("New label…", systemImage: "plus") { actions.newLabel(on: workspace) }
+    /// What the row's dot and PR badge say with color alone: the aggregate status, the unread or
+    /// attention flag, and the pull request's state. The dot is hidden from VoiceOver.
+    private var spokenValue: String {
+        let flag: String? =
+            model.manuallyUnread
+            ? String(localized: "Manually marked unread", bundle: #bundle)
+            : (model.attention ? String(localized: "Needs attention", bundle: #bundle) : nil)
+        return [statusSpokenName, flag, pullRequestSpokenState].compactMap { $0 }.formatted()
     }
 
-    private var hasVisibleDiffStat: Bool {
-        guard model.showDiffStats, let stat = model.workspace.diffStat else { return false }
-        return stat.additions > 0 || stat.deletions > 0
-    }
-
-    private var metaRow: some View {
-        let workspace = model.workspace
-        return HStack(spacing: 4) {
-            if model.showBranch {
-                Text(model.branchText)
-                    .font(.paseo(.codeSmall))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            if model.showDiffStats, let stat = workspace.diffStat, stat.additions > 0 || stat.deletions > 0 {
-                if model.showBranch { Text("·").foregroundStyle(Palette.captionInk) }
-                // The title gives way, the numbers never do (D3 §1).
-                DiffStat(added: stat.additions, removed: stat.deletions, compact: true)
-                    .fixedSize()
-                    .layoutPriority(1)
-                    .opacity(0.75)
-            }
-            if let age = model.ageText {
-                if model.showBranch || hasVisibleDiffStat {
-                    Text("·").foregroundStyle(Palette.captionInk)
-                }
-                Text(age)
-                    .fixedSize()
-                    .layoutPriority(1)
-                    .foregroundStyle(Palette.secondaryInk)
-            }
-            if !model.labelDefinitions.isEmpty {
-                if model.showBranch || hasVisibleDiffStat || model.ageText != nil {
-                    Text("·").foregroundStyle(Palette.captionInk)
-                }
-                WorkspaceLabelChips(definitions: model.labelDefinitions)
-            }
-            Spacer(minLength: 6)
-            if model.showPRBadge, let pullRequest = workspace.githubRuntime?.pullRequest,
-                let number = pullRequest.number
-            {
-                Text(verbatim: "#\(number)")
-                    .font(.paseo(.caption2, weight: .semibold))
-                    .foregroundStyle(Self.pullRequestTint(pullRequest))
-            }
-            if !model.scriptDots.isEmpty {
-                HStack(spacing: 3) {
-                    ForEach(0..<model.scriptDots.count, id: \.self) { index in
-                        Circle()
-                            .fill(model.scriptDots[index] == .running ? Palette.successInk : Palette.failureInk)
-                            .frame(width: 5, height: 5)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(model.scriptDotsLabel)
-            }
+    private var statusSpokenName: String? {
+        switch model.statusKind {
+        case .running: String(localized: "Running", bundle: #bundle)
+        case .attention: String(localized: "Needs input", bundle: #bundle)
+        case .failed: String(localized: "Failed", bundle: #bundle)
+        case .unread: String(localized: "Unread", bundle: #bundle)
+        case .idle: nil
         }
-        .font(.paseo(.caption))
-        .lineLimit(1)
     }
 
-    private static func pullRequestTint(_ pr: WorkspaceGitHubRuntime.WorkspacePullRequest) -> Color {
-        if pr.isMerged { return Palette.unread }
-        if pr.isDraft == true { return Palette.tertiaryInk }
-        switch pr.state.lowercased() {
-        case "open": return Palette.successInk
-        case "closed": return Palette.failureInk
-        default: return Palette.secondaryInk
+    /// Mirrors `SidebarRowMetaLine.pullRequestTint`, which is the badge's only state cue; nil when the badge is off.
+    private var pullRequestSpokenState: String? {
+        guard model.showPRBadge, let pullRequest = model.workspace.githubRuntime?.pullRequest,
+            pullRequest.number != nil
+        else { return nil }
+        if pullRequest.isMerged { return String(localized: "Pull request merged", bundle: #bundle) }
+        if pullRequest.isDraft == true {
+            return String(localized: "Pull request draft", bundle: #bundle)
+        }
+        switch pullRequest.state.lowercased() {
+        case "open": return String(localized: "Pull request open", bundle: #bundle)
+        case "closed": return String(localized: "Pull request closed", bundle: #bundle)
+        default: return nil
         }
     }
 }
@@ -238,14 +174,12 @@ extension PaseoSidebar {
     func scriptDotsLabel(_ workspace: WorkspaceDescriptor, count: Int) -> String {
         let storeScripts = session.terminals.scripts(in: workspace.id)
         let scripts = storeScripts.isEmpty ? workspace.scripts : storeScripts
-        let running = scripts.filter { $0.lifecycle == .running }.count
-        let crashed = scripts.filter { script in
-            script.lifecycle != .running && (script.exitCode ?? 0) != 0
-        }.count
+        let running = scripts.count(where: { $0.lifecycle == .running })
+        let crashed = scripts.count(where: { $0.lifecycle != .running && ($0.exitCode ?? 0) != 0 })
         var parts: [String] = []
         if running > 0 { parts.append("\(running) running") }
         if crashed > 0 { parts.append("\(crashed) exited") }
-        return "Scripts: " + (parts.isEmpty ? "\(count)" : parts.joined(separator: ", "))
+        return "Scripts: " + (parts.isEmpty ? "\(count)" : parts.formatted())
     }
 
     func agents(

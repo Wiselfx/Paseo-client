@@ -37,8 +37,17 @@ enum DiffModel {
         var anchor: LineAnchor? = nil
     }
 
-    /// Builds the sections and the width once. Non-isolated: large files call it from a
-    /// detached task.
+    /// `render` off the caller's actor, for large files. `@concurrent` ties the work to the
+    /// calling task, so cancelling the build (leaving the screen, toggling Hide whitespace)
+    /// stops it instead of leaving it to run to completion.
+    @concurrent nonisolated static func renderOffMain(
+        file: ParsedDiffFile, hideWhitespace: Bool, unitWidth: CGFloat
+    ) async -> DiffRender {
+        render(file: file, hideWhitespace: hideWhitespace, unitWidth: unitWidth)
+    }
+
+    /// Builds the sections and the width once. Non-isolated, so `renderOffMain` can run it off
+    /// the main actor.
     nonisolated static func render(
         file: ParsedDiffFile, hideWhitespace: Bool, unitWidth: CGFloat
     ) -> DiffRender {
@@ -48,6 +57,8 @@ enum DiffModel {
         var longest = 0
 
         for (hunkIndex, hunk) in file.hunks.enumerated() {
+            // A cancelled build's result is discarded; stop walking the rest of the hunks.
+            if Task.isCancelled { break }
             // Client-side whitespace filter: skip hunks whose changed lines all match on
             // trimmed content (indent moves). Mixed hunks stay.
             if hideWhitespace, skipHunkForWhitespace(hunk) {

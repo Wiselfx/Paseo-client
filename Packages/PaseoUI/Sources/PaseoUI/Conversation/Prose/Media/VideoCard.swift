@@ -68,13 +68,20 @@ struct VideoCard: View {
     @State private var player: AVPlayer?
     @State private var showShare = false
     @State private var overLimit = false
-    @State private var width: CGFloat = 0
+    /// The tap's load-and-play. Held so a second tap while it runs is ignored (it would build
+    /// a second player and orphan the first) and so the card can cancel it when it goes away.
+    @State private var playbackTask: Task<Void, Never>?
+    /// Bumped per load: a cancelled load can finish after a newer tap started its own, and
+    /// must not clear that load's handle.
+    @State private var playbackGeneration = 0
+    /// Bumped per tap: the trigger for the touch feedback.
+    @State private var tapCount = 0
 
     private var heightCap: CGFloat { viewportHeight * 0.6 }
 
-    /// The stage's width: the prose column when the transcript published one, else this card's
-    /// own measurement. Fixed, so the poster's box is decided before the file arrives.
-    private var slotWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
+    /// The stage's width: the prose column when the transcript published one, else 0 (the
+    /// flexible slot). Fixed, so the poster's box is decided before the file arrives.
+    private var slotWidth: CGFloat { proseWidth }
 
     /// Reserved 16:9 until the track ratio arrives; one settle, at most.
     private var reservedAspect: CGFloat { aspectRatio }
@@ -109,17 +116,11 @@ struct VideoCard: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
-
     private static func byteCount(_ bytes: Int64) -> String {
-        byteFormatter.string(fromByteCount: bytes)
+        bytes.formatted(.byteCount(style: .file))
     }
 
-    private static func timestamp(_ seconds: Double) -> String {
+    static func timestamp(_ seconds: Double) -> String {
         let total = max(0, Int(seconds))
         let pattern: Duration.TimeFormatStyle.Pattern =
             total >= 3600 ? .hourMinuteSecond : .minuteSecond
@@ -129,7 +130,7 @@ struct VideoCard: View {
     var body: some View {
         Group {
             if overLimit {
-                PaseoCard(content: capBox)
+                PaseoCard(content: VideoCapRow(fileName: fileName, filePath: filePath))
             } else {
                 PaseoMediaCard(
                     media: stage,
@@ -152,13 +153,23 @@ struct VideoCard: View {
                 externalTitle: "Open in Files",
                 externalURL: nil,
                 filePath: filePath)
-            .paseoCardAccessibility(kind: "Video", title: fileName, meta: metaText, isButton: true)
-            .accessibilityHint("Plays the video")
+            // Once AVKit's player is on screen its transport controls must stay separate
+            // elements: combining the card would hide them behind one "Video" button.
+            .accessibilityElement(children: isPlaying ? .contain : .combine)
+            .accessibilityLabel(accessibilityTitle)
+            .accessibilityAddTraits(isPlaying ? [] : .isButton)
+            .accessibilityHint(isPlaying ? "" : "Plays the video")
+            .paseoFeedback(.light, trigger: tapCount)
             .sheet(isPresented: $showShare) {
                 if let shareTarget {
                     ActivityView(items: [shareTarget])
                 }
             }
+    }
+
+    private var accessibilityTitle: String {
+        (["Video", fileName] + (metaText.map { [$0] } ?? [])).filter { !$0.isEmpty }
+            .joined(separator: ", ")
     }
 
     private var shareTarget: URL? { localFileURL }
@@ -181,45 +192,19 @@ struct VideoCard: View {
                 .mediaSlot(width: slotWidth, heightCap: heightCap)
                 .transition(.opacity)
         } else if let poster {
-            ZStack {
-                Image(uiImage: poster)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .mediaSlot(width: slotWidth, heightCap: heightCap)
-                    .clipped()
-                Circle()
-                    .fill(Palette.mediaBadge)
-                    .frame(width: Metrics.hitSize, height: Metrics.hitSize)
-                    .overlay {
-                        Image(systemName: "play.fill")
-                            .font(.paseo(.body, weight: .semibold))
-                            .foregroundStyle(Palette.onMediaBadge)
-                            .offset(x: 1)
-                            .accessibilityHidden(true)
-                    }
-                if let duration {
-                    Text(Self.timestamp(duration))
-                        .font(.paseo(.caption, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(Palette.onMediaBadge)
-                        .padding(.horizontal, Space.sm)
-                        .padding(.vertical, Metrics.overlayVPadding)
-                        .background(Palette.mediaBadge, in: .capsule)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                        .padding(Space.sm)
-                }
-            }
-            .aspectRatio(reservedAspect, contentMode: .fit)
-            .mediaSlot(width: slotWidth, heightCap: heightCap)
-            .clipped()
-            .contentShape(.rect)
-            .onTapGesture { startTappedPlayback() }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel("Play video")
+            VideoPosterStage(
+                poster: poster, duration: duration, aspect: reservedAspect,
+                slotWidth: slotWidth, heightCap: heightCap, reduceMotion: reduceMotion,
+                action: startTappedPlayback)
         } else if showsTapBox {
-            tapBox
+            VideoTapToDownloadBox(
+                label: downloadLabel, fileName: fileName, aspect: reservedAspect,
+                slotWidth: slotWidth, heightCap: heightCap, reduceMotion: reduceMotion,
+                action: startTappedDownload)
         } else if loadFailed {
-            failureBox
+            VideoLoadFailureBox(
+                fileName: fileName, aspect: reservedAspect,
+                slotWidth: slotWidth, heightCap: heightCap, retry: retryLoad)
         } else {
             Rectangle()
                 .fill(Palette.codeSurface)
@@ -242,86 +227,9 @@ struct VideoCard: View {
         }
     }
 
-    /// The 64 MB cap row (G10 C10 pattern): no download, Share and Show in Files only.
-    private var capBox: some View {
-        HStack(alignment: .center, spacing: Space.sm) {
-            Image(systemName: "film")
-                .font(.glyph(.large, weight: .light))
-                .foregroundStyle(Palette.secondaryInk)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Space.xs) {
-                Text("Too large to preview")
-                    .font(.paseo(.caption, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                Text(fileName)
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: Space.sm)
-            if let filePath {
-                Button("Files") {
-                    richActions?.openFile(filePath)
-                }
-                .buttonStyle(.plain)
-                .font(.paseo(.caption, weight: .medium))
-                .foregroundStyle(Palette.ink)
-                .frame(minWidth: Metrics.hitSize, minHeight: Metrics.hitSize)
-                .accessibilityLabel("Show in Files")
-            }
-        }
-        .padding(.horizontal, Space.md)
-        .padding(.vertical, Space.sm)
-        .frame(maxWidth: .infinity, minHeight: Metrics.rowCardMinHeight - Space.md * 2, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Video too large to preview, \(fileName)")
-    }
-
     private var downloadLabel: String {
         if let knownBytes { return "Tap to download · \(Self.byteCount(knownBytes))" }
         return "Tap to download"
-    }
-
-    /// The §12 tap state: the reserved box, the size when known, one tap to fetch.
-    private var tapBox: some View {
-        Button {
-            Haptics.light()
-            tappedLoad = true
-            Task { @MainActor in
-                await prepare()
-                // An explicit tap plays as soon as the poster is ready: never
-                // autoplay on appear, always play on the reader's tap.
-                if poster != nil, !isPlaying {
-                    await play()
-                }
-            }
-        } label: {
-            Rectangle()
-                .fill(Palette.codeSurface)
-                .aspectRatio(reservedAspect, contentMode: .fit)
-                .mediaSlot(width: slotWidth, heightCap: heightCap)
-                .overlay {
-                    VStack(spacing: Space.sm) {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.glyph(.large, weight: .light))
-                            .foregroundStyle(Palette.secondaryInk)
-                        Text(downloadLabel)
-                            .font(.paseo(.caption, weight: .medium))
-                            .foregroundStyle(Palette.ink)
-                        Text(fileName)
-                            .font(.paseo(.codeCaption))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .padding(.horizontal, Space.md)
-                }
-        }
-        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-        .accessibilityLabel("Download video \(fileName)")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Downloads the video")
     }
 
     /// The poster stays local-only knowledge: after a failure the box owns the
@@ -371,37 +279,6 @@ struct VideoCard: View {
         }
     }
 
-    /// The honest failure: the reserved box, one line, and Retry in place.
-    private var failureBox: some View {
-        Button {
-            loadFailed = false
-            startTappedPlayback()
-        } label: {
-            Rectangle()
-                .fill(Palette.codeSurface)
-                .aspectRatio(reservedAspect, contentMode: .fit)
-                .mediaSlot(width: slotWidth, heightCap: heightCap)
-                .overlay {
-                    VStack(spacing: Space.sm) {
-                        Image(systemName: "film")
-                            .font(.glyph(.large, weight: .light))
-                            .foregroundStyle(Palette.secondaryInk)
-                        Text("Couldn't load video")
-                            .font(.paseo(.caption, weight: .medium))
-                            .foregroundStyle(Palette.ink)
-                        Text("Retry")
-                            .font(.paseo(.caption, weight: .medium))
-                            .foregroundStyle(Palette.accentInk)
-                    }
-                    .padding(.horizontal, Space.md)
-                }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Couldn't load video \(fileName)")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Retries loading the video")
-    }
-
     // MARK: Loading
 
     /// The poster streams for remote URLs; local files download whole first (the
@@ -426,14 +303,44 @@ struct VideoCard: View {
     }
 
     private func startTappedPlayback() {
+        guard playbackTask == nil else { return }
         tappedLoad = true
-        Haptics.light()
-        Task { @MainActor in
+        tapCount += 1
+        playbackGeneration += 1
+        let generation = playbackGeneration
+        playbackTask = Task { @MainActor in
+            // Clear only our own handle: a cancelled earlier load may still finish.
+            defer { if generation == playbackGeneration { playbackTask = nil } }
             if poster == nil {
                 await loadPosterIfNeeded()
             }
+            guard !Task.isCancelled else { return }
             await play()
         }
+    }
+
+    private func startTappedDownload() {
+        guard playbackTask == nil else { return }
+        tappedLoad = true
+        tapCount += 1
+        playbackGeneration += 1
+        let generation = playbackGeneration
+        playbackTask = Task { @MainActor in
+            // Clear only our own handle: a cancelled earlier load may still finish.
+            defer { if generation == playbackGeneration { playbackTask = nil } }
+            await prepare()
+            guard !Task.isCancelled else { return }
+            // An explicit tap plays as soon as the poster is ready: never
+            // autoplay on appear, always play on the reader's tap.
+            if poster != nil, !isPlaying {
+                await play()
+            }
+        }
+    }
+
+    private func retryLoad() {
+        loadFailed = false
+        startTappedPlayback()
     }
 
     @MainActor
@@ -564,6 +471,8 @@ struct VideoCard: View {
         if let resumeAt = MediaPlaybackCoordinator.shared.position(for: cardID), resumeAt > 1 {
             await player.seek(to: CMTime(seconds: resumeAt, preferredTimescale: 600))
         }
+        // The card went away, or another tap won, while the session and the seek were awaited.
+        guard !Task.isCancelled, self.player == nil else { return }
         self.player = player
         MediaPlaybackCoordinator.shared.play(cardID)
         player.play()
@@ -584,6 +493,8 @@ struct VideoCard: View {
 
     @MainActor
     private func tearDown() {
+        playbackTask?.cancel()
+        playbackTask = nil
         if player != nil {
             pause()
             player = nil

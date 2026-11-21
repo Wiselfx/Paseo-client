@@ -25,7 +25,7 @@ struct TurnRow: View, Equatable {
     /// Part of `==`: a stopped turn must redraw without its content changing.
     var isCanceled: Bool = false
 
-    @State private var landingStartedAt = Date()
+    @State private var landingStartedAt = Date.now
 
     /// Compared off the main actor, so the conformance does not cross isolation: every compared
     /// input is a plain value (`Turn` is `Sendable`), and `actions` is not part of `==`.
@@ -61,7 +61,7 @@ struct TurnRow: View, Equatable {
             }
         }
         .onChange(of: isLanding) { _, landed in
-            if landed { landingStartedAt = Date() }
+            if landed { landingStartedAt = Date.now }
         }
     }
 }

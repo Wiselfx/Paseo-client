@@ -34,6 +34,13 @@ final class UserImageCache {
         return cache
     }()
 
+    /// Owns every read and write of the manifest file, so concurrent persists, discards and
+    /// evictions cannot drop each other's rows.
+    private let manifestFile = UserImageManifestFile(
+        directory: UserImageCache.diskDirectory(),
+        fileExtension: UserImageCache.fileExtension,
+        maxImagesPerMessage: UserImageCache.maxImagesPerMessage)
+
     private var manifestLoaded = false
     private var manifestLoad: Task<[String: [Double]], Never>?
 
@@ -50,8 +57,9 @@ final class UserImageCache {
     func ensureManifestLoaded() async {
         if manifestLoaded { return }
         if manifestLoad == nil {
+            let file = manifestFile
             manifestLoad = Task.detached(priority: .utility) {
-                Self.readManifestFile()
+                await file.load()
             }
         }
         guard let load = manifestLoad else { return }
@@ -77,9 +85,10 @@ final class UserImageCache {
     func persist(_ datas: [Data], for clientMessageId: String) {
         guard !datas.isEmpty else { return }
         let ext = Self.fileExtension
+        let file = manifestFile
         Task {
             let ratios = await Task.detached(priority: .utility) { () -> [Double] in
-                guard let directory = Self.diskDirectory() else { return [] }
+                let directory = Self.diskDirectory()
                 do {
                     try FileManager.default.createDirectory(
                         at: directory, withIntermediateDirectories: true)
@@ -95,7 +104,7 @@ final class UserImageCache {
                     let size = image.size
                     ratios.append(size.height > 0 ? Double(size.width / size.height) : 1)
                 }
-                Self.writeManifestFile(merging: [clientMessageId: ratios])
+                await file.merge([clientMessageId: ratios])
                 return ratios
             }.value
             if !ratios.isEmpty {
@@ -112,8 +121,9 @@ final class UserImageCache {
         manifest[clientMessageId] = nil
         let ext = Self.fileExtension
         let maxImages = Self.maxImagesPerMessage
+        let file = manifestFile
         Task.detached(priority: .utility) {
-            guard let directory = Self.diskDirectory() else { return }
+            let directory = Self.diskDirectory()
             for index in 0..<maxImages {
                 let url = directory
                     .appending(path: "\(clientMessageId)-\(index).\(ext)")
@@ -123,7 +133,7 @@ final class UserImageCache {
                     break
                 }
             }
-            Self.writeManifestFile(removing: clientMessageId)
+            await file.remove(ids: [clientMessageId])
         }
     }
 
@@ -144,7 +154,7 @@ final class UserImageCache {
         let ext = Self.fileExtension
         let maxImages = Self.maxImagesPerMessage
         let images = await Task.detached(priority: .utility) { () -> [UIImage]? in
-            guard let directory = Self.diskDirectory() else { return nil }
+            let directory = Self.diskDirectory()
             var images: [UIImage] = []
             for index in 0..<maxImages {
                 let url = directory
@@ -154,7 +164,7 @@ final class UserImageCache {
                 else { break }
                 images.append(image)
                 try? FileManager.default.setAttributes(
-                    [.modificationDate: Date()], ofItemAtPath: url.path)
+                    [.modificationDate: Date.now], ofItemAtPath: url.path)
             }
             guard !images.isEmpty else { return nil }
             return images
@@ -166,64 +176,10 @@ final class UserImageCache {
         return images
     }
 
-    // MARK: Manifest file
-
-    nonisolated private static func manifestURL() -> URL? {
-        diskDirectory()?.appending(path: "manifest.json", directoryHint: .notDirectory)
-    }
-
-    nonisolated private static func readManifestFile() -> [String: [Double]] {
-        guard let url = manifestURL(),
-            let data = try? Data(contentsOf: url),
-            var decoded = try? JSONDecoder().decode([String: [Double]].self, from: data)
-        else { return [:] }
-        // Prune rows whose files are gone (eviction, manual clears): the manifest
-        // never outlives the bytes, so it stays bounded by the LRU itself.
-        let pruned = decoded.filter { id, _ in hasFiles(for: id) }
-        if pruned.count != decoded.count {
-            decoded = pruned
-            if let data = try? JSONEncoder().encode(decoded) {
-                try? data.write(to: url, options: .atomic)
-            }
-        }
-        return decoded
-    }
-
-    nonisolated private static func hasFiles(for clientMessageId: String) -> Bool {
-        guard let directory = diskDirectory() else { return false }
-        for index in 0..<maxImagesPerMessage {
-            let url = directory.appending(path: "\(clientMessageId)-\(index).\(fileExtension)")
-            if FileManager.default.fileExists(atPath: url.path) { return true }
-        }
-        return false
-    }
-
-    /// Merges one send's ratios into the manifest file. Runs off main; the published
-    /// dictionary is updated separately on main, so concurrent sends can't clobber
-    /// each other in memory (the file is rewritten, not patched, per send).
-    nonisolated private static func writeManifestFile(merging entry: [String: [Double]]) {
-        var manifest = readManifestFile()
-        for (key, value) in entry { manifest[key] = value }
-        guard let url = manifestURL(),
-            let data = try? JSONEncoder().encode(manifest)
-        else { return }
-        try? data.write(to: url, options: .atomic)
-    }
-
-    nonisolated private static func writeManifestFile(removing clientMessageId: String) {
-        var manifest = readManifestFile()
-        manifest[clientMessageId] = nil
-        guard let url = manifestURL(),
-            let data = try? JSONEncoder().encode(manifest)
-        else { return }
-        try? data.write(to: url, options: .atomic)
-    }
-
     // MARK: Disk
 
-    nonisolated private static func diskDirectory() -> URL? {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-            .appending(path: "user-images", directoryHint: .notDirectory)
+    nonisolated private static func diskDirectory() -> URL {
+        URL.cachesDirectory.appending(path: "user-images", directoryHint: .isDirectory)
     }
 
     nonisolated private static func downscaled(data: Data) -> UIImage? {
@@ -253,7 +209,7 @@ final class UserImageCache {
         let ext = Self.fileExtension
         let cap = Self.diskCapBytes
         let evicted = await Task.detached(priority: .utility) { () -> [String] in
-            guard let directory = Self.diskDirectory() else { return [] }
+            let directory = Self.diskDirectory()
             let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
             guard
                 let files = try? FileManager.default.contentsOfDirectory(
@@ -289,13 +245,9 @@ final class UserImageCache {
             memory.removeObject(forKey: id as NSString)
             manifest[id] = nil
         }
-        let remaining = manifest
-        await Task.detached(priority: .utility) {
-            guard let url = Self.manifestURL(),
-                let data = try? JSONEncoder().encode(remaining.mapValues { $0.map { Double($0) } })
-            else { return }
-            try? data.write(to: url, options: .atomic)
-        }.value
+        // The file drops exactly the evicted rows: writing this snapshot back would lose a row
+        // a concurrent persist wrote that has not reached `manifest` yet.
+        await manifestFile.remove(ids: Set(evicted))
     }
 }
 #endif

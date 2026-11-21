@@ -107,7 +107,7 @@ public final class LiveWaveformBuffer: @unchecked Sendable {
 
     /// Records one 0…1 level, at most `maxPushRate` times a second. Callable from any thread.
     @discardableResult
-    public func push(_ level: Float, at now: TimeInterval = Date().timeIntervalSince1970) -> Bool {
+    public func push(_ level: Float, at now: TimeInterval = Date.now.timeIntervalSince1970) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         // The first push always lands, even at the clock's zero: a new recording must show its
@@ -123,7 +123,7 @@ public final class LiveWaveformBuffer: @unchecked Sendable {
 
     /// The newest `count` levels, oldest first, with each sample's age in bar slots.
     public func snapshot(
-        count: Int, at now: TimeInterval = Date().timeIntervalSince1970
+        count: Int, at now: TimeInterval = Date.now.timeIntervalSince1970
     ) -> Snapshot {
         lock.lock()
         defer { lock.unlock() }
@@ -186,7 +186,7 @@ public final class AudioLevelMeter: @unchecked Sendable {
     /// Maps one buffer's RMS, eases it, and pushes it to the ring. Returns the eased level for
     /// callers that publish telemetry (voice mode's store).
     @discardableResult
-    public func push(rms: Float, at now: TimeInterval = Date().timeIntervalSince1970) -> Float {
+    public func push(rms: Float, at now: TimeInterval = Date.now.timeIntervalSince1970) -> Float {
         let target = AudioLevel.normalized(rms: rms, band: band)
         lock.lock()
         smoothed = AudioLevel.smoothed(smoothed, towards: target)

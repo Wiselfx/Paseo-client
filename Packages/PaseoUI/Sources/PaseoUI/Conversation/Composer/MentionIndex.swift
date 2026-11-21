@@ -62,7 +62,7 @@ final class MentionIndex {
         if q.isEmpty {
             var seen = Set<String>()
             var shallow: [MentionIndexRow] = []
-            for row in rows where row.path.split(separator: "/").count <= 2 {
+            for row in rows where row.depth <= 2 {
                 if seen.insert(row.path).inserted { shallow.append(row) }
             }
             let recentRows = recent.compactMap { path in rows.first { $0.path == path } }
@@ -74,7 +74,7 @@ final class MentionIndex {
         }
         var scored: [(row: MentionIndexRow, score: Int)] = []
         for row in rows {
-            let path = row.path.lowercased()
+            let path = row.lowercasedPath
             var score = 0
             if path == q {
                 score = 120
@@ -84,7 +84,7 @@ final class MentionIndex {
                 score = 70
             } else if path.contains("/" + q) {
                 score = 60
-            } else if path.contains(q) {
+            } else if row.path.localizedStandardContains(query) {
                 score = 40
             } else {
                 continue
@@ -96,9 +96,7 @@ final class MentionIndex {
         return scored
             .sorted {
                 if $0.score != $1.score { return $0.score > $1.score }
-                let d0 = $0.row.path.split(separator: "/").count
-                let d1 = $1.row.path.split(separator: "/").count
-                if d0 != d1 { return d0 < d1 }
+                if $0.row.depth != $1.row.depth { return $0.row.depth < $1.row.depth }
                 return $0.row.path.localizedCaseInsensitiveCompare($1.row.path) == .orderedAscending
             }
             .map(\.row)

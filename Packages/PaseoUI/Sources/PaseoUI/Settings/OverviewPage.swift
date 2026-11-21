@@ -185,7 +185,7 @@ struct OverviewPage: View {
     private var restartRequiredTitle: String { "Restart required" }
 
     private var restartRequiredMessage: String {
-        "Saved; not applied. Restart the daemon to apply: \(hostSettings.restartRequiredPaths.joined(separator: ", "))."
+        "Saved; not applied. Restart the daemon to apply: \(hostSettings.restartRequiredPaths.formatted())."
     }
 
     private func restartErrorTitle(_ error: HostSettingsStore.RestartError) -> String {

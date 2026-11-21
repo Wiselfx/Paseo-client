@@ -20,39 +20,56 @@ struct DraftChatView: View {
     /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
     @State private var composerFocused = false
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The shell's drawer, nil outside the shell. The sidebar button toggles through it (N3 F).
     @Environment(\.shellDrawer) private var shellDrawer
-
-    var body: some View {
-        column
-            .task { await loadCatalogue() }
-            .onChange(of: session.agentControl.providers) { _, _ in seedIfNeeded() }
-    }
 
     /// The draft's page: the stage (greeting, or the pending bubble) with the header floating over
     /// it, then the workspace line and the composer — or the Add project action when the host has
     /// no workspace at all (§3.1). The draft has no scroll content, so only the header is a bar
     /// (D1 §1).
-    private var column: some View {
+    var body: some View {
         HomeHeroLayout {
-            header
+            ShellHeader(leading: .sidebar(toggleSidebar)) {
+                Text(workspaceTitle)
+                    .font(.paseo(.title))
+                    .lineLimit(1)
+                    // The header is a 48 pt bar (`HomeHeroMetrics.headerHeight`) and the launch frame
+                    // reserves exactly that, so the title must not make the row taller: this is bar
+                    // chrome, and bar labels keep their height like UIKit's do. Without the cap the
+                    // title's line box passes 48 pt at the largest text sizes and the hero shifts a
+                    // few points on the launch → draft hand-off (H4 §1).
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                    .accessibilityIdentifier("draft.workspace")
+            } trailing: {
+                if let onOpenPanel {
+                    GlassIconButton(
+                        systemName: "sidebar.right", label: "Open workspace panel",
+                        action: onOpenPanel)
+                }
+            }
         } hero: {
-            stage
+            DraftStage(
+                pendingPrompt: draft.pendingPrompt, onTapOutside: { composerFocused = false })
         } footer: {
             if needsProject {
-                addProjectAction
+                DraftAddProjectAction(onAddProject: onAddProject)
             } else {
-                workspaceLine
-                composer
+                DraftWorkspaceLine(session: session, draft: draft)
+                // The one composer (R6 §5): the draft's card is `ComposerView` in `.draft` mode — a
+                // one-line pill at rest, the two-row card once it has focus, text, an attachment or
+                // an error. Send hands the prompt to the shell, which creates the agent and swaps
+                // the conversation in.
+                ComposerView(
+                    draft: draft, session: session, onSubmit: onSubmit, focused: $composerFocused)
+                .padding(.bottom, Space.sm)
             }
         }
         // No background here: the shell's rounded card is the canvas (UX-SPEC §1.1).
         .foregroundStyle(Palette.ink)
         .tint(Palette.ink)
+        .task { await loadCatalogue() }
+        .onChange(of: session.agentControl.providers) { _, _ in seedIfNeeded() }
     }
-
-    // MARK: Header
 
     /// The sidebar button toggles, as the chat header's does (N1 B, N3 F): it closes the sidebar
     /// when the sidebar is already on screen, and otherwise opens it. Upstream: none (user directive).
@@ -64,126 +81,6 @@ struct DraftChatView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            Button(action: toggleSidebar) {
-                UnequalMenu().stroke(
-                    Palette.ink.opacity(0.8),
-                    style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
-                )
-                .frame(width: 18, height: 17)
-                .frame(width: 44, height: 44)
-            }
-            .glassEffect(in: .circle)
-            .accessibilityLabel("Open sidebar")
-
-            Text(workspaceTitle)
-                .font(.paseo(.title))
-                .lineLimit(1)
-                // The header is a 48 pt bar (`HomeHeroMetrics.headerHeight`) and the launch frame
-                // reserves exactly that, so the title must not make the row taller: this is bar
-                // chrome, and bar labels keep their height like UIKit's do. Without the cap the
-                // title's line box passes 48 pt at the largest text sizes and the hero shifts a
-                // few points on the launch → draft hand-off (H4 §1).
-                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .accessibilityIdentifier("draft.workspace")
-
-            if let onOpenPanel {
-                Button(action: onOpenPanel) {
-                    Image(systemName: "sidebar.right")
-                        .font(.glyph(.regular, weight: .medium))
-                        .frame(width: 44, height: 44)
-                }
-                .glassEffect(in: .circle)
-                .accessibilityLabel("Open workspace panel")
-            } else {
-                Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
-            }
-        }
-        .frame(minHeight: 48)
-        .padding(.horizontal, 12)
-    }
-
-    // MARK: Stage
-
-    /// The greeting fades out the moment the first prompt leaves, replaced by the pending bubble
-    /// that the new conversation will carry (§3.2).
-    private var stage: some View {
-        ZStack {
-            if let pending = draft.pendingPrompt {
-                VStack(spacing: 0) {
-                    ClaudeUserBubble(text: pending, isPending: true)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                    Spacer(minLength: 0)
-                }
-            } else {
-                ClaudeHomeHero()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Tapping the page outside the composer drops the keyboard (V5 §2). Simultaneous, so the
-        // workspace-line menu and the hero's own controls still take their taps.
-        .simultaneousGesture(TapGesture().onEnded { composerFocused = false })
-        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: draft.pendingPrompt)
-    }
-
-    private var addProjectAction: some View {
-        VStack(spacing: 10) {
-            Button(action: onAddProject) {
-                Label("Add project", systemImage: "folder.badge.plus")
-                    .font(.paseo(.callout, weight: .medium))
-                    .foregroundStyle(Palette.background)
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 44)
-                    .background(Palette.ink, in: .capsule)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("draft.addProject")
-        }
-        .padding(.bottom, 40)
-        // Top the footer up to the normal resting chrome (28 + 4 + 48 + 8 = 88): the hero must
-        // not move when the host has no workspace, and `HomeHeroLayout` shares this strip with
-        // the speaking draft (E2b §2).
-        .padding(.bottom, Space.xs)
-    }
-
-    // MARK: Workspace line
-
-    @ViewBuilder private var workspaceLine: some View {
-        if !session.workspaceDirectory.groups.isEmpty {
-            Menu {
-                ForEach(session.workspaceDirectory.groups) { group in
-                    Section(projectTitle(group.project)) {
-                        ForEach(group.workspaces) { workspace in
-                            Button {
-                                Haptics.selection()
-                                draft.move(toWorkspace: workspace.id, cwd: workspace.cwd)
-                            } label: {
-                                Text(title(of: workspace))
-                            }
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text("in \(workspaceTitle)")
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.glyph(.small, weight: .semibold))
-                }
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .padding(.horizontal, 10)
-                .frame(minHeight: 28)
-                .contentShape(.rect)
-            }
-            .accessibilityLabel("Workspace, \(workspaceTitle)")
-            .accessibilityIdentifier("draft.workspaceLine")
-            .padding(.bottom, 4)
-        }
-    }
-
     /// No workspaces at all: nothing can be created yet, so the hero asks for a project instead
     /// of offering a composer (§3.1).
     private var needsProject: Bool {
@@ -191,36 +88,7 @@ struct DraftChatView: View {
     }
 
     private var workspaceTitle: String {
-        guard let workspaceId = draft.workspaceId,
-            let workspace = session.workspaceDirectory.workspace(id: workspaceId)
-        else { return "New session" }
-        return title(of: workspace)
-    }
-
-    private func title(of workspace: WorkspaceDescriptor) -> String {
-        if let title = workspace.title,
-            !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            return title
-        }
-        return workspace.branch ?? workspace.name
-    }
-
-    private func projectTitle(_ project: WorkspaceProjectDescriptor) -> String {
-        let custom = project.projectCustomName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let custom, !custom.isEmpty { return custom }
-        return project.projectDisplayName
-    }
-
-    // MARK: Composer
-
-    /// The one composer (R6 §5): the draft's card is `ComposerView` in `.draft` mode — a one-line
-    /// pill at rest, the two-row card once it has focus, text, an attachment or an error. Send
-    /// hands the prompt to the shell, which creates the agent and swaps the conversation in.
-    private var composer: some View {
-        ComposerView(
-            draft: draft, session: session, onSubmit: onSubmit, focused: $composerFocused)
-        .padding(.bottom, Space.sm)
+        DraftWorkspaceLine.workspaceTitle(for: draft, in: session)
     }
 
     // MARK: Catalogue

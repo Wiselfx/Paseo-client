@@ -298,8 +298,7 @@ public struct ConnectionOffer: Sendable, Equatable {
     }
 
     static func decodeBase64URL(_ encoded: String) -> Data? {
-        var standard = encoded.replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
+        var standard = encoded.replacing("-", with: "+").replacing("_", with: "/")
         let remainder = standard.count % 4
         if remainder == 1 { return nil }
         if remainder != 0 {
@@ -331,7 +330,8 @@ public struct ConnectionOffer: Sendable, Equatable {
             if isUnreserved {
                 out.append(Character(UnicodeScalar(byte)))
             } else {
-                out += String(format: "%%%02X", byte)
+                let hex = String(byte, radix: 16, uppercase: true)
+                out += byte < 0x10 ? "%0\(hex)" : "%\(hex)"
             }
         }
         return out

@@ -14,6 +14,8 @@ struct RichPathChip: View {
 
     @Environment(\.richActions) private var richActions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Bumped on a pasteboard copy (no `RichActions`): the copy haptic, once per tap.
+    @State private var copyTaps = 0
 
     var body: some View {
         Button {
@@ -40,6 +42,7 @@ struct RichPathChip: View {
         .paseoCardMenu(copyTitle: "Copy path", copyText: path, filePath: path)
         .paseoCardAccessibility(kind: "File", title: path, isButton: true)
         .accessibilityHint("Copies the path")
+        .paseoFeedback(.light, trigger: copyTaps)
     }
 
     private func copyPath() {
@@ -47,7 +50,7 @@ struct RichPathChip: View {
             richActions.copyText(path)
         } else {
             UIPasteboard.general.string = path
-            Haptics.light()
+            copyTaps += 1
         }
     }
 }

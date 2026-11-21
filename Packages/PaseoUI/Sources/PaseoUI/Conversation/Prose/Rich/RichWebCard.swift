@@ -109,13 +109,14 @@ struct RichWebCard: View {
     var body: some View {
         PaseoCard(content:
             VStack(alignment: .leading, spacing: 10) {
-                header
+                RichCardSourceHeader(title: kind.title, showSource: $showSource)
                 if showSource {
-                    source
+                    RichSourcePanel(code: code)
                 } else {
                     stage
                     if overflows {
-                        openFullScreenButton
+                        RichOpenButton(
+                            accessibilityText: "Open full screen", action: openArtifactPage)
                     }
                 }
             })
@@ -156,28 +157,6 @@ struct RichWebCard: View {
             onViewSource: { showSource.toggle() })
     }
 
-    private var header: some View {
-        HStack {
-            Text(kind.title)
-                .font(.paseo(.caption, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
-            Button {
-                showSource.toggle()
-            } label: {
-                Text(showSource ? "Hide source" : "View source")
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
-                    .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showSource ? "Hide source" : "View source")
-        }
-    }
-
     @ViewBuilder private var stage: some View {
         if showsLive, let document {
             SandboxedHTMLView(
@@ -198,59 +177,12 @@ struct RichWebCard: View {
         } else if renderFailed {
             // Honest and calm in the same box: the source is what the renderer could not
             // turn into a page. No endless spinner (common rules).
-            source
+            RichSourcePanel(code: code)
         } else {
             Rectangle()
                 .fill(Palette.codeSurface)
                 .frame(height: stageHeight)
                 .overlay { ProgressView().controlSize(.small).tint(Palette.secondaryInk) }
-        }
-    }
-
-    /// Open goes to the artifact page (G5 C8): the live stage, source toggle, Reload
-    /// and Share as .html live there, not in a transcript sheet.
-    private var openFullScreenButton: some View {
-        Button {
-            openArtifactPage()
-        } label: {
-            Label("Open", systemImage: "arrow.up.left.and.arrow.down.right")
-                .font(.paseo(.caption, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Open full screen")
-    }
-
-    private var source: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ScrollView {
-                // Wrapping (not clipping) is the source view's contract: a long line must
-                // never disappear at the card's right edge.
-                Text(code)
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(Palette.ink)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 260)
-            HStack {
-                Spacer(minLength: 0)
-                Button {
-                    if let richActions {
-                        richActions.copyText(code)
-                    } else {
-                        UIPasteboard.general.string = code
-                        Haptics.light()
-                    }
-                } label: {
-                    Label("Copy source", systemImage: "doc.on.doc")
-                        .font(.paseo(.caption, weight: .medium))
-                        .foregroundStyle(Palette.secondaryInk)
-                }
-                .buttonStyle(.plain)
-            }
         }
     }
 
@@ -293,6 +225,8 @@ struct RichWebCard: View {
         }
     }
 
+    /// Open goes to the artifact page (G5 C8): the live stage, source toggle, Reload
+    /// and Share as .html live there, not in a transcript sheet.
     private func openArtifactPage() {
         richActions?.openArtifact(artifactDocument)
     }

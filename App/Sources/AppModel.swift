@@ -243,6 +243,7 @@ final class AppModel {
         relayOffer: ConnectionOffer? = nil, passwordToSave: String? = nil
     ) async -> ConnectionError? {
         phase = .setup(.connecting)
+        directoryWatch?.cancel()
         connection?.disconnect()
         let connection = DaemonConnection(
             endpoint: endpoint, clientId: clientId, appVersion: Self.appVersion)
@@ -309,6 +310,7 @@ final class AppModel {
     // MARK: Session lifecycle
 
     func disconnect() {
+        directoryWatch?.cancel()
         connection?.disconnect()
         connection = nil
         currentHostID = nil
@@ -473,24 +475,32 @@ final class AppModel {
         return true
     }
 
+    /// The in-flight directory watch. One per connected session: a new connection, a
+    /// disconnect and a re-watch all cancel it, so a replaced session never publishes.
+    private var directoryWatch: Task<Void, Never>?
+
     /// Keeps the intents/Spotlight snapshot with the agent list: one write per
     /// change, off main, through `AgentDirectory` (which diffs Spotlight by id).
+    /// `Observations` emits the current value first, then once per change to the
+    /// agent ids/titles or the pending attention ids.
     private func watchAgentDirectory(session: HostSession) {
-        withObservationTracking {
-            _ = session.agents.map { ($0.id, $0.title) }
-            _ = session.attention.pending.map(\.id)
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+        directoryWatch?.cancel()
+        directoryWatch = Task { @MainActor [weak self] in
+            let changes = Observations { () -> ([String], [String]) in
+                (
+                    session.agents.flatMap { [$0.id, $0.title ?? ""] },
+                    session.attention.pending.map(\.id)
+                )
+            }
+            for await _ in changes {
+                // A late emission from a replaced session must not publish under the
+                // new `currentHostID`.
+                guard !Task.isCancelled, let self,
+                    case .connected(let current) = self.phase, current === session
+                else { return }
                 await self.publishAgentDirectory(session: session)
                 await self.publishGlanceSnapshot(session: session)
-                self.watchAgentDirectory(session: session)
             }
-        }
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.publishAgentDirectory(session: session)
-            await self.publishGlanceSnapshot(session: session)
         }
     }
 
@@ -547,7 +557,9 @@ final class AppModel {
             try? FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: url, options: .atomic)
-            WidgetCenter.shared.reloadTimelines(ofKind: "PaseoAgentsWidget")
+            // Must equal `AgentsWidget.kind` in the widget extension, which does not link
+            // this target.
+            WidgetCenter.shared.reloadTimelines(ofKind: "com.wiselfx.paseoclient.agents")
         }.value
     }
 

@@ -23,6 +23,10 @@ public final class ConversationSearch {
 
     private let agentId: String
     private let client: (any DaemonClient)?
+    /// Bumped by every `search` and `clear`. The actor is re-entrant across `await`, and the daemon
+    /// call is not cancellable, so a superseded request compares its captured value after each
+    /// await and drops its reply instead of mixing old matches into the new query's results.
+    private var generation = 0
 
     init(agentId: String, client: (any DaemonClient)?) {
         self.agentId = agentId
@@ -36,12 +40,16 @@ public final class ConversationSearch {
     /// whitespace-only query clears the results. Failures land in `error`.
     @discardableResult
     public func search(_ query: String, followPages: Bool = true) async -> ConversationSearchResult? {
+        generation += 1
+        let mine = generation
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         self.query = trimmed
         locations = []
         epoch = nil
         nextCursor = nil
         error = nil
+        // A superseded request no longer clears this flag, so the new search owns it from here.
+        isSearching = false
         guard !trimmed.isEmpty else { return nil }
         guard let client else {
             error = "This conversation is not connected to a daemon."
@@ -49,7 +57,7 @@ public final class ConversationSearch {
         }
 
         isSearching = true
-        defer { isSearching = false }
+        defer { if mine == generation { isSearching = false } }
 
         var cursor: Int?
         var expectedEpoch: String?
@@ -57,6 +65,7 @@ public final class ConversationSearch {
             do {
                 let response = try await client.send(
                     AgentTimelineSearchRequest(agentId: agentId, query: trimmed, cursor: cursor))
+                guard mine == generation, !Task.isCancelled else { return nil }
                 if let message = response.error {
                     error = message
                     return nil
@@ -75,7 +84,7 @@ public final class ConversationSearch {
                 nextCursor = next
                 cursor = next
             } catch let cause {
-                error = conversationErrorText(cause)
+                if mine == generation { error = conversationErrorText(cause) }
                 return nil
             }
         }
@@ -87,11 +96,13 @@ public final class ConversationSearch {
     /// Appends the next daemon-capped page, keeping the locations already shown.
     public func loadMore() async {
         guard let client, let cursor = nextCursor, !isSearching else { return }
+        let mine = generation
         isSearching = true
-        defer { isSearching = false }
+        defer { if mine == generation { isSearching = false } }
         do {
             let response = try await client.send(
                 AgentTimelineSearchRequest(agentId: agentId, query: query, cursor: cursor))
+            guard mine == generation else { return }
             if let message = response.error {
                 error = message
                 return
@@ -106,12 +117,13 @@ public final class ConversationSearch {
             nextCursor = response.nextCursor == cursor ? nil : response.nextCursor
             error = nil
         } catch let cause {
-            error = conversationErrorText(cause)
+            if mine == generation { error = conversationErrorText(cause) }
         }
     }
 
     /// Drops the results and closes the find bar.
     public func clear() {
+        generation += 1
         query = ""
         locations = []
         epoch = nil

@@ -78,7 +78,7 @@ final class VoiceCapturePipeline: @unchecked Sendable {
     /// Maps the level into the ring every buffer, and hands the PCM to the main actor at most 30
     /// times a second. Outside the AEC warm-up window nothing is dropped.
     private func accumulate(_ result: (level: Double, pcm: Data)) {
-        let now = Date().timeIntervalSince1970
+        let now = Date.now.timeIntervalSince1970
         // The AEC warm-up window (E1b): upstream skips the whole tap body, so neither the level
         // nor the PCM leaves the device. One timestamp compare per buffer, no timer.
         if discardUntil > 0 {
@@ -107,7 +107,7 @@ final class VoiceCapturePipeline: @unchecked Sendable {
         lastLevelLog = now
         let db = 20 * log10(max(rms, 1e-5))
         VoiceLog.log.debug(
-            "level db=\(String(format: "%.1f", db), privacy: .public) eased=\(String(format: "%.3f", eased), privacy: .public)")
+            "level db=\(db.formatted(.number.precision(.fractionLength(1))), privacy: .public) eased=\(eased.formatted(.number.precision(.fractionLength(3))), privacy: .public)")
     }
 
     private func process(_ frame: Frame) -> (level: Double, pcm: Data)? {

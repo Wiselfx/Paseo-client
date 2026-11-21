@@ -21,7 +21,9 @@ struct VoiceBar: View {
                 Image(systemName: voice.isMuted ? "mic.slash.fill" : "mic.fill")
                     .font(.glyph(.regular, weight: .medium))
                     .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
-                    .foregroundStyle(.white)
+                    // The glyph on the chip is ink, as everywhere else in the composer: white on the
+                    // chip's near-white light fill was invisible. Muted keeps white on the red.
+                    .foregroundStyle(voice.isMuted ? Palette.onAccent : Palette.ink)
                     .background(voice.isMuted ? Palette.failureInk : Palette.chip, in: .circle)
                     .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
                     .contentShape(.rect)

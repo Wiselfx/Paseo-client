@@ -23,32 +23,35 @@ struct SubagentTrackPill: View {
     }
     var total: Int { items.count + managed.count }
 
-    var text: String {
+    /// The working / failed counts; empty when neither applies.
+    private var statusParts: [String] {
         var parts: [String] = []
         if running > 0 { parts.append("\(running) working") }
         if failed > 0 { parts.append("\(failed) failed") }
-        if parts.isEmpty {
-            return total == 1 ? "1 subagent" : "\(total) subagents"
-        }
-        return parts.joined(separator: " · ")
+        return parts
     }
 
-    var accessibilityText: String {
-        var parts: [String] = []
-        if running > 0 { parts.append("\(running) working") }
-        if failed > 0 { parts.append("\(failed) failed") }
-        if parts.isEmpty { parts.append(total == 1 ? "1 subagent" : "\(total) subagents") }
-        return parts.joined(separator: ", ")
+    /// "2 subagents" / "1 subagent", inflected by the system.
+    private var totalLabel: Text {
+        Text("^[\(total) subagent](inflect: true)")
+    }
+
+    var text: Text {
+        let parts = statusParts
+        return parts.isEmpty ? totalLabel : Text(parts.joined(separator: " · "))
+    }
+
+    var accessibilityText: Text {
+        let parts = statusParts
+        return parts.isEmpty ? totalLabel : Text(parts.formatted())
     }
 
     var body: some View {
-        Button {
-            action()
-        } label: {
+        Button(action: action) {
             HStack(spacing: 7) {
                 Image(systemName: "person.2")
                     .font(.glyph(.small, weight: .medium))
-                Text(text)
+                text
                     .font(.paseo(.footnote))
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
@@ -59,12 +62,12 @@ struct SubagentTrackPill: View {
             .padding(.horizontal, 14)
             .frame(minHeight: 36)
             .background(Palette.chip, in: .capsule)
-            .padding(.vertical, 4)
+            .padding(.vertical, Space.xs)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("transcript.subagents")
-        .accessibilityLabel("Subagents: \(accessibilityText)")
+        .accessibilityLabel(Text("Subagents: ") + accessibilityText)
     }
 }
 #endif

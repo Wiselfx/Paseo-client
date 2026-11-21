@@ -5,17 +5,17 @@ import SwiftUI
 struct GlassIconButton<Label: View>: View {
     private let label: String
     private let action: () -> Void
-    private let content: () -> Label
+    private let content: Label
 
-    init(label: String, action: @escaping () -> Void, @ViewBuilder content: @escaping () -> Label) {
+    init(label: String, action: @escaping () -> Void, @ViewBuilder content: () -> Label) {
         self.label = label
         self.action = action
-        self.content = content
+        self.content = content()
     }
 
     var body: some View {
         Button(action: action) {
-            content()
+            content
                 .font(.glyph(.regular, weight: .medium))
                 .frame(width: 44, height: 44)
                 .contentShape(.circle)

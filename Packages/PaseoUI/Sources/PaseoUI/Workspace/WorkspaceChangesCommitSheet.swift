@@ -38,7 +38,7 @@ struct WorkspaceChangesCommitSheet: View {
                             Text("Message")
                                 .font(.paseo(.callout))
                                 .foregroundStyle(Palette.secondaryInk)
-                                .padding(.horizontal, 12)
+                                .padding(.horizontal, Space.md)
                                 .padding(.vertical, 13)
                                 .allowsHitTesting(false)
                         }

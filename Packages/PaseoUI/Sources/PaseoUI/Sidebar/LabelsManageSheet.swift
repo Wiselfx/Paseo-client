@@ -18,56 +18,36 @@ struct LabelsManageSheet: View {
 
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            errorBar
-            ScrollView {
-                content
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
-            }
-            .scrollIndicators(.hidden)
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(Palette.panel)
-        .confirmationDialog(
-            "Delete \(deleting?.name ?? "label")?",
-            item: $deleting,
-            titleVisibility: .visible
-        ) { _ in
-            Button("Delete label", role: .destructive) { confirmDelete() }
-            Button("Cancel", role: .cancel) { deleting = nil }
-        } message: { _ in
-            Text(deleteMessage)
-        }
-        .task(id: deleting?.name) {
-            deleteCount = nil
-            guard let deleting else { return }
-            deleteCount = await session.labels.inspectDelete(name: deleting.name)
-        }
-    }
-
-    private var header: some View {
-        ZStack {
-            Text("Labels")
-                .font(.paseo(.title, weight: .semibold))
-            HStack {
-                Button {
-                    commitAllDrafts()
-                    onClose()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.glyph(.large, weight: .light))
-                        .frame(width: 44, height: 44)
+        // Pending renames are committed on every way out, including a swipe-down, which the
+        // scaffold's close button does not see.
+        SheetScaffold("Labels", detents: .large, onClose: onClose) {
+            VStack(alignment: .leading, spacing: 0) {
+                errorBar
+                ScrollView {
+                    content
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 24)
                 }
-                .glassEffect(in: .circle)
-                .accessibilityLabel("Close")
-                Spacer()
+                .scrollIndicators(.hidden)
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .confirmationDialog(
+                "Delete \(deleting?.name ?? "label")?",
+                item: $deleting,
+                titleVisibility: .visible
+            ) { label in
+                Button("Delete label", role: .destructive) { confirmDelete(label) }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text(deleteMessage)
+            }
+            .task(id: deleting?.name) {
+                deleteCount = nil
+                guard let deleting else { return }
+                deleteCount = await session.labels.inspectDelete(name: deleting.name)
             }
         }
-        .frame(height: 56)
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
+        .onDisappear { commitAllDrafts() }
     }
 
     @ViewBuilder private var errorBar: some View {
@@ -157,7 +137,7 @@ struct LabelsManageSheet: View {
         $drafts[name, default: name]
     }
 
-    /// Applies every pending rename. Called when the sheet closes.
+    /// Applies every pending rename. Called once, when the sheet disappears.
     private func commitAllDrafts() {
         for (original, draft) in drafts where normalizedLabelName(draft) != original {
             commitRename(original: original, revertOnFailure: true)
@@ -194,9 +174,7 @@ struct LabelsManageSheet: View {
         }
     }
 
-    private func confirmDelete() {
-        guard let target = deleting else { return }
-        deleting = nil
+    private func confirmDelete(_ target: WorkspaceLabelDefinition) {
         Haptics.light()
         Task {
             let ok = await session.labels.deleteLabel(name: target.name)

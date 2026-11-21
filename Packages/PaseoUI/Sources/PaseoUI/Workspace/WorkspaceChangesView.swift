@@ -12,8 +12,6 @@ struct WorkspaceChangesView: View {
     let checkout: CheckoutStore
     /// The open chat's agent, the default recipient for review feedback.
     var agentId: String? = nil
-    /// The workspace id, for the feedback recipients menu (matches session.agents rows).
-    var workspaceId: String? = nil
 
     private enum Compare {
         case uncommitted
@@ -37,6 +35,9 @@ struct WorkspaceChangesView: View {
     @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
     @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
     @State private var feedbackError: String?
+    /// The latest compare-switch reload. Each flip chains onto the previous one so quick
+    /// Uncommitted/Base toggles finish in order rather than racing.
+    @State private var diffReload: Task<Void, Never>?
 
     @Environment(\.toast) private var toast
     @Environment(\.openURL) private var openURL
@@ -79,8 +80,13 @@ struct WorkspaceChangesView: View {
         extras.currentBranch ?? checkout.branch
     }
 
+    /// Git action failures (pull, update from base, merge, auto-merge) land on `gitActions`. A merge
+    /// conflict has its own banner, and the Create PR sheet shows its own failure.
     private var visibleError: String? {
-        let error = extras.actionError ?? checkout.actionError
+        let gitError =
+            gitActions.lastFailure?.code == .mergeConflict || showCreatePRSheet
+            ? nil : gitActions.actionError
+        let error = gitError ?? extras.actionError ?? checkout.actionError
         guard let error, error != dismissedError else { return nil }
         return error
     }
@@ -119,7 +125,11 @@ struct WorkspaceChangesView: View {
                 await loadTimeline()
             }
             .onChange(of: compare) { _, _ in
-                Task { await reloadDiff() }
+                let previous = diffReload
+                diffReload = Task {
+                    await previous?.value
+                    await reloadDiff()
+                }
             }
             .paseoFeedback(.selection, trigger: compare)
             .paseoFeedback(.light, trigger: copiedForgeCommand) { _, new in new != nil }
@@ -200,15 +210,12 @@ struct WorkspaceChangesView: View {
             "Merge pull request?",
             item: $mergeCandidate,
             titleVisibility: .visible
-        ) { _ in
-            let method = mergeCandidate ?? .squash
+        ) { method in
             Button(mergeLabel(method), role: .destructive) {
-                mergeCandidate = nil
                 Task { await performMergePullRequest(method) }
             }
-            Button("Cancel", role: .cancel) { mergeCandidate = nil }
-        } message: { _ in
-            let method = mergeCandidate ?? .squash
+            Button("Cancel", role: .cancel) {}
+        } message: { method in
             let number = extras.prBadge?.number.map { "#\($0)" } ?? ""
             let base = extras.prStatus?.baseRefName ?? checkout.prStatus?.baseRefName ?? baseRef ?? "base"
             Text("This merges pull request \(number) into \(base) using \(method.rawValue). This cannot be undone.")
@@ -217,20 +224,14 @@ struct WorkspaceChangesView: View {
             "Discard changes?",
             item: $pendingDiscard,
             titleVisibility: .visible
-        ) { _ in
+        ) { file in
             Button("Discard changes", role: .destructive) {
-                guard let target = pendingDiscard else { return }
-                pendingDiscard = nil
-                performDiscard(target)
+                performDiscard(file)
             }
-            Button("Cancel", role: .cancel) { pendingDiscard = nil }
-        } message: { _ in
+            Button("Cancel", role: .cancel) {}
+        } message: { file in
             // Upstream: workspace.fileActions.confirmRevert.message (en.ts:513).
-            Text(
-                pendingDiscard.map {
-                    "Changes to \"\($0.path)\" will be permanently discarded."
-                } ?? ""
-            )
+            Text("Changes to \"\(file.path)\" will be permanently discarded.")
         }
     }
 
@@ -278,7 +279,7 @@ struct WorkspaceChangesView: View {
 
     @ViewBuilder private var sendFeedbackBar: some View {
         if reviewDraftCount > 0 {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Space.xs) {
             HStack(spacing: 10) {
                 if let defaultRecipient = defaultFeedbackRecipient {
                     HStack(spacing: 0) {
@@ -293,12 +294,14 @@ struct WorkspaceChangesView: View {
                             }
                             .foregroundStyle(Palette.background)
                             .padding(.leading, 14)
-                            .padding(.trailing, 12)
+                            .padding(.trailing, Space.md)
                             .frame(minHeight: 44)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(
-                            "Send feedback to \(agentTitle(defaultRecipient)), \(reviewDraftCount) comments")
+                            Text(
+                                "Send feedback to \(agentTitle(defaultRecipient)), ^[\(reviewDraftCount) comment](inflect: true)"
+                            ))
                         if feedbackRecipients.count > 1 {
                             Menu {
                                 ForEach(feedbackRecipients) { agent in
@@ -315,13 +318,14 @@ struct WorkspaceChangesView: View {
                                     }
                                 }
                             } label: {
-                                Image(systemName: "chevron.down")
+                                Label("Choose an agent to send feedback", systemImage: "chevron.down")
+                                    .labelStyle(.iconOnly)
                                     .font(.glyph(.small, weight: .semibold))
                                     .foregroundStyle(Palette.background)
-                                    .frame(height: 34)
                                     .padding(.trailing, 10)
+                                    .frame(minHeight: 44)
+                                    .contentShape(.rect)
                             }
-                            .accessibilityLabel("Choose an agent to send feedback")
                         }
                     }
                     .background(Palette.ink, in: .capsule)
@@ -332,21 +336,23 @@ struct WorkspaceChangesView: View {
                 }
                 if let feedbackError {
                     Text(feedbackError)
-                        .font(.paseo(.caption2))
+                        .font(.paseo(.caption))
                         .foregroundStyle(Palette.failureInk)
                         .lineLimit(2)
                 }
             }
             .padding(.top, 2)
-            if !staleReviewDrafts.isEmpty {
+            // One `buildAll` per evaluation: the stale set feeds the text, the label and Clear.
+            let stale = staleReviewDrafts
+            if !stale.isEmpty {
                 HStack(spacing: 6) {
-                    Text("\(PaseoFormat.integer(staleReviewDrafts.count)) comments no longer match this diff")
+                    Text("^[\(stale.count) comment](inflect: true) no longer matching this diff")
                         .font(.paseo(.caption))
                         .foregroundStyle(Palette.secondaryInk)
                     Button("Clear") {
                         Haptics.light()
-                        for stale in staleReviewDrafts {
-                            WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: stale.id)
+                        for draft in stale {
+                            WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: draft.id)
                         }
                     }
                     .font(.paseo(.caption, weight: .medium))
@@ -356,7 +362,7 @@ struct WorkspaceChangesView: View {
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(
-                    "\(staleReviewDrafts.count) comments no longer match this diff")
+                    Text("^[\(stale.count) comment](inflect: true) no longer matching this diff"))
             }
             }
         }
@@ -408,7 +414,7 @@ struct WorkspaceChangesView: View {
                     .foregroundStyle(Palette.secondaryInk)
                 VStack(alignment: .leading, spacing: 2) {
                     branchTitle
-                    HStack(spacing: 8) {
+                    HStack(spacing: Space.sm) {
                         aheadBehind
                         pullRequestChip
                     }
@@ -420,9 +426,9 @@ struct WorkspaceChangesView: View {
             }
             sendFeedbackBar
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, Space.xl)
         .padding(.top, 14)
-        .padding(.bottom, 12)
+        .padding(.bottom, Space.md)
     }
 
     /// The branch name, tapping which opens the switcher (upstream `BranchSwitcher`'s trigger,
@@ -442,6 +448,7 @@ struct WorkspaceChangesView: View {
                         .font(.glyph(.small, weight: .semibold))
                         .foregroundStyle(Palette.tertiaryInk)
                 }
+                .frame(minHeight: 44)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -463,7 +470,7 @@ struct WorkspaceChangesView: View {
                     Text("\(PaseoFormat.integer(aheadBehind.ahead))").font(.paseo(.codeSmall))
                 }
                 .foregroundStyle(Palette.secondaryInk)
-                .accessibilityLabel("\(aheadBehind.ahead) commits ahead")
+                .accessibilityLabel(Text("^[\(aheadBehind.ahead) commit](inflect: true) ahead"))
             }
             if aheadBehind.behind > 0 {
                 HStack(spacing: 3) {
@@ -471,7 +478,7 @@ struct WorkspaceChangesView: View {
                     Text("\(PaseoFormat.integer(aheadBehind.behind))").font(.paseo(.codeSmall))
                 }
                 .foregroundStyle(Palette.secondaryInk)
-                .accessibilityLabel("\(aheadBehind.behind) commits behind")
+                .accessibilityLabel(Text("^[\(aheadBehind.behind) commit](inflect: true) behind"))
             }
         }
     }
@@ -489,13 +496,15 @@ struct WorkspaceChangesView: View {
                         Circle().fill(checksTint(badge.checks)).frame(width: 7, height: 7)
                     }
                     Text(badgeLabel(badge))
-                        .font(.paseo(.caption2, weight: .semibold))
+                        .font(.paseo(.caption, weight: .semibold))
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 9)
-                .padding(.vertical, 4)
+                .padding(.vertical, Space.xs)
                 .foregroundStyle(tint)
                 .background(tint.opacity(0.14), in: .capsule)
+                .frame(minHeight: 44)
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Pull request \(badgeLabel(badge))")
@@ -532,7 +541,7 @@ struct WorkspaceChangesView: View {
             compareSegment(.uncommitted, label: "Uncommitted")
             compareSegment(.base, label: baseRef.map { "vs \($0)" } ?? "vs base")
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, Space.xs)
         .background(Palette.chip, in: .capsule)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -551,7 +560,7 @@ struct WorkspaceChangesView: View {
                 .frame(minHeight: 36)
                 .foregroundStyle(selected ? Palette.background : Palette.secondaryInk)
                 .background(selected ? Palette.ink : Color.clear, in: .capsule)
-                .padding(.vertical, 4)
+                .padding(.vertical, Space.xs)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -562,7 +571,7 @@ struct WorkspaceChangesView: View {
 
     private var summary: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(files.isEmpty ? "" : "\(files.count) \(files.count == 1 ? "file" : "files") changed")
+            Text(files.isEmpty ? "" : "^[\(files.count) file](inflect: true) changed")
                 .font(.paseo(.footnote, weight: .medium))
                 .foregroundStyle(Palette.secondaryInk)
             Spacer()
@@ -614,7 +623,7 @@ struct WorkspaceChangesView: View {
         return Button {
             openFile = file
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Space.md) {
                 Text(style.letter)
                     .font(.paseo(.codeCaption, weight: .semibold))
                     .foregroundStyle(style.tint)
@@ -649,12 +658,11 @@ struct WorkspaceChangesView: View {
         .accessibilityLabel("\(style.word) \(file.path), plus \(file.additions), minus \(file.deletions)")
         .contextMenu {
             Button("Copy path", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = (checkout.cwd as NSString)
-                    .appendingPathComponent(file.path)
+                Clipboard.copy(URL(filePath: checkout.cwd).appending(path: file.path).path())
                 showToast("Path copied")
             }
             Button("Copy relative path", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = file.path
+                Clipboard.copy(file.path)
                 showToast("Relative path copied")
             }
             if extras.capabilities.supportsDiscardChanges {
@@ -694,9 +702,9 @@ struct WorkspaceChangesView: View {
                 primaryButton
                 moreMenu
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, Space.xl)
             .padding(.top, 10)
-            .padding(.bottom, 12)
+            .padding(.bottom, Space.md)
         }
         .background(Palette.panel)
     }
@@ -707,22 +715,15 @@ struct WorkspaceChangesView: View {
             Button {
                 showCommitSheet = true
             } label: {
-                if checkout.isCommitting {
-                    ProgressView().tint(Palette.background)
-                        .frame(maxWidth: .infinity).frame(height: 46)
-                } else {
-                    Text("Commit")
-                        .font(.paseo(.callout, weight: .semibold))
-                        .foregroundStyle(Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 46)
-                }
+                Text("Commit").frame(maxWidth: .infinity)
             }
-            .background(Palette.ink, in: .capsule)
-            .disabled(checkout.isCommitting)
+            .buttonStyle(.paseoPrimary(isWorking: checkout.isCommitting))
             .accessibilityLabel("Commit changes")
         case .push:
             Button {
+                // The style only blocks touches; assistive activation still reaches this action,
+                // and `push()` has no re-entry guard of its own.
+                guard !checkout.isPushing else { return }
                 Task {
                     let pushed = await checkout.push()
                     if pushed {
@@ -734,41 +735,22 @@ struct WorkspaceChangesView: View {
                     }
                 }
             } label: {
-                if checkout.isPushing {
-                    ProgressView().tint(Palette.background)
-                        .frame(maxWidth: .infinity).frame(height: 46)
-                } else {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.up")
-                            .font(.glyph(.small, weight: .semibold))
-                        Text("Push")
-                            .font(.paseo(.callout, weight: .semibold))
-                    }
-                    .foregroundStyle(Palette.background)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.up")
+                        .font(.glyph(.small, weight: .semibold))
+                    Text("Push")
                 }
+                .frame(maxWidth: .infinity)
             }
-            .background(Palette.ink, in: .capsule)
-            .disabled(checkout.isPushing)
+            .buttonStyle(.paseoPrimary(isWorking: checkout.isPushing))
             .accessibilityLabel("Push")
         case .createPR:
             Button {
                 prepareCreatePR()
             } label: {
-                if gitActions.isCreatingPullRequest {
-                    ProgressView().tint(Palette.background)
-                        .frame(maxWidth: .infinity).frame(height: 46)
-                } else {
-                    Text("Create PR")
-                        .font(.paseo(.callout, weight: .semibold))
-                        .foregroundStyle(Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 46)
-                }
+                Text("Create PR").frame(maxWidth: .infinity)
             }
-            .background(Palette.ink, in: .capsule)
-            .disabled(gitActions.isCreatingPullRequest)
+            .buttonStyle(.paseoPrimary(isWorking: gitActions.isCreatingPullRequest))
             .accessibilityLabel("Create pull request")
         case .viewPR:
             Button {
@@ -782,13 +764,10 @@ struct WorkspaceChangesView: View {
                     Image(systemName: "arrow.up.right.square")
                         .font(.glyph(.small, weight: .semibold))
                     Text("View PR")
-                        .font(.paseo(.callout, weight: .semibold))
                 }
-                .foregroundStyle(Palette.background)
                 .frame(maxWidth: .infinity)
-                .frame(height: 46)
             }
-            .background(Palette.ink, in: .capsule)
+            .buttonStyle(.paseoPrimary())
             .accessibilityLabel("View pull request")
         }
     }
@@ -816,13 +795,13 @@ struct WorkspaceChangesView: View {
                 autoMergeSection
             }
         } label: {
-            Image(systemName: "ellipsis")
+            Label("More git actions", systemImage: "ellipsis")
+                .labelStyle(.iconOnly)
                 .font(.glyph(.regular, weight: .medium))
                 .foregroundStyle(Palette.ink)
                 .frame(width: 46, height: 46)
                 .background(Palette.chip, in: .circle)
         }
-        .accessibilityLabel("More git actions")
     }
 
     private func gitMenuItem(
@@ -973,7 +952,7 @@ struct WorkspaceChangesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.vertical, Space.sm)
             .background(Palette.warning.opacity(0.08))
             .transition(.opacity)
         }
@@ -983,14 +962,14 @@ struct WorkspaceChangesView: View {
 
     private func forgeCopyCommand(_ command: String) -> some View {
         Button {
-            UIPasteboard.general.string = command
+            Clipboard.copy(command)
             copiedForgeCommand = command
             Task {
                 try? await Task.sleep(for: .seconds(1.5))
                 if copiedForgeCommand == command { copiedForgeCommand = nil }
             }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Space.sm) {
                 Image(systemName: copiedForgeCommand == command ? "checkmark" : "doc.on.doc")
                     .font(.glyph(.small, weight: .semibold))
                 Text(command)
@@ -1001,7 +980,7 @@ struct WorkspaceChangesView: View {
             .padding(.horizontal, 14)
             .frame(minHeight: 36)
             .background(Palette.chip, in: .capsule)
-            .padding(.vertical, 4)
+            .padding(.vertical, Space.xs)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -1025,7 +1004,11 @@ struct WorkspaceChangesView: View {
         let title: String = {
             if gitActions.lastFailure?.code == .mergeConflict {
                 return count > 0
-                    ? "Merge conflict in \(count) \(count == 1 ? "file" : "files")"
+                    ? String(
+                        AttributedString(
+                            localized: "Merge conflict in ^[\(count) file](inflect: true)",
+                            bundle: #bundle
+                        ).characters)
                     : "Merge conflict"
             }
             return "Conflicts with \(baseRef ?? "the base branch")"
@@ -1053,16 +1036,18 @@ struct WorkspaceChangesView: View {
                     Text("Ask the agent")
                         .font(.paseo(.caption, weight: .medium))
                         .foregroundStyle(Palette.background)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, Space.md)
                         .frame(minHeight: 30)
                         .background(Palette.ink, in: .capsule)
+                        .frame(minHeight: 44)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Mention the conflicted files in chat")
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, Space.sm)
         .background(Palette.warning.opacity(0.08))
     }
 
@@ -1084,21 +1069,21 @@ struct WorkspaceChangesView: View {
                             .foregroundStyle(Palette.tertiaryInk)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Space.xl)
+                .padding(.vertical, Space.sm)
                 if let message = gitActions.commitsError {
                     Text(message)
                         .font(.paseo(.caption))
                         .foregroundStyle(Palette.failureInk)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 8)
+                        .padding(.horizontal, Space.xl)
+                        .padding(.bottom, Space.sm)
                 } else {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(gitActions.commits) { commit in
                             VStack(spacing: 0) {
                                 commitRow(commit)
                                 ClaudeDivider()
-                                    .padding(.leading, 20)
+                                    .padding(.leading, Space.xl)
                                     .opacity(commit.id == gitActions.commits.last?.id ? 0 : 1)
                             }
                         }
@@ -1124,7 +1109,7 @@ struct WorkspaceChangesView: View {
                             .font(.paseo(.codeCaption))
                             .foregroundStyle(Palette.secondaryInk)
                         Text("· \(relativeAge(commit.authorDate))")
-                            .font(.paseo(.caption2))
+                            .font(.paseo(.caption))
                             .foregroundStyle(Palette.tertiaryInk)
                     }
                 }
@@ -1133,7 +1118,7 @@ struct WorkspaceChangesView: View {
                     .font(.glyph(.small, weight: .medium))
                     .foregroundStyle(Palette.tertiaryInk)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Space.lg)
             .padding(.vertical, 9)
             .contentShape(.rect)
         }
@@ -1279,18 +1264,11 @@ struct WorkspaceChangesView: View {
     // MARK: Not a git repository
 
     private var notGitState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "tray")
-                .font(.glyph(.hero, weight: .light))
-                .foregroundStyle(Palette.tertiaryInk)
-            Text("Not a git repository")
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-            Text("Changes and commits aren't available for this workspace.")
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState(
+            systemImage: "tray",
+            title: "Not a git repository",
+            message: "Changes and commits aren't available for this workspace."
+        )
         .background(Palette.panel)
     }
 }

@@ -55,48 +55,10 @@ struct SlashMenu: View {
             }
         } else {
             ScrollView(.vertical) {
-                VStack(spacing: 0) {
+                // Lazy: a bare "/" lists every command and skill, and only about six fit.
+                LazyVStack(spacing: 0) {
                     ForEach(commands) { command in
-                        Button {
-                            onPick(command)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 8) {
-                                    Text("/\(command.name)")
-                                        .font(.paseo(.code, weight: .medium))
-                                        .foregroundStyle(Palette.ink)
-                                        .lineLimit(1)
-                                    if !command.argumentHint.isEmpty {
-                                        Text(command.argumentHint)
-                                            .font(.paseo(.codeCaption))
-                                            .foregroundStyle(Palette.tertiaryInk)
-                                            .lineLimit(1)
-                                    }
-                                    Spacer(minLength: 0)
-                                    if command.kind == .skill {
-                                        Image(systemName: "sparkles")
-                                            .font(.glyph(.small, weight: .medium))
-                                            .foregroundStyle(Palette.secondaryInk)
-                                            .accessibilityLabel("Skill")
-                                    }
-                                }
-                                if !command.description.isEmpty {
-                                    Text(command.description)
-                                        .font(.paseo(.caption))
-                                        .foregroundStyle(Palette.secondaryInk)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 46)
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(
-                            ["/\(command.name)", command.description]
-                                .filter { !$0.isEmpty }
-                                .joined(separator: ", "))
+                        SlashCommandRow(command: command) { onPick(command) }
                     }
                 }
             }

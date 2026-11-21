@@ -154,12 +154,11 @@
                 }
             }
             for prefix in ["PaseoUI.", "PaseoStore.", "SwiftUI."] {
-                text = text.replacingOccurrences(of: prefix, with: "")
+                text = text.replacing(prefix, with: "")
             }
-            text = text.replacingOccurrences(of: " in closure", with: "")
-            text = text.replacingOccurrences(
-                of: " in _[0-9A-F]{32}", with: "", options: .regularExpression)
-            text = text.replacingOccurrences(of: "(extension in SwiftUI):", with: "")
+            text = text.replacing(" in closure", with: "")
+            text = text.replacing(#/\sin\s_[0-9A-F]{32}/#, with: "")
+            text = text.replacing("(extension in SwiftUI):", with: "")
             return text.count > 60 ? String(text.prefix(60)) : text
         }
 

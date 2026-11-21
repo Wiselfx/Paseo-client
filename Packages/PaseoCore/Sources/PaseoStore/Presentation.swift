@@ -60,7 +60,7 @@ public struct ToolCallPresentation: Sendable, Equatable {
     /// `mcp__paseo__list_agents` → `List agents`; `Bash` stays `Bash`.
     static func humanize(_ name: String) -> String {
         let last = name.components(separatedBy: "__").last ?? name
-        let spaced = last.replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
+        let spaced = last.replacing("_", with: " ").replacing("-", with: " ")
         guard let first = spaced.first else { return name }
         return first.uppercased() + spaced.dropFirst()
     }

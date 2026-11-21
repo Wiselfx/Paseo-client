@@ -18,7 +18,6 @@ struct ClaudeDiffView: View {
     /// The same two preferences as the workspace Changes screen (`WorkspaceChangesDiffView`).
     @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
     @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
-    @Environment(\.chatActions) private var actions
 
     /// The parse, once per diff: read synchronously on first draw (no empty frame that then grows),
     /// and only again when the diff or the whitespace preference changes. The inputs are compared by
@@ -61,9 +60,12 @@ struct ClaudeDiffView: View {
                 .padding(.vertical, 9)
             ClaudeDivider()
             if fullHeight {
-                sheetScroll(lines)
+                DiffSheetScroll(lines: lines, wrap: wrapLongLines)
             } else {
-                inline(lines)
+                DiffInlinePreview(
+                    lines: lines, wrap: wrapLongLines,
+                    document: ClaudeDiffDocument(
+                        path: path, unifiedDiff: unifiedDiff, old: old, new: new))
             }
         }
         .frame(
@@ -79,102 +81,10 @@ struct ClaudeDiffView: View {
         .codeTypeScale()
         .toolbar {
             if fullHeight {
-                ToolbarItem(placement: .topBarTrailing) { diffOptionsMenu }
+                ToolbarItem(placement: .topBarTrailing) {
+                    DiffOptionsMenu(hideWhitespace: $hideWhitespace, wrapLongLines: $wrapLongLines)
+                }
             }
-        }
-    }
-
-    /// The first lines, sideways-scrollable (or wrapped), never a scroller inside the transcript.
-    @ViewBuilder private func inline(_ lines: [ClaudeDiffLine]) -> some View {
-        let shown = lines.prefix(Self.inlineLines)
-        Group {
-            if wrapLongLines {
-                diffLines(shown, wrap: true)
-            } else {
-                ScrollView(.horizontal) { diffLines(shown, wrap: false) }
-                    .scrollIndicators(.hidden)
-                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-            }
-        }
-        if lines.count > Self.inlineLines, let actions {
-            Button("Show all \(PaseoFormat.integer(lines.count)) lines") {
-                actions.showDiff(
-                    ClaudeDiffDocument(path: path, unifiedDiff: unifiedDiff, old: old, new: new))
-            }
-            .font(.paseo(.caption, weight: .medium))
-            .foregroundStyle(Palette.secondaryInk)
-            .frame(minHeight: Metrics.hitSize)
-            .padding(.horizontal, Space.md)
-        }
-    }
-
-    /// The whole diff in the sheet: wrap (vertical scroll only) or scroll both ways. Upstream:
-    /// packages/app/src/git/diff-pane.tsx:842-847 (wrap vs scroll labels).
-    @ViewBuilder private func sheetScroll(_ lines: [ClaudeDiffLine]) -> some View {
-        if wrapLongLines {
-            ScrollView(.vertical) { lazyLines(lines, wrap: true) }
-                .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: .infinity)
-        } else {
-            ScrollView([.vertical, .horizontal]) { lazyLines(lines, wrap: false) }
-                .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: .infinity)
-        }
-    }
-
-    private func diffLines(_ lines: ArraySlice<ClaudeDiffLine>, wrap: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(lines) { line in lineView(line, wrap: wrap) }
-        }
-        .padding(.vertical, 6)
-        .textSelection(.enabled)
-    }
-
-    private func lazyLines(_ lines: [ClaudeDiffLine], wrap: Bool) -> some View {
-        LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(lines) { line in lineView(line, wrap: wrap) }
-        }
-        .padding(.vertical, 6)
-        .textSelection(.enabled)
-    }
-
-    private func lineView(_ line: ClaudeDiffLine, wrap: Bool) -> some View {
-        Text(line.text.isEmpty ? " " : line.text)
-            .font(.paseo(.codeSmall))
-            .foregroundStyle(line.kind == .header ? Palette.tertiaryInk : Palette.ink)
-            .fixedSize(horizontal: !wrap, vertical: true)
-            .padding(.horizontal, Space.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(background(for: line.kind))
-    }
-
-    /// The three-dot menu in the sheet's top bar. Upstream: packages/app/src/git/diff-pane.tsx:883-897
-    /// (the two items); the words are en.ts `workspace.git.diff` (`options`, `hideWhitespace`,
-    /// `showWhitespace`, `wrapLongLines`, `scrollLongLines`), packages/app/src/i18n/resources/en.ts:981-986.
-    private var diffOptionsMenu: some View {
-        Menu {
-            Toggle(isOn: $hideWhitespace) {
-                Text(hideWhitespace ? "Show whitespace" : "Hide whitespace")
-            }
-            .tint(Palette.toggleTint)
-            Toggle(isOn: $wrapLongLines) {
-                Text(wrapLongLines ? "Scroll long lines" : "Wrap long lines")
-            }
-            .tint(Palette.toggleTint)
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.glyph(.small, weight: .semibold))
-                .frame(width: 44, height: 44)
-                .contentShape(.rect)
-        }
-        .accessibilityLabel("Diff options")
-    }
-
-    private func background(for kind: ClaudeDiffLine.Kind) -> Color {
-        switch kind {
-        case .added: Palette.diffAdded
-        case .removed: Palette.diffRemoved
-        case .context, .header: .clear
         }
     }
 }

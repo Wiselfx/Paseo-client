@@ -756,6 +756,9 @@ private func isClosingFence(_ line: Substring, marker: Character, length: Int) -
 /// contain `<>`; the cap keeps oversized blocks as text; unclosed blocks stay text.
 /// Protected zones for this pre-pass: fences and inline code only.
 func scanRawSVGs(in source: String, outside excluded: [Range<String.Index>]) -> [Range<String.Index>] {
+    // Ordinary prose has no `<svg` at all: one substring search beats the per-character walk in
+    // `nextCaseInsensitive`, which this runs on every streamed token.
+    guard source.range(of: "<svg", options: .caseInsensitive) != nil else { return [] }
     var found: [Range<String.Index>] = []
     for segment in unprotectedSegments(source, excluding: excluded) {
         var search = segment.startIndex

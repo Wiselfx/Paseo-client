@@ -41,7 +41,7 @@ enum WorkspaceFileFormat {
     static func relativeModified(_ modifiedAt: String) -> String {
         let trimmed = modifiedAt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let date = PaseoDate.parse(trimmed) ?? epoch(trimmed) else { return trimmed }
-        let seconds = max(0, Date().timeIntervalSince(date))
+        let seconds = max(0, Date.now.timeIntervalSince(date))
         if seconds >= 7 * 86_400 { return PaseoFormat.dateTime(date) }
         return PaseoFormat.relative(date)
     }

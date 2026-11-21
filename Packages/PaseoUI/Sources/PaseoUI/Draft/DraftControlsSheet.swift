@@ -13,6 +13,8 @@ struct DraftControlsSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var page: Page = .root
+    /// Bumped by every pick; drives the selection haptic.
+    @State private var selectionCount = 0
 
     enum Page: Equatable { case root, providers, models, thinking, modes }
 
@@ -58,13 +60,66 @@ struct DraftControlsSheet: View {
                         page = .root
                     }
                 })
-            content
+            switch page {
+            case .root:
+                // Scrolls so the last rows stay reachable at large text sizes.
+                ScrollView {
+                    RowGroup {
+                        ListRow(title: "Provider", accessory: .value(providerLabel)) {
+                            page = .providers
+                        }
+                        RowDivider()
+                        ListRow(title: "Model", accessory: .value(modelLabel)) { page = .models }
+                        RowDivider()
+                        ListRow(title: "Thinking", accessory: .value(thinkingLabel)) {
+                            page = .thinking
+                        }
+                        RowDivider()
+                        ListRow(title: "Mode", accessory: .value(modeLabel)) { page = .modes }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            case .providers:
+                DraftProviderPage(
+                    providers: providers, selectedId: draft.providerId, phase: catalog.phase,
+                    onSelect: { provider in
+                        selectionCount += 1
+                        draft.selectProvider(provider.provider, catalog: catalog)
+                        page = .root
+                    })
+            case .models:
+                DraftModelPage(
+                    models: models, selectedId: draft.modelId, isLoading: providerIsLoading,
+                    onSelect: { id in
+                        selectionCount += 1
+                        draft.selectModel(id, catalog: catalog)
+                        page = .root
+                    })
+            case .thinking:
+                DraftThinkingPage(
+                    options: thinkingOptions, selectedId: draft.thinkingOptionId,
+                    isLoading: providerIsLoading,
+                    onSelect: { id in
+                        selectionCount += 1
+                        draft.selectThinking(id)
+                        page = .root
+                    })
+            case .modes:
+                DraftModePage(
+                    modes: modes, selectedId: draft.modeId,
+                    onSelect: { id in
+                        selectionCount += 1
+                        draft.selectMode(id)
+                        page = .root
+                    })
+            }
             Spacer(minLength: 0)
         }
         .background(Palette.background)
         .foregroundStyle(Palette.ink)
-        .presentationDetents([.height(430)])
+        .presentationDetents([.height(430), .large])
         .presentationDragIndicator(.visible)
+        .paseoFeedback(.selection, trigger: selectionCount)
         .task {
             // The draft's sheet can open before the conversation ever asked for a catalogue.
             if catalog.providers.isEmpty {
@@ -74,225 +129,9 @@ struct DraftControlsSheet: View {
         }
     }
 
-    @ViewBuilder private var content: some View {
-        switch page {
-        case .root: root
-        case .providers: providerPage
-        case .models: modelPage
-        case .thinking: thinkingPage
-        case .modes: modePage
-        }
-    }
-
-    // MARK: Root
-
-    private var root: some View {
-        VStack(spacing: 12) {
-            RowGroup {
-                ListRow(title: "Provider", accessory: .value(providerLabel)) {
-                    page = .providers
-                }
-                RowDivider()
-                ListRow(title: "Model", accessory: .value(modelLabel)) { page = .models }
-                RowDivider()
-                ListRow(title: "Thinking", accessory: .value(thinkingLabel)) {
-                    page = .thinking
-                }
-                RowDivider()
-                ListRow(title: "Mode", accessory: .value(modeLabel)) { page = .modes }
-            }
-            .padding(.horizontal, 16)
-        }
-    }
-
-    // MARK: Pages
-
-    private var providerPage: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                if providers.isEmpty {
-                    providerEmptyState
-                } else {
-                    RowGroup {
-                        ForEach(providers.enumerated(), id: \.element.id) { index, provider in
-                            ListRow(
-                                title: provider.label ?? provider.provider,
-                                subtitle: providerDetail(provider),
-                                accessory: providerAccessory(provider)
-                            ) {
-                                guard provider.isAvailable else { return }
-                                Haptics.selection()
-                                draft.selectProvider(provider.provider, catalog: catalog)
-                                page = .root
-                            }
-                            if index < providers.count - 1 { RowDivider() }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
-            }
-        }
-    }
-
-    /// Every enabled provider, in the daemon's order; one that is still probing says so and fills
-    /// in through `providers_snapshot_update`. Only a ready one can be picked.
-    @ViewBuilder private var providerEmptyState: some View {
-        switch catalog.phase {
-        case .loading, .idle:
-            ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
-        case .failed(let message):
-            Text(message)
-                .font(.paseo(.callout))
-                .foregroundStyle(Palette.failureInk)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-        case .ready:
-            Text("No enabled providers on this host.")
-                .font(.paseo(.callout))
-                .foregroundStyle(Palette.secondaryInk)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-        }
-    }
-
-    private func providerDetail(_ provider: ProviderSnapshotEntry) -> String? {
-        switch provider.status {
-        case .ready: provider.description
-        case .loading: "Loading models…"
-        case .error: provider.error ?? "This provider could not start."
-        case .unavailable: provider.error ?? "Not available on this host."
-        case .unknown(let raw): raw.isEmpty ? nil : raw
-        }
-    }
-
-    private func providerBadge(_ provider: ProviderSnapshotEntry) -> String? {
-        switch provider.status {
-        case .ready: nil
-        case .loading: "Loading"
-        case .error: "Error"
-        case .unavailable: "Unavailable"
-        case .unknown: nil
-        }
-    }
-
-    /// Selected wins over the badge.
-    private func providerAccessory(_ provider: ProviderSnapshotEntry) -> ListRow.Accessory {
-        if draft.providerId == provider.provider { return .checkmark(true) }
-        if let badge = providerBadge(provider) { return .badge(badge) }
-        return .none
-    }
-
-    private var modelPage: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                if models.isEmpty {
-                    VStack(spacing: 8) {
-                        if catalog.provider(draft.providerId ?? "")?.status == .loading {
-                            ProgressView().controlSize(.small)
-                        }
-                        Text(
-                            catalog.provider(draft.providerId ?? "")?.status == .loading
-                                ? "Loading models from this provider…"
-                                : "No models reported by this provider"
-                        )
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                    }
-                    .padding(.top, 24)
-                } else {
-                    RowGroup {
-                        ForEach(models.enumerated(), id: \.element.id) { index, model in
-                            ListRow(
-                                title: model.label,
-                                subtitle: model.description,
-                                accessory: draft.modelId == model.id
-                                    ? ListRow.Accessory.checkmark(true)
-                                    : (model.isDefault == true
-                                        ? ListRow.Accessory.badge("Default")
-                                        : ListRow.Accessory.none)
-                            ) {
-                                Haptics.selection()
-                                draft.selectModel(model.id, catalog: catalog)
-                                page = .root
-                            }
-                            if index < models.count - 1 { RowDivider() }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
-            }
-        }
-    }
-
-    /// One row per level, in the provider's order, the current one checked (§4.2). "Default" means
-    /// the provider's own choice for this model, which the create request leaves out.
-    private var thinkingPage: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                RowGroup {
-                    ListRow(
-                        title: "Default",
-                        subtitle: "Use the provider's level for this model",
-                        accessory: .checkmark(draft.thinkingOptionId == nil)
-                    ) {
-                        Haptics.selection()
-                        draft.selectThinking(nil)
-                        page = .root
-                    }
-                    ForEach(thinkingOptions) { option in
-                        RowDivider()
-                        ListRow(
-                            title: option.label, subtitle: option.description,
-                            accessory: draft.thinkingOptionId == option.id
-                                ? .checkmark(true)
-                                : (option.isDefault == true ? .badge("Default") : .none)
-                        ) {
-                            Haptics.selection()
-                            draft.selectThinking(option.id)
-                            page = .root
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                if thinkingOptions.isEmpty {
-                    Text(
-                        catalog.provider(draft.providerId ?? "")?.status == .loading
-                            ? "Waiting for this provider's model list…"
-                            : "This model reports no thinking levels."
-                    )
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.horizontal, 16)
-                }
-            }
-        }
-    }
-
-    private var modePage: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                RowGroup {
-                    ForEach(modes.enumerated(), id: \.element.id) { index, mode in
-                        ListRow(
-                            title: mode.label, subtitle: mode.description,
-                            accessory: .checkmark(draft.modeId == mode.id)
-                        ) {
-                            Haptics.selection()
-                            draft.selectMode(mode.id)
-                            page = .root
-                        }
-                        if index < modes.count - 1 { RowDivider() }
-                    }
-                }
-                .padding(.horizontal, 16)
-                if modes.isEmpty {
-                    Text("This provider reports no modes.")
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.horizontal, 16)
-                }
-            }
-        }
+    /// The chosen provider is still probing, so an empty model or thinking list may yet fill in.
+    private var providerIsLoading: Bool {
+        catalog.provider(draft.providerId ?? "")?.status == .loading
     }
 
     // MARK: Labels

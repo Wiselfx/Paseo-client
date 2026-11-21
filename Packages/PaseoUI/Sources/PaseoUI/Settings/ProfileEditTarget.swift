@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
-import UIKit
 
 /// Which edit sheet to present and with what.
 struct ProfileEditTarget: Identifiable {

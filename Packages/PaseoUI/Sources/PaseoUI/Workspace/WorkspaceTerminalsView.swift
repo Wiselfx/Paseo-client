@@ -38,7 +38,7 @@ struct WorkspaceTerminalsView: View {
     /// only; the daemon's activity pushes are what actually updates it.
     @State private var lastViewed: [String: Double] = [:]
     @State private var linkedFile: TerminalLinkedFile?
-    @State private var serviceURLSheet: URL?
+    @State private var serviceURLSheet: BrowserTarget?
     /// The service URL waiting on the `ask` confirmation (Settings → Terminal).
     @State private var pendingServiceURL: URL?
     @AppStorage(ServiceUrlBehavior.storageKey) private var serviceUrlBehavior = ServiceUrlBehavior.ask.rawValue
@@ -49,6 +49,7 @@ struct WorkspaceTerminalsView: View {
     /// result toast.
     @State private var showAttachMenu = false
     @State private var showPhotoPicker = false
+    @State private var pickedPhoto: PhotosPickerItem?
     @State private var showFileImporter = false
 
     @Environment(\.openURL) private var openURL
@@ -70,15 +71,51 @@ struct WorkspaceTerminalsView: View {
 
     var body: some View {
         let terminals = orderedTerminals
+        let ids = terminals.map(\.id)
+        let scripts = store.scripts(in: workspaceId)
+        let isLoadingScripts = store.loadingScriptWorkspaces.contains(workspaceId)
         VStack(spacing: 0) {
-            if let error = store.error { errorBanner(error) }
-            terminalPicker(terminals)
+            if let error = store.error {
+                TerminalErrorBanner(
+                    message: error, onRetry: reopen, onDismiss: { store.clearError() })
+            }
+            TerminalChipBar(
+                terminals: terminals,
+                selectedId: selectedTerminalId,
+                dotStates: dotStates(for: terminals),
+                isCreating: isCreating,
+                onSelect: { select($0) },
+                onRename: beginRename,
+                onClose: requestClose,
+                onCreate: createTerminal)
             ClaudeDivider()
-            terminalArea(terminals)
-            let scripts = store.scripts(in: workspaceId)
-            if !scripts.isEmpty || store.loadingScriptWorkspaces.contains(workspaceId) {
+            TerminalStage(
+                store: store,
+                uploader: session.fileUploader,
+                mounted: mountedTerminals,
+                selectedTerminalId: selectedTerminalId,
+                outgoingTerminalId: outgoingTerminalId,
+                exitMessage: selectedTerminalId.flatMap { exitMessages[$0] },
+                isSupported: store.isSupported,
+                hasTerminals: !terminals.isEmpty,
+                onExit: { recordExit($0, for: $1) },
+                onOutput: markViewedIfChanged,
+                onOpenLink: handleOpenLink,
+                onAttach: { showAttachMenu = true },
+                onCreate: createTerminal,
+                onReattach: reattach,
+                onDismissExit: dismissExit)
+            if !scripts.isEmpty || isLoadingScripts {
                 ClaudeDivider()
-                scriptsSection(scripts)
+                WorkspaceScriptsSection(
+                    scripts: scripts,
+                    terminalIds: Set(ids),
+                    busy: busyScripts,
+                    isLoading: isLoadingScripts,
+                    onOpenService: openServiceURL,
+                    onShowTerminal: { select($0) },
+                    onToggle: toggle,
+                    onRestart: restart)
             }
         }
         // One canvas for the whole workspace panel: the terminal page sits on the panel fill,
@@ -93,8 +130,8 @@ struct WorkspaceTerminalsView: View {
             syncFocusedTerminal()
         }
         .onAppear {
-            if selectedTerminalId == nil || !terminalIds.contains(selectedTerminalId ?? "") {
-                select(preferredTerminalId(from: terminalIds))
+            if selectedTerminalId == nil || !ids.contains(selectedTerminalId ?? "") {
+                select(preferredTerminalId(from: ids))
             }
             markCurrentViewed()
             syncFocusedTerminal()
@@ -110,12 +147,12 @@ struct WorkspaceTerminalsView: View {
         .onChange(of: scenePhase) { _, phase in
             session.hostSettings.updateTerminalFocus(phase == .active ? selectedTerminalId : nil)
         }
-        .onChange(of: terminalIds) { _, ids in
-            mountedTerminalIds.removeAll { !ids.contains($0) }
-            exitMessages = exitMessages.filter { ids.contains($0.key) }
-            reattachCounts = reattachCounts.filter { ids.contains($0.key) }
-            if let selectedTerminalId, ids.contains(selectedTerminalId) { return }
-            select(preferredTerminalId(from: ids))
+        .onChange(of: ids) { _, newIds in
+            mountedTerminalIds.removeAll { !newIds.contains($0) }
+            exitMessages = exitMessages.filter { newIds.contains($0.key) }
+            reattachCounts = reattachCounts.filter { newIds.contains($0.key) }
+            if let selectedTerminalId, newIds.contains(selectedTerminalId) { return }
+            select(preferredTerminalId(from: newIds))
             markCurrentViewed()
         }
         .onChange(of: selectedTerminalId) { _, _ in
@@ -131,13 +168,12 @@ struct WorkspaceTerminalsView: View {
             Button("Files…") { showFileImporter = true }
             Button("Cancel", role: .cancel) {}
         }
-        .sheet(isPresented: $showPhotoPicker) {
-            PhotoPickerView(onPick: { data, fileName, mimeType in
-                showPhotoPicker = false
-                Task { await attach(data: data, fileName: fileName, mimeType: mimeType) }
-            }, onCancel: {
-                showPhotoPicker = false
-            })
+        .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhoto, matching: .images)
+        // The upload runs in its own task, so resetting the selection does not cancel it.
+        .onChange(of: pickedPhoto) { _, item in
+            guard let item else { return }
+            pickedPhoto = nil
+            Task { await attachPhoto(item) }
         }
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item]) { result in
             guard case .success(let url) = result else { return }
@@ -163,40 +199,30 @@ struct WorkspaceTerminalsView: View {
             Text("Choose a name for this terminal.")
         }
         .confirmationDialog(
-            closeCandidate.map { "Close “\(displayName($0))”?" } ?? "Close terminal?",
+            closeCandidate.map { "Close “\($0.displayName)”?" } ?? "Close terminal?",
             item: $closeCandidate,
-            titleVisibility: .visible) { _ in
-            Button("Close terminal", role: .destructive) { commitClose() }
-            Button("Cancel", role: .cancel) { closeCandidate = nil }
+            titleVisibility: .visible) { candidate in
+            Button("Close terminal", role: .destructive) { commitClose(candidate) }
+            Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("Any running process in this terminal will be stopped immediately.")
         }
         .confirmationDialog(
             "Open service URL",
             item: $pendingServiceURL,
-            titleVisibility: .visible) { _ in
-            Button("In Paseo") {
-                if let url = pendingServiceURL { serviceURLSheet = url }
-                pendingServiceURL = nil
-            }
-            Button("External browser") {
-                if let url = pendingServiceURL { openURL(url) }
-                pendingServiceURL = nil
-            }
-            Button("Cancel", role: .cancel) { pendingServiceURL = nil }
-        } message: { _ in
-            Text(pendingServiceURL.map { "Open \($0.absoluteString)?" } ?? "")
+            titleVisibility: .visible) { url in
+            Button("In Paseo") { serviceURLSheet = BrowserTarget(url: url) }
+            Button("External browser") { openURL(url) }
+            Button("Cancel", role: .cancel) {}
+        } message: { url in
+            Text("Open \(url.absoluteString)?")
         }
         .sheet(item: $linkedFile) { target in
             WorkspaceTerminalFileSheet(checkout: checkout, target: target)
                 .presentationDetents([.large])
         }
-        .fullScreenCover(isPresented: Binding(
-            get: { serviceURLSheet != nil },
-            set: { if !$0 { serviceURLSheet = nil } })) {
-            if let url = serviceURLSheet {
-                SafariView(url: url).ignoresSafeArea()
-            }
+        .fullScreenCover(item: $serviceURLSheet) { target in
+            SafariView(url: target.url).ignoresSafeArea()
         }
     }
 
@@ -205,7 +231,7 @@ struct WorkspaceTerminalsView: View {
     /// Wording is upstream's (`serviceUrl.title/message/inPaseo/externalBrowser`, en.ts:2019-2022).
     private func openServiceURL(_ url: URL) {
         switch ServiceUrlBehavior(rawValue: serviceUrlBehavior) ?? .ask {
-        case .inApp: serviceURLSheet = url
+        case .inApp: serviceURLSheet = BrowserTarget(url: url)
         case .external: openURL(url)
         case .ask: pendingServiceURL = url
         }
@@ -213,7 +239,7 @@ struct WorkspaceTerminalsView: View {
 
     private func markCurrentViewed() {
         guard let selectedTerminalId else { return }
-        lastViewed[selectedTerminalId] = Date().timeIntervalSince1970 * 1000
+        lastViewed[selectedTerminalId] = Date.now.timeIntervalSince1970 * 1000
     }
 
     /// Reports the terminal on screen (nil when there is none, or the app is not active) to the
@@ -231,7 +257,7 @@ struct WorkspaceTerminalsView: View {
             let terminal = store.terminals(in: workspaceId).first(where: { $0.id == terminalId }),
             isUnread(terminal)
         else { return }
-        lastViewed[terminalId] = Date().timeIntervalSince1970 * 1000
+        lastViewed[terminalId] = Date.now.timeIntervalSince1970 * 1000
     }
 
     /// Daemon activity newer than the last time this device looked at the terminal.
@@ -279,13 +305,6 @@ struct WorkspaceTerminalsView: View {
 
     // MARK: Attach a file
 
-    /// The key bar's progress row, straight off the T14 uploader (one upload at a time).
-    private var uploadSnapshot: TerminalUploadSnapshot? {
-        let uploader = session.fileUploader
-        guard uploader.isUploading, let name = uploader.fileName else { return nil }
-        return TerminalUploadSnapshot(fileName: name, progress: uploader.progress)
-    }
-
     /// T14 (`file.upload`, 50 MB cap), then the remote path is typed into the focused terminal
     /// shell-quoted. Errors surface as a toast; oversized files are rejected before the RPC.
     private func attach(data: Data, fileName: String, mimeType: String) async {
@@ -307,6 +326,19 @@ struct WorkspaceTerminalsView: View {
         }
     }
 
+    /// The picked photo's original bytes, with the file name and MIME type from its content type.
+    private func attachPhoto(_ item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self) else {
+            showToast("Couldn't read that photo.")
+            return
+        }
+        let type = item.supportedContentTypes.first { $0.conforms(to: .image) } ?? .jpeg
+        await attach(
+            data: data,
+            fileName: "photo.\(type.preferredFilenameExtension ?? "jpg")",
+            mimeType: type.preferredMIMEType ?? "image/jpeg")
+    }
+
     /// Single-quote for POSIX shells: `abc'def` → `'abc'\''def'`.
     private static func shellQuote(_ path: String) -> String {
         "'" + path.replacing("'", with: "'\\''") + "'"
@@ -317,10 +349,6 @@ struct WorkspaceTerminalsView: View {
     }
 
     // MARK: Terminals
-
-    private var terminalIds: [String] {
-        orderedTerminals.map(\.id)
-    }
 
     /// Newest first when the daemon sent timestamps; otherwise the daemon's order.
     private var orderedTerminals: [TerminalInfo] {
@@ -335,62 +363,9 @@ struct WorkspaceTerminalsView: View {
         }
     }
 
-    private func displayName(_ terminal: TerminalInfo) -> String {
-        if let title = terminal.title, !title.isEmpty, title != terminal.name {
-            return title
-        }
-        return terminal.name
-    }
-
-    private func terminalPicker(_ terminals: [TerminalInfo]) -> some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(terminals) { terminal in
-                    terminalChip(terminal)
-                }
-                newTerminalButton
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-        }
-        .scrollIndicators(.hidden)
-        .frame(height: 48)
-    }
-
-    private func terminalChip(_ terminal: TerminalInfo) -> some View {
-        let isSelected = terminal.id == selectedTerminalId
-        return Button {
-            guard selectedTerminalId != terminal.id else { return }
-            Haptics.selection()
-            select(terminal.id)
-        } label: {
-            HStack(spacing: 6) {
-                StatusDot(dotKind(for: terminal))
-                Text(displayName(terminal))
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(isSelected ? Palette.ink : Palette.secondaryInk)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, Space.md)
-            .frame(minHeight: 44)
-            .background(isSelected ? Palette.chip : Color.clear, in: .capsule)
-            .overlay(
-                Capsule().strokeBorder(
-                    Palette.cardBorder, lineWidth: isSelected ? 0 : 0.5))
-            .contentShape(.capsule)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Terminal \(displayName(terminal))")
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-        .contextMenu {
-            Button("Rename…", systemImage: "pencil") {
-                renameText = displayName(terminal)
-                renameTarget = terminal
-            }
-            Button("Close", systemImage: "xmark", role: .destructive) {
-                requestClose(terminal)
-            }
-        }
+    private func beginRename(_ terminal: TerminalInfo) {
+        renameText = terminal.displayName
+        renameTarget = terminal
     }
 
     /// Close with confirmation only when the daemon's activity says a process is running.
@@ -399,16 +374,11 @@ struct WorkspaceTerminalsView: View {
         if running {
             closeCandidate = terminal
         } else {
-            Task {
-                let ok = await store.killTerminal(terminal.id)
-                if ok { Haptics.light() } else { Haptics.failure() }
-            }
+            commitClose(terminal)
         }
     }
 
-    private func commitClose() {
-        guard let target = closeCandidate else { return }
-        closeCandidate = nil
+    private func commitClose(_ target: TerminalInfo) {
         Task {
             let ok = await store.killTerminal(target.id)
             if ok { Haptics.light() } else { Haptics.failure() }
@@ -426,6 +396,22 @@ struct WorkspaceTerminalsView: View {
         }
     }
 
+    private func createTerminal() {
+        guard !isCreating else { return }
+        isCreating = true
+        Task {
+            let created = await store.createTerminal(in: workspaceId, cwd: workspace.cwd)
+            isCreating = false
+            if let created { select(created.id) }
+        }
+    }
+
+    private func dotStates(for terminals: [TerminalInfo]) -> [String: StatusDot.State] {
+        Dictionary(
+            terminals.map { ($0.id, dotKind(for: $0)) },
+            uniquingKeysWith: { first, _ in first })
+    }
+
     private func dotKind(for terminal: TerminalInfo) -> StatusDot.State {
         switch terminal.activityBucket {
         case .needsInput: return .attention
@@ -437,161 +423,15 @@ struct WorkspaceTerminalsView: View {
         }
     }
 
-    private var newTerminalButton: some View {
-        Button {
-            guard !isCreating else { return }
-            isCreating = true
-            Task {
-                let created = await store.createTerminal(in: workspaceId, cwd: workspace.cwd)
-                isCreating = false
-                if let created { select(created.id) }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                if isCreating {
-                    ProgressView().controlSize(.mini).tint(Palette.secondaryInk)
-                } else {
-                    Image(systemName: "plus")
-                        .font(.glyph(.small, weight: .medium))
-                }
-                Text("New").font(.paseo(.footnote))
-            }
-            .padding(.horizontal, Space.md)
-            .frame(minHeight: 44)
-            .foregroundStyle(Palette.ink)
-            .overlay(
-                Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
-            .contentShape(.capsule)
-        }
-        .buttonStyle(.plain)
-        .disabled(isCreating)
-        .accessibilityLabel("New terminal")
-    }
-
-    /// The stage. Every recently used terminal stays mounted; only the selected one is visible,
-    /// hit-testable and reachable by VoiceOver, and the others keep applying output with their
-    /// streams open.
-    private func terminalArea(_ terminals: [TerminalInfo]) -> some View {
-        ZStack {
-            if mountedTerminals.isEmpty {
-                stagePlaceholder(terminals)
-            } else {
-                ForEach(mountedTerminals) { mounted in
-                    terminalStageEntry(mounted)
-                }
-            }
-            if let terminalId = selectedTerminalId, let message = exitMessages[terminalId] {
-                exitOverlay(message, terminalId: terminalId)
-                    .transition(.opacity)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: stageState)
-    }
-
-    /// One retained emulator. `generation` only changes when the user reattaches after the process
-    /// ended; a tab switch keeps the same identity, so nothing is rebuilt or replayed.
-    private struct MountedTerminal: Identifiable {
-        let terminalId: String
-        let generation: Int
-        var id: String { "\(terminalId)#\(generation)" }
-    }
-
     private var mountedTerminals: [MountedTerminal] {
         mountedTerminalIds.map { id in
             MountedTerminal(terminalId: id, generation: reattachCounts[id] ?? 0)
         }
     }
 
-    /// Everything the stage's appearance depends on, so one `.animation` covers the tab
-    /// crossfade, a terminal arriving, and the exit card appearing or leaving.
-    private struct StageState: Equatable {
-        var selected: String?
-        var mounted: [String]
-        var exit: String?
-    }
-
-    private var stageState: StageState {
-        StageState(
-            selected: selectedTerminalId, mounted: mountedTerminalIds,
-            exit: selectedTerminalId.flatMap { exitMessages[$0] })
-    }
-
-    private func terminalStageEntry(_ mounted: MountedTerminal) -> some View {
-        let isSelected = mounted.terminalId == selectedTerminalId
-        return PaseoTerminalView(
-            store: store,
-            terminalId: mounted.terminalId,
-            isVisible: isSelected,
-            onExit: { message in recordExit(message, for: mounted.terminalId) },
-            onOutput: { markViewedIfChanged(mounted.terminalId) },
-            onOpenLink: handleOpenLink,
-            upload: isSelected ? uploadSnapshot : nil,
-            onAttach: {
-                showAttachMenu = true
-            },
-            onCancelUpload: { session.fileUploader.cancel() })
-        // The terminal the switch just left stays opaque for the length of the fade, so the
-        // incoming one fades in over it instead of both fading toward the canvas. `select` clears
-        // it again when the fade ends, which takes it out of the composite.
-        .opacity(isSelected || mounted.terminalId == outgoingTerminalId ? 1 : 0)
-        .allowsHitTesting(isSelected)
-        .accessibilityHidden(!isSelected)
-    }
-
-    @ViewBuilder private func stagePlaceholder(_ terminals: [TerminalInfo]) -> some View {
-        if !store.isSupported {
-            statusMessage(
-                "Update the host to view terminals.",
-                detail: "This host predates the terminal replay protocol.")
-                .transition(.opacity)
-        } else if terminals.isEmpty {
-            emptyState.transition(.opacity)
-        } else {
-            // The selected id is stale during the same frame the data refreshes.
-            LoadingState().transition(.opacity)
-        }
-    }
-
     /// Remembers why a terminal ended, per terminal, so a tab switch never shows the wrong one.
     private func recordExit(_ message: String?, for terminalId: String) {
         exitMessages[terminalId] = exitLine(for: message)
-    }
-
-    private var emptyState: some View {
-        EmptyState(
-            systemImage: "apple.terminal",
-            title: "No terminals yet",
-            message: "Start one to run commands in this workspace.",
-            action: (title: "New terminal", run: {
-                guard !isCreating else { return }
-                isCreating = true
-                Task {
-                    let created = await store.createTerminal(in: workspaceId, cwd: workspace.cwd)
-                    isCreating = false
-                    if let created { select(created.id) }
-                }
-            }))
-        .padding(.horizontal, Space.xxxl)
-    }
-
-    private func statusMessage(_ title: String, detail: String?) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "info")
-                .font(.glyph(.large, weight: .light))
-                .foregroundStyle(Palette.secondaryInk)
-            Text(title)
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-                .multilineTextAlignment(.center)
-            if let detail {
-                Text(detail)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding(.horizontal, 32)
     }
 
     private func handleOpenLink(_ target: TerminalLinkTarget) {
@@ -610,278 +450,51 @@ struct WorkspaceTerminalsView: View {
         return "\(error)\nThe process may still be running."
     }
 
-    private func exitOverlay(_ message: String, terminalId: String) -> some View {
-        VStack(spacing: 12) {
-            Text(message)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.ink)
-                .multilineTextAlignment(.center)
-            HStack(spacing: 10) {
-                Button {
-                    Haptics.selection()
-                    exitMessages[terminalId] = nil
-                    // A fresh emulator and a fresh subscription, at the same grid.
-                    reattachCounts[terminalId, default: 0] += 1
-                } label: {
-                    Text("Reattach")
-                }
-                .buttonStyle(.paseoPrimary())
-                Button {
-                    exitMessages[terminalId] = nil
-                } label: {
-                    Text("Dismiss")
-                }
-                .buttonStyle(.paseoSecondary)
-            }
-        }
-        .padding(20)
-        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                .strokeBorder(Palette.cardBorder, lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.25), radius: 16, y: 4)
-        .padding(.horizontal, 32)
+    /// A fresh emulator and a fresh subscription, at the same grid.
+    private func reattach(_ terminalId: String) {
+        Haptics.selection()
+        exitMessages[terminalId] = nil
+        reattachCounts[terminalId, default: 0] += 1
+    }
+
+    private func dismissExit(_ terminalId: String) {
+        exitMessages[terminalId] = nil
     }
 
     // MARK: Scripts
 
-    private func scriptsSection(_ scripts: [WorkspaceScript]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Scripts")
-                    .font(.paseo(.footnote, weight: .medium))
-                    .foregroundStyle(Palette.secondaryInk)
-                Spacer(minLength: 8)
-                if store.loadingScriptWorkspaces.contains(workspaceId) {
-                    ProgressView().controlSize(.small).tint(Palette.secondaryInk)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(scripts) { script in
-                        if script.id != scripts.first?.id { ClaudeDivider().padding(.leading, 40) }
-                        scriptRow(script)
-                    }
-                }
-            }
-            .frame(maxHeight: 168)
-        }
-        .padding(.bottom, 4)
-    }
-
-    private func scriptRow(_ script: WorkspaceScript) -> some View {
-        let serviceURL = script.lifecycle == .running ? script.preferredURL.flatMap(URL.init(string:)) : nil
-        return HStack(spacing: 12) {
-            StatusDot(scriptDotKind(script))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(script.scriptName)
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                Text(scriptSubtitle(script))
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if let serviceURL {
-                Button {
-                    openServiceURL(serviceURL)
-                } label: {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.glyph(.regular, weight: .regular))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .frame(width: 36, height: 36)
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("View service \(script.scriptName)")
-                .contextMenu {
-                    Button("View service", systemImage: "arrow.up.right.square") {
-                        openServiceURL(serviceURL)
-                    }
-                    Button("Copy URL", systemImage: "doc.on.doc") {
-                        UIPasteboard.general.string = serviceURL.absoluteString
-                        Haptics.light()
-                    }
-                }
-            }
-            if let terminalId = script.terminalId, terminalIds.contains(terminalId) {
-                Button {
-                    Haptics.selection()
-                    select(terminalId)
-                } label: {
-                    Text("View")
-                        .font(.paseo(.footnote, weight: .medium))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .frame(minHeight: 30)
-                        .padding(.horizontal, 12)
-                        .overlay { Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5) }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Show terminal for \(script.scriptName)")
-            }
-            scriptActionButton(script)
-        }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 48)
-        .contextMenu {
-            Button("Restart", systemImage: "arrow.clockwise") {
-                Task { await restart(script) }
-            }
-            let urlTargets = scriptURLTargets(script)
-            if !urlTargets.isEmpty {
-                Menu("Choose URL", systemImage: "link") {
-                    ForEach(urlTargets) { target in
-                        Button {
-                            UIPasteboard.general.string = target.url
-                            Haptics.light()
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text("Copy \(target.title) URL")
-                                Text(target.hostLabel)
-                                    .font(.caption)
-                                    .foregroundStyle(Palette.secondaryInk)
-                            }
-                        }
-                    }
-                }
-            }
-            if let serviceURL = script.preferredURL {
-                Button("Copy URL", systemImage: "doc.on.doc") {
-                    UIPasteboard.general.string = serviceURL
-                    Haptics.light()
-                }
-            }
-        }
-    }
-
-    /// One URL the daemon advertises for a running service. Follows upstream's COMPAT split:
-    /// `localProxyUrl` (or a loopback-looking `proxyUrl`) is "Memorable", `publicProxyUrl` (or a
-    /// non-loopback `proxyUrl`) is "Reverse proxy", and `port` yields the direct URL. Deduped by
-    /// URL, and shown only when the script is a running service.
-    private struct ScriptURLTarget: Identifiable {
-        let kind: String
-        let title: String
-        let url: String
-        let hostLabel: String
-        var id: String { kind }
-    }
-
-    private func scriptURLTargets(_ script: WorkspaceScript) -> [ScriptURLTarget] {
-        guard script.type == .service, script.lifecycle == .running else { return [] }
-        func isLoopbackURL(_ url: String) -> Bool {
-            guard let host = URLComponents(string: url)?.host?.lowercased() else { return true }
-            return host == "localhost" || host == "127.0.0.1" || host == "::1" || host.hasSuffix(".localhost")
-        }
-        var targets: [ScriptURLTarget] = []
-        func add(_ kind: String, title: String, url: String?) {
-            guard let url, !url.isEmpty, !targets.contains(where: { $0.url == url }) else { return }
-            let host = URLComponents(string: url)?.host ?? url
-            targets.append(ScriptURLTarget(kind: kind, title: title, url: url, hostLabel: host))
-        }
-        let local = script.localProxyUrl
-            ?? (script.proxyUrl.map(isLoopbackURL) == true ? script.proxyUrl : nil)
-        let pub = script.publicProxyUrl
-            ?? (script.proxyUrl.map { !isLoopbackURL($0) } == true ? script.proxyUrl : nil)
-        add("public", title: "Reverse proxy", url: pub)
-        add("paseo", title: "Memorable", url: local)
-        // No connection info on this client to build a true direct URL; localhost is the
-        // honest default (matches upstream when there is no directTcp connection).
-        if let port = script.port {
-            add("direct", title: "Direct", url: "http://localhost:\(port)")
-        }
-        return targets
-    }
-
     /// Restart = stop then start, one action. No confirmation: the script is designed to be
     /// bounced.
-    private func restart(_ script: WorkspaceScript) async {
-        busyScripts.insert(script.scriptName)
-        if script.lifecycle == .running {
-            _ = await store.stopScript(script.scriptName, in: workspaceId)
-        }
-        _ = await store.startScript(script.scriptName, in: workspaceId)
-        busyScripts.remove(script.scriptName)
-    }
-
-    private func scriptSubtitle(_ script: WorkspaceScript) -> String {
-        var parts: [String] = []
-        switch script.lifecycle {
-        case .running: parts.append("Running")
-        case .stopped: parts.append("Stopped")
-        case .unknown: parts.append("Unknown")
-        }
-        switch script.health {
-        case .healthy: parts.append("healthy")
-        case .unhealthy: parts.append("unhealthy")
-        case .unknown, .none: break
-        }
-        if let port = script.port { parts.append(":\(port)") }
-        if script.lifecycle == .stopped, let code = script.exitCode, code != 0 {
-            parts.append("exit \(code)")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func scriptDotKind(_ script: WorkspaceScript) -> StatusDot.State {
-        switch script.lifecycle {
-        case .running:
-            return script.health == .unhealthy ? .failed : .running
-        case .stopped:
-            return (script.exitCode ?? 0) != 0 ? .failed : .idle
-        case .unknown:
-            return .idle
-        }
-    }
-
-    private func scriptActionButton(_ script: WorkspaceScript) -> some View {
-        let busy = busyScripts.contains(script.scriptName)
-        let isRunning = script.lifecycle == .running
-        return Button {
+    private func restart(_ script: WorkspaceScript) {
+        Task {
             busyScripts.insert(script.scriptName)
-            Task {
-                if isRunning {
-                    _ = await store.stopScript(script.scriptName, in: workspaceId)
-                } else {
-                    _ = await store.startScript(script.scriptName, in: workspaceId)
-                }
-                busyScripts.remove(script.scriptName)
+            if script.lifecycle == .running {
+                _ = await store.stopScript(script.scriptName, in: workspaceId)
             }
-        } label: {
-            Group {
-                if busy {
-                    ProgressView().controlSize(.small).tint(Palette.ink)
-                } else {
-                    Image(systemName: isRunning ? "stop.fill" : "play.fill")
-                        .font(.glyph(.small, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                }
-            }
-            .frame(width: 32, height: 32)
-            .background(Palette.chip, in: .circle)
+            _ = await store.startScript(script.scriptName, in: workspaceId)
+            busyScripts.remove(script.scriptName)
         }
-        .buttonStyle(.plain)
-        .disabled(busy)
-        .accessibilityLabel("\(isRunning ? "Stop" : "Start") \(script.scriptName)")
+    }
+
+    private func toggle(_ script: WorkspaceScript) {
+        let isRunning = script.lifecycle == .running
+        busyScripts.insert(script.scriptName)
+        Task {
+            if isRunning {
+                _ = await store.stopScript(script.scriptName, in: workspaceId)
+            } else {
+                _ = await store.startScript(script.scriptName, in: workspaceId)
+            }
+            busyScripts.remove(script.scriptName)
+        }
     }
 
     // MARK: Errors
 
-    /// An error is a banner with a retry (PLAN §RI 22); reopening the directory clears it on
-    /// success, so dismiss and retry do the same thing on the store side.
-    private func errorBanner(_ message: String) -> some View {
-        InlineBanner(
-            .failure, title: message,
-            action: ("Try again", {
-                Task { await store.open(workspaceId: workspaceId, cwd: workspace.cwd) }
-            }),
-            onDismiss: { store.clearError() })
-        .padding(.horizontal, Space.lg)
-        .padding(.vertical, Space.xs)
+    /// Reopening the directory clears the error on success, so dismiss and retry do the same
+    /// thing on the store side.
+    private func reopen() {
+        Task { await store.open(workspaceId: workspaceId, cwd: workspace.cwd) }
     }
 }
 #endif

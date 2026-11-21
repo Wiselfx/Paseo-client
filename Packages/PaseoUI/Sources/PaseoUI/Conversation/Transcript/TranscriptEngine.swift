@@ -156,13 +156,13 @@ final class TranscriptEngine: NSObject {
     }
 
     @objc private func transcriptTapped() {
-        resizeAnimationUntil = Date().addingTimeInterval(0.6)
+        resizeAnimationUntil = Date.now.addingTimeInterval(0.6)
         controller?.dismissKeyboard()
     }
 
     /// A tap just happened and nothing else is moving the content.
     var animatesResizes: Bool {
-        Date() < resizeAnimationUntil && !reduceMotion && !isUserScrolling && !isAnimatingScroll
+        Date.now < resizeAnimationUntil && !reduceMotion && !isUserScrolling && !isAnimatingScroll
             && !isApplyingStructuralChange
     }
 
@@ -190,7 +190,7 @@ final class TranscriptEngine: NSObject {
     @objc private func keyboardWillChangeFrame(_ note: Notification) {
         let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
         let curve = (note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? 7
-        keyboardAnimation = (duration, curve, Date().addingTimeInterval(max(duration, 0.05) + 0.1))
+        keyboardAnimation = (duration, curve, Date.now.addingTimeInterval(max(duration, 0.05) + 0.1))
     }
 
     // MARK: Geometry
@@ -467,8 +467,8 @@ final class TranscriptEngine: NSObject {
         else { return }
         let key = fingerprint(row.turn, column: layout.columnWidth)
         guard heightMemory.record(key: key, height: Double(height)) else { return }
-        guard Date().timeIntervalSince(lastHeightSave) > 5 else { return }
-        lastHeightSave = Date()
+        guard Date.now.timeIntervalSince(lastHeightSave) > 5 else { return }
+        lastHeightSave = Date.now
         TurnHeightStore.save(heightMemory.persisted)
     }
 
@@ -513,7 +513,7 @@ final class TranscriptEngine: NSObject {
             apply()
         } else if let animation, !reduceMotion {
             UIView.animate(animation, changes: apply)
-        } else if let keyboard = keyboardAnimation, keyboard.until > Date(), !reduceMotion {
+        } else if let keyboard = keyboardAnimation, keyboard.until > Date.now, !reduceMotion {
             UIView.animate(
                 withDuration: keyboard.duration, delay: 0,
                 options: [
@@ -571,7 +571,7 @@ final class TranscriptEngine: NSObject {
 
     /// A small downward growth while a turn streams, with nothing else animating the content.
     private func followsStreamGrowth(by delta: CGFloat) -> Bool {
-        let keyboardMoving = (keyboardAnimation?.until ?? .distantPast) > Date()
+        let keyboardMoving = (keyboardAnimation?.until ?? .distantPast) > Date.now
         guard store?.activeTurnId != nil, !reduceMotion, !keyboardMoving else { return false }
         return delta > 0 && delta <= Self.streamFollowMaxStep
     }
@@ -604,7 +604,7 @@ final class TranscriptEngine: NSObject {
         }
         lastDistanceFromContentBottom = m.distanceFromContentBottom
 
-        let now = Date()
+        let now = Date.now
         if now.timeIntervalSince(lastTick) >= Self.readingReportInterval {
             lastTick = now
             reportReadingPosition()
@@ -680,7 +680,7 @@ final class TranscriptEngine: NSObject {
     func revealTurnRail() {
         guard ChatOutlineRail.promptRailEnabled, controller?.outlineAvailable == true else { return }
         if !ui.turnNavVisible { ui.turnNavVisible = true }
-        turnNavDeadline = Date().addingTimeInterval(TranscriptView.turnNavIdleDuration)
+        turnNavDeadline = Date.now.addingTimeInterval(TranscriptView.turnNavIdleDuration)
         guard turnNavTask == nil else { return }
         turnNavTask = Task { [weak self] in
             while let self, let deadline = self.turnNavDeadline, !Task.isCancelled {

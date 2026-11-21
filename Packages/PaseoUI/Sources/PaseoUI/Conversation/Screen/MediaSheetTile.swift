@@ -16,6 +16,9 @@ struct MediaSheetTile: View, Equatable {
     @Environment(\.displayScale) private var displayScale
     @State private var thumb: UIImage?
     @State private var showViewer = false
+    /// The tile's measured width in points, bucketed to 40 so a resize does not reload the
+    /// thumbnail on every frame. Starts at the phone-width tile.
+    @State private var tileWidth: CGFloat = 120
     @Namespace private var zoom
 
     nonisolated static func == (lhs: MediaSheetTile, rhs: MediaSheetTile) -> Bool {
@@ -23,8 +26,9 @@ struct MediaSheetTile: View, Equatable {
     }
 
     var body: some View {
+        // Opening the viewer ticks here; the jump for every other tile is the controller's
+        // `openMediaItem`, which plays its own haptic.
         Button {
-            Haptics.selection()
             if isRemoteImage {
                 showViewer = true
             } else {
@@ -34,8 +38,14 @@ struct MediaSheetTile: View, Equatable {
             tileContent
         }
         .buttonStyle(.plain)
+        .paseoFeedback(.selection, trigger: showViewer) { _, new in new }
         .accessibilityLabel("\(item.kind.accessibilityNoun), \(item.title)")
-        .task(id: thumbKey) { await loadThumb() }
+        .onGeometryChange(for: CGFloat.self) {
+            ($0.size.width / 40).rounded(.up) * 40
+        } action: { width in
+            if width > 0 { tileWidth = width }
+        }
+        .task(id: "\(thumbKey)-\(Int(tileWidth))") { await loadThumb() }
         .fullScreenCover(isPresented: $showViewer) {
             if let url = remoteURL {
                 MediaViewerView(
@@ -70,29 +80,31 @@ struct MediaSheetTile: View, Equatable {
 
     @ViewBuilder
     private var tileContent: some View {
-        ZStack {
-            Rectangle()
-                .fill(Palette.codeSurface)
-            if let thumb {
-                Image(uiImage: thumb)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Image(systemName: item.kind.glyphName)
-                    .font(.glyph(.large, weight: .light))
-                    .foregroundStyle(Palette.secondaryInk)
+        // The square is the layout; the image is an overlay, so a `.fill` thumbnail that is
+        // wider than the square is clipped instead of widening the tile past its column.
+        Rectangle()
+            .fill(Palette.codeSurface)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let thumb {
+                    Image(uiImage: thumb)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: item.kind.glyphName)
+                        .font(.glyph(.large, weight: .light))
+                        .foregroundStyle(Palette.secondaryInk)
+                }
             }
-        }
-        .aspectRatio(1, contentMode: .fit)
-        .clipShape(.rect(cornerRadius: Radius.md))
-        .overlay {
-            if showsPlayBadge {
-                Image(systemName: "play.circle.fill")
-                    .font(.glyph(.large, weight: .regular))
-                    .foregroundStyle(.white)
-                    .shadow(radius: 2)
+            .clipShape(.rect(cornerRadius: Radius.md))
+            .overlay {
+                if showsPlayBadge {
+                    Image(systemName: "play.circle.fill")
+                        .font(.glyph(.large, weight: .regular))
+                        .foregroundStyle(.white)
+                        .shadow(radius: 2)
+                }
             }
-        }
     }
 
     private var showsPlayBadge: Bool {
@@ -101,7 +113,7 @@ struct MediaSheetTile: View, Equatable {
 
     private func loadThumb() async {
         if let url = remoteURL {
-            let pixelWidth = MediaSizing.pixelWidth(points: 120, scale: displayScale)
+            let pixelWidth = MediaSizing.pixelWidth(points: tileWidth, scale: displayScale)
             for await event in await MediaPipeline.shared.events(
                 source: .remote(url), pixelWidth: pixelWidth)
             {

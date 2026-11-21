@@ -59,13 +59,14 @@ struct RichSVGCard: View {
     var body: some View {
         PaseoCard(content:
             VStack(alignment: .leading, spacing: 10) {
-                header
+                RichCardSourceHeader(title: "SVG", showSource: $showSource)
                 if showSource {
-                    source
+                    RichSourcePanel(code: code)
                 } else {
                     drawing
                     if isTall {
-                        openFullScreenButton
+                        RichOpenButton(
+                            accessibilityText: "Open SVG full screen", action: openArtifactPage)
                     }
                 }
             })
@@ -96,41 +97,19 @@ struct RichSVGCard: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            Text("SVG")
-                .font(ProseFonts.sans(size: 12, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
-            Button {
-                showSource.toggle()
-            } label: {
-                Text(showSource ? "Hide source" : "View source")
-                    .font(ProseFonts.mono(size: 11))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
-                    .overlay(Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showSource ? "Hide source" : "View source")
-        }
-    }
-
     @ViewBuilder private var drawing: some View {
         if let drawing = resolvedImage {
-            Image(uiImage: drawing)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: heightCap)
-                .contentShape(.rect)
-                .matchedTransitionSource(id: contentKey, in: zoom)
-                .onTapGesture {
-                    showViewer = true
-                }
-                .accessibilityLabel("SVG drawing, tap to open")
-                .accessibilityAddTraits(.isButton)
+            Button(action: openViewer) {
+                Image(uiImage: drawing)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: heightCap)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .matchedTransitionSource(id: contentKey, in: zoom)
+            .accessibilityLabel("SVG drawing")
+            .accessibilityHint("Opens the drawing full screen")
         } else {
             Rectangle()
                 .fill(Palette.codeSurface)
@@ -180,51 +159,16 @@ struct RichSVGCard: View {
         image = rendered
     }
 
-    private var source: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ScrollView {
-                Text(code)
-                    .font(ProseFonts.mono(size: 11))
-                    .foregroundStyle(Palette.ink)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 260)
-            HStack {
-                Spacer(minLength: 0)
-                Button {
-                    if let richActions {
-                        richActions.copyText(code)
-                    } else {
-                        UIPasteboard.general.string = code
-                        Haptics.light()
-                    }
-                } label: {
-                    Label("Copy source", systemImage: "doc.on.doc")
-                        .font(ProseFonts.sans(size: 12, weight: .medium))
-                        .foregroundStyle(Palette.secondaryInk)
-                }
-                .buttonStyle(.plain)
-            }
-        }
+    private func openViewer() {
+        showViewer = true
     }
 
     /// The tall drawing's home: the artifact page shows the whole vector, at any width.
-    private var openFullScreenButton: some View {
-        Button {
-            if let richActions {
-                richActions.openArtifact(
-                    ArtifactDocument(kind: .svg(source: code), shareImage: resolvedImage))
-            }
-        } label: {
-            Label("Open", systemImage: "arrow.up.left.and.arrow.down.right")
-                .font(ProseFonts.sans(size: 12, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .contentShape(.rect)
+    private func openArtifactPage() {
+        if let richActions {
+            richActions.openArtifact(
+                ArtifactDocument(kind: .svg(source: code), shareImage: resolvedImage))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Open SVG full screen")
     }
 }
 #endif

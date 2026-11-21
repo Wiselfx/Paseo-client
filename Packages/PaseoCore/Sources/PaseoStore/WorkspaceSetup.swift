@@ -213,11 +213,9 @@ public final class WorkspaceSetupObservationStore {
                 guard let self else { return }
                 guard let response = try? await client.send(
                     WorkspaceSetupStatusRequest(workspaceId: workspaceId)) else { continue }
-                await MainActor.run {
-                    self.applySnapshot(response.snapshot, for: workspaceId)
-                }
+                self.applySnapshot(response.snapshot, for: workspaceId)
                 if response.snapshot?.status != .running {
-                    await MainActor.run { self.stopPolling(workspaceId) }
+                    self.stopPolling(workspaceId)
                     return
                 }
             }

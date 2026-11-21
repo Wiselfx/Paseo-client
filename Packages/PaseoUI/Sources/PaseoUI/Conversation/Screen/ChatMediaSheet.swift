@@ -16,7 +16,6 @@ import UIKit
 /// reads only `store.mediaIndex` (R-1); the jump verb arrives on `RichActions`.
 struct ChatMediaSheet: View {
     @Bindable var store: ConversationStore
-    @Environment(\.richActions) private var richActions
     @Environment(\.dismiss) private var dismiss
 
     @State private var tab = MediaSheetTab.media
@@ -36,86 +35,21 @@ struct ChatMediaSheet: View {
             .padding(.vertical, Space.sm)
             switch tab {
             case .media:
-                mediaGrid(items.filter(\.isMedia))
+                MediaSheetGrid(items: items.filter(\.isMedia))
             case .links:
-                linkRows(items.filter { $0.kind == .link })
+                MediaSheetList(
+                    items: items.filter { $0.kind == .link },
+                    emptySymbol: "link", emptyTitle: "No links yet",
+                    emptyMessage: "Links shared in this chat appear here.")
             case .files:
-                fileRows(items.filter { $0.kind == .file })
+                MediaSheetList(
+                    items: items.filter { $0.kind == .file },
+                    emptySymbol: "doc", emptyTitle: "No files yet",
+                    emptyMessage: "Files shared in this chat appear here.")
             }
         }
         .background(Palette.background)
         .presentationDetents([.medium, .large])
-    }
-
-    // MARK: Media grid
-
-    private func mediaGrid(_ items: [ConversationMediaItem]) -> some View {
-        Group {
-            if items.isEmpty {
-                EmptyState(
-                    systemImage: "photo.on.rectangle",
-                    title: "No media yet",
-                    message: "Images, diagrams and recordings appear here as they arrive.")
-            } else {
-                ScrollView {
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(), spacing: Metrics.galleryTileSpacing),
-                            GridItem(.flexible(), spacing: Metrics.galleryTileSpacing),
-                            GridItem(.flexible(), spacing: Metrics.galleryTileSpacing),
-                        ],
-                        spacing: Metrics.galleryTileSpacing
-                    ) {
-                        ForEach(items) { item in
-                            MediaSheetTile(item: item)
-                        }
-                    }
-                    .padding(Space.lg)
-                }
-            }
-        }
-    }
-
-    // MARK: Link and file rows
-
-    private func linkRows(_ items: [ConversationMediaItem]) -> some View {
-        Group {
-            if items.isEmpty {
-                EmptyState(
-                    systemImage: "link",
-                    title: "No links yet",
-                    message: "Links shared in this chat appear here.")
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(items) { item in
-                            MediaSheetRow(item: item)
-                        }
-                    }
-                    .padding(.vertical, Space.sm)
-                }
-            }
-        }
-    }
-
-    private func fileRows(_ items: [ConversationMediaItem]) -> some View {
-        Group {
-            if items.isEmpty {
-                EmptyState(
-                    systemImage: "doc",
-                    title: "No files yet",
-                    message: "Files shared in this chat appear here.")
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(items) { item in
-                            MediaSheetRow(item: item)
-                        }
-                    }
-                    .padding(.vertical, Space.sm)
-                }
-            }
-        }
     }
 }
 extension ConversationMediaItem {
@@ -124,34 +58,34 @@ extension ConversationMediaItem {
     var isMedia: Bool {
         switch kind {
         case .image, .video, .audio, .diagram, .artifact:
-            return true
+            true
         case .link, .file:
-            return false
+            false
         }
     }
 }
 extension ConversationMediaItem.Kind {
     var glyphName: String {
         switch self {
-        case .image: return "photo"
-        case .video: return "film"
-        case .audio: return "waveform"
-        case .diagram: return "chart.bar.doc"
-        case .artifact: return "square.on.square.screens"
-        case .link: return "link"
-        case .file: return "doc"
+        case .image: "photo"
+        case .video: "film"
+        case .audio: "waveform"
+        case .diagram: "chart.bar.doc"
+        case .artifact: "square.on.square.screens"
+        case .link: "link"
+        case .file: "doc"
         }
     }
 
     var accessibilityNoun: String {
         switch self {
-        case .image: return "Image"
-        case .video: return "Video"
-        case .audio: return "Audio"
-        case .diagram: return "Diagram"
-        case .artifact: return "Visualization"
-        case .link: return "Link"
-        case .file: return "File"
+        case .image: "Image"
+        case .video: "Video"
+        case .audio: "Audio"
+        case .diagram: "Diagram"
+        case .artifact: "Visualization"
+        case .link: "Link"
+        case .file: "File"
         }
     }
 }

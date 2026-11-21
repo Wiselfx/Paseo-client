@@ -91,6 +91,7 @@ struct SandboxedHTMLView: UIViewRepresentable {
         let rulesReady = !awaitContentRules || contentRuleList != nil
         if rulesReady, context.coordinator.loadedHTML != html {
             context.coordinator.loadedHTML = html
+            context.coordinator.loadedDocument = false
             webView.loadHTMLString(html, baseURL: nil)
         }
     }
@@ -194,8 +195,10 @@ struct SandboxedHTMLView: UIViewRepresentable {
 
         /// The first main-frame load is the document itself and is allowed; every later one (a
         /// link, a form post, a redirect) is cancelled — or, for a file preview, handed to Safari.
-        /// Sub-frames are part of the document and load normally.
-        private var loadedDocument = false
+        /// Sub-frames are part of the document and load normally. `updateUIView` resets it before
+        /// each `loadHTMLString`, so a reload or a scheme rebuild is the document again, not a
+        /// link to cancel.
+        var loadedDocument = false
 
         func webView(
             _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction

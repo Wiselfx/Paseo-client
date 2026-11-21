@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
-import UIKit
 
 /// Settings → Agents → Agent profiles: the host-wide named launch bundles. List, add, edit,
 /// reorder, delete. Persisted by writing the whole list to the daemon config's `agentProfiles`
@@ -19,7 +18,7 @@ struct AgentProfilesSection: View {
             if session.hostSettings.supportsProfiles {
                 sectionContent
             } else {
-                sectionLabel("Agent profiles")
+                SettingsSectionLabel(title: "Agent profiles")
                 RowGroup {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Not available on this host")
@@ -29,8 +28,8 @@ struct AgentProfilesSection: View {
                             .foregroundStyle(Palette.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, Space.lg)
+                    .padding(.vertical, Space.md)
                     .frame(minHeight: 52)
                 }
             }
@@ -42,14 +41,11 @@ struct AgentProfilesSection: View {
             "Delete profile?",
             item: $pendingDelete,
             titleVisibility: .visible
-        ) { _ in
-            if let profile = pendingDelete {
-                Button("Delete \(profile.name)", role: .destructive) {
-                    remove(profile)
-                    pendingDelete = nil
-                }
+        ) { profile in
+            Button("Delete \(profile.name)", role: .destructive) {
+                remove(profile)
             }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
+            Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("This removes the profile from this host. Agents already created are not affected.")
         }
@@ -58,7 +54,7 @@ struct AgentProfilesSection: View {
     // MARK: List
 
     @ViewBuilder private var sectionContent: some View {
-        sectionLabel("Agent profiles")
+        SettingsSectionLabel(title: "Agent profiles")
         RowGroup {
             if profiles.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -69,128 +65,41 @@ struct AgentProfilesSection: View {
                         .foregroundStyle(Palette.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, Space.lg)
+                .padding(.vertical, Space.md)
                 .frame(minHeight: 52, alignment: .leading)
             } else {
                 ForEach(profiles.enumerated(), id: \.element.id) { index, profile in
-                    profileRow(profile, index: index)
+                    AgentProfileRow(
+                        profile: profile,
+                        catalog: session.agentControl,
+                        isFirst: index == 0,
+                        isLast: index == profiles.count - 1,
+                        onMove: { move(profile: profile, offset: $0) },
+                        onEdit: { editing = ProfileEditTarget(mode: .edit, profile: profile) },
+                        onDelete: { pendingDelete = profile }
+                    )
                     if index < profiles.count - 1 { RowDivider() }
                 }
             }
             RowDivider()
-            addRow
+            AddProfileRow {
+                editing = ProfileEditTarget(mode: .create, profile: nil)
+            }
         }
         if let error = session.hostSettings.error {
             Text(error)
                 .font(.paseo(.footnote))
                 .foregroundStyle(Palette.failureInk)
-                .padding(.leading, 16)
+                .padding(.leading, Space.lg)
         }
         Text("Stored on this host, not on this device.")
             .font(.paseo(.footnote))
             .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
+            .padding(.leading, Space.lg)
     }
 
     private var profiles: [AgentProfile] { session.hostSettings.profiles }
-
-    private func profileRow(_ profile: AgentProfile, index: Int) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text(profile.name)
-                        .font(.paseo(.body))
-                        .lineLimit(1)
-                        .accessibilityIdentifier("settings.profiles.name.\(profile.id)")
-                    Text(summary(for: profile))
-                        .font(.paseo(.codeCaption))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                if let notes = profile.notes, !notes.isEmpty {
-                    Text(notes)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(2)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            actions(profile: profile, index: index)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .frame(minHeight: 56)
-    }
-
-    private func actions(profile: AgentProfile, index: Int) -> some View {
-        HStack(spacing: 0) {
-            moveButton(profile: profile, offset: -1, isFirst: index == 0)
-            moveButton(profile: profile, offset: 1, isLast: index == profiles.count - 1)
-            Button {
-                editing = ProfileEditTarget(mode: .edit, profile: profile)
-            } label: {
-                Image(systemName: "pencil")
-                    .font(.glyph(.regular, weight: .light))
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Edit \(profile.name)")
-            .accessibilityIdentifier("settings.profiles.edit.\(profile.id)")
-            Button {
-                pendingDelete = profile
-            } label: {
-                Image(systemName: "trash")
-                    .font(.glyph(.regular, weight: .light))
-                    .foregroundStyle(Palette.failureInk)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Delete \(profile.name)")
-            .accessibilityIdentifier("settings.profiles.delete.\(profile.id)")
-        }
-    }
-
-    private func moveButton(profile: AgentProfile, offset: Int, isFirst: Bool = false, isLast: Bool = false) -> some View {
-        Button {
-            Haptics.light()
-            move(profile: profile, offset: offset)
-        } label: {
-            Image(systemName: offset < 0 ? "chevron.up" : "chevron.down")
-                .font(.glyph(.regular, weight: .regular))
-                .foregroundStyle((isFirst || isLast) ? Palette.tertiaryInk.opacity(0.4) : Palette.tertiaryInk)
-                .frame(width: 44, height: 44)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .disabled(isFirst || isLast)
-        .accessibilityLabel(offset < 0 ? "Move \(profile.name) up" : "Move \(profile.name) down")
-        .accessibilityIdentifier("settings.profiles.move.\(offset < 0 ? "up" : "down").\(profile.id)")
-    }
-
-    private var addRow: some View {
-        Button {
-            editing = ProfileEditTarget(mode: .create, profile: nil)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "plus.circle")
-                    .font(.glyph(.large, weight: .light))
-                    .foregroundStyle(Palette.ink)
-                Text("Add profile")
-                    .font(.paseo(.body))
-                    .foregroundStyle(Palette.ink)
-                Spacer(minLength: 8)
-            }
-            .padding(.horizontal, 16)
-            .frame(minHeight: 52)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("settings.profiles.add")
-    }
 
     // MARK: Mutations
 
@@ -205,50 +114,6 @@ struct AgentProfilesSection: View {
 
     private func remove(_ profile: AgentProfile) {
         Task { _ = await session.hostSettings.saveProfiles(profiles.filter { $0.id != profile.id }) }
-    }
-
-    // MARK: Summary line
-
-    private func summary(for profile: AgentProfile) -> String {
-        var parts = [profile.provider]
-        if let model = profile.model, !model.isEmpty {
-            parts.append(modelName(profile.provider, model))
-        }
-        if let modeId = profile.modeId, !modeId.isEmpty,
-            let mode = modeLabel(profile.provider, modeId) {
-            parts.append(mode)
-        }
-        if let thinkingId = profile.thinkingOptionId, !thinkingId.isEmpty {
-            parts.append(thinkingLabel(profile.provider, model: profile.model, optionId: thinkingId))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func modelName(_ providerID: String, _ modelID: String) -> String {
-        session.agentControl.models(forProvider: providerID).first { $0.id == modelID }?.label ?? modelID
-    }
-
-    private func modeLabel(_ providerID: String, _ modeId: String) -> String? {
-        session.agentControl.modes(forProvider: providerID).first { $0.id == modeId }?.label ?? modeId
-    }
-
-    private func thinkingLabel(_ providerID: String, model: String?, optionId: String) -> String {
-        let effectiveModel = model ?? session.agentControl.defaultModel(forProvider: providerID)?.id
-        let options = effectiveModel.map {
-            session.agentControl.thinkingOptions(forProvider: providerID, modelId: $0)
-        } ?? []
-        return options.first { $0.id == optionId }?.label ?? optionId
-    }
-
-    // MARK: Shared bits
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.callout))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.leading, 16)
-            .padding(.top, 8)
-            .padding(.bottom, -8)
     }
 }
 #endif

@@ -31,7 +31,7 @@ struct WorkspaceFilesDirectoryList: View {
     /// Hidden files (dotfiles) are filtered out unless this is on; persisted per device.
     @AppStorage("paseo.files.showHidden") private var showHidden = false
     /// List ordering; folders always come first regardless of key. Persisted per device.
-    @AppStorage("paseo.files.sortOrder") private var sortRaw = "name"
+    @AppStorage("paseo.files.sortOrder") private var sort: FileSort = .name
     @State private var namePrompt: NamePrompt?
     @State private var nameText = ""
     @State private var pendingDelete: FileExplorerEntry?
@@ -39,6 +39,7 @@ struct WorkspaceFilesDirectoryList: View {
     @State private var shareTarget: SharePayload?
     @State private var savingToFilesPath: String?
     @State private var exportDocument: WorkspaceExportDocument?
+    @State private var isExporting = false
     @State private var exportType: UTType?
     @State private var exportName: String?
     /// The flash-highlighted row (workspace-relative path), if any; clears after a beat.
@@ -47,8 +48,6 @@ struct WorkspaceFilesDirectoryList: View {
     @State private var listMemo = FileListMemo()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.toast) private var toast
-    /// "Mention in chat" from a row's long-press; nil disables the action.
-    @Environment(\.mentionInChat) private var mentionInChat
 
     private var files: WorkspaceFiles { checkout.files }
 
@@ -60,28 +59,26 @@ struct WorkspaceFilesDirectoryList: View {
         }
         // Every pushed folder draws its own header row; the system bar would duplicate it.
         .toolbarVisibility(.hidden, for: .navigationBar)
-        .paseoFeedback(.selection, trigger: sortRaw)
+        .paseoFeedback(.selection, trigger: sort)
         // The page owns the canvas too: a NavigationStack's own background must never be what
         // shows in dark or pure black (E2 §5).
         .background(Palette.panel)
         .task { await refresh() }
         .onChange(of: listing) { _, _ in syncReveal() }
         .onChange(of: revealTarget) { _, _ in syncReveal() }
-        .alert(namePromptTitle, isPresented: namePromptBinding) {
-            TextField(namePromptPlaceholder, text: $nameText)
+        .alert(namePromptTitle, item: $namePrompt) { prompt in
+            TextField(prompt.placeholder, text: $nameText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-            Button(namePromptAction, action: submitNamePrompt)
+            Button(prompt.actionTitle) { submitNamePrompt(prompt) }
             Button("Cancel", role: .cancel) {}
         }
         .sheet(item: $shareTarget) { target in
             ActivityView(items: [target.url])
         }
         .fileExporter(
-            isPresented: Binding(
-                get: { exportDocument != nil },
-                set: { if !$0 { exportDocument = nil } }),
-            document: exportDocument ?? WorkspaceExportDocument(data: Data()),
+            isPresented: $isExporting,
+            document: exportDocument,
             contentType: exportType ?? .data,
             defaultFilename: exportName
         ) { result in
@@ -96,16 +93,15 @@ struct WorkspaceFilesDirectoryList: View {
                 toast?.show("Couldn't save: \(error.localizedDescription)")
             }
         }
+        .onChange(of: isExporting) { _, exporting in
+            if !exporting { exportDocument = nil }
+        }
         .confirmationDialog(
             "Delete “\(pendingDelete?.name ?? "")”?",
             item: $pendingDelete,
             titleVisibility: .visible
-        ) { _ in
-            Button("Delete", role: .destructive) {
-                guard let target = pendingDelete else { return }
-                pendingDelete = nil
-                Task { await deleteEntry(target) }
-            }
+        ) { entry in
+            Button("Delete", role: .destructive) { Task { await deleteEntry(entry) } }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("This permanently deletes it. This cannot be undone.")
@@ -137,35 +133,22 @@ struct WorkspaceFilesDirectoryList: View {
             // here, and the actions stay trailing-aligned (E2b §12). A subfolder shows its back
             // folder, one line, truncated in the middle.
             Spacer(minLength: Space.sm)
-            Menu {
-                ForEach(FileSort.allCases, id: \.self) { choice in
-                    Button {
-                        sortRaw = choice.rawValue
-                    } label: {
-                        if currentSort == choice {
-                            Label(choice.title, systemImage: "checkmark")
-                        } else {
-                            Text(choice.title)
-                        }
+            Menu("Sort by", systemImage: "arrow.up.arrow.down") {
+                Picker("Sort by", selection: $sort) {
+                    ForEach(FileSort.allCases, id: \.self) { choice in
+                        Text(choice.title).tag(choice)
                     }
                 }
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(.glyph(.small, weight: .medium))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
+                .pickerStyle(.inline)
             }
-            .accessibilityLabel("Sort by")
+            .labelStyle(.iconOnly)
+            .font(.glyph(.small, weight: .medium))
+            .foregroundStyle(Palette.secondaryInk)
+            .frame(width: 44, height: 44)
+            .contentShape(.rect)
             Menu {
-                Button("New file", systemImage: "doc") {
-                    nameText = ""
-                    namePrompt = .newFile(parent: relPath)
-                }
-                Button("New folder", systemImage: "folder") {
-                    nameText = ""
-                    namePrompt = .newFolder(parent: relPath)
-                }
+                Button("New file", systemImage: "doc") { promptNewFile(in: relPath) }
+                Button("New folder", systemImage: "folder") { promptNewFolder(in: relPath) }
             } label: {
                 Image(systemName: "plus")
                     .font(.glyph(.regular, weight: .medium))
@@ -228,7 +211,7 @@ struct WorkspaceFilesDirectoryList: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .success(let entries):
             let visible = listMemo.visible(
-                entries, showHidden: showHidden, sort: currentSort
+                entries, showHidden: showHidden, sort: sort
             ) { sortedVisible(entries) }
             if visible.isEmpty {
                 emptyView
@@ -243,8 +226,6 @@ struct WorkspaceFilesDirectoryList: View {
         return entries.count(where: { $0.name.hasPrefix(".") })
     }
 
-    private var currentSort: FileSort { FileSort(rawValue: sortRaw) ?? .name }
-
     /// Folders first always, then the chosen key: name (A–Z), modified (newest first), size (largest first).
     private func sortedVisible(_ entries: [FileExplorerEntry]) -> [FileExplorerEntry] {
         let visible = entries.filter { showHidden || !$0.name.hasPrefix(".") }
@@ -254,7 +235,7 @@ struct WorkspaceFilesDirectoryList: View {
     }
 
     private func sortEntries(_ entries: [FileExplorerEntry]) -> [FileExplorerEntry] {
-        switch currentSort {
+        switch sort {
         case .name:
             return entries.sorted {
                 $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
@@ -277,13 +258,34 @@ struct WorkspaceFilesDirectoryList: View {
                     // stack identifies rows by id alone; the first row's divider is hidden, not
                     // left out.
                     ForEach(visible.enumerated(), id: \.element.id) { index, entry in
+                        let relativePath = relative(entry)
                         VStack(spacing: 0) {
                             ClaudeDivider()
                                 .padding(.leading, 46)
                                 .opacity(index > 0 ? 1 : 0)
-                            row(entry)
+                            FileEntryRow(
+                                entry: entry,
+                                relativePath: relativePath,
+                                absolutePath: absolute(entry),
+                                subtitle: meta(entry),
+                                isRevealed: revealedRow == relativePath,
+                                isBusy: sharingPath == entry.path || savingToFilesPath == entry.path,
+                                onOpen: {
+                                    if entry.isDirectory {
+                                        onOpenDirectory(entry.path)
+                                    } else {
+                                        onOpenFile(entry.path)
+                                    }
+                                },
+                                onShare: { share(entry) },
+                                onSaveToFiles: { saveToFiles(entry) },
+                                onRename: { promptRename(entry) },
+                                onDuplicate: { Task { await duplicate(entry) } },
+                                onNewFile: { promptNewFile(in: entry.path) },
+                                onNewFolder: { promptNewFolder(in: entry.path) },
+                                onDelete: { pendingDelete = entry })
                         }
-                        .id(relative(entry))
+                        .id(relativePath)
                     }
                 }
                 .scrollTargetLayout()
@@ -306,65 +308,6 @@ struct WorkspaceFilesDirectoryList: View {
         }
     }
 
-    private func row(_ entry: FileExplorerEntry) -> some View {
-        let revealed = revealedRow == relative(entry)
-        return ListRow(
-            title: entry.name,
-            subtitle: meta(entry),
-            systemImage: entry.isDirectory ? "folder" : "doc",
-            accessory: accessory(entry),
-            action: {
-                if entry.isDirectory { onOpenDirectory(entry.path) } else { onOpenFile(entry.path) }
-            }
-        )
-        .background(revealed ? Palette.chip.opacity(0.9) : Color.clear)
-        .draggable(relative(entry))
-        .contextMenu {
-            if !entry.isDirectory {
-                Button("Add to chat", systemImage: "at") {
-                    mentionInChat?(relative(entry))
-                }
-            }
-            Button("Share…", systemImage: "square.and.arrow.up") {
-                share(entry)
-            }
-            Button("Save to Files…", systemImage: "square.and.arrow.down") {
-                saveToFiles(entry)
-            }
-            Button("Rename…", systemImage: "pencil") {
-                nameText = entry.name
-                namePrompt = .rename(path: entry.path, currentName: entry.name)
-            }
-            Button("Duplicate", systemImage: "plus.square.on.square") {
-                Task { await duplicate(entry) }
-            }
-            if entry.isDirectory {
-                Button("New file", systemImage: "doc") {
-                    nameText = ""
-                    namePrompt = .newFile(parent: entry.path)
-                }
-                Button("New folder", systemImage: "folder") {
-                    nameText = ""
-                    namePrompt = .newFolder(parent: entry.path)
-                }
-            }
-            Button("Delete…", systemImage: "trash", role: .destructive) {
-                pendingDelete = entry
-            }
-            Button("Copy path", systemImage: "doc.on.doc") {
-                Clipboard.copy(absolute(entry), toast: toast)
-            }
-            Button("Copy relative path", systemImage: "doc.on.doc") {
-                Clipboard.copy(relative(entry), toast: toast)
-            }
-        }
-    }
-
-    private func accessory(_ entry: FileExplorerEntry) -> ListRow.Accessory {
-        if sharingPath == entry.path || savingToFilesPath == entry.path { return .progress }
-        return entry.isDirectory ? .chevron : .none
-    }
-
     private var emptyView: some View {
         let allHidden = !showHidden && hiddenCount > 0
         let action: (title: String, run: () -> Void)? = allHidden
@@ -377,7 +320,11 @@ struct WorkspaceFilesDirectoryList: View {
             systemImage: "folder",
             title: allHidden ? "No visible files" : "Empty folder",
             message: allHidden
-                ? "\(PaseoFormat.integer(hiddenCount)) hidden \(hiddenCount == 1 ? "item is" : "items are") dot-prefixed."
+                ? String(
+                    AttributedString(
+                        localized: "^[\(hiddenCount) hidden item](inflect: true) not shown",
+                        bundle: #bundle
+                    ).characters)
                 : "There is nothing to show here yet.",
             action: action)
         .padding(.horizontal, Space.xl)
@@ -424,19 +371,24 @@ struct WorkspaceFilesDirectoryList: View {
     }
 
     private var namePromptTitle: String { namePrompt?.title ?? "" }
-    private var namePromptAction: String { namePrompt?.actionTitle ?? "OK" }
-    private var namePromptPlaceholder: String { namePrompt?.placeholder ?? "Name" }
 
-    private var namePromptBinding: Binding<Bool> {
-        Binding(
-            get: { namePrompt != nil },
-            set: { if !$0 { namePrompt = nil } })
+    private func promptNewFile(in parent: String) {
+        nameText = ""
+        namePrompt = .newFile(parent: parent)
     }
 
-    private func submitNamePrompt() {
-        guard let prompt = namePrompt else { return }
+    private func promptNewFolder(in parent: String) {
+        nameText = ""
+        namePrompt = .newFolder(parent: parent)
+    }
+
+    private func promptRename(_ entry: FileExplorerEntry) {
+        nameText = entry.name
+        namePrompt = .rename(path: entry.path, currentName: entry.name)
+    }
+
+    private func submitNamePrompt(_ prompt: NamePrompt) {
         let name = nameText.trimmingCharacters(in: .whitespacesAndNewlines)
-        namePrompt = nil
         guard !name.isEmpty else { return }
         Haptics.light()
         Task {
@@ -494,6 +446,7 @@ struct WorkspaceFilesDirectoryList: View {
                 exportName = payload.displayName
                 exportType = payload.contentType
                 exportDocument = WorkspaceExportDocument(data: payload.data)
+                isExporting = true
             } catch let error as WorkspaceShare.ShareError {
                 if case .unreadable(let message) = error { showToast(message) }
             } catch {

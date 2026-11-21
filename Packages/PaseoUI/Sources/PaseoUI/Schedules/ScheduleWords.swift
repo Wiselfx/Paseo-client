@@ -57,12 +57,12 @@ enum ScheduleWords {
         return withTimezone(words, timezone)
     }
 
-    /// True when all five fields parse under the grammar. Used to reject a custom cadence at the form.
     /// A minute as two digits, "05".
     static func twoDigits(_ value: Int) -> String {
         value.formatted(.number.precision(.integerLength(2)).grouping(.never))
     }
 
+    /// True when all five fields parse under the grammar. Used to reject a custom cadence at the form.
     static func isValid(cron expression: String) -> Bool {
         parse(expression) != nil
     }
@@ -171,7 +171,7 @@ enum ScheduleWords {
         let dowAny = dayOfWeek == .any
 
         func clock(_ minuteValue: Int, _ hourValue: Int) -> String {
-            String(format: "%d:%02d", hourValue, minuteValue)
+            "\(hourValue):\(Self.twoDigits(minuteValue))"
         }
 
         func exactMinute() -> Int? {

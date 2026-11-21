@@ -247,7 +247,7 @@ public enum DeepLink: Sendable, Equatable {
     }
 
     private static func decodeQueryComponent(_ value: String) -> String? {
-        value.replacingOccurrences(of: "+", with: " ").removingPercentEncoding
+        value.replacing("+", with: " ").removingPercentEncoding
     }
 
     // MARK: Workspace ids and paths (upstream host-routes.ts:192-253)
@@ -289,8 +289,8 @@ public enum DeepLink: Sendable, Equatable {
 
     private static func base64URLData(_ value: String) -> Data? {
         guard !value.isEmpty, value.allSatisfy(isBase64URLCharacter) else { return nil }
-        var base64 = value.replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
+        var base64 = value.replacing("-", with: "+")
+            .replacing("_", with: "/")
         let padding = (4 - base64.count % 4) % 4
         if padding > 0 { base64 += String(repeating: "=", count: padding) }
         return Data(base64Encoded: base64)
@@ -299,9 +299,9 @@ public enum DeepLink: Sendable, Equatable {
     private static func base64URLString(_ value: String) -> String? {
         guard let data = value.data(using: .utf8) else { return nil }
         return data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
+            .replacing("+", with: "-")
+            .replacing("/", with: "_")
+            .replacing("=", with: "")
     }
 
     /// Upstream's `tryDecodeBase64UrlNoPadUtf8`: the decoded string must re-encode to the input,
@@ -380,12 +380,12 @@ public struct DeepLinkHost: Identifiable, Sendable, Equatable {
         return ordered
     }
 
-    /// Label or server id, case-insensitive substring; empty query matches everything.
+    /// Label or server id, case- and diacritic-insensitive substring; empty query matches everything.
     public static func matches(_ host: DeepLinkHost, query: String) -> Bool {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return true }
-        if host.label.lowercased().contains(normalized) { return true }
-        return host.serverID?.lowercased().contains(normalized) ?? false
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        if host.label.localizedStandardContains(trimmed) { return true }
+        return host.serverID?.localizedStandardContains(trimmed) ?? false
     }
 }
 

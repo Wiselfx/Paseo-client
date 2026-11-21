@@ -20,6 +20,9 @@ struct WorkOutcome: View {
         }
     }
 
+    /// The outcome as it is spoken, for a row whose label replaces this view.
+    var accessibilityText: String? { words?.text }
+
     var body: some View {
         if let words {
             Text(words.text)

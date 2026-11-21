@@ -180,7 +180,7 @@ public struct MascotStateMachine: Sendable, Equatable {
         var kind: Kind
     }
 
-    public init(now: Date = Date()) {
+    public init(now: Date = .now) {
         lastActivity = now
         tierSince = .distantPast
     }

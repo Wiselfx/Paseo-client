@@ -18,6 +18,7 @@ struct PaseoCardMenuModifier: ViewModifier {
     let filePath: String?
 
     @Environment(\.richActions) private var richActions
+    @Environment(\.openURL) private var openURL
 
     func body(content: Content) -> some View {
         content.contextMenu {
@@ -29,32 +30,13 @@ struct PaseoCardMenuModifier: ViewModifier {
                     Button("Share", systemImage: "square.and.arrow.up") { onShare() }
                 }
                 if let copyTitle, let copyText {
-                    Button(copyTitle, systemImage: "doc.on.doc") {
-                        if let richActions {
-                            richActions.copyText(copyText)
-                        } else {
-                            UIPasteboard.general.string = copyText
-                            Haptics.light()
-                        }
-                    }
+                    Button(copyTitle, systemImage: "doc.on.doc") { copy(copyText) }
                 }
                 if let saveImage {
-                    Button("Save to Photos", systemImage: "photo") {
-                        if let richActions {
-                            richActions.saveImage(saveImage)
-                        } else {
-                            UIImageWriteToSavedPhotosAlbum(saveImage, nil, nil, nil)
-                        }
-                    }
+                    Button("Save to Photos", systemImage: "photo") { save(saveImage) }
                 }
                 if let externalTitle, let externalURL {
-                    Button(externalTitle, systemImage: "safari") {
-                        if let richActions {
-                            richActions.openURL(externalURL)
-                        } else {
-                            UIApplication.shared.open(externalURL)
-                        }
-                    }
+                    Button(externalTitle, systemImage: "safari") { openExternally(externalURL) }
                 }
                 if let viewSourceTitle, let onViewSource {
                     Button(viewSourceTitle, systemImage: "chevron.left.forwardslash.chevron.right") {
@@ -67,6 +49,31 @@ struct PaseoCardMenuModifier: ViewModifier {
                     }
                 }
             }
+        }
+    }
+
+    @MainActor private func copy(_ text: String) {
+        if let richActions {
+            richActions.copyText(text)
+        } else {
+            Clipboard.copy(text)
+            Haptics.light()
+        }
+    }
+
+    @MainActor private func save(_ image: UIImage) {
+        if let richActions {
+            richActions.saveImage(image)
+        } else {
+            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        }
+    }
+
+    @MainActor private func openExternally(_ url: URL) {
+        if let richActions {
+            richActions.openURL(url)
+        } else {
+            openURL(url)
         }
     }
 }

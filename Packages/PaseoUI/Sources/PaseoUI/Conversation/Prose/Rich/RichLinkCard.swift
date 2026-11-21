@@ -72,7 +72,8 @@ struct RichLinkCard: View {
                     media: heroSlot(hero),
                     header: PaseoCardHeader(title: linkTitle, meta: linkMeta))
             } else {
-                PaseoCard(content: rowContent)
+                PaseoCard(content: LinkRowContent(
+                    icon: resolvedIcon, title: linkTitle, meta: linkMeta))
             }
         }
         .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
@@ -115,41 +116,6 @@ struct RichLinkCard: View {
             .clipped()
             .contentShape(.rect)
             .mediaSlot(width: slotWidth, heightCap: .infinity)
-    }
-
-    private var rowContent: some View {
-        HStack(alignment: .center, spacing: 10) {
-            if let icon = resolvedIcon {
-                Image(uiImage: icon)
-                    .resizable()
-                    .frame(width: Metrics.linkIconSize, height: Metrics.linkIconSize)
-                    .clipShape(.rect(cornerRadius: Radius.sm, style: .continuous))
-                    .accessibilityHidden(true)
-            } else {
-                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                    .fill(Palette.chip)
-                    .frame(width: Metrics.linkIconSize, height: Metrics.linkIconSize)
-                    .overlay {
-                        Image(systemName: "link")
-                            .font(.glyph(.regular))
-                            .foregroundStyle(Palette.secondaryInk)
-                    }
-                    .accessibilityHidden(true)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(linkTitle)
-                    .font(.paseo(.footnote, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(2)
-                Text(linkMeta)
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .contentShape(.rect)
     }
 
     /// The card's inner width, for decoding the hero at the size it is drawn at.

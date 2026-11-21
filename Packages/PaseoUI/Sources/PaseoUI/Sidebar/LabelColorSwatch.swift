@@ -21,12 +21,12 @@ struct LabelColorSwatch: View {
                             .padding(-3)
                     }
                 }
-                .frame(width: 32, height: 32)
-                .contentShape(.circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Color \(color.rawValue)")
-        .accessibilityValue(selected ? "Selected" : "")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 #endif

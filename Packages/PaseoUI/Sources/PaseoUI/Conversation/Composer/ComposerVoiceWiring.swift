@@ -129,8 +129,16 @@ struct ComposerVoiceWiring: ViewModifier {
             guard voice.isVoiceMode else { return }
             bind()
             do {
+                // The lane can stop while a call suspends (the permission alert, the engine's
+                // start): the phase handler has already stopped capture by then, and nothing
+                // would stop what this resumes into. Check again after each suspension.
                 try await controller.voiceEngine.requestMicPermission()
+                guard voice.isVoiceMode, !Task.isCancelled else { return }
                 try await controller.voiceEngine.startCapture()
+                guard voice.isVoiceMode else {
+                    controller.voiceEngine.stopCapture()
+                    return
+                }
                 UIApplication.shared.isIdleTimerDisabled = true
             } catch {
                 controller.showToast(error.localizedDescription)

@@ -54,8 +54,8 @@ final class DictationController: NSObject {
     @ObservationIgnored private var sessionBase = ""
     @ObservationIgnored private var committed = ""
     @ObservationIgnored private var currentPartial = ""
-    @ObservationIgnored private var lastHeard = Date()
-    @ObservationIgnored private var startedAt = Date()
+    @ObservationIgnored private var lastHeard = Date.now
+    @ObservationIgnored private var startedAt = Date.now
     /// Set once the recognizer returns any text; before that, silence is "not started yet".
     @ObservationIgnored private var hasHeardSpeech = false
     @ObservationIgnored private var silenceTask: Task<Void, Never>?
@@ -169,8 +169,8 @@ final class DictationController: NSObject {
 
         self.engine = engine
         self.request = bufferRequest
-        lastHeard = Date()
-        startedAt = Date()
+        lastHeard = Date.now
+        startedAt = Date.now
         hasHeardSpeech = false
 
         recognition = Self.startRecognition(recognizer, request: bufferRequest) {
@@ -192,11 +192,11 @@ final class DictationController: NSObject {
                 // Whole seconds only: the overlay's label reads `duration`, and writing a new
                 // value twice a second would re-evaluate the composer for a digit that has not
                 // changed.
-                let whole = Date().timeIntervalSince(self.startedAt).rounded(.down)
+                let whole = Date.now.timeIntervalSince(self.startedAt).rounded(.down)
                 if whole != self.duration { self.duration = whole }
                 // Before any words: wait up to 8 s for the user to start. After: 2.5 s of quiet.
                 let limit: TimeInterval = self.hasHeardSpeech ? 2.5 : 8
-                if Date().timeIntervalSince(self.lastHeard) > limit {
+                if Date.now.timeIntervalSince(self.lastHeard) > limit {
                     self.stop(keepingDraft: true)
                     return
                 }
@@ -278,7 +278,7 @@ final class DictationController: NSObject {
     private func handle(text: String, isFinal: Bool) {
         if !text.isEmpty {
             hasHeardSpeech = true
-            lastHeard = Date()
+            lastHeard = Date.now
         }
         if isFinal {
             committed += (committed.isEmpty ? "" : " ") + text

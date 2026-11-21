@@ -10,7 +10,7 @@ struct ToolCallLine: View {
     private var presentation: ToolCallPresentation { ToolCallPresentation(call) }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.sm) {
             Text(presentation.title)
                 .font(.paseo(.codeSmall))
                 .foregroundStyle(Palette.tertiaryInk)

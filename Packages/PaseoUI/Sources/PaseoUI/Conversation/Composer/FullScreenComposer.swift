@@ -18,32 +18,9 @@ struct FullScreenComposer: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center) {
-                Button("Done") { dismiss() }
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.ink)
-                    .frame(minWidth: 44, minHeight: 44, alignment: .leading)
-                    .accessibilityLabel("Done")
-                Spacer()
-                Text("Message")
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                Spacer()
-                Button("Send") {
-                    onSend()
-                    dismiss()
-                }
-                .font(.paseo(.callout, weight: .semibold))
-                .foregroundStyle(trimmedEmpty ? Palette.secondaryInk : Palette.accentInk)
-                .disabled(trimmedEmpty)
-                .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
-                .accessibilityLabel(isRunning ? "Send and steer" : "Send message")
-                .accessibilityIdentifier("composer.fullscreen.send")
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 52)
-            ClaudeDivider()
+        // A system navigation bar, not a hand-built one: it takes Liquid Glass and the scroll-edge
+        // treatment, moves with the window on iPhone Duo, and grows with Dynamic Type.
+        NavigationStack {
             TextEditor(text: $draft)
                 .font(.paseo(.body))
                 .foregroundStyle(Palette.ink)
@@ -53,10 +30,35 @@ struct FullScreenComposer: View {
                 .padding(.top, 8)
                 .focused($focused)
                 .accessibilityIdentifier("composer.fullscreen.editor")
+                .background(Palette.background.ignoresSafeArea())
+                .navigationTitle("Message")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    // Done keeps the draft; Send sends it.
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done", systemImage: "checkmark", action: dismissKeepingDraft)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(
+                            isRunning ? "Send and steer" : "Send", systemImage: "arrow.up",
+                            action: sendAndDismiss
+                        )
+                        .disabled(trimmedEmpty)
+                        .accessibilityIdentifier("composer.fullscreen.send")
+                    }
+                }
         }
-        .background(Palette.background.ignoresSafeArea())
         .foregroundStyle(Palette.ink)
         .onAppear { focused = true }
+    }
+
+    private func sendAndDismiss() {
+        onSend()
+        dismiss()
+    }
+
+    private func dismissKeepingDraft() {
+        dismiss()
     }
 }
 #endif

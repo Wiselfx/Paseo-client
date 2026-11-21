@@ -208,7 +208,9 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
 
     private func applyChrome() {
         let open = drawer.state
-        conversationCard.accessibilityElementsHidden = open != .none
+        // Hide the hosted conversation, not the card: `dimView` (the "Close" button) is a subview of
+        // the card, and VoiceOver needs it while a surface is open.
+        conversationHost.view.accessibilityElementsHidden = open != .none
         sidebarHost.view.accessibilityElementsHidden = open != .sidebar
         panelCard.isHidden = panelProgress == 0
         panelCard.accessibilityElementsHidden = panelProgress == 0

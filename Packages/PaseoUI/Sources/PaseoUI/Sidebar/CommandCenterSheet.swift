@@ -101,10 +101,12 @@ struct CommandCenterSheet: View {
             model.setQuery(query)
             selectedIndex = 0
         }
-        .onChange(of: session.agents.count) { _, _ in refresh() }
-        .onChange(of: session.agentLifecycle.entries.count) { _, _ in refresh() }
-        .onChange(of: session.workspaceDirectory.workspaces.count) { _, _ in refresh() }
-        .onChange(of: session.workspaceDirectory.projects.count) { _, _ in refresh() }
+        // By value, not by count: the model caches titles, dots and recency, which a rename or a
+        // status change alters without changing a count.
+        .onChange(of: session.agents) { refresh() }
+        .onChange(of: session.agentLifecycle.entries) { refresh() }
+        .onChange(of: session.workspaceDirectory.workspaces) { refresh() }
+        .onChange(of: session.workspaceDirectory.projects) { refresh() }
     }
 
     // MARK: Field
@@ -169,9 +171,17 @@ struct CommandCenterSheet: View {
                     .accessibilityIdentifier("search.noResults")
                 } else {
                     ForEach(model.sections) { section in
-                        sectionHeader(section.header)
-                        ForEach(section.rows) { row in
-                            rowView(row)
+                        Section {
+                            ForEach(section.rows) { row in
+                                SearchResultRow(
+                                    row: row, isSelected: row.id == selectedRowID,
+                                    hostExpanded: hostExpanded
+                                ) {
+                                    activate(row)
+                                }
+                            }
+                        } header: {
+                            SearchSectionHeader(title: section.header)
                         }
                     }
                 }
@@ -181,84 +191,10 @@ struct CommandCenterSheet: View {
         .scrollIndicators(.hidden)
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.footnote, weight: .medium))
-            .foregroundStyle(Palette.secondaryInk)
-            .padding(.top, Space.lg)
-            .padding(.bottom, Space.xs)
-            .padding(.horizontal, Space.xl)
-            .accessibilityAddTraits(.isHeader)
-    }
-
     /// The highlighted row's id, so a row compares one string instead of scanning the list.
     private var selectedRowID: String? {
         model.flatRows.indices.contains(selectedIndex)
             ? model.flatRows[selectedIndex].id : model.flatRows.first?.id
-    }
-
-    private func rowView(_ row: SearchModel.Result) -> some View {
-        let isSelected = row.id == selectedRowID
-        return Button {
-            activate(row)
-        } label: {
-            HStack(spacing: Space.md) {
-                leading(row)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(row.title)
-                        .font(.paseo(.callout, weight: .medium))
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
-                    if let subtitle = row.subtitle {
-                        Text(subtitle)
-                            .font(row.kind == .file ? .paseo(.codeCaption) : .paseo(.caption))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
-                Spacer(minLength: Space.sm)
-                trailing(row)
-            }
-            .padding(.horizontal, Space.lg)
-            .frame(minHeight: 44)
-            .background(
-                isSelected ? Palette.chip : Color.clear, in: .rect(cornerRadius: Radius.md))
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, Space.md)
-        .accessibilityIdentifier("search.row.\(row.id)")
-    }
-
-    @ViewBuilder private func leading(_ row: SearchModel.Result) -> some View {
-        if let dot = row.dot {
-            StatusDot(dot)
-        } else if let symbol = row.symbol {
-            Image(systemName: symbol)
-                .font(.glyph(.regular))
-                .foregroundStyle(Palette.secondaryInk)
-                .frame(width: 22)
-        } else {
-            Color.clear.frame(width: 22)
-        }
-    }
-
-    @ViewBuilder private func trailing(_ row: SearchModel.Result) -> some View {
-        if row.archived {
-            Text("Archived")
-                .font(.paseo(.caption2, weight: .medium))
-                .foregroundStyle(Palette.captionInk)
-                .padding(.horizontal, Space.sm)
-                .frame(minHeight: 20)
-                .background(Palette.chip, in: .rect(cornerRadius: Radius.xs))
-        } else if row.kind == .action, row.action == .switchHost {
-            Image(systemName: hostExpanded ? "chevron.up" : "chevron.down")
-                .font(.glyph(.small, weight: .semibold))
-                .foregroundStyle(Palette.tertiaryInk)
-        } else {
-            Color.clear
-        }
     }
 
     // MARK: Keyboard

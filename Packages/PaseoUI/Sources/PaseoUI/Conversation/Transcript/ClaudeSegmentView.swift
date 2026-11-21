@@ -14,7 +14,6 @@ struct ClaudeSegmentView: View {
     var highlightedSeq: Int?
     var findTarget: Int?
     var onOpenFile: ((String) -> Void)?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         switch segment {
@@ -26,11 +25,7 @@ struct ClaudeSegmentView: View {
             if case .assistantMessage(let message) = row.item {
                 ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: turnIsRunning)
                     .rowAnchor(row.seqEnd)
-                    .background {
-                        RoundedRectangle(cornerRadius: Radius.md)
-                            .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
-                            .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
-                    }
+                    .background { FindWash(highlighted: highlightedSeq == row.seqEnd) }
             }
         case .todo:
             // The per-turn card above owns todos now: a row here would duplicate it.

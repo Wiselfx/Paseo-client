@@ -25,6 +25,7 @@ struct WorkToolStep: View {
 
     var body: some View {
         let wording = WorkToolWording(call)
+        let stat = WorkDiffStat.of(call)
         WorkStepFrame(
             icon: WorkIcon(
                 kind: wording.icon, running: call.status == .running,
@@ -32,16 +33,18 @@ struct WorkToolStep: View {
             rail: rail, highlighted: highlighted
         ) {
             VStack(alignment: .leading, spacing: 0) {
-                Button {
-                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                        userExpanded = !isExpanded
-                    }
-                } label: {
+                WorkDisclosureButton(
+                    isExpanded: isExpanded,
+                    accessibilityLabel: [wording.verb, wording.target].compactMap { $0 }
+                        .joined(separator: " "),
+                    accessibilityDetails: spokenDetails(stat),
+                    action: toggleExpanded
+                ) {
                     HStack(spacing: 8) {
                         WorkToolLine(verb: wording.verb, target: wording.target)
                         Spacer(minLength: 4)
                         WorkOutcome(call: call)
-                        if let stat = WorkDiffStat.of(call) {
+                        if let stat {
                             DiffStat(added: stat.added, removed: stat.removed)
                         }
                         ClaudeTurnChevron(expanded: isExpanded)
@@ -49,10 +52,6 @@ struct WorkToolStep: View {
                     .frame(minHeight: WorkTimelineMetrics.headerHeight)
                     .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(
-                    [wording.verb, wording.target].compactMap { $0 }.joined(separator: " "))
-                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
                 if isExpanded {
                     ClaudeToolCallDetail(call: call)
                         .padding(.top, 2)
@@ -62,6 +61,22 @@ struct WorkToolStep: View {
             }
         }
         .paseoFeedback(.selection, trigger: userExpanded)
+    }
+
+    /// What the visible line shows besides the verb and target, which the spoken label replaces.
+    private func spokenDetails(_ stat: (added: Int, removed: Int)?) -> [String] {
+        var details: [String] = []
+        if let outcome = WorkOutcome(call: call).accessibilityText { details.append(outcome) }
+        if let stat, let text = WorkDiffStat.spokenText(added: stat.added, removed: stat.removed) {
+            details.append(text)
+        }
+        return details
+    }
+
+    private func toggleExpanded() {
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
+            userExpanded = !isExpanded
+        }
     }
 }
 #endif

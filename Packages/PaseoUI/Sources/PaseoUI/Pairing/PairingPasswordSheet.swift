@@ -1,9 +1,5 @@
 #if canImport(UIKit)
-import AVFoundation
-import PaseoStore
 import SwiftUI
-import UIKit
-import VisionKit
 
 // MARK: - Password
 
@@ -25,7 +21,6 @@ public struct PairingPasswordSheet: View {
         self.isAttempting = isAttempting
         self.onConnect = onConnect
     }
-    @Environment(\.dismiss) private var dismiss
 
     @State private var password = ""
 
@@ -38,7 +33,7 @@ public struct PairingPasswordSheet: View {
                     .submitLabel(.go)
                     .onSubmit { submit() }
                     .padding(.horizontal, 12)
-                    .frame(height: 48)
+                    .frame(minHeight: 48)
                     .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
                     .accessibilityIdentifier("pairing.password.field")
                 if let error {
@@ -49,19 +44,11 @@ public struct PairingPasswordSheet: View {
                 Button {
                     submit()
                 } label: {
-                    if isAttempting {
-                        ProgressView().controlSize(.small).tint(Palette.background)
-                    } else {
-                        Text("Connect")
-                            .font(.paseo(.callout, weight: .medium))
-                            .frame(maxWidth: .infinity)
-                            .frame(minHeight: 48)
-                    }
+                    Text("Connect")
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Palette.ink)
+                .buttonStyle(.paseoPrimary(isWorking: isAttempting))
                 .disabled(password.isEmpty || isAttempting)
-                .opacity(password.isEmpty || isAttempting ? 0.4 : 1)
                 .accessibilityIdentifier("pairing.password.connect")
                 Spacer()
             }

@@ -5,10 +5,10 @@ import SwiftUI
 /// rounded panel, hairline border, same width as the card, max height set by the caller.
 struct ComposerMenuContainer<Content: View>: View {
     var accessibilityIdentifier: String
-    @ViewBuilder var content: () -> Content
+    @ViewBuilder let content: Content
 
     var body: some View {
-        Group { content() }
+        content
             .frame(maxWidth: .infinity)
             .background(Palette.panel, in: .rect(cornerRadius: Radius.md))
             .overlay {

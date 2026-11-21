@@ -1414,9 +1414,7 @@ public final class ConversationStore: Identifiable {
     internal func markSendAccepted() { actionError = nil }
 
     internal static func nowTimestamp() -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: Date())
+        Date.now.ISO8601Format(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
     }
 }
 
@@ -1476,9 +1474,12 @@ internal final class TimelineCommitCoalescer {
     }
 
     private func arm() {
+        // A `flush()` from outside cancels the timer. A cancelled sleep must end the task, not fall
+        // through: it would otherwise drop the handle of a newer timer and flush a second time.
+        let interval = frameInterval
         timer = Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(for: self.frameInterval)
+            do { try await Task.sleep(for: interval) } catch { return }
+            guard let self, !Task.isCancelled else { return }
             self.timer = nil
             self.flush()
             if !self.pending.isEmpty {

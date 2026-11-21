@@ -45,14 +45,24 @@ struct YouTubeRichCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.sm) {
             ZStack {
                 if isPlaying {
                     InlineYouTubePlayer(referenceID: reference.id)
-                        .accessibilityLabel("YouTube video \(reference.id)")
+                        .accessibilityLabel(resolvedTitle ?? "YouTube video")
                         .transition(.opacity)
                 } else {
-                    thumbnail
+                    YouTubeThumbnail(
+                        still: still,
+                        failed: stillFailed,
+                        accessibilityText: resolvedTitle.map { "Play \($0)" } ?? "Play YouTube video",
+                        onPlay: play)
+                        .contextMenu {
+                            Button("Open in YouTube", systemImage: "play.rectangle") { openInYouTube() }
+                        }
+                        // The box is already reserved by the card's 16:9 frame, so the still can
+                        // land whenever.
+                        .task(id: stillKey) { await loadStill() }
                         .transition(.opacity)
                 }
             }
@@ -71,31 +81,13 @@ struct YouTubeRichCard: View {
                 if !visible, isPlaying { playback.stop(reference.id) }
             }
             if full {
-                VStack(alignment: .leading, spacing: 2) {
-                    if let title = resolvedTitle {
-                        Text(title)
-                            .font(.paseo(.callout))
-                            .foregroundStyle(Palette.ink)
-                            .lineLimit(2)
-                    }
-                    HStack(spacing: 6) {
-                        Image(systemName: "play")
-                            .font(.glyph(.small, weight: .medium))
-                            .foregroundStyle(Palette.secondaryInk)
-                        Text(resolvedChannel ?? "youtube.com · \(reference.id)")
-                            .font(.paseo(.caption))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        if isPlaying {
-                            Button("Close") { playback.stop(reference.id) }
-                                .font(.paseo(.caption, weight: .medium))
-                                .foregroundStyle(Palette.secondaryInk)
-                                .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .padding(.horizontal, 4)
+                YouTubeTitleStrip(
+                    title: resolvedTitle,
+                    channel: resolvedChannel,
+                    id: reference.id,
+                    isPlaying: isPlaying,
+                    onClose: stopPlayback
+                )
                 .animation(
                     Motion.disclosure.resolved(reduceMotion: reduceMotion),
                     value: resolvedTitle != nil)
@@ -105,46 +97,12 @@ struct YouTubeRichCard: View {
         .frame(maxWidth: full ? .infinity : 320, alignment: .leading)
     }
 
-    private var thumbnail: some View {
-        ZStack {
-            if let still {
-                Image(uiImage: still)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else {
-                Rectangle()
-                    .fill(Palette.codeSurface)
-                    .overlay {
-                        if stillFailed {
-                            Image(systemName: "photo")
-                                .font(.glyph(.xlarge, weight: .light))
-                                .foregroundStyle(Palette.secondaryInk)
-                        }
-                    }
-            }
+    private func play() {
+        playback.play(reference.id)
+    }
 
-            Circle()
-                .fill(Palette.mediaBadge)
-                .frame(width: 34, height: 34)
-                .overlay {
-                    Image(systemName: "play.fill")
-                        .font(.glyph(.regular, weight: .semibold))
-                        .foregroundStyle(Palette.onMediaBadge)
-                        .offset(x: 1)
-                }
-                .accessibilityHidden(true)
-        }
-        .contentShape(.rect)
-        .onTapGesture { playback.play(reference.id) }
-        .contextMenu {
-            Button("Open in YouTube", systemImage: "play.rectangle") { openInYouTube() }
-        }
-        .accessibilityElement()
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("Play YouTube video \(reference.id)")
-        // The box is already reserved by the card's 16:9 frame, so the still can land whenever.
-        .task(id: stillKey) { await loadStill() }
+    private func stopPlayback() {
+        playback.stop(reference.id)
     }
 
     /// The card's inner width, measured on the frame it is actually drawn in. Published only

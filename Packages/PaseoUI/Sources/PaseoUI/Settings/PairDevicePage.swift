@@ -47,28 +47,12 @@ struct PairDevicePage: View {
         .onDisappear {
             session.hostSettings.clearPairingOffer()
         }
-        .confirmationDialog(
-            // en.ts:1972 enableTitle
-            "Enable relay?",
-            isPresented: $confirmEnableRelay,
-            titleVisibility: .visible
-        ) {
-            // en.ts:1977 enableRelay
-            Button("Enable relay") {
-                Task { await enableRelay() }
-            }
-            // en.ts:1979 notNow
-            Button("Not now", role: .cancel) {}
-        } message: {
-            // en.ts:1973-1974 enableDescription
-            Text("Relay lets this device connect from anywhere. Pairing traffic is end-to-end encrypted.")
-        }
     }
 
     @ViewBuilder private var content: some View {
         switch session.hostSettings.pairingOfferState {
         case .idle, .loading:
-            HStack(spacing: 8) {
+            HStack(spacing: Space.sm) {
                 ProgressView().controlSize(.small)
                 // en.ts:1969 loadingOffer
                 Text("Loading pairing offer...")
@@ -76,9 +60,9 @@ struct PairDevicePage: View {
                     .foregroundStyle(Palette.secondaryInk)
             }
             .frame(maxWidth: .infinity)
-            .padding(.top, 24)
+            .padding(.top, Space.xxl)
         case .failed(let message):
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Space.sm) {
                 if message == "Pairing offer unavailable." {
                     // en.ts:1985 unavailable — one line, upstream shows it alone.
                     Text(message)
@@ -123,7 +107,7 @@ struct PairDevicePage: View {
                     .scaledToFit()
                     .frame(maxWidth: 220)
                     // Upstream qrTile: white tile with padding (a QR needs a light surround).
-                    .padding(12)
+                    .padding(Space.md)
                     .background(Color.white, in: .rect(cornerRadius: Radius.lg))
                     .accessibilityLabel("Pairing QR code") // en.ts:1990 qrAccessibility
             } else {
@@ -132,7 +116,7 @@ struct PairDevicePage: View {
                     .font(.paseo(.callout))
                     .foregroundStyle(Palette.secondaryInk)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: Space.sm) {
                 Text(url)
                     .font(.paseo(.codeSmall))
                     .foregroundStyle(Palette.secondaryInk)
@@ -186,6 +170,23 @@ struct PairDevicePage: View {
                 .tint(Palette.ink)
                 .disabled(session.hostSettings.isSaving)
                 .accessibilityIdentifier("pairDevice.enableRelay")
+                // On the trigger, not the page, so the dialog animates from the button.
+                .confirmationDialog(
+                    // en.ts:1972 enableTitle
+                    "Enable relay?",
+                    isPresented: $confirmEnableRelay,
+                    titleVisibility: .visible
+                ) {
+                    // en.ts:1977 enableRelay
+                    Button("Enable relay") {
+                        Task { await enableRelay() }
+                    }
+                    // en.ts:1979 notNow
+                    Button("Not now", role: .cancel) {}
+                } message: {
+                    // en.ts:1973-1974 enableDescription
+                    Text("Relay lets this device connect from anywhere. Pairing traffic is end-to-end encrypted.")
+                }
             } else {
                 // en.ts:1984 updateRequired
                 Text("Update the host to enable relay from Paseo Desktop.")

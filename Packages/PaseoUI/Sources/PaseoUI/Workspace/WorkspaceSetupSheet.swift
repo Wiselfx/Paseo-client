@@ -148,7 +148,7 @@ struct WorkspaceSetupSheet: View {
     }
 
     private func blockedRow(_ source: WorkspaceSetupBlockedSource) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.sm) {
             Image(systemName: "clock.badge.exclamationmark")
                 .font(.glyph(.small, weight: .medium))
                 .foregroundStyle(Palette.warning)
@@ -168,18 +168,19 @@ struct WorkspaceSetupSheet: View {
     }
 
     private var runAgainButton: some View {
-        Button("Run setup again") {
-            guard !isRerunning else { return }
-            isRerunning = true
-            Task {
-                _ = await session.setupObservation.runSetup(workspace.id)
-                isRerunning = false
-            }
+        Button("Run setup again", action: runAgain)
+            .buttonStyle(.paseoPrimary(isWorking: isRerunning))
+            .disabled(!capabilities.run)
+            .padding(.top, Space.xs)
+    }
+
+    private func runAgain() {
+        guard !isRerunning else { return }
+        isRerunning = true
+        Task {
+            _ = await session.setupObservation.runSetup(workspace.id)
+            isRerunning = false
         }
-        .buttonStyle(.paseoPrimary(isWorking: isRerunning))
-        .disabled(!capabilities.run)
-        .accessibilityLabel("Run setup again")
-        .padding(.top, Space.xs)
     }
 }
 #endif

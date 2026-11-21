@@ -11,24 +11,36 @@ import UIKit
 /// value it would have computed, and a render that does not find one computes it itself, as before.
 /// Newest turns first: they are the ones on screen at the open.
 enum ProseWarmup {
+    /// The running open warm-up and the running prefetch warm-up. Each kind keeps its own handle, so
+    /// a new prefetch batch cancels the previous prefetch (turns already scrolled past) without
+    /// cancelling the open warm-up, and the other way round.
+    @MainActor private static var openTask: Task<Void, Never>?
+    @MainActor private static var prefetchTask: Task<Void, Never>?
+
     /// Starts the warm-up for the newest `limit` turns. Nothing is awaited; it never blocks the caller.
     @MainActor
     static func startForOpen(store: ConversationStore, limit: Int) {
-        var texts: [String] = []
-        for turn in store.turns.suffix(limit).reversed() {
-            texts.append(contentsOf: proseTexts(of: turn))
+        // A `let`: the Task below captures it, and a captured `var` is rejected in concurrent code.
+        let texts = store.turns.suffix(limit).reversed().flatMap { proseTexts(of: $0) }
+        guard !texts.isEmpty else { return }
+        let home = store.agent?.cwd
+        let dark = currentUserInterfaceIsDark()
+        openTask?.cancel()
+        openTask = Task(priority: .userInitiated) {
+            await warm(texts: texts, home: home, dark: dark)
         }
-        startForMessages(texts, home: store.agent?.cwd)
     }
 
     /// Starts the warm-up for an explicit message list — a jump's target window, so its
     /// split, parse and highlight are warm before the rows build (W8). Same fire-and-forget
-    /// shape as the open: short-lived, bounded by the caller's window, self-cancelling.
+    /// shape as the open: short-lived and bounded by the caller's window. A newer call cancels the
+    /// previous one, which `warm` observes through `Task.isCancelled`.
     @MainActor
     static func startForMessages(_ texts: [String], home: String?) {
         guard !texts.isEmpty else { return }
         let dark = currentUserInterfaceIsDark()
-        Task.detached(priority: .userInitiated) {
+        prefetchTask?.cancel()
+        prefetchTask = Task(priority: .userInitiated) {
             await warm(texts: texts, home: home, dark: dark)
         }
     }
@@ -51,6 +63,9 @@ enum ProseWarmup {
         return style == .dark
     }
 
+    /// `@concurrent`: the parse and highlight run off the main actor, which the `Task` started from
+    /// the main actor would otherwise inherit.
+    @concurrent
     private static func warm(texts: [String], home: String?, dark: Bool) async {
         var code: [(language: String?, content: String)] = []
         for text in texts {

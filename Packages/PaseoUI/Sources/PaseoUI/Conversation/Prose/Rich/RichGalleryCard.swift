@@ -15,6 +15,9 @@ import UIKit
 /// that tile.
 struct RichGalleryCard: View {
     let images: [RichImage]
+    /// One stable id per image, mapped once at init: every tile, the viewer and each load step
+    /// read it, so a computed property would remap the whole array on every read.
+    private let tileIDs: [String]
 
     @Environment(\.richActions) private var richActions
     @Environment(\.richProseWidth) private var proseWidth
@@ -23,14 +26,15 @@ struct RichGalleryCard: View {
     @State private var thumbnails: [String: UIImage] = [:]
     @State private var selection = 0
     @State private var showViewer = false
-    @State private var shareImage: UIImage?
+    @State private var sharedImage: GallerySharedImage?
     /// The card's measured width, for decoding tiles at the size they draw at.
     @State private var width: CGFloat = 0
     /// Tiles that failed after an explicit fetch: a small glyph, and a tap retries.
     @State private var failedTiles: Set<String> = []
 
-    private var tileIDs: [String] {
-        images.map { image in
+    init(images: [RichImage]) {
+        self.images = images
+        tileIDs = images.map { image in
             switch image.source {
             case .remote(let url): "gallery-remote:\(url)"
             case .local(let path): "gallery-local:\(path)"
@@ -89,14 +93,7 @@ struct RichGalleryCard: View {
 
     private var viewerItems: [MediaViewerItem] {
         images.enumerated().map { index, image in
-            let fileName: String = {
-                switch image.source {
-                case .remote(let url):
-                    return MediaPipeline.target(for: url)?.lastPathComponent.nilIfEmpty ?? "image"
-                case .local(let path):
-                    return (path as NSString).lastPathComponent.nilIfEmpty ?? "image"
-                }
-            }()
+            let fileName = GalleryTile.fileName(for: image)
             let fullSource: MediaSource? = {
                 switch image.source {
                 case .remote(let urlString):
@@ -137,10 +134,8 @@ struct RichGalleryCard: View {
                     onClose: { showViewer = false },
                     selection: $selection)
             }
-            .sheet(isPresented: Binding(get: { shareImage != nil }, set: { if !$0 { shareImage = nil } })) {
-                if let shareImage {
-                    ActivityView(items: [shareImage])
-                }
+            .sheet(item: $sharedImage) { shared in
+                ActivityView(items: [shared.image])
             }
             // Contain, not combine: every tile stays its own VoiceOver button so the
             // reader can open image 2 of 5. The container carries the count.
@@ -179,110 +174,40 @@ struct RichGalleryCard: View {
                 ForEach(0..<3, id: \.self) { index in
                     tile(at: index, aspect: 1)
                 }
-                ZStack {
-                    tile(at: 3, aspect: 1)
-                    if images.count > 4 {
-                        Color.black.opacity(0.55)
-                            .accessibilityHidden(true)
-                        Text("+\(images.count - 4)")
-                            .font(.paseo(.headline))
-                            .monospacedDigit()
-                            .foregroundStyle(.white)
-                            .accessibilityLabel("\(images.count - 4) more images")
-                    }
-                }
-                .contentShape(.rect)
-                .onTapGesture {
-                    selection = 3
-                    showViewer = true
-                }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("Opens the images full screen")
+                tile(at: 3, aspect: 1, moreCount: images.count > 4 ? images.count - 4 : nil)
             }
         }
     }
 
-    @ViewBuilder
-    private func tile(at index: Int, aspect: CGFloat) -> some View {
+    private func tile(at index: Int, aspect: CGFloat, moreCount: Int? = nil) -> some View {
         let id = tileIDs[index]
         let image = images[index]
-        Button {
-            if failedTiles.contains(id) {
-                // A failed tile retries on tap: the reader's explicit fetch.
-                failedTiles.remove(id)
-                Task { @MainActor in
-                    await loadTile(image: image, id: id, fetch: true)
-                }
-            } else {
-                selection = index
-                showViewer = true
-            }
-        } label: {
-            // The box decides the size; the picture is drawn over it and can never push the row
-            // wider (a `.fill` image proposes its pixel size to its parent).
-            Rectangle().fill(Palette.codeSurface)
-                .overlay {
-                    if let uiImage = resolvedThumb(id: id, image: image) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .transition(.opacity)
-                    } else if failedTiles.contains(id) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.glyph(.regular, weight: .light))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .accessibilityLabel("Couldn't load image")
-                    }
-                }
-            .aspectRatio(aspect, contentMode: .fit)
-            .clipped()
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .matchedTransitionSource(id: id, in: zoom)
-        .paseoCardMenu(
-            onShare: thumbnails[id] == nil ? nil : {
-                shareImage = thumbnails[id]
-            },
-            copyTitle: "Copy link",
-            copyText: copyText(for: image),
-            saveImage: thumbnails[id],
-            externalTitle: externalTitle(for: image),
-            externalURL: externalURL(for: image),
-            filePath: filePath(for: image))
-        .accessibilityLabel("Image \(index + 1) of \(images.count), \(image.alt.isEmpty ? fileName(for: image) : image.alt)")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Opens the image full screen")
+        return GalleryTile(
+            image: image,
+            index: index,
+            count: images.count,
+            aspect: aspect,
+            displayed: resolvedThumb(id: id, image: image),
+            saved: thumbnails[id],
+            failed: failedTiles.contains(id),
+            moreCount: moreCount,
+            sourceID: id,
+            namespace: zoom,
+            onOpen: { open(at: index) },
+            onRetry: { retry(image: image, id: id) },
+            onShare: { sharedImage = GallerySharedImage(image: $0) })
     }
 
-    private func copyText(for image: RichImage) -> String? {
-        if case .remote(let url) = image.source { url } else { nil }
+    private func open(at index: Int) {
+        selection = index
+        showViewer = true
     }
 
-    private func externalTitle(for image: RichImage) -> String? {
-        if case .remote = image.source { "Open link" } else { nil }
-    }
-
-    private func externalURL(for image: RichImage) -> URL? {
-        if case .remote(let urlString) = image.source {
-            return MediaPipeline.target(for: urlString).flatMap { url in
-                guard url.scheme == "http" || url.scheme == "https" else { return nil }
-                return url
-            }
-        }
-        return nil
-    }
-
-    private func filePath(for image: RichImage) -> String? {
-        if case .local(let path) = image.source { path } else { nil }
-    }
-
-    private func fileName(for image: RichImage) -> String {
-        switch image.source {
-        case .remote(let url):
-            return MediaPipeline.target(for: url)?.lastPathComponent.nilIfEmpty ?? "image"
-        case .local(let path):
-            return (path as NSString).lastPathComponent.nilIfEmpty ?? "image"
+    /// A failed tile retries on tap: the reader's explicit fetch.
+    private func retry(image: RichImage, id: String) {
+        failedTiles.remove(id)
+        Task { @MainActor in
+            await loadTile(image: image, id: id, fetch: true)
         }
     }
 
@@ -353,9 +278,5 @@ struct RichGalleryCard: View {
                 workspaceID: workspaceID, path: path, revision: nil))
         }
     }
-}
-
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 #endif

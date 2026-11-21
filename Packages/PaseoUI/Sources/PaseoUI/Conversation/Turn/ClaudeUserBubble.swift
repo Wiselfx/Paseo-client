@@ -38,6 +38,8 @@ struct ClaudeUserBubble: View {
     @State private var entered: Bool
     /// The "Select text" sheet.
     @State private var showingText = false
+    /// Counts copies so the confirmation haptic fires per tap.
+    @State private var copyCount = 0
 
     init(
         text: String, isPending: Bool, rewindChoices: [RewindScope] = [],
@@ -111,7 +113,7 @@ struct ClaudeUserBubble: View {
     /// The filled bubble, and the thing the context-menu preview shows.
     private var bubble: some View {
         VStack(alignment: .leading, spacing: Space.sm) {
-            ForEach(Array(sentImages.enumerated()), id: \.offset) { index, image in
+            ForEach(sentImages.enumerated(), id: \.offset) { index, image in
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -120,7 +122,7 @@ struct ClaudeUserBubble: View {
                     .transition(.opacity)
                     .accessibilityLabel("Sent image \(index + 1)")
             }
-            ForEach(Array(reservedRatios.enumerated()), id: \.offset) { _, ratio in
+            ForEach(reservedRatios.enumerated(), id: \.offset) { _, ratio in
                 Rectangle()
                     .fill(.clear)
                     .aspectRatio(ratio, contentMode: .fit)
@@ -139,23 +141,19 @@ struct ClaudeUserBubble: View {
             .lineSpacing(4)
             .padding(.horizontal, 16)
             .padding(.vertical, Space.md)
-            .background(
-                Palette.userBubble, in: .rect(cornerRadius: Radius.bubble, style: .continuous)
-            )
+            .background(Palette.userBubble, in: .rect(cornerRadius: Radius.bubble))
             .contentShape(
                 .contextMenuPreview,
-                RoundedRectangle(cornerRadius: Radius.bubble, style: .continuous))
+                RoundedRectangle(cornerRadius: Radius.bubble))
             .opacity(isPending ? 0.6 : 1)
             .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: isPending)
             .contextMenu { menuItems }
             .sheet(isPresented: $showingText) { MessageTextSheet(text: text) }
+            .paseoFeedback(.light, trigger: copyCount)
     }
 
     @ViewBuilder private var menuItems: some View {
-        Button("Copy", systemImage: "doc.on.doc") {
-            UIPasteboard.general.string = text
-            Haptics.light()
-        }
+        Button("Copy", systemImage: "doc.on.doc", action: copyText)
         Button("Select text", systemImage: "textformat.alt") {
             showingText = true
         }
@@ -174,6 +172,11 @@ struct ClaudeUserBubble: View {
                 .disabled(rewindInFlight)
             }
         }
+    }
+
+    private func copyText() {
+        Clipboard.copy(text)
+        copyCount += 1
     }
 
     /// The plain text, or with its file paths as tappable links (M7g), memoized by text.

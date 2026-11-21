@@ -98,8 +98,12 @@ struct AddProjectSheet: View {
                         .frame(minHeight: 32)
                         .background(
                             mode == choice ? Palette.ink : Color.clear, in: .capsule)
+                        // The capsule stays 32 pt; the tap target around it is 44.
+                        .frame(minHeight: 44)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(mode == choice ? .isSelected : [])
             }
         }
         .padding(3)
@@ -118,11 +122,13 @@ struct AddProjectSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             RowGroup {
                 HStack(spacing: 12) {
+                    // The field carries the name VoiceOver reads; the visible label would repeat it.
                     Text("Path")
                         .font(.paseo(.body))
+                        .accessibilityHidden(true)
                     Spacer(minLength: 8)
                     TextField(
-                        "", text: $path,
+                        "Path", text: $path,
                         prompt: Text("~/dev/my-app").foregroundStyle(Palette.secondaryInk)
                     )
                     .font(.paseo(.code))
@@ -131,7 +137,7 @@ struct AddProjectSheet: View {
                     .autocorrectionDisabled()
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 52)
+                .frame(minHeight: 52)
             }
             Text("The host registers an existing folder as a project. Nothing is created on disk.")
                 .font(.paseo(.caption))
@@ -183,7 +189,7 @@ struct AddProjectSheet: View {
                 .font(.glyph(.regular))
                 .foregroundStyle(Palette.secondaryInk)
             TextField(
-                "", text: $search,
+                "Search repositories", text: $search,
                 prompt: Text("Search repositories…").foregroundStyle(Palette.tertiaryInk)
             )
             .font(.paseo(.body))
@@ -201,13 +207,15 @@ struct AddProjectSheet: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.glyph(.regular))
                         .foregroundStyle(Palette.tertiaryInk)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear")
             }
         }
         .padding(.horizontal, 12)
-        .frame(height: 44)
+        .frame(minHeight: 44)
         .background(Palette.chip, in: .capsule)
         .padding(.top, 2)
     }
@@ -315,9 +323,10 @@ struct AddProjectSheet: View {
                 HStack(spacing: 12) {
                     Text("Into")
                         .font(.paseo(.callout))
+                        .accessibilityHidden(true)
                     Spacer(minLength: 8)
                     TextField(
-                        "", text: $destination,
+                        "Into", text: $destination,
                         prompt: Text("~/src/repo").foregroundStyle(Palette.secondaryInk)
                     )
                     .font(.paseo(.code))
@@ -326,7 +335,7 @@ struct AddProjectSheet: View {
                     .multilineTextAlignment(.trailing)
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 52)
+                .frame(minHeight: 52)
                 RowDivider()
                 HStack {
                     Text("Protocol")
@@ -340,7 +349,7 @@ struct AddProjectSheet: View {
                     .frame(width: 150)
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 48)
+                .frame(minHeight: 48)
             }
             if let actionError = directory.actionError {
                 InlineBanner(.failure, title: actionError)

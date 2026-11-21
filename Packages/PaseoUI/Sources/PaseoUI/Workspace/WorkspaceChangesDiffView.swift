@@ -119,7 +119,7 @@ struct WorkspaceChangesDiffView: View {
 
     /// The quiet card rendered inline under the anchor line.
     @ViewBuilder private func draftCard(_ draft: WorkspaceReviewDraftComment) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: Space.sm) {
             Image(systemName: "text.bubble")
                 .font(.glyph(.small, weight: .regular))
                 .foregroundStyle(Palette.tertiaryInk)
@@ -130,7 +130,7 @@ struct WorkspaceChangesDiffView: View {
                         .font(.paseo(.codeCaption))
                         .foregroundStyle(Palette.tertiaryInk)
                     Text("Review comment")
-                        .font(.paseo(.caption2, weight: .medium))
+                        .font(.paseo(.caption, weight: .medium))
                         .foregroundStyle(Palette.tertiaryInk)
                     Spacer(minLength: 4)
                     Button {
@@ -159,17 +159,19 @@ struct WorkspaceChangesDiffView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Delete review comment")
                 }
-                Text(draft.body)
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onTapGesture {
-                        commentTarget = .edit(draft)
-                    }
-                    .accessibilityLabel("Review comment: \(draft.body)")
-                    .accessibilityHint("Edits the comment")
-                    .accessibilityAddTraits(.isButton)
+                Button {
+                    commentTarget = .edit(draft)
+                } label: {
+                    Text(draft.body)
+                        .font(.paseo(.footnote))
+                        .foregroundStyle(Palette.ink)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Review comment: \(draft.body)")
+                .accessibilityHint("Edits the comment")
             }
         }
         .padding(.horizontal, Space.md)
@@ -198,7 +200,7 @@ struct WorkspaceChangesDiffView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "text.bubble")
                             .font(.glyph(.small, weight: .medium))
-                        Text("Comment on \(PaseoFormat.integer(count)) \(count == 1 ? "line" : "lines")")
+                        Text("Comment on ^[\(count) line](inflect: true)")
                             .font(.paseo(.footnote, weight: .medium))
                     }
                     .foregroundStyle(Palette.background)
@@ -207,7 +209,7 @@ struct WorkspaceChangesDiffView: View {
                     .background(Palette.ink, in: .capsule)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Comment on the selected \(count) lines")
+                .accessibilityLabel(Text("Comment on the selected ^[\(count) line](inflect: true)"))
                 Button {
                     selectionAnchor = nil
                     selectionEnd = nil
@@ -277,29 +279,31 @@ struct WorkspaceChangesDiffView: View {
         .toolbar {
             if allowsDiscard, extras.capabilities.supportsDiscardChanges {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .destructive) {
+                    Button(
+                        "Discard changes to this file", systemImage: "trash", role: .destructive
+                    ) {
                         confirmDiscard = true
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(Palette.failureInk)
                     }
-                    .accessibilityLabel("Discard changes to this file")
+                    .tint(Palette.failureInk)
                     .disabled(extras.isDiscarding)
+                    // On the button, so the dialog animates out of it.
+                    .confirmationDialog(
+                        "Discard changes?",
+                        isPresented: $confirmDiscard,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Discard changes", role: .destructive) { performDiscard() }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This removes all changes in \(file.path). This cannot be undone.")
+                    }
                 }
             }
         }
-        .confirmationDialog(
-            "Discard changes?",
-            isPresented: $confirmDiscard,
-            titleVisibility: .visible
-        ) {
-            Button("Discard changes", role: .destructive) { performDiscard() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes all changes in \(file.path). This cannot be undone.")
-        }
         .paseoFeedback(.selection, trigger: selectionAnchor) { _, new in new != nil }
         .paseoFeedback(.selection, trigger: expandedLongHunks)
+        .paseoFeedback(.selection, trigger: collapsedHunks)
+        .paseoFeedback(.selection, trigger: expandedHunks)
     }
 
     // MARK: Build
@@ -313,8 +317,7 @@ struct WorkspaceChangesDiffView: View {
         return DiffKey(
             path: file.path,
             signature: "\(file.additions)/\(file.deletions)/\(signature)",
-            hideWhitespace: hideWhitespace,
-            wrap: wrapLongLines)
+            hideWhitespace: hideWhitespace)
     }
 
     private func build(_ key: DiffKey) async {
@@ -324,9 +327,8 @@ struct WorkspaceChangesDiffView: View {
         let lineCount = file.hunks.reduce(0) { $0 + $1.lines.count }
         let built: DiffRender
         if lineCount > 500 {
-            built = await Task.detached(priority: .userInitiated) {
-                DiffModel.render(file: file, hideWhitespace: hide, unitWidth: unitWidth)
-            }.value
+            built = await DiffModel.renderOffMain(
+                file: file, hideWhitespace: hide, unitWidth: unitWidth)
         } else {
             built = DiffModel.render(file: file, hideWhitespace: hide, unitWidth: unitWidth)
         }
@@ -335,7 +337,7 @@ struct WorkspaceChangesDiffView: View {
     }
 
     /// The mono advance width, measured once on the main actor (UIKit fonts never cross into the
-    /// detached build).
+    /// off-main build).
     private static func characterWidth() -> CGFloat {
         let size = TextRole.code.size
         let font = UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
@@ -444,22 +446,22 @@ struct WorkspaceChangesDiffView: View {
     @ViewBuilder private func content(drafts: [LineAnchor: [WorkspaceReviewDraftComment]]) -> some View {
         switch file.status {
         case .binary:
-            centeredMessage(
-                symbol: "archivebox",
+            EmptyState(
+                systemImage: "archivebox",
                 title: "Binary file",
-                subtitle: "Binary files can't be shown as a diff.")
+                message: "Binary files can't be shown as a diff.")
         case .tooLarge:
-            centeredMessage(
-                symbol: "doc.text",
+            EmptyState(
+                systemImage: "doc.text",
                 title: "File too large",
-                subtitle: "The diff for this file was omitted by the host.")
+                message: "The diff for this file was omitted by the host.")
         default:
             if let render {
                 if render.sections.isEmpty {
-                    centeredMessage(
-                        symbol: "checkmark.circle",
+                    EmptyState(
+                        systemImage: "checkmark.circle",
                         title: "No textual changes",
-                        subtitle: "There's nothing to show for this file.")
+                        message: "There's nothing to show for this file.")
                 } else {
                     diffScroll(render: render, drafts: drafts)
                 }
@@ -467,22 +469,6 @@ struct WorkspaceChangesDiffView: View {
                 LoadingState()
             }
         }
-    }
-
-    private func centeredMessage(symbol: String, title: String, subtitle: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.glyph(.hero, weight: .light))
-                .foregroundStyle(Palette.tertiaryInk)
-            Text(title)
-                .font(.paseo(.callout, weight: .medium))
-                .foregroundStyle(Palette.ink)
-            Text(subtitle)
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Space.xxxl)
     }
 
     private func isCollapsed(_ hunk: Int) -> Bool {
@@ -613,25 +599,26 @@ struct WorkspaceChangesDiffView: View {
 
     private func showMoreRow(_ section: DiffSection) -> some View {
         let remaining = max(0, section.rows.count - 40)
-        return HStack(spacing: Space.sm) {
-            Image(systemName: "chevron.down")
-                .font(.glyph(.small, weight: .semibold))
-                .foregroundStyle(Palette.secondaryInk)
-            Text("Show \(PaseoFormat.integer(remaining)) more lines")
-                .font(.paseo(.footnote, weight: .medium))
-                .foregroundStyle(Palette.secondaryInk)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, Space.lg)
-        .frame(minHeight: 44)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.chip)
-        .contentShape(.rect)
-        .onTapGesture {
+        return Button {
             expandedLongHunks.insert(section.hunk)
+        } label: {
+            HStack(spacing: Space.sm) {
+                Image(systemName: "chevron.down")
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.secondaryInk)
+                Text("Show \(PaseoFormat.integer(remaining)) more lines")
+                    .font(.paseo(.footnote, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Space.lg)
+            .frame(minHeight: 44)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.chip)
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
         .accessibilityLabel("Show \(remaining) more lines")
-        .accessibilityAddTraits(.isButton)
     }
 
     private func selectionWash(_ anchor: LineAnchor?) -> Color? {
@@ -649,7 +636,6 @@ struct WorkspaceChangesDiffView: View {
 
     private func hunkHeaderRow(text: String, hunk: Int) -> some View {
         Button {
-            Haptics.selection()
             toggleHunk(hunk)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 0) {

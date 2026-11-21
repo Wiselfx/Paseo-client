@@ -17,10 +17,24 @@ struct ProviderGlyph: View {
 
     private let icon: ProviderIcon?
 
+    @MainActor
     init(label: String, iconSvg: String? = nil) {
         self.label = label
         self.iconSvg = iconSvg
-        self.icon = iconSvg.flatMap(ProviderIcon.parse)
+        self.icon = iconSvg.flatMap { Self.parsedIcon($0) }
+    }
+
+    /// Parsed marks by SVG source. `ProviderIcon.parse` is a full SVG scan, and the model chip
+    /// builds this view three times per pass (its `ViewThatFits` candidates), on every pass of the
+    /// composer's body; a view initializer does no such work. A source that does not parse is
+    /// cached too, so it is not scanned again.
+    @MainActor private static var parsedIcons: [String: ProviderIcon?] = [:]
+
+    @MainActor private static func parsedIcon(_ svg: String) -> ProviderIcon? {
+        if let cached = parsedIcons[svg] { return cached }
+        let parsed = ProviderIcon.parse(svg)
+        parsedIcons[svg] = parsed
+        return parsed
     }
 
     var body: some View {

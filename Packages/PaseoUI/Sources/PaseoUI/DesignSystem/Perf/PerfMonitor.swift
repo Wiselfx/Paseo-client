@@ -247,12 +247,18 @@
 
         // MARK: Formatting
 
+        /// One decimal, no grouping, POSIX digits: the perf log line stays machine-parsable
+        /// whatever the device's region.
+        private static let oneDecimal = FloatingPointFormatStyle<Double>.number
+            .precision(.fractionLength(1)).grouping(.never)
+            .locale(Locale(identifier: "en_US_POSIX"))
+
         private static func ms(_ seconds: Double) -> String {
-            String(format: "%.1f", seconds * 1000)
+            (seconds * 1000).formatted(oneDecimal)
         }
 
         private static func seconds(_ value: Double) -> String {
-            String(format: "%.1f", value)
+            value.formatted(oneDecimal)
         }
 
         private static func pairs(_ counts: [String: Int]) -> String {

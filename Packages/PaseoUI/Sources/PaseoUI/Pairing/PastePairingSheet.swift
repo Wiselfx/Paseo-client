@@ -1,9 +1,5 @@
 #if canImport(UIKit)
-import AVFoundation
-import PaseoStore
 import SwiftUI
-import UIKit
-import VisionKit
 
 // MARK: - Paste
 
@@ -20,7 +16,6 @@ public struct PastePairingSheet: View {
         self.error = error
         self.onPasted = onPasted
     }
-    @Environment(\.dismiss) private var dismiss
 
     @State private var text = ""
     @State private var invalid = false
@@ -81,8 +76,7 @@ public struct PastePairingSheet: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         // Same acceptance rule as the scanner; the parse itself happens on Connect.
-        guard trimmed.contains("#offer=") || trimmed.contains("#connect=")
-            || trimmed.hasPrefix("relay://") else {
+        guard PairingLink.looksValid(trimmed) else {
             invalid = true
             return
         }

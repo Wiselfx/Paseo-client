@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
-import UIKit
 
 /// M20: the deep-link host chooser, upstream `hosts/host-chooser.tsx`. Searchable, local-first
 /// order, "No matching hosts" empty state (upstream strings, hardcoded there exactly as here:
@@ -27,7 +26,7 @@ public struct HostChooserSheet: View {
             VStack(alignment: .leading, spacing: Space.md) {
                 searchField
                 ScrollView {
-                    LazyVStack(spacing: 4) {
+                    LazyVStack(spacing: Space.xs) {
                         if options.isEmpty {
                             EmptyState(title: "No matching hosts")
                                 .padding(.vertical, 18)
@@ -38,7 +37,7 @@ public struct HostChooserSheet: View {
                             }
                         }
                     }
-                    .padding(.bottom, 8)
+                    .padding(.bottom, Space.sm)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -48,12 +47,12 @@ public struct HostChooserSheet: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.sm) {
             Image(systemName: "magnifyingglass")
                 .font(.glyph(.small))
                 .foregroundStyle(Palette.tertiaryInk)
             TextField(
-                "",
+                "Search hosts",
                 text: $query,
                 prompt: Text("Search hosts...").foregroundStyle(Palette.secondaryInk)
             )
@@ -63,7 +62,7 @@ public struct HostChooserSheet: View {
             .submitLabel(.search)
             .accessibilityIdentifier("host-chooser.search")
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, Space.md)
         .frame(minHeight: 42)
         .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
     }
@@ -72,11 +71,12 @@ public struct HostChooserSheet: View {
         Button {
             onChoose(host)
         } label: {
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(host.isCurrent ? Palette.successInk : Palette.secondaryInk.opacity(0.5))
-                    .frame(width: 7, height: 7)
+            HStack(spacing: Space.md) {
+                Image(systemName: host.isCurrent ? "checkmark.circle.fill" : "circle")
+                    .font(.glyph(.small))
+                    .foregroundStyle(host.isCurrent ? Palette.successInk : Palette.tertiaryInk)
                     .frame(width: 14)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(host.label)
                         .font(.paseo(.body, weight: .medium))
@@ -99,6 +99,7 @@ public struct HostChooserSheet: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(host.isCurrent ? .isSelected : [])
         .accessibilityIdentifier("host-chooser.row.\(host.detail)")
     }
 }

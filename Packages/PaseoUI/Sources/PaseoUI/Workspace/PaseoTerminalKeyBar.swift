@@ -3,6 +3,15 @@ import SwiftTerm
 import SwiftUI
 import UIKit
 
+/// A virtual key bar shown above the keyboard while a terminal is focused: the keys the
+/// iOS software keyboard can't produce — Esc, Tab, a sticky one-shot Ctrl, arrows, and the
+/// shell punctuation `|`, `~`, `/`, `-` — plus a hide/show-keyboard button.
+///
+/// Wired to SwiftTerm's `TerminalView` as `inputAccessoryView` (the built-in accessory is
+/// replaced). Arrow keys go through `TerminalView.sendKeyUp/Down/Left/Right`, which encode
+/// for the app's cursor-key mode. Esc/Tab/punctuation are sent as raw bytes through
+/// `TerminalsStore.sendInput`. Ctrl flips `TerminalView.controlModifier`, which SwiftTerm
+/// clears after the next key automatically.
 final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private weak var terminalView: TerminalView?
     private let onInput: (String) -> Void
@@ -76,7 +85,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
             forName: .terminalViewControlModifierReset, object: terminalView, queue: .main) { [weak self] _ in
             // Delivered on the main queue, so the main actor is already current.
             MainActor.assumeIsolated {
-                self?.ctrlButton?.tintColor = Self.ink
+                if let ctrl = self?.ctrlButton { self?.showControl(ctrl, latched: false) }
             }
         }
 
@@ -93,7 +102,6 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         spinner.startAnimating()
         uploadRow.addArrangedSubview(spinner)
         uploadFileLabel.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            ?? .monospacedSystemFont(ofSize: 12, weight: .regular)
         uploadFileLabel.textColor = Self.ink.withAlphaComponent(0.85)
         uploadFileLabel.lineBreakMode = .byTruncatingMiddle
         uploadFileLabel.text = ""
@@ -158,7 +166,6 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         } else if let title {
             button.setTitle(title, for: .normal)
             button.titleLabel?.font = UIFont.monospacedSystemFont(ofSize: 17, weight: .regular)
-                ?? UIFont.monospacedSystemFont(ofSize: 17, weight: .regular)
         }
         button.tintColor = Self.ink
         button.setTitleColor(Self.ink, for: .normal)
@@ -178,7 +185,17 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         // The only haptic on the bar: a latched modifier is a mode, and you can feel it.
         Haptics.selection()
         terminalView.controlModifier.toggle()
-        button.tintColor = terminalView.controlModifier ? UIColor(Palette.accentInk) : Self.ink
+        showControl(button, latched: terminalView.controlModifier)
+    }
+
+    /// The latched state is a tint, a selected trait and value for VoiceOver, and a chip behind
+    /// the key, so it never rides on colour alone.
+    private func showControl(_ button: UIButton, latched: Bool) {
+        button.tintColor = latched ? UIColor(Palette.accentInk) : Self.ink
+        button.isSelected = latched
+        button.accessibilityValue = latched ? String(localized: "On", bundle: #bundle) : nil
+        button.backgroundColor = latched ? UIColor(Palette.chip) : .clear
+        button.layer.cornerRadius = 8
     }
 
     private func toggleKeyboard() {

@@ -109,7 +109,7 @@ public enum UsageModel {
         _ window: ProviderUsageWindow,
         as displayAs: UsageDisplayAs,
         retained: Bool = false,
-        now: Date = Date(),
+        now: Date = .now,
         locale: Locale = .current,
         timeZone: TimeZone = .current
     ) -> UsageWindowDisplay {
@@ -144,7 +144,7 @@ public enum UsageModel {
     public static func display(
         _ balance: ProviderUsageBalance,
         retained: Bool = false,
-        now: Date = Date(),
+        now: Date = .now,
         locale: Locale = .current,
         timeZone: TimeZone = .current
     ) -> UsageBalanceDisplay {
@@ -197,7 +197,7 @@ public enum UsageModel {
 
     /// What a card shows for one report. The current outcome owns the messages; only a successful
     /// fetch owns values and freshness.
-    public static func resolve(_ entry: UsageReportEntry, now: Date = Date())
+    public static func resolve(_ entry: UsageReportEntry, now: Date = .now)
         -> UsageReportContent
     {
         let available = isAvailable(entry.report)

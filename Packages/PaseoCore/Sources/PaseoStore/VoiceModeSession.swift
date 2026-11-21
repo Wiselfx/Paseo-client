@@ -260,8 +260,8 @@ public final class VoiceModeSession {
 
     /// The mic level, same smoothing as upstream (`publishDisplayVolume`):
     /// attack 0.35, release 0.18, publish every 120 ms or on a 0.02 change.
-    /// `now` is injectable for tests; the UI passes `Date()`.
-    public func handleCaptureVolume(_ level: Double, now: Date = Date()) {
+    /// `now` is injectable for tests; the UI passes `Date.now`.
+    public func handleCaptureVolume(_ level: Double, now: Date = .now) {
         let displayLevel = isMuted ? 0 : level
         let nowMs = now.timeIntervalSince1970 * 1000
         let previous = volume

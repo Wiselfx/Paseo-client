@@ -27,15 +27,16 @@ struct ClaudeCodeBlock: View {
         var full: [AnsiRun]
         var sheet: [AnsiRun]
         var sheetAttributed: AttributedString
+        /// The tail's coloured text, built once per parse like `sheetAttributed`.
+        var tailAttributed: AttributedString
         var summary: TestSummary?
         var lineCount: Int
     }
 
     @State private var parsed: ParsedTerminal?
-    @State private var showAll = false
 
     /// The sheet's line cap (G8 review): full output scrolls nowhere fast.
-    nonisolated private static let sheetLines = 2000
+    nonisolated static let sheetLines = 2000
 
     init(
         title: String? = nil, command: String? = nil, output: String?,
@@ -52,7 +53,7 @@ struct ClaudeCodeBlock: View {
     }
 
     /// The last 12 lines: the tail that carries the verdict (G8 C12).
-    nonisolated private static let tailLines = 12
+    nonisolated static let tailLines = 12
 
     private var copyText: String {
         if let parsed {
@@ -103,7 +104,7 @@ struct ClaudeCodeBlock: View {
             }
             if hasOutput {
                 if terminal, let output {
-                    terminalOutput(output)
+                    ClaudeTerminalOutput(output: output, parsed: parsed)
                 } else if let output {
                     // The first lines, sideways-scrollable; the rest a tap away. A whole file laid
                     // out in a capped scroll box cost its full text layout on every measure.
@@ -135,89 +136,34 @@ struct ClaudeCodeBlock: View {
         }
         // The parse runs off main; the AttributedString (fonts and colours are
         // main-actor tokens) is built once here, from the capped sheet runs.
-        let parts = await Task.detached(priority: .userInitiated) {
-            () -> (tail: [AnsiRun], full: [AnsiRun], sheet: [AnsiRun], summary: TestSummary?, lines: Int) in
-            let runs = AnsiText.parse(output)
-            let tail = AnsiText.tail(runs, maxLines: Self.tailLines)
-            let sheet = AnsiText.tail(runs, maxLines: Self.sheetLines)
-            let summary = TestSummaryParser.parse(output)
-            let lines = runs.reduce(0) { $0 + $1.text.count(where: \.isNewline) }
-            return (tail, runs, sheet, summary, lines)
-        }.value
-        guard !Task.isCancelled else { return }
+        guard let parts = await Self.parseParts(output), !Task.isCancelled else { return }
         let result = ParsedTerminal(
             tail: parts.tail, full: parts.full, sheet: parts.sheet,
-            sheetAttributed: Self.attributedText(parts.sheet), summary: parts.summary,
+            sheetAttributed: Self.attributedText(parts.sheet),
+            tailAttributed: Self.attributedText(parts.tail), summary: parts.summary,
             lineCount: parts.lines)
         TerminalParseCache.store(result, for: output)
         parsed = result
     }
 
-    /// The tail in ANSI colors, with "Show all" opening the capped sheet. Until the
-    /// first parse lands, the plain last 12 lines hold the final box height and only
-    /// the colors change — no jump, no repeated work on remount.
-    private func terminalOutput(_ output: String) -> some View {
-        let display = parsed ?? TerminalParseCache.entry(for: output)
-        return VStack(alignment: .leading, spacing: 0) {
-            ScrollView(.horizontal) {
-                if let display {
-                    Text(Self.attributedText(display.tail))
-                        .font(.paseo(.codeSmall))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Text(AnsiText.plainTail(output, maxLines: Self.tailLines))
-                        .font(.paseo(.codeSmall))
-                        .foregroundStyle(Palette.ink.opacity(0.85))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-            if let display, display.lineCount > Self.tailLines {
-                Button("Show all \(display.lineCount) lines") { showAll = true }
-                    .font(.paseo(.caption, weight: .medium))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .frame(minHeight: Metrics.hitSize)
-                    .accessibilityHint("Opens the full terminal output")
-                    .sheet(isPresented: $showAll) {
-                        SheetScaffold("Output", detents: .large) {
-                            VStack(alignment: .leading, spacing: 0) {
-                                HStack {
-                                    if display.lineCount > Self.sheetLines {
-                                        Text(
-                                            "Showing the last \(Self.sheetLines) of \(display.lineCount) lines"
-                                        )
-                                        .font(.paseo(.caption))
-                                        .foregroundStyle(Palette.secondaryInk)
-                                    }
-                                    Spacer(minLength: Space.sm)
-                                    ClaudeCopyButton(text: copyText, label: "Copy all")
-                                }
-                                .padding(.horizontal, Space.md)
-                                .padding(.vertical, Space.sm)
-                                ScrollView([.vertical, .horizontal]) {
-                                    Text(display.sheetAttributed)
-                                        .font(.paseo(.codeSmall))
-                                        .textSelection(.enabled)
-                                        .fixedSize(horizontal: true, vertical: false)
-                                        .padding(Space.md)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
-                    }
-            }
-        }
+    /// The off-main half of the parse. `@concurrent` runs it on the global pool as a child of the
+    /// caller's task, so cancelling `.task(id:)` reaches it; the parse itself is synchronous, so it
+    /// is checked between steps and a superseded output stops there (nil) instead of finishing a
+    /// parse nobody will read.
+    @concurrent nonisolated private static func parseParts(_ output: String) async -> (
+        tail: [AnsiRun], full: [AnsiRun], sheet: [AnsiRun], summary: TestSummary?, lines: Int
+    )? {
+        let runs = AnsiText.parse(output)
+        if Task.isCancelled { return nil }
+        let tail = AnsiText.tail(runs, maxLines: tailLines)
+        let sheet = AnsiText.tail(runs, maxLines: sheetLines)
+        if Task.isCancelled { return nil }
+        let summary = TestSummaryParser.parse(output)
+        let lines = runs.reduce(0) { $0 + $1.text.count(where: \.isNewline) }
+        return (tail, runs, sheet, summary, lines)
     }
 
-    /// Runs to a colored `Text`: the tail builds per paint (12 lines, cheap); the
-    /// sheet builds once per parse and rides with it.
+    /// Runs to a colored `Text`: the tail and the sheet each build once per parse and ride with it.
     private static func attributedText(_ runs: [AnsiRun]) -> AttributedString {
         var out = AttributedString()
         for run in runs {

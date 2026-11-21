@@ -1,7 +1,5 @@
 #if canImport(UIKit)
-import AVFoundation
 import Foundation
-import PaseoStore
 
 /// Attention sound cues (DSH `sound-cues`, D89): a short cue when an agent finishes (Tink) or
 /// is blocked waiting on you (Pop), while the app is in the foreground and you are not looking

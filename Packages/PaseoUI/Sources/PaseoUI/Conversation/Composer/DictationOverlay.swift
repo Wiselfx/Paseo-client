@@ -10,10 +10,9 @@ import UniformTypeIdentifiers
 /// insert-and-send. It replaces the field rather than sitting beside it, the way upstream swaps
 /// the whole input surface. Wording is en.ts `message.dictation` (:362-371).
 struct DictationOverlay: View {
-    /// The dictation's live levels.
-    let buffer: LiveWaveformBuffer
-    /// Seconds since recording started.
-    let duration: TimeInterval
+    /// The live dictation. Passed whole, not as its `duration`: that ticks once a second, and
+    /// only this overlay reads it, so only this overlay re-runs on the tick, not the composer.
+    let dictation: DictationController
     let onCancel: () -> Void
     let onAccept: () -> Void
     let onAcceptAndSend: () -> Void
@@ -60,7 +59,7 @@ struct DictationOverlay: View {
     /// The live level, the same waveform the voice bar draws (D2 §4), filling the row (E1 §2.3).
     private var meter: some View {
         LiveWaveform(
-            buffer: buffer, isActive: true,
+            buffer: dictation.waveform, isActive: true,
             barWidth: ComposerMetrics.waveformBarWidth, barGap: ComposerMetrics.waveformBarGap,
             maxBarHeight: ComposerMetrics.waveformHeight)
     }
@@ -84,7 +83,7 @@ struct DictationOverlay: View {
 
     /// Upstream `formatDuration`: zero-padded minutes and seconds.
     private var formattedDuration: String {
-        let total = max(0, Int(duration))
+        let total = max(0, Int(dictation.duration))
         return Duration.seconds(total).formatted(.time(pattern: .minuteSecond(padMinuteToLength: 2)))
     }
 }

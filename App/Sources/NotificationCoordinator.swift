@@ -5,18 +5,6 @@ import PaseoStore
 import PaseoUI
 import UserNotifications
 
-/// A notification Allow/Deny answer waiting for the shell to perform. The shell
-/// reconnects if needed, sends through the store's permission path, and records
-/// the line (which the transcript shows only after the daemon confirms, D8).
-/// On failure the shell posts an "Open" fallback instead.
-struct PendingPermissionAction: Sendable, Hashable {
-    var requestId: String
-    var agentId: String
-    var hostServerID: String
-    var allow: Bool
-    var daemonActionId: String
-}
-
 /// Posts local notifications for `AttentionCenter` intents and turns a notification tap back into
 /// an `AttentionTarget` for the shell.
 ///
@@ -34,8 +22,6 @@ final class NotificationCoordinator {
     /// server id to answer on (or nil). Set once at launch by the composition
     /// root, which owns the session.
     var permissionRequestProvider: ((String) -> (AgentPermissionRequest, String)?)?
-    /// The in-flight answer's background task, so expiry and completion end it.
-    private var permissionTask: UIBackgroundTaskIdentifier = .invalid
 
     private let proxy: NotificationDelegateProxy
 
@@ -274,11 +260,24 @@ final class NotificationCoordinator {
             completion()
             return
         }
-        permissionTask = UIApplication.shared.beginBackgroundTask(withName: "paseo.permission-response") { [weak self] in
+        // One box per answer: answers are reentrant (two quick Allow/Deny taps overlap
+        // across the daemon wait), so a shared slot would end the wrong task and leak
+        // the other.
+        let box = BackgroundTaskBox()
+        box.id = UIApplication.shared.beginBackgroundTask(withName: "paseo.permission-response") {
+            [weak self] in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.postOpenFallback(agentId: action.agentId, hostServerID: action.hostServerID)
-                self.endPermissionTask()
+                self?.postOpenFallback(agentId: action.agentId, hostServerID: action.hostServerID)
+                if box.id != .invalid {
+                    UIApplication.shared.endBackgroundTask(box.id)
+                    box.id = .invalid
+                }
+            }
+        }
+        defer {
+            if box.id != .invalid {
+                UIApplication.shared.endBackgroundTask(box.id)
+                box.id = .invalid
             }
         }
         let confirmed = await performPermissionAction?(action) ?? false
@@ -286,91 +285,5 @@ final class NotificationCoordinator {
             postOpenFallback(agentId: action.agentId, hostServerID: action.hostServerID)
         }
         completion()
-        endPermissionTask()
     }
-
-    private func endPermissionTask() {
-        guard permissionTask != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(permissionTask)
-        permissionTask = .invalid
-    }
-}
-
-/// The UNUserNotificationCenter delegate must be an NSObject. It carries no state beyond the
-/// callbacks the coordinator installs once before any callback can run.
-private final class NotificationDelegateProxy: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
-    /// The raw response plus its completion, for the coordinator to answer
-    /// (possibly after async work) and complete exactly once.
-    var onResponse:
-        (@Sendable (String, [String: String], @escaping @Sendable () -> Void) -> Void)?
-
-    /// Foreground notifications stay in Notification Center: no banner, no sound. Upstream keeps
-    /// them for stale presence information — the push was queued before this app reattached, so
-    /// the thing it announces is often over by the time it arrives (docs/notifications.md:53-54,
-    /// `packages/app/src/notification-open/source.native.ts:12-20`: `shouldShowBanner: false`,
-    /// `shouldShowList: true`, `shouldPlaySound: false`).
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        completionHandler([.list])
-    }
-
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
-    ) {
-        // The coordinator answers (possibly after async work) and completes
-        // exactly once; without a handler this falls through to the tap path.
-        // The coordinator installs `onResponse` in its init, before any callback.
-        guard let onResponse else {
-            completionHandler()
-            return
-        }
-        var info: [String: String] = [:]
-        for (key, value) in response.notification.request.content.userInfo {
-            guard let key = key as? String, let value = value as? String else { continue }
-            info[key] = value
-        }
-        let completion = CompletionBox(completionHandler)
-        onResponse(response.actionIdentifier, info) { completion.call() }
-    }
-}
-
-private extension PendingPermissionAction {
-    /// The tapped action plus the daemon action id it answers with. Nil unless every
-    /// piece survived the userInfo round-trip.
-    init?(actionId: String, userInfo: [String: String]) {
-        let allow: Bool
-        let daemonKey: String
-        if actionId == NotificationCoordinator.allowActionID {
-            allow = true
-            daemonKey = NotificationCoordinator.allowIdKey
-        } else if actionId == NotificationCoordinator.denyActionID {
-            allow = false
-            daemonKey = NotificationCoordinator.denyIdKey
-        } else {
-            return nil
-        }
-        guard let requestId = userInfo[NotificationCoordinator.requestIdKey],
-            !requestId.isEmpty,
-            let agentId = userInfo[NotificationCoordinator.agentIdKey],
-            !agentId.isEmpty,
-            let hostServerID = userInfo[NotificationCoordinator.hostKey],
-            !hostServerID.isEmpty,
-            let daemonActionId = userInfo[daemonKey],
-            !daemonActionId.isEmpty
-        else { return nil }
-        self.init(
-            requestId: requestId, agentId: agentId, hostServerID: hostServerID, allow: allow,
-            daemonActionId: daemonActionId)
-    }
-}
-
-/// The system's completion handler, carried across the main-actor hop. UserNotifications
-/// documents it as callable from any thread, exactly once; the coordinator calls it once.
-private final class CompletionBox: @unchecked Sendable {
-    private let handler: () -> Void
-    init(_ handler: @escaping () -> Void) { self.handler = handler }
-    func call() { handler() }
 }

@@ -30,27 +30,22 @@ struct ChatSubagentsSheet: View {
         return trimmed
     }
 
-    private var items: [ProviderSubagent] {
-        subagents.items.filter { !hiddenIds.contains($0.id) }
-    }
-
-    /// Paseo-managed child agents, oldest first like upstream's track (`select.ts` sorts by
-    /// `createdAt`); they are ordinary agents, so they never appear in `subagents.items`.
-    private var managed: [AgentSnapshot] {
-        session.subagents(of: parentAgentId)
-            .sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
-    }
-
     /// Upstream gates Detach on `features.agentDetach` (`panels/agent-tracks.tsx:67`).
     private var canDetach: Bool {
         session.serverInfo?.hasFeature("agentDetach") == true
     }
 
-    private var finishedCount: Int {
-        items.filter { $0.status != .running }.count
-    }
-
     var body: some View {
+        // Derived once per pass: each is a filter (and `managed` a sort) the rows below would
+        // otherwise repeat on every `ForEach` iteration.
+        let items = subagents.items.filter { !hiddenIds.contains($0.id) }
+        // Paseo-managed child agents, oldest first like upstream's track (`select.ts` sorts by
+        // `createdAt`); they are ordinary agents, so they never appear in `subagents.items`.
+        let managed = session.subagents(of: parentAgentId)
+            .sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+        let lastManagedID = managed.last?.id
+        let lastItemID = items.last?.id
+        let finishedCount = items.count(where: { $0.status != .running })
         SheetScaffold("Subagents", detents: .mediumLarge) {
             Group {
                 if subagents.isLoading && items.isEmpty {
@@ -66,14 +61,17 @@ struct ChatSubagentsSheet: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(managed) { agent in
-                                managedRow(agent)
-                                if agent.id != managed.last?.id || !items.isEmpty {
+                                ManagedSubagentRow(
+                                    agent: agent, providerLabel: providerLabel(agent),
+                                    canDetach: canDetach, isDetaching: detachingId == agent.id,
+                                    onOpen: onOpenAgent, onDetach: { detachTarget = agent })
+                                if agent.id != lastManagedID || !items.isEmpty {
                                     ClaudeDivider().padding(.leading, 44)
                                 }
                             }
                             ForEach(items) { item in
-                                subagentRow(item)
-                                if item.id != items.last?.id {
+                                ProviderSubagentRow(item: item) { pushTarget = item }
+                                if item.id != lastItemID {
                                     ClaudeDivider().padding(.leading, 44)
                                 }
                             }
@@ -83,7 +81,7 @@ struct ChatSubagentsSheet: View {
                                     .padding(.vertical, 10)
                             }
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, Space.xs)
                     }
                 }
             }
@@ -126,129 +124,8 @@ struct ChatSubagentsSheet: View {
         }
     }
 
-    private func subagentRow(_ item: ProviderSubagent) -> some View {
-        Button {
-            pushTarget = item
-        } label: {
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(SubagentStatusWord.dot(item.status))
-                    .frame(width: 8, height: 8)
-                    .frame(width: 20)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(rowTitle(item))
-                        .font(.paseo(.callout, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
-                    if let subtitle = rowSubtitle(item) {
-                        Text(subtitle)
-                            .font(.paseo(.caption))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 8)
-                Text(SubagentStatusWord.label(item.status))
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                Image(systemName: "chevron.right")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.tertiaryInk)
-            }
-            .padding(.horizontal, 16)
-            .frame(minHeight: 56)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(rowTitle(item)), \(SubagentStatusWord.label(item.status))")
-    }
-
-    /// A managed subagent: ordinary agent row plus the detach action. Upstream shows the action
-    /// cluster always on compact form factors (a phone) and on hover on desktop
-    /// (`subagents-track.tsx`, `actionsAlwaysVisible`), so the button is visible here; the context
-    /// menu carries the same action for a long press.
-    private func managedRow(_ agent: AgentSnapshot) -> some View {
-        HStack(spacing: 12) {
-            StatusDot(managedStatus(agent))
-                .frame(width: 20)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(managedTitle(agent))
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                Text(providerLabel(agent))
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            if canDetach {
-                if detachingId == agent.id {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(width: 28, height: 28)
-                        .accessibilityLabel("Detaching")
-                } else {
-                    Button {
-                        detachTarget = agent
-                    } label: {
-                        Image(systemName: "person.badge.minus")
-                            .font(.glyph(.regular, weight: .medium))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .frame(width: 28, height: 28)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Detach \(managedTitle(agent))")
-                    .accessibilityIdentifier("subagents.detach")
-                }
-            }
-            Image(systemName: "chevron.right")
-                .font(.glyph(.small, weight: .semibold))
-                .foregroundStyle(Palette.tertiaryInk)
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 56)
-        .contentShape(.rect)
-        .onTapGesture {
-            onOpenAgent(agent.id)
-        }
-        .accessibilityAddTraits(.isButton)
-        .contextMenu {
-            Button("Open agent", systemImage: "arrow.up.right.square") {
-                onOpenAgent(agent.id)
-            }
-            if canDetach {
-                Button("Detach", systemImage: "person.badge.minus") {
-                    detachTarget = agent
-                }
-            }
-        }
-    }
-
-    private func managedTitle(_ agent: AgentSnapshot) -> String {
-        let trimmed = agent.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? "New agent" : trimmed
-    }
-
     private func providerLabel(_ agent: AgentSnapshot) -> String {
         session.agentControl.provider(agent.provider)?.label ?? agent.provider
-    }
-
-    /// The same dot the panel's agent rows use: attention first, then the lifecycle status.
-    private func managedStatus(_ agent: AgentSnapshot) -> StatusDot.State {
-        switch agent.attention {
-        case .permission: return .attention
-        case .error: return .failed
-        case .finished: return .unread
-        case .unknown, nil: break
-        }
-        return switch agent.status {
-        case .running: .running
-        case .error: .failed
-        case .initializing, .idle, .closed, .unknown: .idle
-        }
     }
 
     /// Detach, then open the agent: upstream's `requestDetachSubagent` opens the detached agent
@@ -267,17 +144,6 @@ struct ChatSubagentsSheet: View {
         await session.refreshAgents()
         Haptics.success()
         onOpenAgent(agent.id)
-    }
-
-    private func rowTitle(_ item: ProviderSubagent) -> String {
-        item.title ?? item.description ?? item.provider
-    }
-
-    private func rowSubtitle(_ item: ProviderSubagent) -> String? {
-        if item.title != nil {
-            return item.description ?? item.subtitle
-        }
-        return item.subtitle
     }
 }
 #endif

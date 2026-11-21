@@ -1,4 +1,6 @@
 #if canImport(UIKit)
+import SwiftUI
+
     struct InlineCodeRenderer: TextRenderer {
         var background: Color
         func draw(layout: Text.Layout, in context: inout GraphicsContext) {

@@ -32,7 +32,7 @@ struct WorkspacePanel: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.toast) private var toast
-    @AppStorage private var pageRaw: String
+    @AppStorage private var page: Page
     @State private var checkout: CheckoutStore?
     @State private var gitExtras: WorkspaceGitExtras?
     @State private var renamingAgent: AgentSnapshot?
@@ -68,7 +68,7 @@ struct WorkspacePanel: View {
         // The last page is remembered per workspace; a notification tap lands on Terminal.
         let initial: Page = initialTerminalId != nil ? .terminal : .agents
         let id = workspace?.id ?? "none"
-        _pageRaw = AppStorage(wrappedValue: initial.rawValue, "paseo.panel.page.\(id)")
+        _page = AppStorage(wrappedValue: initial, "paseo.panel.page.\(id)")
     }
 
     enum Page: String, CaseIterable {
@@ -97,16 +97,12 @@ struct WorkspacePanel: View {
         }
     }
 
-    private var currentPage: Page {
-        Page(rawValue: pageRaw) ?? .agents
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             header
             setupQuietLine
             segmented
-                .padding(.horizontal, 16)
+                .padding(.horizontal, Space.lg)
                 .padding(.bottom, 10)
             ClaudeDivider()
             dismissableContent
@@ -117,7 +113,7 @@ struct WorkspacePanel: View {
         .environment(\.mentionInChat, onMentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
         .onChange(of: initialTerminalId) { _, terminalId in
-            if terminalId != nil { pageRaw = Page.terminal.rawValue }
+            if terminalId != nil { page = .terminal }
         }
         .task(id: isPanelVisible ? workspace?.id : nil) {
             guard !Task.isCancelled else { return }
@@ -139,12 +135,9 @@ struct WorkspacePanel: View {
                 gitExtras = nil
                 return
             }
-            let store = await MainActor.run { session.checkout(for: workspace) }
-            guard isPanelVisible, !Task.isCancelled else {
-                await session.closeCheckout(workspace.id)
-                return
-            }
-            let extras = await MainActor.run { session.gitExtras.workspace(for: store) }
+            // `.task` runs on the main actor, so the stores are created without a hop.
+            let store = session.checkout(for: workspace)
+            let extras = session.gitExtras.workspace(for: store)
             guard isPanelVisible, !Task.isCancelled else {
                 await session.closeCheckout(workspace.id)
                 return
@@ -179,9 +172,7 @@ struct WorkspacePanel: View {
         }
         .alert(
             "Rename workspace",
-            isPresented: Binding(
-                get: { renamingWorkspace },
-                set: { if !$0 { renamingWorkspace = false } })
+            isPresented: $renamingWorkspace
         ) {
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) { renamingWorkspace = false }
@@ -206,16 +197,14 @@ struct WorkspacePanel: View {
         .alert(
             "Rename agent",
             item: $renamingAgent
-        ) { _ in
+        ) { agent in
             TextField("Name", text: $renameText)
-            Button("Cancel", role: .cancel) { renamingAgent = nil }
+            Button("Cancel", role: .cancel) {}
             Button("Rename") {
-                let target = renamingAgent
                 let title = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                renamingAgent = nil
-                guard let target, !title.isEmpty else { return }
+                guard !title.isEmpty else { return }
                 Task {
-                    await session.conversation(for: target.id).rename(to: title)
+                    await session.conversation(for: agent.id).rename(to: title)
                     await session.refreshAgents()
                 }
             }
@@ -226,15 +215,11 @@ struct WorkspacePanel: View {
             "Archive agent?",
             item: $agentPendingArchive,
             titleVisibility: .visible
-        ) { _ in
-            Button("Archive", role: .destructive) {
-                guard let agent = agentPendingArchive else { return }
-                agentPendingArchive = nil
-                archive(agent)
-            }
-            Button("Cancel", role: .cancel) { agentPendingArchive = nil }
-        } message: { _ in
-            Text(archiveMessage(for: agentPendingArchive))
+        ) { agent in
+            Button("Archive", role: .destructive) { archive(agent) }
+            Button("Cancel", role: .cancel) {}
+        } message: { agent in
+            Text(archiveMessage(for: agent))
         }
         .workspaceArchiveDialogs(workspaceArchive, session: session)
     }
@@ -375,7 +360,7 @@ struct WorkspacePanel: View {
             Button {
                 showSetupSheet = true
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: Space.sm) {
                     setupGlyph(snapshot.status)
                     Text(setupLineText(snapshot))
                         .font(.paseo(.footnote, weight: .medium))
@@ -387,8 +372,8 @@ struct WorkspacePanel: View {
                         .foregroundStyle(Palette.tertiaryInk)
                 }
                 .contentShape(Rectangle())
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Space.lg)
+                .padding(.vertical, Space.sm)
                 .background(Palette.quoteWash)
             }
             .buttonStyle(.plain)
@@ -439,33 +424,22 @@ struct WorkspacePanel: View {
     private var segmented: some View {
         Picker(
             "Workspace page",
-            selection: Binding(
-                get: { currentPage },
-                set: { select($0) })
+            selection: $page.animation(Motion.disclosure.resolved(reduceMotion: reduceMotion))
         ) {
-            ForEach(Page.allCases, id: \.self) { page in
-                Label(page.title, systemImage: page.symbol)
-                    .tag(page)
+            ForEach(Page.allCases, id: \.self) { option in
+                Label(option.title, systemImage: option.symbol)
+                    .tag(option)
             }
         }
         .pickerStyle(.segmented)
-    }
-
-    private func select(_ page: Page) {
-        guard page != currentPage else { return }
-        Haptics.selection()
-        if reduceMotion {
-            pageRaw = page.rawValue
-        } else {
-            withAnimation(Motion.disclosure.animation) { pageRaw = page.rawValue }
-        }
+        .paseoFeedback(.selection, trigger: page)
     }
 
     // MARK: Content
 
     @ViewBuilder private var content: some View {
         if let workspace {
-            switch currentPage {
+            switch page {
             case .agents:
                 agentsPage(workspace: workspace)
             case .files:
@@ -492,8 +466,7 @@ struct WorkspacePanel: View {
     @ViewBuilder private var changesPage: some View {
         if let checkout {
             WorkspaceChangesView(
-                session: session, checkout: checkout,
-                agentId: currentAgentId, workspaceId: workspace?.id)
+                session: session, checkout: checkout, agentId: currentAgentId)
         } else {
             loadingPage
         }
@@ -634,8 +607,7 @@ struct WorkspacePanel: View {
         return nil
     }
 
-    private func archiveMessage(for agent: AgentSnapshot?) -> String {
-        guard let agent else { return "" }
+    private func archiveMessage(for agent: AgentSnapshot) -> String {
         if agent.status == .running {
             return "This agent is still running. Archiving it will stop the agent."
         }

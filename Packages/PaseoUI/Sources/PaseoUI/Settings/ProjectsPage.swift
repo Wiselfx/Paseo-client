@@ -66,7 +66,8 @@ struct ProjectsPage: View {
             SettingsRoute.project(project.projectId),
             title: project.projectCustomName ?? project.projectDisplayName,
             subtitle: project.projectRootPath,
-            detail: count == 1 ? "1 workspace" : "\(count) workspaces"
+            detail: String(
+                AttributedString(localized: "^[\(count) workspace](inflect: true)", bundle: #bundle).characters)
         )
         .accessibilityIdentifier("settings.projects.open.\(project.projectId)")
     }

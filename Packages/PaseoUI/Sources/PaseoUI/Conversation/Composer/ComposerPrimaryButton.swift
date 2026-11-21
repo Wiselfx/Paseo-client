@@ -54,8 +54,8 @@ struct ComposerPrimaryButton: View {
             Circle().fill(fill)
             content
         }
-        .frame(width: 36, height: 36)
-        .frame(width: 44, height: 44)
+        .frame(width: ComposerMetrics.controlSize, height: ComposerMetrics.controlSize)
+        .frame(width: ComposerMetrics.hitSize, height: ComposerMetrics.hitSize)
         .contentShape(.rect)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: state)
     }

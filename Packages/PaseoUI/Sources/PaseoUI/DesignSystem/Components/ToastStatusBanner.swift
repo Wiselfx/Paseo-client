@@ -11,7 +11,7 @@ struct ToastStatusBanner: View {
             if status.showsProgress {
                 ProgressView().controlSize(.mini)
             } else if let systemImage = status.systemImage {
-                Image(systemName: systemImage).font(.glyph(.small, weight: .medium))
+                Image(systemName: systemImage).font(.glyph(.small, weight: .medium)).accessibilityHidden(true)
             }
             Text(status.message)
                 .font(.paseo(.footnote, weight: .medium))

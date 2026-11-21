@@ -13,9 +13,5 @@ struct QuestionFormQuestion: Equatable {
     var allowEmpty: Bool
     var placeholder: String?
     var dismissLabel: String?
-
-    static func == (lhs: QuestionFormQuestion, rhs: QuestionFormQuestion) -> Bool {
-        lhs.question == rhs.question
-    }
 }
 #endif

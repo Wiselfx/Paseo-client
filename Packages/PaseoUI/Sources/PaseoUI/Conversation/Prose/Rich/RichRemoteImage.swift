@@ -23,6 +23,9 @@ import WebKit
 struct RichRemoteImage: View {
     let urlString: String
     let alt: String
+    /// The parsed link, once. `MediaPipeline.target(for:)` trims and parses (with a
+    /// percent-encoding fallback), and a `data:` URL can be megabytes: body must not repeat it.
+    private let target: URL?
 
     @State private var image: UIImage?
     /// Known before the pixels: from the cache, or from the image once it lands.
@@ -30,7 +33,7 @@ struct RichRemoteImage: View {
     @State private var failure: MediaFailure?
     /// True while this card is the one that showed the placeholder: its failure then keeps the
     /// reserved box instead of collapsing to a 56 pt row and pulling the rest of the turn up.
-    @State private var keepsFailureBox = true
+    @State private var keepsFailureBox: Bool
     @State private var width: CGFloat = 0
     @State private var retryToken = 0
     /// The URL the state above belongs to. SwiftUI can hand this view a different block; when it
@@ -49,14 +52,15 @@ struct RichRemoteImage: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.openURL) private var openURL
 
     init(urlString: String, alt: String) {
         self.urlString = urlString
         self.alt = alt
+        let target = MediaPipeline.target(for: urlString)
+        self.target = target
         // First frame: whatever the session already knows about this URL. A cache read is
         // O(1), so the row has no "empty" frame to flash when it scrolls back.
-        let seed = Self.seed(for: urlString)
+        let seed = Self.seed(for: urlString, target: target)
         _image = State(initialValue: seed.image)
         _aspectRatio = State(initialValue: seed.aspectRatio)
         _failure = State(initialValue: seed.failure)
@@ -73,8 +77,9 @@ struct RichRemoteImage: View {
         let keepsBox: Bool
     }
 
-    private static func seed(for urlString: String) -> Seed {
-        let identity = MediaPipeline.cacheIdentity(for: urlString)
+    private static func seed(for urlString: String, target: URL?) -> Seed {
+        // The same identity `MediaPipeline.cacheIdentity(for:)` computes, from the parsed link.
+        let identity = target?.absoluteString ?? urlString
         let cached = MediaPipeline.cached(for: identity)
         let memo = MediaPipeline.cachedFailure(for: identity)
         let image = cached?.image
@@ -103,16 +108,17 @@ struct RichRemoteImage: View {
     }
 
     private var fileName: String {
-        MediaPipeline.target(for: urlString)?.lastPathComponent.nilIfEmpty ?? "image"
+        let name = target?.lastPathComponent ?? ""
+        return name.isEmpty ? "image" : name
     }
 
     private var host: String? {
-        MediaPipeline.target(for: urlString)?.host
+        target?.host
     }
 
     /// Only an http(s) link is worth sending to Safari; a `data:` or `blob:` one is not.
     private var webURL: URL? {
-        guard let url = MediaPipeline.target(for: urlString) else { return nil }
+        guard let url = target else { return nil }
         let scheme = url.scheme?.lowercased()
         return scheme == "http" || scheme == "https" ? url : nil
     }
@@ -161,132 +167,64 @@ struct RichRemoteImage: View {
 
     @ViewBuilder private var stage: some View {
         if let image {
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .mediaSlot(width: slotWidth, heightCap: heightCap)
-                .background(Palette.codeSurface)
-                .clipShape(.rect(cornerRadius: Radius.md))
-                .overlay(alignment: .bottomTrailing) {
-                    if showsAnimationBadge {
-                        Text(MediaPipeline.target(for: urlString)?.pathExtension.uppercased() ?? "GIF")
-                            .font(.paseo(.codeCaption))
-                            .foregroundStyle(Palette.onMediaBadge)
-                            .padding(.horizontal, Metrics.badgeHPadding)
-                            .padding(.vertical, Metrics.badgeVPadding)
-                            .background(Palette.mediaBadge, in: .capsule)
-                            .padding(Space.sm)
-                            .accessibilityHidden(true)
+            Button(action: openViewer) {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .mediaSlot(width: slotWidth, heightCap: heightCap)
+                    .background(Palette.codeSurface)
+                    .clipShape(.rect(cornerRadius: Radius.md))
+                    .overlay(alignment: .bottomTrailing) {
+                        if showsAnimationBadge {
+                            Text(target?.pathExtension.uppercased() ?? "GIF")
+                                .font(.paseo(.codeCaption))
+                                .foregroundStyle(Palette.onMediaBadge)
+                                .padding(.horizontal, Metrics.badgeHPadding)
+                                .padding(.vertical, Metrics.badgeVPadding)
+                                .background(Palette.mediaBadge, in: .capsule)
+                                .padding(Space.sm)
+                                .accessibilityHidden(true)
+                        }
                     }
-                }
-                .contentShape(.rect)
-                .matchedTransitionSource(id: viewerSourceID, in: zoom)
-                .onTapGesture {
-                    showViewer = true
-                }
-                .accessibilityLabel(alt.isEmpty ? "Image" : alt)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("Opens the image full screen")
-                // A context menu is the only way to the link without a second gesture language.
-                // Share and Save to Photos live in the viewer (G3 §4.6).
-                .paseoCardMenu(
-                    copyTitle: "Copy link",
-                    copyText: webURL != nil ? urlString : nil,
-                    externalTitle: "Open link",
-                    externalURL: webURL)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .matchedTransitionSource(id: viewerSourceID, in: zoom)
+            .accessibilityLabel(alt.isEmpty ? "Image" : alt)
+            .accessibilityHint("Opens the image full screen")
+            // A context menu is the only way to the link without a second gesture language.
+            // Share and Save to Photos live in the viewer (G3 §4.6).
+            .paseoCardMenu(
+                copyTitle: "Copy link",
+                copyText: webURL != nil ? urlString : nil,
+                externalTitle: "Open link",
+                externalURL: webURL)
         } else if let failure {
+            // Two forms, one behaviour: a card that showed the placeholder keeps the
+            // placeholder's height, a card that was created already failed takes the compact row.
             if keepsFailureBox {
-                boxedFailure(failure)
+                MediaFailureBox(aspect: reservedAspect, width: slotWidth, heightCap: heightCap) {
+                    failureContent(failure)
+                }
             } else {
-                compactFailure(failure)
+                PaseoCard(content:
+                    failureContent(failure)
+                        .frame(maxWidth: .infinity, alignment: .leading))
             }
         } else {
-            placeholder
+            MediaPlaceholder(
+                aspect: reservedAspect, width: slotWidth, heightCap: heightCap,
+                progress: downloadProgress, alt: alt)
         }
-    }
-
-    private var placeholder: some View {
-        Rectangle()
-            .fill(Palette.codeSurface)
-            .aspectRatio(reservedAspect, contentMode: .fit)
-            .mediaSlot(width: slotWidth, heightCap: heightCap)
-            .clipShape(.rect(cornerRadius: Radius.md))
-            .overlay {
-                // Streaming with a known total: the determinate ring in the same frame.
-                if let progress = downloadProgress {
-                    ProgressView(value: progress)
-                        .controlSize(.small)
-                        .tint(Palette.secondaryInk)
-                } else {
-                    ProgressView().controlSize(.small).tint(Palette.secondaryInk)
-                }
-            }
-            .accessibilityLabel(alt.isEmpty ? "Loading image" : "Loading image: \(alt)")
-    }
-
-    /// What went wrong, in the user's words, with the two things worth doing about it.
-    ///
-    /// Two forms, one behaviour: a card that showed the placeholder keeps the placeholder's
-    /// height (H5 round 2 review — a 270 pt box must not collapse to 56 pt under the reader),
-    /// a card that was created already failed takes the compact row.
-    private func boxedFailure(_ failure: MediaFailure) -> some View {
-        Rectangle()
-            .fill(Palette.codeSurface)
-            .aspectRatio(reservedAspect, contentMode: .fit)
-            .mediaSlot(width: slotWidth, heightCap: heightCap)
-            .clipShape(.rect(cornerRadius: Radius.md))
-            .overlay {
-                failureContent(failure)
-                    .padding(.horizontal, Space.md)
-                    .padding(.vertical, Space.sm)
-            }
-    }
-
-    private func compactFailure(_ failure: MediaFailure) -> some View {
-        PaseoCard(content:
-            failureContent(failure)
-                .frame(maxWidth: .infinity, alignment: .leading))
     }
 
     private func failureContent(_ failure: MediaFailure) -> some View {
-        HStack(alignment: .center, spacing: Space.sm) {
-            Image(systemName: "photo")
-                .font(.glyph(.large, weight: .light))
-                .foregroundStyle(Palette.secondaryInk)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Space.xs) {
-                Text("Couldn't load image")
-                    .font(.paseo(.caption, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                Text(detail(for: failure))
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: Space.sm)
-            Button("Retry") { retry() }
-                .buttonStyle(.plain)
-                .font(.paseo(.caption, weight: .medium))
-                .foregroundStyle(Palette.ink)
-                .frame(minWidth: Metrics.hitSize, minHeight: Metrics.hitSize)
-                .accessibilityLabel("Try loading the image again")
-            if webURL != nil {
-                Button {
-                    if let webURL { openURL(webURL) }
-                } label: {
-                    Image(systemName: "safari")
-                        .font(.glyph(.small))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .frame(width: Metrics.hitSize, height: Metrics.hitSize)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open link")
-                .accessibilityHint("Opens \(host ?? "the link") in Safari")
-            }
-        }
-        .accessibilityElement(children: .contain)
+        MediaFailureContent(
+            detail: detail(for: failure), onRetry: retry, webURL: webURL, host: host)
+    }
+
+    private func openViewer() {
+        showViewer = true
     }
 
     /// The zoom-transition source, stable per card: the thumbnail the viewer returns to.
@@ -297,7 +235,7 @@ struct RichRemoteImage: View {
         MediaViewerItem(
             id: urlString,
             thumbnail: image,
-            fullSource: MediaPipeline.target(for: urlString).map(MediaSource.remote),
+            fullSource: target.map(MediaSource.remote),
             fileName: fileName,
             alt: alt.isEmpty ? fileName : alt,
             filePath: nil)
@@ -305,7 +243,7 @@ struct RichRemoteImage: View {
 
     /// The transcript shows the first frame; only the viewer animates (G3 §4.6).
     private var showsAnimationBadge: Bool {
-        let ext = MediaPipeline.target(for: urlString)?.pathExtension.lowercased()
+        let ext = target?.pathExtension.lowercased()
         return ext == "gif" || ext == "apng"
     }
 
@@ -344,7 +282,7 @@ struct RichRemoteImage: View {
             if image == nil, failure == nil { failure = .offline }
             return
         }
-        guard let url = MediaPipeline.target(for: urlString) else {
+        guard let url = target else {
             failure = .badURL
             return
         }
@@ -383,7 +321,7 @@ struct RichRemoteImage: View {
     /// Point the card at a URL it has not drawn yet, starting from whatever is cached.
     private func adoptState(for urlString: String) {
         stateURL = urlString
-        let seed = Self.seed(for: urlString)
+        let seed = Self.seed(for: urlString, target: target)
         image = seed.image
         aspectRatio = seed.aspectRatio
         failure = seed.failure
@@ -406,7 +344,8 @@ struct RichRemoteImage: View {
             let rendered = await RichSnapshotQueue.shared.snapshot(
                 html: html, width: width, scale: displayScale)
         else {
-            failure = .decoding
+            // A render skipped because the card scrolled away is not a decoding failure.
+            if !Task.isCancelled { failure = .decoding }
             return
         }
         guard !Task.isCancelled else { return }

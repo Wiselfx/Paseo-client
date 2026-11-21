@@ -1,16 +1,22 @@
 #if canImport(UIKit)
 import PaseoStore
-import PhotosUI
 import SwiftUI
-import UniformTypeIdentifiers
-import UIKit
 
 /// Name + command editor for one script.
 struct ScriptEditSheet: View {
-    @State var script: ProjectScriptDraft
+    @State private var script: ProjectScriptDraft
     var onSave: (ProjectScriptDraft) -> Void
     var onCancel: () -> Void
 
+    init(
+        script: ProjectScriptDraft,
+        onSave: @escaping (ProjectScriptDraft) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        _script = State(initialValue: script)
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
 
     private var canSave: Bool {
         !script.name.trimmingCharacters(in: .whitespaces).isEmpty
@@ -31,20 +37,15 @@ struct ScriptEditSheet: View {
                     Haptics.light()
                 } label: {
                     Text("Save")
-                        .font(.paseo(.callout, weight: .semibold))
-                        .foregroundStyle(Palette.background)
                         .frame(maxWidth: .infinity)
-                        .frame(minHeight: 48)
-                        .background(
-                            Palette.ink.opacity(canSave ? 1 : 0.35), in: .capsule)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.paseoPrimary())
                 .disabled(!canSave)
-                .padding(.top, 4)
+                .padding(.top, Space.xs)
                 Spacer()
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.horizontal, Space.lg)
+            .padding(.top, Space.sm)
         }
         .background(Palette.background)
         .presentationDetents([.medium, .large])
@@ -55,21 +56,17 @@ struct ScriptEditSheet: View {
             Text(title)
                 .font(.paseo(.footnote, weight: .medium))
                 .foregroundStyle(Palette.secondaryInk)
-            ZStack(alignment: .leading) {
-                if text.wrappedValue.isEmpty {
-                    Text(placeholder)
-                        .font(.paseo(.code))
-                        .foregroundStyle(Palette.tertiaryInk)
-                        .allowsHitTesting(false)
-                }
-                TextField("", text: text)
-                    .font(.paseo(.code))
-                    .foregroundStyle(Palette.ink)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
+            TextField(
+                title, text: text,
+                prompt: Text(placeholder).foregroundStyle(Palette.tertiaryInk)
+            )
+            .font(.paseo(.code))
+            .foregroundStyle(Palette.ink)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
             .padding(.horizontal, 14)
-            .frame(height: 48)
+            .padding(.vertical, Space.md)
+            .frame(minHeight: 48)
             .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
         }
     }

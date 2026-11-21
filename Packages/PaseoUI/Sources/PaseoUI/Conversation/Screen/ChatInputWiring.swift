@@ -14,8 +14,8 @@ struct ChatInputWiring: ViewModifier {
     let controller: ChatController
     @Binding var focused: Bool
 
-    /// Inline images decode at the screen's width in pixels; `UIScreen.main` is deprecated on
-    /// iOS 26, so the scale comes from the environment (D1 §4).
+    /// Inline images decode at the window's width in pixels: the scale comes from the environment
+    /// (`UIScreen.main` is deprecated on iOS 26) and the width from this view's geometry (D1 §4).
     @Environment(\.displayScale) private var displayScale
 
     func body(content: Content) -> some View {
@@ -34,7 +34,7 @@ struct ChatInputWiring: ViewModifier {
                 store: store,
                 onDraftChange: { newValue in
                     controller.scheduleDraftSave(newValue)
-                    controller.feedMascot(.userActivity(at: Date()))
+                    controller.feedMascot(.userActivity(at: .now))
                 },
                 onMentionQueryChange: { query in controller.handleMentionQuery(query) })
             .onAppear {
@@ -43,6 +43,9 @@ struct ChatInputWiring: ViewModifier {
                 controller.dictation.onDraft = { [store] text in store.draft = text }
             }
             .onChange(of: displayScale) { _, scale in controller.displayScale = scale }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                controller.contentWidth = width
+            }
     }
 }
 #endif

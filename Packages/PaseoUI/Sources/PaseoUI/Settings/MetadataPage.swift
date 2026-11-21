@@ -97,7 +97,7 @@ struct MetadataPage: View {
             .font(.paseo(.callout, weight: .semibold))
             .foregroundStyle(isSelected ? Palette.background : Palette.ink)
             .padding(.horizontal, 18)
-            .frame(minHeight: 40)
+            .frame(minHeight: 44)
             .background(isSelected ? Palette.ink : Palette.chip, in: .capsule)
     }
 

@@ -11,7 +11,6 @@ struct UserActivityWiring: ViewModifier {
     @Binding var focused: Bool
 
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
@@ -25,7 +24,7 @@ struct UserActivityWiring: ViewModifier {
             }
             .onChange(of: focused) { _, isFocused in
                 if isFocused {
-                    controller.feedMascot(.userActivity(at: Date()))
+                    controller.feedMascot(.userActivity(at: .now))
                     controller.requestEndScroll()
                 }
             }

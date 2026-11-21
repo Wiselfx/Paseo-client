@@ -33,47 +33,59 @@ struct TurnTodoCard: View, Equatable {
 
     private var summaryText: String {
         if state.todos == nil { return "Plan" }
-        if state.isComplete { return "\(totalCount) tasks done" }
-        return "\(doneCount) of \(totalCount) tasks"
+        // Inflected by the system ("1 task done"); kept a `String` because the accessibility label
+        // reads it too.
+        if state.isComplete {
+            return String(
+                AttributedString(
+                    localized: "^[\(totalCount) task](inflect: true) done", bundle: #bundle
+                ).characters)
+        }
+        return String(
+            AttributedString(
+                localized: "\(doneCount) of ^[\(totalCount) task](inflect: true)", bundle: #bundle
+            ).characters)
     }
 
     var body: some View {
-        if expanded {
-            expandedCard
-        } else {
-            Button {
-                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                    expanded = true
-                }
-                Haptics.selection()
-            } label: {
-                PaseoCard(content:
-                    HStack(spacing: Space.sm) {
-                        Image(
-                            systemName: state.isComplete
-                                ? "checkmark.circle.fill" : "circle.dotted"
-                        )
-                        .font(.glyph(.regular, weight: .medium))
-                        .foregroundStyle(
-                            state.isComplete ? Palette.successInk : Palette.secondaryInk)
-                        .accessibilityHidden(true)
-                        Text(summaryText)
-                            .font(.paseo(.callout))
-                            .foregroundStyle(Palette.ink)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: "chevron.down")
-                            .font(.glyph(.small, weight: .semibold))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .accessibilityHidden(true)
+        Group {
+            if expanded {
+                expandedCard
+            } else {
+                Button {
+                    withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
+                        expanded = true
                     }
-                    .frame(minHeight: Metrics.rowCardMinHeight - Space.md * 2)
-                    .contentShape(.rect))
+                } label: {
+                    PaseoCard(content:
+                        HStack(spacing: Space.sm) {
+                            Image(
+                                systemName: state.isComplete
+                                    ? "checkmark.circle.fill" : "circle.dotted"
+                            )
+                            .font(.glyph(.regular, weight: .medium))
+                            .foregroundStyle(
+                                state.isComplete ? Palette.successInk : Palette.secondaryInk)
+                            .accessibilityHidden(true)
+                            Text(summaryText)
+                                .font(.paseo(.callout))
+                                .foregroundStyle(Palette.ink)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Image(systemName: "chevron.down")
+                                .font(.glyph(.small, weight: .semibold))
+                                .foregroundStyle(Palette.secondaryInk)
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: Metrics.rowCardMinHeight - Space.md * 2)
+                        .contentShape(.rect))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(summaryText)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Expands the task list")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(summaryText)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint("Expands the task list")
         }
+        .paseoFeedback(.selection, trigger: expanded)
     }
 
     private var expandedCard: some View {
@@ -93,12 +105,11 @@ struct TurnTodoCard: View, Equatable {
                 withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
                     expanded = false
                 }
-                Haptics.selection()
             } label: {
                 Text("Show less")
                     .font(.paseo(.caption, weight: .medium))
                     .foregroundStyle(Palette.secondaryInk)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    .frame(maxWidth: .infinity, minHeight: Metrics.hitSize, alignment: .center)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)

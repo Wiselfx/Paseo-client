@@ -16,7 +16,7 @@ enum TerminalParseCache {
     /// Stable per content: length plus hash (a display cache — a collision shows
     /// the wrong tail until the output changes again, at ~2^-64 odds).
     static func key(for output: String) -> String {
-        "\(output.count)-\(output.hashValue)"
+        "\(output.utf8.count)-\(output.hashValue)"
     }
 
     static func entry(for output: String) -> ClaudeCodeBlock.ParsedTerminal? {

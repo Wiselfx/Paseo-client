@@ -9,17 +9,12 @@ import UIKit
 struct ClaudeVisibleRow: View {
     let row: TimelineRow
     var highlightedSeq: Int?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if case .compaction(let status, let trigger, let preTokens) = row.item {
             ClaudeCompactionMarker(status: status, trigger: trigger, preTokens: preTokens)
                 .rowAnchor(row.seqEnd)
-                .background {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
-                        .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
-                }
+                .background { FindWash(highlighted: highlightedSeq == row.seqEnd) }
         } else {
             ClaudeMidTurnBubble(row: row, highlightedSeq: highlightedSeq)
         }

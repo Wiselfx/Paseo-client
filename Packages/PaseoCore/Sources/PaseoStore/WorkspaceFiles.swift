@@ -259,29 +259,26 @@ public final class WorkspaceFiles {
     }
 
     /// Extracts the bytes of an inline file off the main actor: a 64 MB base64 string never
-    /// decodes (or copies) on the thread that draws.
-    private nonisolated static func decodeOffMain(_ file: FileExplorerFile) async throws
+    /// decodes (or copies) on the thread that draws. `@concurrent` runs it on the global
+    /// executor without a detached task, so it keeps the caller's task priority.
+    @concurrent private nonisolated static func decodeOffMain(_ file: FileExplorerFile) async throws
         -> FileReadResult
     {
-        let encoding = file.encoding
-        let content = file.content
-        let path = file.path
-        let data = try await Task.detached(priority: .userInitiated) { () throws -> Data in
-            switch encoding {
-            case .base64:
-                guard let content,
-                    let decoded = Data(
-                        base64Encoded: content, options: [.ignoreUnknownCharacters])
-                else {
-                    throw PaseoStoreError.missingFile(path: path, message: nil)
-                }
-                return decoded
-            case .utf8:
-                return Data((content ?? "").utf8)
-            case .none, .unknown:
-                throw PaseoStoreError.missingFile(path: path, message: nil)
+        let data: Data
+        switch file.encoding {
+        case .base64:
+            guard let content = file.content,
+                let decoded = Data(
+                    base64Encoded: content, options: [.ignoreUnknownCharacters])
+            else {
+                throw PaseoStoreError.missingFile(path: file.path, message: nil)
             }
-        }.value
+            data = decoded
+        case .utf8:
+            data = Data((file.content ?? "").utf8)
+        case .none, .unknown:
+            throw PaseoStoreError.missingFile(path: file.path, message: nil)
+        }
         return FileReadResult(
             data: data, mimeType: file.mimeType ?? "application/octet-stream", size: file.size,
             path: file.path, kind: file.kind, modifiedAt: file.modifiedAt,

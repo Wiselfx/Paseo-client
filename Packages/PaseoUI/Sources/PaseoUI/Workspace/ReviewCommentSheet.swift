@@ -55,24 +55,16 @@ struct ReviewCommentSheet: View {
                         .padding(10)
                         .background(Palette.quoteWash, in: .rect(cornerRadius: Radius.md))
                 }
-                ZStack(alignment: .topLeading) {
-                    if text.isEmpty {
-                        Text("Leave a comment")
-                            .font(.paseo(.callout))
-                            .foregroundStyle(Palette.tertiaryInk)
-                            .allowsHitTesting(false)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 8)
-                    }
-                    TextEditor(text: $text)
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.ink)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 120, maxHeight: 240)
-                        .focused($focused)
-                }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
+                TextField(
+                    "Leave a comment", text: $text,
+                    prompt: Text("Leave a comment").foregroundStyle(Palette.tertiaryInk),
+                    axis: .vertical
+                )
+                .font(.paseo(.callout))
+                .foregroundStyle(Palette.ink)
+                .lineLimit(5...10)
+                .focused($focused)
+                .padding(Space.sm)
                 .background(Palette.chip, in: .rect(cornerRadius: Radius.md))
                 HStack(spacing: 10) {
                     if let onDelete {

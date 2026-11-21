@@ -5,15 +5,15 @@ import SwiftUI
 /// Shared by Settings, Schedules, History and Search, which all present lists the same way.
 /// R-5: one component, not a copy per screen.
 struct PageList<Content: View>: View {
-    private let content: () -> Content
+    private let content: Content
 
-    init(@ViewBuilder content: @escaping () -> Content) {
-        self.content = content
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
     }
 
     var body: some View {
         List {
-            content()
+            content
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)

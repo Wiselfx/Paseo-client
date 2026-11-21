@@ -43,9 +43,10 @@ struct StatusDot: View {
             }
             .opacity(pulses ? (pulsing ? 1 : 0.35) : 1)
             .animation(animation, value: pulsing)
-            .onAppear {
-                guard pulses else { return }
-                pulsing = true
+            .onChange(of: pulses, initial: true) { _, isPulsing in
+                // Turning on animates with `repeatForever`; turning off has a nil animation, so
+                // the dot snaps back to full opacity.
+                pulsing = isPulsing
             }
             .accessibilityHidden(true)
     }

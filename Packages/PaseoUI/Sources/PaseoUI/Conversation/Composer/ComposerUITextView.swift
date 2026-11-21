@@ -65,6 +65,9 @@ final class ComposerUITextView: UITextView {
             setNeedsLayout()
         }
         if placeholderLabel.text != text { placeholderLabel.text = text }
+        // The placeholder is a plain subview, and a text view is itself the accessibility element,
+        // so VoiceOver never visits it: the field's name is the placeholder's text.
+        if accessibilityLabel != text { accessibilityLabel = text }
     }
 
     func updatePlaceholder(visible: Bool) {

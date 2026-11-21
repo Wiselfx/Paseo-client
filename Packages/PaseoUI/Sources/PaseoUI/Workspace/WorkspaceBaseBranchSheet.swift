@@ -14,12 +14,15 @@ struct WorkspaceBaseBranchSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
-    @State private var isApplying = false
+    /// The branch being applied; only its row shows the spinner.
+    @State private var applyingName: String?
     @State private var applyError: String?
     @State private var hasLoaded = false
 
 
     private var suggestions: [BranchSuggestion] { extras.branchSuggestions }
+
+    private var isApplying: Bool { applyingName != nil }
 
     /// The default remote's HEAD is out of scope; show the local branches and remote-only tips.
     var body: some View {
@@ -34,17 +37,19 @@ struct WorkspaceBaseBranchSheet: View {
                     .frame(maxHeight: .infinity)
             }
         }
-        .task {
-            await extras.loadBranchSuggestions(limit: 50)
+        // One structured request per query: typing cancels the previous one (and its debounce), so
+        // a slow response for an older query can't land after a newer one.
+        .task(id: searchText) {
+            if !searchText.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+            guard !Task.isCancelled else { return }
+            await extras.loadBranchSuggestions(
+                query: searchText.isEmpty ? nil : searchText, limit: 50)
             hasLoaded = true
-        }
-        .onChange(of: searchText) { _, value in
-            Task { await extras.loadBranchSuggestions(query: value.isEmpty ? nil : value, limit: 50) }
         }
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.sm) {
             Image(systemName: "magnifyingglass")
                 .font(.glyph(.small, weight: .medium))
                 .foregroundStyle(Palette.secondaryInk)
@@ -54,13 +59,13 @@ struct WorkspaceBaseBranchSheet: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
             if extras.isLoadingBranchSuggestions {
-                ProgressView().controlSize(.small)
+                InlineProgress()
             }
         }
         .padding(.horizontal, 14)
-        .frame(height: 38)
+        .frame(minHeight: 38)
         .background(Palette.chip, in: .capsule)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Space.lg)
     }
 
     @ViewBuilder private var content: some View {
@@ -80,7 +85,7 @@ struct WorkspaceBaseBranchSheet: View {
                         Button {
                             apply(suggestion)
                         } label: {
-                            HStack(spacing: 12) {
+                            HStack(spacing: Space.md) {
                                 Image(systemName: "arrow.triangle.branch")
                                     .font(.glyph(.small, weight: .medium))
                                     .foregroundStyle(Palette.secondaryInk)
@@ -92,17 +97,17 @@ struct WorkspaceBaseBranchSheet: View {
                                         .lineLimit(1)
                                     if suggestion.hasRemote == true && suggestion.hasLocal != true {
                                         Text("Remote only")
-                                            .font(.paseo(.caption2))
+                                            .font(.paseo(.caption))
                                             .foregroundStyle(Palette.tertiaryInk)
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                if isApplying {
+                                if applyingName == suggestion.name {
                                     InlineProgress()
                                 }
                             }
-                            .padding(.horizontal, 20)
-                            .frame(height: 46)
+                            .padding(.horizontal, Space.xl)
+                            .frame(minHeight: 46)
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
@@ -116,14 +121,14 @@ struct WorkspaceBaseBranchSheet: View {
 
     private func apply(_ suggestion: BranchSuggestion) {
         guard !isApplying else { return }
-        isApplying = true
+        applyingName = suggestion.name
         applyError = nil
         let remoteOnly = suggestion.hasLocal == false && suggestion.hasRemote == true
         let ref = (remoteOnly ? "refs/remotes/" : "refs/heads/") + suggestion.name
         Task {
             let applied = await session.workspaceDirectory.setBaseBranch(
                 workspaceId, baseRef: ref)
-            isApplying = false
+            applyingName = nil
             if applied {
                 Haptics.success()
                 onApplied()

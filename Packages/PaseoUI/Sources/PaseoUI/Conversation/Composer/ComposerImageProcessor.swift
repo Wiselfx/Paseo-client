@@ -14,22 +14,25 @@ enum ComposerImageProcessor {
 
     /// Decodes, scales to fit `maxPixel` on the long edge (never upscaling), re-encodes as JPEG.
     /// Returns nil when the data doesn't decode.
-    static func downscaledJPEG(data: Data) -> (data: Data, image: UIImage)? {
-        guard let image = UIImage(data: data) else { return nil }
-        let size = image.size
-        guard size.width > 0, size.height > 0 else { return nil }
-        let scale = min(1, maxPixel / max(size.width, size.height))
-        let target = CGSize(
-            width: max(1, (size.width * scale).rounded(.down)),
-            height: max(1, (size.height * scale).rounded(.down)))
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        let renderer = UIGraphicsImageRenderer(size: target, format: format)
-        let scaled = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: target))
-        }
-        guard let jpeg = scaled.jpegData(compressionQuality: jpegQuality) else { return nil }
+    ///
+    /// `@concurrent`: the work runs off the caller's actor, stated once here instead of at every
+    /// call site. The decode goes through ImageIO (`ImageDownsampler`), which never materializes the
+    /// full bitmap: a 48 MP photo would cost about 190 MB through `UIImage(data:)` and `draw(in:)`,
+    /// and the picker allows ten at once.
+    @concurrent nonisolated static func downscaledJPEG(
+        data: Data
+    ) async -> (data: Data, image: UIImage)? {
+        guard let scaled = ImageDownsampler.image(data: data, maxPixelSize: Double(maxPixel)),
+            let jpeg = scaled.jpegData(compressionQuality: jpegQuality)
+        else { return nil }
         return (jpeg, scaled)
+    }
+
+    /// A camera frame as full-quality JPEG bytes. `@concurrent`: a 12 to 48 MP frame takes tens to
+    /// hundreds of milliseconds to encode, which the main actor must not pay while the camera
+    /// sheet dismisses. The bytes then go through the same `downscaledJPEG` pass as a picked photo.
+    @concurrent nonisolated static func jpegData(of image: UIImage) async -> Data? {
+        image.jpegData(compressionQuality: 1.0)
     }
 
     /// Decode + downscale with ImageIO, without a full `UIImage` pass: `ImageDownsampler` reads

@@ -7,17 +7,17 @@ import SwiftUI
 struct SettingsMenuRow<MenuContent: View>: View {
     private let title: String
     private let value: String
-    private let menu: () -> MenuContent
+    private let menu: MenuContent
 
-    init(_ title: String, value: String, @ViewBuilder menu: @escaping () -> MenuContent) {
+    init(_ title: String, value: String, @ViewBuilder menu: () -> MenuContent) {
         self.title = title
         self.value = value
-        self.menu = menu
+        self.menu = menu()
     }
 
     var body: some View {
         Menu {
-            menu()
+            menu
         } label: {
             ListRow(title: title, accessory: ListRow.Accessory.value(value))
         }

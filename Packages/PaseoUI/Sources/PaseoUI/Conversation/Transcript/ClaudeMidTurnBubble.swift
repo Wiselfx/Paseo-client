@@ -10,7 +10,6 @@ import UIKit
 struct ClaudeMidTurnBubble: View {
     let row: TimelineRow
     var highlightedSeq: Int?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if case .userMessage(let message) = row.item {
@@ -26,11 +25,7 @@ struct ClaudeMidTurnBubble: View {
                     sentAt: PaseoDate.parse(row.timestamp)
                 )
                 .rowAnchor(row.seqEnd)
-                .background {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .fill(Palette.warning.opacity(highlightedSeq == row.seqEnd ? 0.18 : 0))
-                        .animation(Motion.settle.resolved(reduceMotion: reduceMotion), value: highlightedSeq)
-                }
+                .background { FindWash(highlighted: highlightedSeq == row.seqEnd) }
             }
         }
     }

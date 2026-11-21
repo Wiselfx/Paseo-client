@@ -40,7 +40,7 @@ enum WorkspaceShare {
         let unique = ext.isEmpty
             ? "\(base)-\(UUID().uuidString.prefix(8))"
             : "\(base)-\(UUID().uuidString.prefix(8)).\(ext)"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(unique)
+        let url = URL.temporaryDirectory.appending(path: unique)
         // A 64 MB write for a video or audio file never runs on the main actor: the share sheet
         // waits a beat instead of the screen freezing.
         try await Task.detached(priority: .userInitiated) {

@@ -7,7 +7,14 @@ import SwiftUI
 struct ClaudeNoticeRow: View {
     let item: TimelineItem
 
-
+    /// A distinct glyph per level, so severity does not rest on the ink colour alone.
+    private static func symbol(for level: String) -> String {
+        switch level {
+        case "error": "xmark.octagon"
+        case "warning": "exclamationmark.circle"
+        default: "info.circle"
+        }
+    }
     var body: some View {
         switch item {
         case .error(let message):
@@ -16,7 +23,7 @@ struct ClaudeNoticeRow: View {
                 .foregroundStyle(Palette.failureInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .notification(let level, let message):
-            Label(message, systemImage: level == "warning" ? "exclamationmark.circle" : "info.circle")
+            Label(message, systemImage: Self.symbol(for: level))
                 .font(.paseo(.callout))
                 .foregroundStyle(level == "error" ? Palette.failureInk : Palette.secondaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -29,6 +36,8 @@ struct ClaudeNoticeRow: View {
                 .font(.paseo(.footnote))
                 .foregroundStyle(Palette.tertiaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            #else
+            EmptyView()
             #endif
         default:
             EmptyView()

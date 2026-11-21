@@ -4,22 +4,20 @@ import Observation
 import PaseoStore
 import SwiftUI
 
-/// The History screen's data: one pass over the lifecycle entries, dates parsed once, titles
-/// lowercased once, and the filter applied to those precomputed keys (PLAN §RE, R-1). The view
+/// The History screen's data: one pass over the lifecycle entries, dates parsed once, and
+/// the filter applied to those precomputed rows (PLAN §RE, R-1). The view
 /// rebuilds it when the entries change and when the debounced query changes.
 @MainActor @Observable final class HistoryModel {
     struct Row: Identifiable, Equatable {
         let id: String
         let agent: AgentSnapshot
         let title: String
-        /// The precomputed search key.
-        let searchKey: String
         let subtitle: String
         let date: Date?
         let archived: Bool
     }
 
-    struct Group: Identifiable {
+    struct Group: Identifiable, Equatable {
         var id: String { label }
         let label: String
         let rows: [Row]
@@ -38,8 +36,7 @@ import SwiftUI
         entries: [AgentSnapshot],
         workspaceTitles: [String: String],
         providerLabels: [String: String],
-        modelLabel: (String, String) -> String,
-        now: Date = Date()
+        modelLabel: (String, String) -> String
     ) {
         var built: [Row] = []
         built.reserveCapacity(entries.count)
@@ -59,7 +56,6 @@ import SwiftUI
                     id: agent.id,
                     agent: agent,
                     title: title,
-                    searchKey: title.lowercased(),
                     subtitle: parts.joined(separator: " · "),
                     date: PaseoDate.parse(stamp),
                     archived: agent.archivedAt != nil
@@ -72,9 +68,9 @@ import SwiftUI
     /// Filters the precomputed rows and regroups them by day.
     func applyFilter(_ text: String) {
         query = text
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let matched =
-            trimmed.isEmpty ? rows : rows.filter { $0.searchKey.contains(trimmed) }
+            trimmed.isEmpty ? rows : rows.filter { $0.title.localizedStandardContains(trimmed) }
         var today: [Row] = []
         var yesterday: [Row] = []
         var earlier: [Row] = []

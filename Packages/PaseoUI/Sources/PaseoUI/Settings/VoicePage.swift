@@ -8,7 +8,7 @@ import SwiftUI
 struct VoicePage: View {
     let session: HostSession
 
-    @State private var openSite: SpeechSiteID?
+    @State private var openSite: SpeechSiteSelection?
 
     private var voice: VoiceSettingsStore { session.voiceSettings }
     private var speech: SpeechSettings? { voice.speechSettings }
@@ -52,15 +52,8 @@ struct VoicePage: View {
         }
         .inlinePageTitle("Voice")
         .refreshable { await session.hostSettings.load() }
-        .sheet(
-            isPresented: Binding(
-                get: { openSite != nil },
-                set: { if !$0 { openSite = nil } })
-        ) {
-            if let siteID = openSite {
-                SpeechProviderSheet(session: session, siteID: siteID)
-                    .id(siteID.rawValue)
-            }
+        .sheet(item: $openSite) { selection in
+            SpeechProviderSheet(session: session, siteID: selection.siteID)
         }
         .task {
             await voice.loadModels()
@@ -140,7 +133,7 @@ struct VoicePage: View {
             subtitle: summaryLabel(summary),
             accessory: ListRow.Accessory.chevron,
             action: {
-                openSite = siteID
+                openSite = SpeechSiteSelection(siteID: siteID)
             }
         )
         .panelRow()

@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import PaseoStore
 import SwiftUI
-import UIKit
 
 /// Remembers the last scrubbed bundle for the input it came from.
 @MainActor final class ScrubMemo {

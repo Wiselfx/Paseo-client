@@ -28,30 +28,24 @@ struct TerminalPage: View {
         PageList {
             Section {
                 SettingsMenuRow("Scrollback", value: selectedLabel) {
-                    ForEach(options, id: \.value) { option in
-                        Button {
-                            scrollback = option.value
-                        } label: {
-                            Label(
-                                option.label,
-                                systemImage: scrollback == option.value ? "checkmark" : "circle")
+                    Picker("Scrollback", selection: $scrollback) {
+                        ForEach(options, id: \.value) { option in
+                            Text(option.label).tag(option.value)
                         }
                     }
+                    .pickerStyle(.inline)
                 }
                 .accessibilityIdentifier("settings.terminal.scrollback")
                 .paseoFeedback(.selection, trigger: scrollback)
                 SettingsMenuRow(
                     "Clicking a script's service URL", value: currentBehavior.label
                 ) {
-                    ForEach(ServiceUrlBehavior.allCases, id: \.self) { option in
-                        Button {
-                            serviceUrlBehavior = option.rawValue
-                        } label: {
-                            Label(
-                                option.label,
-                                systemImage: currentBehavior == option ? "checkmark" : "circle")
+                    Picker("Clicking a script's service URL", selection: $serviceUrlBehavior) {
+                        ForEach(ServiceUrlBehavior.allCases, id: \.self) { option in
+                            Text(option.label).tag(option.rawValue)
                         }
                     }
+                    .pickerStyle(.inline)
                 }
                 .accessibilityIdentifier("settings.terminal.serviceUrls")
                 .paseoFeedback(.selection, trigger: serviceUrlBehavior)

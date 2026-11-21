@@ -6,19 +6,20 @@ import PaseoStore
 public struct MarkdownDocumentModel: Equatable, Sendable {
     public let source: String
     public var blocks: [MarkdownBlock]
-    /// Whether any block — nested quotes and lists included — is a table. Gates the
-    /// per-piece viewport-width reader, which only tables read (W8): plain prose
-    /// pieces mount no geometry reader. Derived from `blocks`, so not part of `==`.
+    /// Whether any block — nested quotes and lists included — is a table. The tables own their
+    /// viewport readers now (W8), so the renderer no longer gates on it; kept for hosts.
+    /// Derived from `blocks`, so not part of `==`.
     public let hasTable: Bool
-    /// Whether any block is a fenced code block. Gates the per-piece expand sheet
-    /// host (W8). Derived from `blocks`, so not part of `==`.
+    /// Whether any block is a fenced code block. The code blocks own their expand sheets now
+    /// (W8), so the renderer no longer gates on it; kept for hosts. Derived from `blocks`, so not
+    /// part of `==`.
     public let hasCode: Bool
-    /// Per-table content versions, by block index (Phase C §9.1): a hash of the
-    /// table's cell text, computed once per parse and memoised with the cached
-    /// document. The layout remeasures when it changes (streamed text grows with
-    /// the cell count unchanged); settled tables never change it, so steady state
-    /// is still zero measurement.
-    public var tableVersions: [Int: Int]
+    /// Per-table content versions, by the table's document-unique path (Phase C §9.1; see
+    /// `String.markdownChild`, nested tables included): a hash of the table's cell text,
+    /// computed once per parse and memoised with the cached document. The layout remeasures
+    /// when it changes (streamed text grows with the cell count unchanged); settled tables
+    /// never change it, so steady state is still zero measurement.
+    public var tableVersions: [String: Int]
     public init(source: String) {
         self.source = source
         let parsed = Document(parsing: source, options: [.disableSmartOpts]).children.map(
@@ -76,19 +77,31 @@ public struct MarkdownDocumentModel: Equatable, Sendable {
         return (hasTable, hasCode)
     }
 
-    private static func tableVersions(for blocks: [MarkdownBlock]) -> [Int: Int] {
-        var versions: [Int: Int] = [:]
+    private static func tableVersions(for blocks: [MarkdownBlock], path: String = "") -> [String: Int] {
+        var versions: [String: Int] = [:]
         for (index, block) in blocks.enumerated() {
-            guard case .table(let header, let rows, _) = block else { continue }
-            var hasher = Hasher()
-            hasher.combine(rows.count)
-            for cell in header { hasher.combine(cell.map(\.plainText).joined(separator: "\u{1F}")) }
-            for row in rows {
-                for cell in row {
-                    hasher.combine(cell.map(\.plainText).joined(separator: "\u{1F}"))
+            let blockPath = path.markdownChild(index)
+            switch block {
+            case .table(let header, let rows, _):
+                var hasher = Hasher()
+                hasher.combine(rows.count)
+                for cell in header { hasher.combine(cell.map(\.plainText).joined(separator: "\u{1F}")) }
+                for row in rows {
+                    for cell in row {
+                        hasher.combine(cell.map(\.plainText).joined(separator: "\u{1F}"))
+                    }
                 }
+                versions[blockPath] = hasher.finalize()
+            case .quote(let children):
+                versions.merge(Self.tableVersions(for: children, path: blockPath)) { _, nested in nested }
+            case .list(_, let items):
+                for (itemIndex, item) in items.enumerated() {
+                    versions.merge(
+                        Self.tableVersions(for: item.blocks, path: blockPath.markdownChild(itemIndex))
+                    ) { _, nested in nested }
+                }
+            default: break
             }
-            versions[index] = hasher.finalize()
         }
         return versions
     }

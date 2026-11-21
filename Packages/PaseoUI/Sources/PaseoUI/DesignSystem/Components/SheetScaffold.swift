@@ -15,7 +15,7 @@ struct SheetScaffold<Content: View>: View {
     private let detents: SheetDetents
     private let confirm: SheetConfirm?
     private let onClose: (() -> Void)?
-    private let content: () -> Content
+    private let content: Content
 
     @Environment(\.dismiss) private var dismiss
     @State private var isDirty = false
@@ -26,29 +26,23 @@ struct SheetScaffold<Content: View>: View {
         detents: SheetDetents = .large,
         confirm: SheetConfirm? = nil,
         onClose: (() -> Void)? = nil,
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.detents = detents
         self.confirm = confirm
         self.onClose = onClose
-        self.content = content
+        self.content = content()
     }
 
     var body: some View {
         NavigationStack {
-            content()
+            content
                 .background(Palette.background)
                 .scrollContentBackground(.hidden)
                 .navigationTitle(title)
                 .toolbarTitleDisplayMode(.inline)
                 .toolbar { toolbar }
-                .confirmationDialog(
-                    "Discard changes?", isPresented: $asksDiscard, titleVisibility: .visible
-                ) {
-                    Button("Discard changes", role: .destructive) { close() }
-                    Button("Keep editing", role: .cancel) {}
-                }
                 .onPreferenceChange(SheetDirtyKey.self) { isDirty = $0 }
         }
         .presentationDetents(detents.presentationDetents)
@@ -58,11 +52,16 @@ struct SheetScaffold<Content: View>: View {
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button(role: .close) {
-                if isDirty { asksDiscard = true } else { close() }
-            }
-            .accessibilityLabel("Close")
-            .accessibilityIdentifier("sheet.close.\(title)")
+            Button(role: .close, action: requestClose)
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("sheet.close.\(title)")
+                // On the close button, so the dialog animates out of the control that asked.
+                .confirmationDialog(
+                    "Discard changes?", isPresented: $asksDiscard, titleVisibility: .visible
+                ) {
+                    Button("Discard changes", role: .destructive) { close() }
+                    Button("Keep editing", role: .cancel) {}
+                }
         }
         if let confirm {
             ToolbarItem(placement: .confirmationAction) {
@@ -78,6 +77,10 @@ struct SheetScaffold<Content: View>: View {
                 }
             }
         }
+    }
+
+    private func requestClose() {
+        if isDirty { asksDiscard = true } else { close() }
     }
 
     private func close() {

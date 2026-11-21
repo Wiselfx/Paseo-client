@@ -17,6 +17,9 @@ struct SidebarRoll<Content: View>: View {
         contentOrEmpty
             .frame(height: expanded ? contentHeight : 0, alignment: .top)
             .clipped()
+            // The height roll is motion. This innermost animation is nil under Reduce Motion, so the
+            // frame changes without animating; the fade below wraps it and still animates opacity.
+            .animation(reduceMotion ? nil : Motion.fade.animation, value: expanded)
             .opacity(expanded ? 1 : 0)
             .animation(Motion.fade.resolved(reduceMotion: reduceMotion), value: expanded)
     }

@@ -42,6 +42,8 @@ public struct ShellView: View {
     /// False until the first `onAppear` has picked the agent or created the draft: the first
     /// frame is the launch skeleton, never a home greeting that is then replaced (E2 §3.3).
     @State private var homeSettled = false
+    /// Bumped when "mention in chat" lands; drives the confirmation haptic.
+    @State private var mentionCount = 0
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -81,17 +83,7 @@ public struct ShellView: View {
                     ShellPerfProbes(session: session, conversation: conversation)
                 }
             }
-            .onAppear {
-                drawer.onNewSession = { openNewSession(workspaceId: nil) }
-                session.hostSettings.startPresence(
-                    focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
-                session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
-                restoreStartupScreen()
-                ComposerWarmup.scheduleOnce()
-                handleNotificationTarget()
-                handleDeepLinkTarget()
-                homeSettled = true
-            }
+            .onAppear(perform: shellDidAppear)
             .onDisappear {
                 session.hostSettings.stopPresence()
                 session.attention.setFocusedAgent(nil)
@@ -116,6 +108,22 @@ public struct ShellView: View {
             .onChange(of: deepLinkTarget) { _, _ in
                 handleDeepLinkTarget()
             }
+            .paseoFeedback(.light, trigger: mentionCount)
+    }
+
+    /// The shell's startup wiring, in the order it needs: presence and attention first, then the
+    /// screen to restore, then whatever a notification or link asked for. `homeSettled` goes last,
+    /// so the launch skeleton stays up until the home is decided.
+    private func shellDidAppear() {
+        drawer.onNewSession = { openNewSession(workspaceId: nil) }
+        session.hostSettings.startPresence(
+            focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
+        session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
+        restoreStartupScreen()
+        ComposerWarmup.scheduleOnce()
+        handleNotificationTarget()
+        handleDeepLinkTarget()
+        homeSettled = true
     }
 
     // MARK: Roots
@@ -263,7 +271,7 @@ public struct ShellView: View {
         }
         drawer.close()
         composerFocusRequested = true
-        Haptics.light()
+        mentionCount += 1
     }
 
     private func appending(_ mention: String, to text: String) -> String {

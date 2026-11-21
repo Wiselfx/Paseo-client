@@ -10,7 +10,7 @@ final class LevelLog: @unchecked Sendable {
     private let lock = NSLock()
     private var last: TimeInterval = 0
 
-    func log(rms: Float, eased: Float, at now: TimeInterval = Date().timeIntervalSince1970) {
+    func log(rms: Float, eased: Float, at now: TimeInterval = Date.now.timeIntervalSince1970) {
         lock.lock()
         guard now - last >= 1 else {
             lock.unlock()
@@ -20,7 +20,7 @@ final class LevelLog: @unchecked Sendable {
         lock.unlock()
         let db = 20 * log10(max(rms, 1e-5))
         VoiceLog.log.debug(
-            "dictation level db=\(String(format: "%.1f", db), privacy: .public) eased=\(String(format: "%.3f", eased), privacy: .public)")
+            "dictation level db=\(db.formatted(.number.precision(.fractionLength(1))), privacy: .public) eased=\(eased.formatted(.number.precision(.fractionLength(3))), privacy: .public)")
     }
 
     func reset() {

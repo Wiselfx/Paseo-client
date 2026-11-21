@@ -41,7 +41,11 @@ struct HelpPage: View {
             } header: {
                 Text("Community")
             } footer: {
-                Text(appVersion + (session.serverInfo?.version.map { " · Host \($0)" } ?? ""))
+                if let hostVersion = session.serverInfo?.version {
+                    Text("\(appVersion) · Host \(hostVersion)")
+                } else {
+                    Text(appVersion)
+                }
             }
         }
         .inlinePageTitle("Help & support")

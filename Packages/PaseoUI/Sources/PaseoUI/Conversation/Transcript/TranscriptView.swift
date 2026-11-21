@@ -9,7 +9,7 @@ import UIKit
 /// cards) and measures the bars; `TranscriptEngine` owns the `UICollectionView` that shows them and
 /// every scroll rule: following the tail, the send, "Back to the end", older history, jumps and find.
 ///
-/// **Reads:** `store.turns`, the trailing cards' emptiness, `store.phase` (states), `controller.find`
+/// **Reads:** `store.turns`, the trailing cards' emptiness, `store.phase` (in `TranscriptStates`), `controller.find`
 /// (open/match/flash), `controller.actions.availability`, `store.canceledTurnIds`, and the landing line.
 /// **Writes** (through the engine, only when a boundary flips): `controller.isFollowing`,
 /// `controller.backToEnd`, `controller.headerHidden`.
@@ -57,7 +57,7 @@ struct TranscriptView: View {
             updateStableViewport(size)
         }
         .overlay {
-            if showsStates { states }
+            if showsStates { TranscriptStates(store: store, controller: controller) }
         }
         .overlay(alignment: .trailing) {
             TranscriptRail(store: store, controller: controller, engine: engine)
@@ -172,32 +172,6 @@ struct TranscriptView: View {
     /// Loading, empty or failed: nothing in the transcript to show. O(1), two emptiness checks.
     private var showsStates: Bool {
         store.turns.isEmpty && store.pendingPermissions.isEmpty
-    }
-
-    /// Loading, empty and failed states, a whole viewport tall so a centred state stays centred.
-    private var states: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                switch store.phase {
-                case .loading:
-                    LoadingState()
-                case .failed(let message):
-                    VStack(spacing: 0) {
-                        InlineBanner(
-                            .failure, title: message, systemImage: "exclamationmark.triangle",
-                            action: ("Try again", { Task { await store.load() } }))
-                            .padding(16)
-                        Spacer(minLength: 0)
-                    }
-                case .ready:
-                    // An existing agent with nothing in it is not a new session (audit C #22).
-                    EmptyState(systemImage: nil, title: "No messages yet")
-                }
-            }
-            .containerRelativeFrame(.vertical)
-        }
-        .scrollDisabled(true)
-        .simultaneousGesture(TapGesture().onEnded { controller.dismissKeyboard() })
     }
 }
 #endif

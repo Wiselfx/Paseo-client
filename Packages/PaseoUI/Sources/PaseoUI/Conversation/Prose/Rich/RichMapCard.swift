@@ -43,9 +43,7 @@ struct RichMapCard: View {
     }
 
     var body: some View {
-        Button {
-            if let targetURL { openURL(targetURL) }
-        } label: {
+        Button(action: openInMaps) {
             PaseoMediaCard(
                 media: snapshotBox,
                 header: PaseoCardHeader(glyph: "mappin", title: caption))
@@ -53,21 +51,31 @@ struct RichMapCard: View {
         .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
         .paseoCardMenu(
             openTitle: "Open in Maps",
-            onOpen: { if let targetURL { openURL(targetURL) } },
+            onOpen: openInMaps,
             copyTitle: "Copy location",
             copyText: caption)
         .paseoCardAccessibility(kind: "Map", title: caption, isButton: true)
         .accessibilityHint("Opens Apple Maps")
-        .task(id: "\(reference.latitude ?? 0),\(reference.longitude ?? 0)") {
-            guard snapshot == nil, let lat = reference.latitude, let lng = reference.longitude else { return }
-            if let cached = RichMapSnapshotCache.image(for: reference) {
-                snapshot = cached
-                return
-            }
-            snapshot = await Self.snapshot(lat: lat, lng: lng)
-            if let snapshot {
-                RichMapSnapshotCache.store(snapshot, for: reference)
-            }
+        .task(id: "\(reference.latitude ?? 0),\(reference.longitude ?? 0)") { await loadSnapshot() }
+    }
+
+    private func openInMaps() {
+        if let targetURL { openURL(targetURL) }
+    }
+
+    /// The cached render when there is one, else one fetch, stored for the next visit.
+    @MainActor
+    private func loadSnapshot() async {
+        guard snapshot == nil, let lat = reference.latitude, let lng = reference.longitude else {
+            return
+        }
+        if let cached = RichMapSnapshotCache.image(for: reference) {
+            snapshot = cached
+            return
+        }
+        snapshot = await Self.snapshot(lat: lat, lng: lng)
+        if let snapshot {
+            RichMapSnapshotCache.store(snapshot, for: reference)
         }
     }
 

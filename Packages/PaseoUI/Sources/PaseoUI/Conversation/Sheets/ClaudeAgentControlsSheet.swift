@@ -10,6 +10,9 @@ struct ClaudeAgentControlsSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var page: Page = .root
+    /// Bumped by every pick, so the selection haptic is a sensory feedback of this view. The
+    /// increment is synchronous, so it plays before the pick's `dismiss()`.
+    @State private var pickPulse = 0
 
     enum Page: Equatable { case root, models, thinking, modes, features, feature(String) }
 
@@ -72,7 +75,10 @@ struct ClaudeAgentControlsSheet: View {
         }
         .background(Palette.background)
         .foregroundStyle(Palette.ink)
-        .presentationDetents([.height(430)])
+        .paseoFeedback(.selection, trigger: pickPulse)
+        // The root page scrolls, and `.large` is there for accessibility text sizes and short
+        // windows where 430 pt cannot hold its rows.
+        .presentationDetents([.height(430), .large])
         .presentationDragIndicator(.visible)
         .onAppear {
             let catalog = session.agentControl
@@ -94,20 +100,42 @@ struct ClaudeAgentControlsSheet: View {
     @ViewBuilder private var content: some View {
         switch session.agentControl.phase {
         case .loading where session.agentControl.providers.isEmpty:
-            ProgressView().frame(maxWidth: .infinity).padding(.top, 24)
+            ProgressView().frame(maxWidth: .infinity).padding(.top, Space.xxl)
         case .failed(let message) where session.agentControl.providers.isEmpty:
             Text(message)
                 .font(.paseo(.callout))
                 .foregroundStyle(Palette.failureInk)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, Space.lg)
         default:
             switch page {
-            case .root: root
-            case .models: modelPage
-            case .thinking: thinkingPage
-            case .modes: modePage
-            case .features: featuresPage
-            case .feature: featureSelectPage
+            case .root:
+                ScrollView {
+                    AgentControlsRootPage(
+                        providerDetail: providerDetail,
+                        modelValue: modelLabel(store.agent?.model),
+                        thinkingValue: thinkingLabel,
+                        modeValue: modeLabel,
+                        featuresSummary: hasFeatures ? featuresSummary : nil,
+                        onSelect: { page = $0 })
+                }
+            case .models:
+                AgentModelPage(
+                    models: models, currentModelId: store.agent?.model,
+                    isProviderLoading: providerIsLoading, onPick: { pickModel($0) })
+            case .thinking:
+                AgentThinkingPage(
+                    options: thinkingOptions, effectiveId: effectiveThinkingId,
+                    isProviderLoading: providerIsLoading, onChoose: { chooseThinking($0) })
+            case .modes:
+                AgentModePage(
+                    modes: modes, currentModeId: store.agent?.currentModeId, onPick: { pickMode($0) })
+            case .features:
+                AgentFeaturesPage(
+                    toggles: toggleableFeatures, selects: selectableFeatures,
+                    onToggle: { setFeatureToggle($0, $1) },
+                    onOpenSelect: { page = .feature($0) })
+            case .feature:
+                AgentFeatureSelectPage(select: selectFeature, onPick: { pickFeatureSelection($0, $1) })
             }
         }
     }
@@ -125,28 +153,6 @@ struct ClaudeAgentControlsSheet: View {
         return nil
     }
 
-    private var root: some View {
-        VStack(spacing: 12) {
-            RowGroup {
-                ListRow(
-                    title: "Model", subtitle: providerDetail,
-                    accessory: .value(modelLabel(store.agent?.model))
-                ) { page = .models }
-                RowDivider()
-                ListRow(title: "Thinking", accessory: .value(thinkingLabel)) { page = .thinking }
-                RowDivider()
-                ListRow(title: "Mode", accessory: .value(modeLabel)) { page = .modes }
-                if !toggleableFeatures.isEmpty || !selectableFeatures.isEmpty {
-                    RowDivider()
-                    ListRow(title: "Features", accessory: .value(featuresSummary)) {
-                        page = .features
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-        }
-    }
-
     private var toggleableFeatures: [AgentFeature.Toggle] {
         agentFeatures.compactMap { if case .toggle(let toggle) = $0 { return toggle } else { return nil } }
     }
@@ -155,8 +161,12 @@ struct ClaudeAgentControlsSheet: View {
         agentFeatures.compactMap { if case .select(let select) = $0 { return select } else { return nil } }
     }
 
+    private var hasFeatures: Bool {
+        !toggleableFeatures.isEmpty || !selectableFeatures.isEmpty
+    }
+
     private var featuresSummary: String {
-        let on = toggleableFeatures.filter(\.value).count
+        let on = toggleableFeatures.count(where: \.value)
         return "\(on) on"
     }
 
@@ -164,245 +174,6 @@ struct ClaudeAgentControlsSheet: View {
         guard let providerId else { return nil }
         let label = session.agentControl.provider(providerId)?.label ?? providerId
         return "Provider · \(label)"
-    }
-
-    private var modelPage: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                if models.isEmpty {
-                    VStack(spacing: 8) {
-                        if providerIsLoading { ProgressView().controlSize(.small) }
-                        Text(
-                            providerIsLoading
-                                ? "Loading models from this provider…"
-                                : "No models reported by this provider"
-                        )
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                    }
-                    .padding(.top, 24)
-                } else {
-                    RowGroup {
-                        ForEach(models.enumerated(), id: \.element.id) { index, model in
-                            ListRow(
-                                title: model.label,
-                                subtitle: model.description,
-                                accessory: store.agent?.model == model.id
-                                    ? ListRow.Accessory.checkmark(true)
-                                    : (model.isDefault == true
-                                        ? ListRow.Accessory.badge("Default")
-                                        : ListRow.Accessory.none)
-                            ) {
-                                Haptics.selection()
-                                Task {
-                                    await store.setModel(model.id)
-                                    dismiss()
-                                }
-                            }
-                            if index < models.count - 1 { RowDivider() }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    Text("Model ids are provider-defined; the list comes from the host's catalogue.")
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.horizontal, 16)
-                }
-            }
-        }
-    }
-
-    /// One list control for every provider (UX spec §4.2): a row per level, in the provider's
-    /// order, the current level checked. The Faster↔Smarter slider is gone.
-    private var thinkingPage: some View {
-        ScrollView {
-            plainThinkingList
-        }
-    }
-
-    /// The provider's levels, verbatim: Default first, then one row per reported option.
-    private var plainThinkingList: some View {
-        VStack(spacing: 12) {
-                RowGroup {
-                    ListRow(
-                        title: "Default",
-                        subtitle: "Use the provider's level for this model",
-                        accessory: .checkmark(effectiveThinkingId == nil)
-                    ) {
-                        chooseThinking(nil)
-                    }
-                    ForEach(thinkingOptions) { option in
-                        RowDivider()
-                        ListRow(
-                            title: option.label, subtitle: option.description,
-                            accessory: effectiveThinkingId == option.id
-                                ? ListRow.Accessory.checkmark(true)
-                                : (option.isDefault == true
-                                    ? ListRow.Accessory.badge("Default")
-                                    : ListRow.Accessory.none)
-                        ) {
-                            chooseThinking(option.id)
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                if thinkingOptions.isEmpty {
-                    Text(
-                        providerIsLoading
-                            ? "Waiting for this provider's model list…"
-                            : "This model reports no thinking levels."
-                    )
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .padding(.horizontal, 16)
-                }
-        }
-    }
-
-    // MARK: Features
-
-    /// Feature switches from the snapshot: toggle rows with a switch, select rows as menus of
-    /// options. Unknown feature kinds are not shown.
-    private var featuresPage: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                if toggleableFeatures.isEmpty, selectableFeatures.isEmpty {
-                    Text("This agent doesn't offer any features.")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.top, 24)
-                } else {
-                    RowGroup {
-                        ForEach(toggleableFeatures.enumerated(), id: \.element.id) { index, toggle in
-                            featureToggleRow(toggle)
-                            if index < toggleableFeatures.count - 1 || !selectableFeatures.isEmpty { RowDivider() }
-                        }
-                        ForEach(selectableFeatures.enumerated(), id: \.element.id) { index, select in
-                            ListRow(
-                                title: select.label, subtitle: select.description,
-                                accessory: .value(selectValueLabel(select))
-                            ) { page = .feature(select.id) }
-                            if index < selectableFeatures.count - 1 { RowDivider() }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
-            }
-        }
-    }
-
-    private func featureToggleRow(_ toggle: AgentFeature.Toggle) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(toggle.label)
-                    .font(.paseo(.body))
-                if let detail = toggle.description {
-                    Text(detail)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if let tooltip = toggle.tooltip {
-                    Text(tooltip)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(2)
-                }
-            }
-            Spacer(minLength: 8)
-            Toggle(
-                "",
-                isOn: Binding(
-                    get: { toggle.value },
-                    set: { newValue in
-                        Haptics.selection()
-                        Task { await store.setFeatureToggle(featureId: toggle.id, value: newValue) }
-                    })
-            )
-            .labelsHidden()
-            .tint(Palette.toggleTint)
-            .accessibilityLabel(toggle.label)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minHeight: 52)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var featureSelectPage: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                if let select = selectFeature {
-                    RowGroup {
-                        if select.value != nil {
-                            ListRow(title: "None") {
-                                Haptics.selection()
-                                page = .features
-                                Task { await store.setFeatureSelection(featureId: select.id, value: nil) }
-                            }
-                            RowDivider()
-                        }
-                        ForEach(select.options.enumerated(), id: \.element.id) { index, option in
-                            ListRow(
-                                title: option.label, subtitle: option.description,
-                                accessory: select.value == option.id
-                                    ? ListRow.Accessory.checkmark(true)
-                                    : (option.isDefault == true
-                                        ? ListRow.Accessory.badge("Default")
-                                        : ListRow.Accessory.none)
-                            ) {
-                                Haptics.selection()
-                                page = .features
-                                Task {
-                                    await store.setFeatureSelection(
-                                        featureId: select.id, value: option.id)
-                                }
-                            }
-                            if index < select.options.count - 1 { RowDivider() }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                } else {
-                    Text("This feature is gone — the agent changed its feature set.")
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.top, 24)
-                }
-            }
-        }
-    }
-
-    private func selectValueLabel(_ select: AgentFeature.Select) -> String {
-        guard let value = select.value else { return "None" }
-        return select.options.first(where: { $0.id == value })?.label ?? value
-    }
-
-    private var modePage: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                RowGroup {
-                    ForEach(modes.enumerated(), id: \.element.id) { index, mode in
-                        ListRow(
-                            title: mode.label, subtitle: mode.description,
-                            accessory: .checkmark(store.agent?.currentModeId == mode.id)
-                        ) {
-                            Haptics.selection()
-                            Task {
-                                await store.setMode(mode.id)
-                                dismiss()
-                            }
-                        }
-                        if index < modes.count - 1 { RowDivider() }
-                    }
-                }
-                .padding(.horizontal, 16)
-                if modes.isEmpty {
-                    Text("This agent reports no modes.")
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .padding(.horizontal, 16)
-                }
-            }
-        }
     }
 
     private var effectiveThinkingId: String? {
@@ -426,12 +197,39 @@ struct ClaudeAgentControlsSheet: View {
         return session.agentControl.defaultModel(forProvider: providerId)?.label ?? id ?? "Default"
     }
 
+    private func pickModel(_ id: String) {
+        pickPulse += 1
+        Task {
+            await store.setModel(id)
+            dismiss()
+        }
+    }
+
     private func chooseThinking(_ id: String?) {
-        Haptics.selection()
+        pickPulse += 1
         Task {
             await store.setThinking(id)
             dismiss()
         }
+    }
+
+    private func pickMode(_ id: String) {
+        pickPulse += 1
+        Task {
+            await store.setMode(id)
+            dismiss()
+        }
+    }
+
+    private func setFeatureToggle(_ featureId: String, _ value: Bool) {
+        pickPulse += 1
+        Task { await store.setFeatureToggle(featureId: featureId, value: value) }
+    }
+
+    private func pickFeatureSelection(_ featureId: String, _ value: String?) {
+        pickPulse += 1
+        page = .features
+        Task { await store.setFeatureSelection(featureId: featureId, value: value) }
     }
 }
 #endif

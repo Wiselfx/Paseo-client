@@ -14,8 +14,8 @@ struct MediaSheetRow: View, Equatable {
     }
 
     var body: some View {
+        // The haptic is the controller's: `openMediaItem` plays it as the jump starts.
         Button {
-            Haptics.selection()
             richActions?.openMediaItem(item)
         } label: {
             HStack(spacing: Space.md) {

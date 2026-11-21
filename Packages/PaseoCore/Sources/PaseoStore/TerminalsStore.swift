@@ -664,7 +664,7 @@ public final class TerminalsStore {
     private func applyAttention(_ payload: TerminalAttentionRequired) {
         let activity = TerminalActivity(
             state: .attention, attentionReason: reason(for: payload.reason),
-            changedAt: Date().timeIntervalSince1970 * 1000)
+            changedAt: Date.now.timeIntervalSince1970 * 1000)
         let candidates = payload.workspaceId.map { [$0] } ?? Array(terminalsByWorkspace.keys)
         for workspaceId in candidates {
             guard var terminals = terminalsByWorkspace[workspaceId],

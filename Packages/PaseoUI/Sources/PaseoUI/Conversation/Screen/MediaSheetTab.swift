@@ -13,9 +13,9 @@ enum MediaSheetTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .media: return "Media"
-        case .links: return "Links"
-        case .files: return "Files"
+        case .media: "Media"
+        case .links: "Links"
+        case .files: "Files"
         }
     }
 }

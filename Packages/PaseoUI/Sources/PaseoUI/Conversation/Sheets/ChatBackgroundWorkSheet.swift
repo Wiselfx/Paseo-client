@@ -8,6 +8,8 @@ struct ChatBackgroundWorkSheet: View {
     let backgroundWork: BackgroundWorkStore
 
     @State private var pendingStop: BackgroundWorkItem?
+    /// Bumped when a Stop is tapped, so the haptic is a sensory feedback of this view.
+    @State private var stopPulse = 0
 
     private var canStop: Bool { backgroundWork.canStop }
 
@@ -25,7 +27,8 @@ struct ChatBackgroundWorkSheet: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(backgroundWork.items) { item in
-                                backgroundWorkRow(item)
+                                BackgroundWorkItemRow(
+                                    item: item, canStop: canStop, onStop: { requestStop(item) })
                                 if item.id != backgroundWork.items.last?.id {
                                     ClaudeDivider().padding(.leading, 52)
                                 }
@@ -36,10 +39,11 @@ struct ChatBackgroundWorkSheet: View {
                                     .padding(.vertical, 10)
                             }
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, Space.xs)
                     }
                 }
             }
+            .paseoFeedback(.light, trigger: stopPulse)
             .confirmationDialog(
                 "Stop this background task?",
                 item: $pendingStop,
@@ -57,75 +61,19 @@ struct ChatBackgroundWorkSheet: View {
         }
     }
 
+    /// A shell is stopped only after the confirmation; anything else stops straight away.
+    private func requestStop(_ item: BackgroundWorkItem) {
+        stopPulse += 1
+        if item.kind == "shell" {
+            pendingStop = item
+        } else {
+            performStop(item)
+        }
+    }
+
     private func performStop(_ item: BackgroundWorkItem) {
         // Refusals land in the store's `error`, rendered inline under the list.
         Task { _ = await backgroundWork.stop(itemId: item.id) }
-    }
-
-    private func backgroundWorkRow(_ item: BackgroundWorkItem) -> some View {
-        HStack(spacing: 12) {
-            WorkIcon(kind: icon(for: item.kind))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(rowTitle(item))
-                    .font(.paseo(.callout, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(item.kind)
-                        .font(.paseo(.codeCaption))
-                    Text("·")
-                    Text(startedText(item.startedAt))
-                }
-                .font(.paseo(.codeCaption))
-                .foregroundStyle(Palette.tertiaryInk)
-            }
-            Spacer(minLength: 8)
-            if canStop && item.canStop == true, item.stopToken != nil {
-                Button("Stop") {
-                    Haptics.light()
-                    if item.kind == "shell" {
-                        pendingStop = item
-                    } else {
-                        performStop(item)
-                    }
-                }
-                .font(.paseo(.footnote, weight: .medium))
-                .foregroundStyle(Palette.failureInk)
-                .padding(.horizontal, 16)
-                .frame(minHeight: 36)
-                .background(Palette.adaptive(light: 0.96, dark: 0.18), in: .capsule)
-                .padding(.vertical, 4)
-                .contentShape(.rect)
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 56)
-    }
-
-    private func rowTitle(_ item: BackgroundWorkItem) -> String {
-        item.command ?? item.description ?? item.kind
-    }
-
-    private func icon(for kind: String) -> WorkIcon.Kind {
-        switch kind {
-        case "monitor": .symbol("waveform.path.ecg")
-        default: .shell
-        }
-    }
-
-    private func startedText(_ iso: String) -> String {
-        guard let date = PaseoDate.parse(iso) else {
-            return iso.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        let seconds = max(0, Date().timeIntervalSince(date))
-        if seconds < 3600 {
-            return "started \(Int(seconds / 60))m ago"
-        }
-        if Calendar.current.isDateInToday(date) {
-            return "started \(PaseoFormat.time(date))"
-        }
-        return "started \(PaseoFormat.dateTime(date))"
     }
 }
 #endif

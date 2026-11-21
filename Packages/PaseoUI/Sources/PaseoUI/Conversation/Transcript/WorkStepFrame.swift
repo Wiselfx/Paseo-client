@@ -17,7 +17,7 @@ struct WorkStepFrame<Content: View>: View {
         }
         .padding(.bottom, 2)
         .background(alignment: .topLeading) { WorkRail(position: rail) }
-        .background { WorkFindWash(highlighted: highlighted) }
+        .background { FindWash(highlighted: highlighted, bleed: 4) }
     }
 }
 #endif

@@ -7,6 +7,16 @@ struct CommandStatusGlyph: View {
     let status: WorkspaceSetupCommandStatus
     let exitCode: Int?
 
+    /// What VoiceOver says for the symbol: the glyph is the only indicator of the outcome.
+    private var accessibilityText: LocalizedStringKey {
+        switch status {
+        case .running: "Running"
+        case .completed: (exitCode ?? 0) == 0 ? "Succeeded" : "Failed"
+        case .failed: "Failed"
+        case .unknown: "Status unknown"
+        }
+    }
+
     var body: some View {
         Group {
             switch status {
@@ -33,6 +43,8 @@ struct CommandStatusGlyph: View {
             }
         }
         .frame(width: 18, height: 18)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
     }
 }
 #endif

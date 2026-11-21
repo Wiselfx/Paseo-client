@@ -33,10 +33,15 @@ struct ArtifactPage: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.richActions) private var richActions
     @State private var showSource = false
-    @State private var shareImage: UIImage?
-    @State private var shareFileURL: URL?
-    @State private var safariURL: URL?
+    @State private var sheet: ArtifactPageSheet?
     @State private var reloadToken = 0
+    /// Bumped on a pasteboard copy (no `RichActions`): the copy haptic, once per tap.
+    @State private var copyTaps = 0
+    /// The live document and the title, built once per scheme/reload (`rebuildDocument`), never
+    /// in `body`: building an HTML artifact lowercases and scans its whole source, and body
+    /// re-runs on every state flip.
+    @State private var liveHTML: String?
+    @State private var title = ""
     @State private var holdsSlot = false
     /// The compiled offline rules for chat documents; file previews skip them and keep
     /// the Files panel's CDN access.
@@ -47,25 +52,26 @@ struct ArtifactPage: View {
     /// File previews render without the rule list; chat documents wait for it.
     private var contentRulesReady: Bool { previewFiles != nil || contentRules != nil }
 
-    /// The loaded document: the live build plus the reload token, which forces
-    /// `SandboxedHTMLView` to reload (its `loadedHTML` compare drives the load).
-    private var liveDocument: String? {
-        guard var base = document.liveHTML(dark: dark) else { return nil }
-        if reloadToken > 0 { base += "\n<!--reload:\(reloadToken)-->" }
-        return base
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            topBar
+            ArtifactPageTopBar(
+                title: title,
+                hideSourceTitle: sourceToggleHideTitle,
+                canReload: document.canReload,
+                hasShareImage: document.shareImage != nil,
+                showSource: $showSource,
+                onClose: onClose,
+                onCopy: copySource,
+                onReload: reload,
+                onShare: share)
             if showSource {
                 sourceView
-            } else if let html = liveDocument, holdsSlot, contentRulesReady {
+            } else if let html = liveHTML, holdsSlot, contentRulesReady {
                 SandboxedHTMLView(
                     html: html, heightFloor: 0, heightCeiling: .greatestFiniteMagnitude,
                     onHeightChange: { _ in }, fillsFrame: true,
                     allowsScripts: allowsScripts,
-                    onExternalNavigation: previewFiles == nil ? nil : { safariURL = $0 },
+                    onExternalNavigation: previewFiles == nil ? nil : { sheet = .safari($0) },
                     previewFiles: previewFiles,
                     contentRuleList: contentRules,
                     awaitContentRules: previewFiles == nil)
@@ -75,12 +81,14 @@ struct ArtifactPage: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityLabel(title)
             } else {
                 ProgressView().controlSize(.small).tint(Palette.secondaryInk)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(Palette.background)
+        .paseoFeedback(.light, trigger: copyTaps)
         .toolbarVisibility(.hidden, for: .navigationBar)
         .modifier(MediaViewerTransition(
             sourceID: sourceID, namespace: namespace, reduceMotion: reduceMotion))
@@ -90,22 +98,49 @@ struct ArtifactPage: View {
                 contentRules = await OfflineContentRules.list()
             }
         }
+        .task(id: "\(dark)|\(reloadToken)") { rebuildDocument() }
         .onAppear { claimSlot() }
         .onDisappear { releaseSlot() }
-        .sheet(isPresented: Binding(get: { shareImage != nil }, set: { if !$0 { shareImage = nil } })) {
-            if let shareImage {
-                ActivityView(items: [shareImage])
+        .sheet(item: $sheet) { sheet in
+            switch sheet {
+            case .shareImage(let image): ActivityView(items: [image])
+            case .shareFile(let url): ActivityView(items: [url])
+            case .safari(let url): SafariView(url: url).ignoresSafeArea()
             }
         }
-        .sheet(isPresented: Binding(get: { shareFileURL != nil }, set: { if !$0 { shareFileURL = nil } })) {
-            if let shareFileURL {
-                ActivityView(items: [shareFileURL])
-            }
+    }
+
+    /// The loaded document: the live build plus the reload token, which forces
+    /// `SandboxedHTMLView` to reload (its `loadedHTML` compare drives the load). Runs when the
+    /// scheme or the token changes; the first frame already waits on the slot and the rules.
+    private func rebuildDocument() {
+        title = document.title
+        guard var base = document.liveHTML(dark: dark) else {
+            liveHTML = nil
+            return
         }
-        .sheet(isPresented: Binding(get: { safariURL != nil }, set: { if !$0 { safariURL = nil } })) {
-            if let safariURL {
-                SafariView(url: safariURL).ignoresSafeArea()
-            }
+        if reloadToken > 0 { base += "\n<!--reload:\(reloadToken)-->" }
+        liveHTML = base
+    }
+
+    private func copySource() {
+        if let richActions {
+            richActions.copyText(document.sourceText)
+        } else {
+            UIPasteboard.general.string = document.sourceText
+            copyTaps += 1
+        }
+    }
+
+    private func reload() {
+        reloadToken += 1
+    }
+
+    private func share() {
+        if let image = document.shareImage {
+            sheet = .shareImage(image)
+        } else {
+            shareHTMLFile()
         }
     }
 
@@ -116,62 +151,6 @@ struct ArtifactPage: View {
         case .mermaid, .svg: false
         case .visualize, .html: true
         }
-    }
-
-    private var topBar: some View {
-        HStack {
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.paseo(.body))
-                    .frame(width: Metrics.hitSize, height: Metrics.hitSize)
-                    .contentShape(.circle)
-            }
-            .glassEffect(in: .circle)
-            .accessibilityLabel("Close viewer")
-            Spacer(minLength: 8)
-            Text(document.title)
-                .font(.paseo(.headline))
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Menu {
-                Button(showSource ? sourceToggleHideTitle : "View source") {
-                    showSource.toggle()
-                }
-                Button("Copy source", systemImage: "doc.on.doc") {
-                    if let richActions {
-                        richActions.copyText(document.sourceText)
-                    } else {
-                        UIPasteboard.general.string = document.sourceText
-                        Haptics.light()
-                    }
-                }
-                if document.canReload {
-                    Button("Reload", systemImage: "arrow.clockwise") {
-                        reloadToken += 1
-                    }
-                }
-                if document.shareImage != nil {
-                    Button("Share image", systemImage: "square.and.arrow.up") {
-                        shareImage = document.shareImage
-                    }
-                } else {
-                    Button("Share as .html", systemImage: "square.and.arrow.up") {
-                        shareHTMLFile()
-                    }
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.paseo(.body))
-                    .frame(width: Metrics.hitSize, height: Metrics.hitSize)
-                    .contentShape(.circle)
-            }
-            .glassEffect(in: .circle)
-            .accessibilityLabel("Artifact actions")
-        }
-        .padding(.horizontal, Space.md)
-        .padding(.top, Space.md)
     }
 
     /// The toggle-back title: upstream's "View diagram" for mermaid; the page for the
@@ -194,32 +173,21 @@ struct ArtifactPage: View {
         }
     }
 
-    /// One pooled slot while open; without one the page shows the card's snapshot
-    /// instead of a third live view (§0: at most 2 live WKWebViews).
     /// The exported `.html`: the live document in the current scheme, written off main.
     /// The menu offers it per kind; mermaid keeps Share image instead.
     private func shareHTMLFile() {
+        let kind = document.kind
         let fileName = document.shareFileName
         let dark = dark
         Task { @MainActor in
-            let url = await Task.detached(priority: .userInitiated) { () -> URL? in
-                guard let directory = FileManager.default.urls(
-                    for: .cachesDirectory, in: .userDomainMask
-                ).first?.appending(path: "artifacts", directoryHint: .isDirectory),
-                let html = ArtifactDocument(kind: document.kind, shareImage: nil)
-                    .liveHTML(dark: dark),
-                let data = html.data(using: .utf8)
-                else { return nil }
-                try? FileManager.default.createDirectory(
-                    at: directory, withIntermediateDirectories: true)
-                let url = directory.appending(path: fileName, directoryHint: .notDirectory)
-                guard (try? data.write(to: url, options: .atomic)) != nil else { return nil }
-                return url
-            }.value
-            shareFileURL = url
+            if let url = await ArtifactShareFile.write(kind: kind, dark: dark, fileName: fileName) {
+                sheet = .shareFile(url)
+            }
         }
     }
 
+    /// One pooled slot while open; without one the page shows the card's snapshot
+    /// instead of a third live view (§0: at most 2 live WKWebViews).
     private func claimSlot() {
         if !holdsSlot { holdsSlot = WebViewSlotPool.shared.claim() }
     }
