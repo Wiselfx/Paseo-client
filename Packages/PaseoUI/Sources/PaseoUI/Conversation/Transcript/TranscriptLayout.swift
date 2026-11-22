@@ -147,7 +147,7 @@ final class TranscriptLayout: UICollectionViewLayout {
         measured[engine.items[index]] = new
         engine.didMeasure(index: index, height: new)
         let delta = new - old
-        if engine.compensatesResize(of: frames[index]) {
+        if engine.compensatesResize(of: frames[index], at: index, delta: delta) {
             context.contentOffsetAdjustment = CGPoint(x: 0, y: delta)
         }
         context.contentSizeAdjustment = CGSize(width: 0, height: delta)

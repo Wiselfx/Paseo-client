@@ -74,20 +74,34 @@ struct ClaudeTurnView: View {
         return row
     }
 
-    /// The answer slot's prose: the last segment when it is prose, shown while the turn runs (work
-    /// shown) and after it completes. It is one slot for both states on purpose (W1): while the
-    /// turn ran the streaming message lived inside the work stack and, on completion, moved out to
-    /// the answer position, which is a different place in the view tree, so every markdown piece,
-    /// text view and code block of the answer was destroyed and rebuilt at the one moment the user
-    /// looks at it (345 ms in the first measurement). Running with the work folded keeps the old
-    /// behaviour: the streaming prose stays hidden.
+    /// The answer: the last segment when it is prose, shown while the turn runs (work shown) and
+    /// after it completes. Running with the work folded keeps the streaming prose hidden.
     var answerProse: TimelineRow? {
         guard case .prose(let row)? = turn.segments.last else { return nil }
         return !isRunning || isExpanded ? row : nil
     }
 
-    var bodySegments: [Turn.Segment] {
-        answerProse == nil ? turn.segments : Array(turn.segments.dropLast())
+    /// The segments the full turn draws, in one `ForEach` keyed by segment id (W1). Opened, that is
+    /// every segment; folded, the rows that stay visible plus the answer. Before, the answer had a
+    /// slot of its own outside the work stack, so a streamed message was destroyed and rebuilt —
+    /// every markdown piece and code block, its unrevealed backlog painted at once — the moment a
+    /// tool call followed it and it moved into the stack.
+    var shownSegments: [Turn.Segment] {
+        if isExpanded { return turn.segments }
+        var shown = turn.segments.filter { segment in
+            guard case .notice(let row) = segment else { return false }
+            switch row.item {
+            case .userMessage, .compaction: return true
+            default: return false
+            }
+        }
+        if let answerProse { shown.append(.prose(answerProse)) }
+        return shown
+    }
+
+    /// The segments other than the answer: what the work header stands for.
+    var bodySegments: ArraySlice<Turn.Segment> {
+        answerProse == nil ? turn.segments[...] : turn.segments.dropLast()
     }
 
     var showsHeader: Bool { isRunning || !bodySegments.isEmpty }
@@ -221,29 +235,21 @@ struct ClaudeTurnView: View {
                     isHighlighted: highlightedSeq == row.seqEnd, onRewind: onRewind)
             }
             if showsHeader { header }
-            if isExpanded, !bodySegments.isEmpty {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(bodySegments) { segment in
-                        ClaudeSegmentView(
-                            segment: segment, turnIsRunning: isRunning,
-                            isTail: isRunning && segment.id == turn.segments.last?.id,
-                            onMarkdown: onMarkdown,
-                            highlightedSeq: highlightedSeq, findTarget: findTarget,
-                            onOpenFile: onOpenFile)
-                    }
-                }
-                .transition(.opacity.combined(with: .offset(y: -2)))
-            } else {
-                // Work folded: the messages sent mid-turn and compaction markers still show, in
-                // order, after the header.
-                ForEach(visibleRows) { row in
+            // One stack, keyed by segment, for the work and the answer alike: a message keeps its
+            // views whether it is the newest segment, settles above a tool call that follows it,
+            // or stays as the answer when the finished turn folds its work away.
+            ForEach(shownSegments) { segment in
+                if !isExpanded, case .notice(let row) = segment {
                     ClaudeVisibleRow(row: row, highlightedSeq: highlightedSeq)
+                } else {
+                    ClaudeSegmentView(
+                        segment: segment, turnIsRunning: isRunning,
+                        isTail: isRunning && segment.id == turn.segments.last?.id,
+                        onMarkdown: onMarkdown,
+                        highlightedSeq: highlightedSeq, findTarget: findTarget,
+                        onOpenFile: onOpenFile)
+                        .transition(.opacity.combined(with: .offset(y: -2)))
                 }
-            }
-            if let answerProse, case .assistantMessage(let message) = answerProse.item {
-                ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: isRunning)
-                    .rowAnchor(answerProse.seqEnd)
-                    .background { FindWash(highlighted: highlightedSeq == answerProse.seqEnd) }
             }
             if let todoState = turn.todoState {
                 // One card per turn for its todos and plan (live while running).

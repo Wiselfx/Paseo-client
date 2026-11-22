@@ -80,6 +80,9 @@ final class TranscriptEngine: NSObject {
     /// A tap opens and closes things in the cells: until then, a row that a resize moves glides
     /// (`animateMoves`) and the end pin follows in the same curve.
     private var resizeAnimationUntil = Date.distantPast
+    /// A turn that just finished and is folding its work away above its answer, and until when its
+    /// resize keeps the turn's end in place (see `compensatesResize`).
+    private var settlingTurn: (id: TranscriptItemID, until: Date)?
     private var isApplyingStructuralChange = false
     private var findFetchTask: Task<Void, Never>?
 
@@ -265,6 +268,11 @@ final class TranscriptEngine: NSObject {
             var changed: [Int] = []
             for index in model.entries.indices where model.entries[index] != entries[index] {
                 changed.append(index)
+                if case .turn(let before) = entries[index], case .turn(let after) = model.entries[index],
+                    before.turn.phase == .running, after.turn.phase != .running
+                {
+                    settlingTurn = (items[index], Date.now.addingTimeInterval(1))
+                }
             }
             if !changed.isEmpty {
                 entries = model.entries
@@ -477,10 +485,23 @@ final class TranscriptEngine: NSObject {
     /// that reaches into the screen is not compensated: its change happens where the reader can see
     /// it (a tapped disclosure, streamed text), and the rows below it move as they should. While the
     /// end is pinned the pin does it instead.
-    func compensatesResize(of frame: CGRect) -> Bool {
+    ///
+    /// One exception reaches into the screen: a turn that just finished folds the work above its
+    /// answer away. When the reader is inside that turn (its top above the screen), reading the
+    /// answer, the turn's end stays put instead of the answer jumping up by the folded height.
+    func compensatesResize(of frame: CGRect, at index: Int, delta: CGFloat) -> Bool {
         guard !pinsToBottom else { return false }
         let cv = collectionView
-        return frame.maxY <= cv.contentOffset.y + cv.contentInset.top + 0.5
+        let readerTop = cv.contentOffset.y + cv.contentInset.top
+        if frame.maxY <= readerTop + 0.5 { return true }
+        guard let settling = settlingTurn, settling.until > Date.now,
+            items.indices.contains(index), items[index] == settling.id
+        else { return false }
+        settlingTurn = nil
+        // Only a net shrink: the answer then moves by what was added below it (the footer, the
+        // changes card) instead of by the larger fold above it.
+        return delta < 0 && frame.minY < readerTop
+            && cv.contentOffset.y + delta >= -cv.contentInset.top
     }
 
     // MARK: Insets
