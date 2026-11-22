@@ -92,141 +92,39 @@ struct WorkspaceChangesDiffView: View {
         return nil
     }
 
-    private func commentMenu(for anchor: LineAnchor) -> some View {
-        Group {
-            Button("Add review comment…", systemImage: "text.bubble") {
-                commentTarget = .new(anchor)
-            }
-            if selectionAnchor == nil {
-                Button("Select line range…", systemImage: "selection.pin.in.out") {
-                    selectionAnchor = anchor
-                    selectionEnd = nil
-                }
-            } else {
-                Button("Extend selection to this line", systemImage: "selection.pin.in.out") {
-                    Haptics.selection()
-                    if anchor.side == selectionAnchor?.side { selectionEnd = anchor }
-                }
-                Button("Clear selection", systemImage: "xmark", role: .cancel) {
-                    selectionAnchor = nil
-                    selectionEnd = nil
-                }
-            }
-        }
-    }
-
-    // MARK: Review draft cards
-
-    /// The quiet card rendered inline under the anchor line.
-    @ViewBuilder private func draftCard(_ draft: WorkspaceReviewDraftComment) -> some View {
-        HStack(alignment: .top, spacing: Space.sm) {
-            Image(systemName: "text.bubble")
-                .font(.glyph(.small, weight: .regular))
-                .foregroundStyle(Palette.tertiaryInk)
-                .padding(.top, 1)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(lineRangeLabel(draft))
-                        .font(.paseo(.codeCaption))
-                        .foregroundStyle(Palette.tertiaryInk)
-                    Text("Review comment")
-                        .font(.paseo(.caption, weight: .medium))
-                        .foregroundStyle(Palette.tertiaryInk)
-                    Spacer(minLength: 4)
-                    Button {
-                        commentTarget = .edit(draft)
-                    } label: {
-                        Image(systemName: "pencil")
-                            .font(.glyph(.small, weight: .medium))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .frame(width: 30, height: 30)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Edit review comment")
-                    Button {
-                        WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: draft.id)
-                        Haptics.light()
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.glyph(.small, weight: .medium))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .frame(width: 30, height: 30)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Delete review comment")
-                }
-                Button {
-                    commentTarget = .edit(draft)
-                } label: {
-                    Text(draft.body)
-                        .font(.paseo(.footnote))
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Review comment: \(draft.body)")
-                .accessibilityHint("Edits the comment")
-            }
-        }
-        .padding(.horizontal, Space.md)
-        .padding(.vertical, Space.sm)
-        .background(Palette.quoteWash, in: .rect(cornerRadius: Radius.md))
-        .padding(.leading, 46)
-        .padding(.trailing, Space.md)
-        .padding(.vertical, 3)
-    }
-
-    private func lineRangeLabel(_ draft: WorkspaceReviewDraftComment) -> String {
-        if draft.startLine == draft.endLine { return "L\(draft.startLine)" }
-        return "L\(draft.startLine)–\(draft.endLine)"
-    }
-
-    // MARK: Selection capsule
-
-    /// Floating capsule while a line range is selected: "Comment on N lines" + cancel.
+    /// The floating capsule while a line range is selected.
     @ViewBuilder private var selectionCapsule: some View {
         if reviewEnabled, let anchor = selectionAnchor, let range = selectionLineRange {
-            let count = range.end - range.start + 1
-            HStack(spacing: Space.xs) {
-                Button {
-                    commentTarget = .new(LineAnchor(side: anchor.side, line: range.end))
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "text.bubble")
-                            .font(.glyph(.small, weight: .medium))
-                        Text("Comment on ^[\(count) line](inflect: true)")
-                            .font(.paseo(.footnote, weight: .medium))
-                    }
-                    .foregroundStyle(Palette.background)
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 44)
-                    .background(Palette.ink, in: .capsule)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Comment on the selected ^[\(count) line](inflect: true)"))
-                Button {
-                    selectionAnchor = nil
-                    selectionEnd = nil
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.glyph(.small, weight: .semibold))
-                        .foregroundStyle(Palette.background)
-                        .frame(width: 38, height: 38)
-                        .frame(width: 44, height: 44)
-                        .background(Palette.ink.opacity(0.85), in: .circle)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear selection")
+            DiffSelectionCapsule(count: range.end - range.start + 1) {
+                commentTarget = .new(LineAnchor(side: anchor.side, line: range.end))
+            } onClear: {
+                clearSelection()
             }
             .padding(.trailing, Space.lg)
             .padding(.bottom, Space.md)
             .transition(reduceMotion ? .identity : .opacity)
+        }
+    }
+
+    private func clearSelection() {
+        selectionAnchor = nil
+        selectionEnd = nil
+    }
+
+    private func handle(_ action: DiffLineAction, at anchor: LineAnchor?) {
+        switch action {
+        case .tap:
+            handleRowTap(anchor)
+        case .comment:
+            if let anchor { commentTarget = .new(anchor) }
+        case .startSelection:
+            selectionAnchor = anchor
+            selectionEnd = nil
+        case .extendSelection:
+            Haptics.selection()
+            if let anchor, anchor.side == selectionAnchor?.side { selectionEnd = anchor }
+        case .clearSelection:
+            clearSelection()
         }
     }
 
@@ -254,7 +152,7 @@ struct WorkspaceChangesDiffView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            pathHeader
+            DiffPathHeader(file: file)
             ClaudeDivider()
             if let discardError {
                 InlineBanner(.failure, title: discardError)
@@ -415,32 +313,6 @@ struct WorkspaceChangesDiffView: View {
         commentTarget = nil
     }
 
-    // MARK: Path header
-
-    private var pathHeader: some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(file.path)
-                    .font(.paseo(.codeCaption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(2)
-                    .truncationMode(.head)
-                    .textSelection(.enabled)
-                if let oldPath = file.oldPath {
-                    Text("renamed from \(oldPath)")
-                        .font(.paseo(.codeCaption))
-                        .foregroundStyle(Palette.tertiaryInk)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-            Spacer(minLength: Space.sm)
-            DiffStat(added: file.additions, removed: file.deletions)
-        }
-        .padding(.horizontal, Space.lg)
-        .padding(.vertical, 10)
-    }
-
     // MARK: Body
 
     @ViewBuilder private func content(drafts: [LineAnchor: [WorkspaceReviewDraftComment]]) -> some View {
@@ -535,151 +407,41 @@ struct WorkspaceChangesDiffView: View {
                     ForEach(rows) { row in
                         // One shape per row: a line and its (possibly empty) draft comments.
                         VStack(spacing: 0) {
-                            lineRow(row, totalWidth: render.totalWidth, gutterWidth: render.gutterWidth)
+                            WorkspaceDiffLineRow(
+                                row: row, gutterWidth: render.gutterWidth,
+                                totalWidth: render.totalWidth, wrap: wrapLongLines,
+                                isSelected: row.anchor.map(isInSelectedRange) ?? false,
+                                reviewEnabled: reviewEnabled,
+                                selectionActive: selectionAnchor != nil
+                            ) { action in
+                                handle(action, at: row.anchor)
+                            }
                             ForEach(row.anchor.flatMap { drafts[$0] } ?? []) { draft in
-                                draftCard(draft)
+                                DiffDraftCard(draft: draft) {
+                                    commentTarget = .edit(draft)
+                                } onDelete: {
+                                    WorkspaceReviewDrafts.shared.delete(key: reviewKey, id: draft.id)
+                                    Haptics.light()
+                                }
                             }
                         }
                     }
                     if isLongCollapsed(section) {
-                        showMoreRow(section)
+                        DiffShowMoreRow(remaining: max(0, section.rows.count - 40)) {
+                            expandedLongHunks.insert(section.hunk)
+                        }
                     }
                 } header: {
-                    hunkHeaderRow(text: section.header, hunk: section.hunk)
+                    DiffHunkHeader(
+                        text: section.header, hunk: section.hunk,
+                        isCollapsed: isCollapsed(section.hunk)
+                    ) {
+                        toggleHunk(section.hunk)
+                    }
                 }
             }
         }
         .padding(.vertical, Space.sm)
-    }
-
-    // MARK: Rows
-
-    private func lineRow(_ row: DiffModel.Row, totalWidth: CGFloat, gutterWidth: CGFloat) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text(row.old.isEmpty ? " " : row.old)
-                .font(.paseo(.codeCaption))
-                .foregroundStyle(Palette.tertiaryInk)
-                .frame(width: gutterWidth, alignment: .trailing)
-            Text(row.new.isEmpty ? " " : row.new)
-                .font(.paseo(.codeCaption))
-                .foregroundStyle(Palette.tertiaryInk)
-                .frame(width: gutterWidth, alignment: .trailing)
-                .padding(.trailing, 10)
-            Text(row.sign)
-                .font(.paseo(.code))
-                .foregroundStyle(signTint(row.kind))
-                .frame(width: 13, alignment: .leading)
-            Text(row.text.isEmpty ? " " : row.text)
-                .font(.paseo(.code))
-                .lineLimit(wrapLongLines ? nil : 1)
-                .fixedSize(horizontal: !wrapLongLines, vertical: false)
-                .frame(
-                    maxWidth: wrapLongLines ? .infinity : nil,
-                    alignment: .leading)
-                .foregroundStyle(contentTint(row.kind))
-        }
-        .frame(width: wrapLongLines ? nil : totalWidth, alignment: .leading)
-        .frame(maxWidth: wrapLongLines ? .infinity : nil, alignment: .leading)
-        .padding(.vertical, 2)
-        .background(selectionWash(row.anchor) ?? rowFill(row.kind))
-        .contentShape(.rect)
-        .onTapGesture { handleRowTap(row.anchor) }
-        .contextMenu {
-            Button("Copy line", systemImage: "doc.on.doc") {
-                Clipboard.copy(row.text)
-            }
-            if reviewEnabled, let anchor = row.anchor {
-                Divider()
-                commentMenu(for: anchor)
-            }
-        }
-        .accessibilityLabel(accessibilityLabel(for: row))
-        .accessibilityAddTraits(reviewEnabled && row.anchor != nil ? .isButton : [])
-    }
-
-    private func showMoreRow(_ section: DiffSection) -> some View {
-        let remaining = max(0, section.rows.count - 40)
-        return Button {
-            expandedLongHunks.insert(section.hunk)
-        } label: {
-            HStack(spacing: Space.sm) {
-                Image(systemName: "chevron.down")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.secondaryInk)
-                Text("Show \(PaseoFormat.integer(remaining)) more lines")
-                    .font(.paseo(.footnote, weight: .medium))
-                    .foregroundStyle(Palette.secondaryInk)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, Space.lg)
-            .frame(minHeight: 44)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Palette.chip)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Show \(remaining) more lines")
-    }
-
-    private func selectionWash(_ anchor: LineAnchor?) -> Color? {
-        guard let anchor, isInSelectedRange(anchor) else { return nil }
-        return Palette.warning.opacity(0.16)
-    }
-
-    private func accessibilityLabel(for row: DiffModel.Row) -> String {
-        switch row.kind {
-        case .add: "Added line \(row.new): \(row.text)"
-        case .remove: "Removed line \(row.old): \(row.text)"
-        case .context, .hunkHeader: "Line \(row.new): \(row.text)"
-        }
-    }
-
-    private func hunkHeaderRow(text: String, hunk: Int) -> some View {
-        Button {
-            toggleHunk(hunk)
-        } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Image(systemName: isCollapsed(hunk) ? "chevron.right" : "chevron.down")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.tertiaryInk)
-                    .frame(width: 14)
-                Text(text)
-                    .foregroundStyle(contentTint(.hunkHeader))
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .font(.paseo(.codeSmall))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
-            .background(rowFill(.hunkHeader))
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Hunk \(hunk + 1), \(isCollapsed(hunk) ? "collapsed" : "expanded")")
-    }
-
-    private func contentTint(_ kind: DiffModel.RowKind) -> Color {
-        switch kind {
-        case .hunkHeader: Palette.tertiaryInk
-        case .context, .add, .remove: Palette.ink
-        }
-    }
-
-    private func signTint(_ kind: DiffModel.RowKind) -> Color {
-        switch kind {
-        case .add: Palette.diffAddedInk
-        case .remove: Palette.diffRemovedInk
-        case .context, .hunkHeader: .clear
-        }
-    }
-
-    private func rowFill(_ kind: DiffModel.RowKind) -> Color {
-        switch kind {
-        case .add: Palette.diffAdded
-        case .remove: Palette.diffRemoved
-        case .hunkHeader: Palette.chip
-        case .context: .clear
-        }
     }
 
     private func performDiscard() {

@@ -26,7 +26,7 @@ enum DiffModel {
         return !adds.isEmpty && adds.count == removes.count && adds.sorted() == removes.sorted()
     }
 
-    struct Row: Identifiable, Sendable {
+    struct Row: Identifiable, Equatable, Sendable {
         let id: Int
         let old: String
         let new: String
