@@ -13,7 +13,7 @@ struct PRChecksBlock: View {
                 .foregroundStyle(Palette.secondaryInk)
                 .padding(.horizontal, Space.lg)
                 .padding(.bottom, 6)
-            ForEach(Array(status.checks.enumerated()), id: \.offset) { _, check in
+            ForEach(status.checks.enumerated(), id: \.offset) { _, check in
                 PRCheckRow(check: check, prNumber: status.number ?? 0)
             }
             if let rollup = PRCheckStatus.rollup(status.checks) {

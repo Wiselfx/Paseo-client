@@ -9,6 +9,10 @@ import WebKit
 /// The inline player (E3 §3.4): `youtube-nocookie.com` embed in a one-line document whose
 /// `baseURL` is an https origin, so YouTube sees a referrer (without one it refuses with error
 /// 152/153). Inline playback, no gesture required to start, no page scroll.
+///
+/// Stays a `WKWebView` representable rather than SwiftUI's `WebView`/`WebPage`: as of iOS 26,
+/// `WebPage.Configuration` has no equivalent of `mediaTypesRequiringUserActionForPlayback`, so
+/// the embed could not autoplay after the card's tap and would need a second tap inside it.
 struct InlineYouTubePlayer: UIViewRepresentable {
     let referenceID: String
 
