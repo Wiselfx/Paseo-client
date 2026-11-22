@@ -44,6 +44,8 @@ public struct ShellView: View {
     @State private var homeSettled = false
     /// Bumped when "mention in chat" lands; drives the confirmation haptic.
     @State private var mentionCount = 0
+    /// The panel's "Mention in chat", one object for the shell's lifetime (handler set at startup).
+    @State private var mentionAction = ChatMentionAction()
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -52,8 +54,7 @@ public struct ShellView: View {
     @Environment(\.pureBlack) private var pureBlack
     @Environment(\.accent) private var accent
     @Environment(\.hostSwitch) private var hostSwitch
-    @Environment(\.notificationPermissionAction) private var requestNotificationPermission
-    @Environment(\.notificationTestAction) private var notificationTestAction
+    @Environment(\.notificationActions) private var notificationActions
 
     public init(
         session: HostSession, onDisconnect: @escaping () -> Void,
@@ -116,6 +117,7 @@ public struct ShellView: View {
     /// so the launch skeleton stays up until the home is decided.
     private func shellDidAppear() {
         drawer.onNewSession = { openNewSession(workspaceId: nil) }
+        mentionAction.perform = { mentionInChat($0) }
         session.hostSettings.startPresence(
             focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
         session.attention.setFocusedAgent(scenePhase == .active ? selectedAgentId : nil)
@@ -143,8 +145,7 @@ public struct ShellView: View {
                 // not inherit the app's SwiftUI environment, so the accent must be re-applied to
                 // every subtree or the bridged trait would write its default (E2 §2.2).
                 .environment(\.accent, accent)
-                .environment(\.notificationPermissionAction, requestNotificationPermission)
-                .environment(\.notificationTestAction, notificationTestAction)
+                .environment(\.notificationActions, notificationActions)
                 .dynamicTypeSize(dynamicTypeSize)
                 .foregroundStyle(Palette.ink)
                 .tint(Palette.ink)
@@ -153,8 +154,7 @@ public struct ShellView: View {
 
     /// Everything the three roots are built from that can differ between two passes of this body.
     /// The container assigns new roots only when this changes (W1): the body also runs when an
-    /// environment closure the app re-creates (`notificationPermissionAction`) or a binding counts as
-    /// changed, which re-assigned all three hosting controllers' roots and re-ran the whole sidebar,
+    /// environment value or a binding counts as changed, which re-assigned all three hosting controllers' roots and re-ran the whole sidebar,
     /// the chat screen and the composer at the first keyboard focus (about 220 ms in Release). The
     /// closures the roots capture act on `@State` storage and stable objects, so an unchanged key
     /// means the old roots are still right.
@@ -244,7 +244,7 @@ public struct ShellView: View {
                     openNewAgent(workspace: workspace)
                     drawer.close()
                 },
-                onMentionInChat: mentionInChat
+                mentionInChat: mentionAction
             )
             // Per-workspace identity: the panel's tab is stored per workspace, and a workspace
             // switch must load that workspace's own remembered tab. Closing and reopening the

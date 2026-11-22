@@ -31,9 +31,9 @@ struct WorkspaceChangesView: View {
     @State private var mergeCandidate: PullRequestMergeMethod?
     @State private var showBaseBranchPicker = false
     @State private var showBranchSwitcher = false
-    @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
-    @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
-    @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
+    @AppStorage(PaseoSettingsKeys.diffHideWhitespace) private var hideWhitespace = false
+    @AppStorage(PaseoSettingsKeys.diffWrapLongLines) private var wrapLongLines = false
+    @AppStorage(PaseoSettingsKeys.diffCollapseAllHunks) private var collapseAllHunks = false
     @State private var feedbackError: String?
     /// The latest compare-switch reload. Each flip chains onto the previous one so quick
     /// Uncommitted/Base toggles finish in order rather than racing.

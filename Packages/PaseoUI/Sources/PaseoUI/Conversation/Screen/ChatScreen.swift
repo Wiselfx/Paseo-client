@@ -30,6 +30,10 @@ public struct ChatScreen: View {
     /// The composer's focus (E1 §1): a plain flag, because the composer's field is a
     /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
     @State private var composerFocused = false
+    /// The composer field's line limit, from the space this screen offers above the keyboard.
+    /// Stored as the line count, so the body runs again only when that number changes (the keyboard
+    /// showing or hiding, a rotation, a window resize), never per point of height.
+    @State private var composerLineLimit = ComposerFieldLimit.unmeasured
 
     public init(
         session: HostSession, store: ConversationStore, onOpenSidebar: (() -> Void)? = nil,
@@ -85,6 +89,11 @@ public struct ChatScreen: View {
                     store: store, controller: controller, focused: $composerFocused))
             .modifier(MascotDriver(store: store, session: session, controller: controller))
             .modifier(ChatSheets(store: store, session: session, controller: controller))
+            .onGeometryChange(for: Int.self) { geometry in
+                ComposerFieldLimit.lines(availableHeight: geometry.size.height)
+            } action: { lines in
+                composerLineLimit = lines
+            }
             .task {
                 // The user-image manifest loads once, off main: bubbles with history
                 // reserve their image boxes on the first pass instead of jumping.
@@ -136,7 +145,7 @@ public struct ChatScreen: View {
             SubagentPill(store: store, controller: controller)
             ComposerView(
                 mode: .conversation, store: store, controller: controller,
-                focused: $composerFocused)
+                focused: $composerFocused, fieldLineLimit: composerLineLimit)
         }
         .background(alignment: .bottom) { ComposerUnderBlur() }
     }

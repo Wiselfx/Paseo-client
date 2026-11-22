@@ -122,14 +122,9 @@ struct RootView: View {
                     notificationTarget: $notifications.pendingTarget,
                     deepLinkTarget: $deepLinkTarget
                 )
-                .environment(
-                    \.notificationPermissionAction,
-                    { @Sendable in
-                        Task { @MainActor in _ = await notifications.requestAuthorization() }
-                    })
-                .environment(
-                    \.notificationTestAction,
-                    { @Sendable in await notifications.sendTestNotification() })
+                // The coordinator itself: one object for the app's lifetime, so Settings never
+                // updates because the actions were re-created.
+                .environment(\.notificationActions, notifications)
                 .modifier(
                     AttentionDelivery(
                         session: session, scenePhase: scenePhase,

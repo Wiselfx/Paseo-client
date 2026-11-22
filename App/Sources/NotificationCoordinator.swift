@@ -287,3 +287,10 @@ final class NotificationCoordinator {
         completion()
     }
 }
+
+/// Settings reaches the coordinator through the environment (`\.notificationActions`).
+extension NotificationCoordinator: NotificationActions {
+    func requestPermission() {
+        Task { await requestAuthorization() }
+    }
+}

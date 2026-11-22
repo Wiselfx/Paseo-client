@@ -11,7 +11,7 @@ struct PanelRoot: View {
     let initialTerminalId: String?
     let onSelectAgent: (String) -> Void
     let onNewAgent: (WorkspaceDescriptor) -> Void
-    let onMentionInChat: (String) -> Void
+    let mentionInChat: ChatMentionAction
 
     var body: some View {
         WorkspacePanel(
@@ -20,7 +20,7 @@ struct PanelRoot: View {
             currentAgentId: currentAgentId,
             onSelectAgent: onSelectAgent,
             onNewAgent: onNewAgent,
-            onMentionInChat: onMentionInChat,
+            mentionInChat: mentionInChat,
             initialTerminalId: initialTerminalId)
     }
 }

@@ -9,8 +9,7 @@ struct GeneralNotificationsSection: View {
     /// M12: attention sound cue level (off | soft | clear), DSH wording. Default off.
     @AppStorage(SoundCueLevel.storageKey) private var soundCueLevel = SoundCueLevel.off.rawValue
 
-    @Environment(\.notificationPermissionAction) private var requestNotificationPermission
-    @Environment(\.notificationTestAction) private var notificationTestAction
+    @Environment(\.notificationActions) private var notificationActions
     @State private var isSendingTestNotification = false
     @State private var testNotificationSent: Bool?
 
@@ -32,7 +31,7 @@ struct GeneralNotificationsSection: View {
                 .panelRow()
                 .accessibilityIdentifier("settings.notifications.enabled")
                 .onChange(of: notificationsEnabled) { _, enabled in
-                    if enabled { requestNotificationPermission() }
+                    if enabled { notificationActions?.requestPermission() }
                 }
             SettingsMenuRow("Sound cue", value: currentSoundCue.title) {
                 Picker("Sound cue", selection: $soundCueLevel) {
@@ -86,7 +85,7 @@ struct GeneralNotificationsSection: View {
         guard !isSendingTestNotification else { return }
         isSendingTestNotification = true
         Task {
-            let sent = await notificationTestAction()
+            let sent = await notificationActions?.sendTestNotification() ?? false
             isSendingTestNotification = false
             testNotificationSent = sent
         }

@@ -13,5 +13,9 @@ public enum PaseoSettingsKeys {
     /// Off by default: allow/deny actions never appear on notifications unless
     /// the reader opts in (G19).
     public static let notificationActions = "paseo.notifications.actions"
+    /// Diff display options, shared by the chat's diffs and the workspace Changes page.
+    public static let diffHideWhitespace = "paseo.diff.hideWhitespace"
+    public static let diffWrapLongLines = "paseo.diff.wrapLongLines"
+    public static let diffCollapseAllHunks = "paseo.diff.collapseAllHunks"
 }
 #endif

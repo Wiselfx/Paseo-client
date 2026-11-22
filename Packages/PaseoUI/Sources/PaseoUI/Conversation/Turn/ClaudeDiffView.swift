@@ -16,8 +16,8 @@ struct ClaudeDiffView: View {
     static let inlineLines = 24
 
     /// The same two preferences as the workspace Changes screen (`WorkspaceChangesDiffView`).
-    @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
-    @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
+    @AppStorage(PaseoSettingsKeys.diffHideWhitespace) private var hideWhitespace = false
+    @AppStorage(PaseoSettingsKeys.diffWrapLongLines) private var wrapLongLines = false
 
     /// The parse, once per diff: read synchronously on first draw (no empty frame that then grows),
     /// and only again when the diff or the whitespace preference changes. The inputs are compared by

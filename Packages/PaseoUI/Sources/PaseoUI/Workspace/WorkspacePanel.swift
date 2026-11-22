@@ -6,7 +6,7 @@ import UIKit
 extension EnvironmentValues {
     /// The action a "Mention in chat" button triggers. Internal, so the panel's pages can reach
     /// it without widening their fixed constructors. Nil disables the action.
-    @Entry var mentionInChat: ((String) -> Void)?
+    @Entry var mentionInChat: ChatMentionAction?
     /// The live-file watch (T11) for the workspace the panel shows. Published by the panel;
     /// consumed by the Files page and its viewer.
     @Entry var workspaceGitExtras: WorkspaceGitExtras?
@@ -24,7 +24,7 @@ struct WorkspacePanel: View {
     var onSelectAgent: (String) -> Void
     var onNewAgent: (WorkspaceDescriptor) -> Void
     /// Inserts `@relative/path ` into the open conversation's composer (see `ShellView`).
-    var onMentionInChat: ((String) -> Void)?
+    var mentionInChat: ChatMentionAction?
     /// A terminal to select when the panel reaches the Terminal page (notification tap).
     var initialTerminalId: String? = nil
     /// Closes the panel: the header's back chevron (§1.3).
@@ -53,7 +53,7 @@ struct WorkspacePanel: View {
         session: HostSession, workspace: WorkspaceDescriptor?, currentAgentId: String?,
         onSelectAgent: @escaping (String) -> Void,
         onNewAgent: @escaping (WorkspaceDescriptor) -> Void,
-        onMentionInChat: ((String) -> Void)? = nil,
+        mentionInChat: ChatMentionAction? = nil,
         initialTerminalId: String? = nil,
         onClose: @escaping () -> Void = {}
     ) {
@@ -62,7 +62,7 @@ struct WorkspacePanel: View {
         self.currentAgentId = currentAgentId
         self.onSelectAgent = onSelectAgent
         self.onNewAgent = onNewAgent
-        self.onMentionInChat = onMentionInChat
+        self.mentionInChat = mentionInChat
         self.initialTerminalId = initialTerminalId
         self.onClose = onClose
         // The last page is remembered per workspace; a notification tap lands on Terminal.
@@ -110,7 +110,7 @@ struct WorkspacePanel: View {
         // One canvas for every panel page and pushed page (E2 §5): the panel fill, the same one
         // the Changes tab draws. The shell card behind it is never what shows through.
         .background { Palette.panel.ignoresSafeArea() }
-        .environment(\.mentionInChat, onMentionInChat)
+        .environment(\.mentionInChat, mentionInChat)
         .environment(\.workspaceGitExtras, gitExtras)
         .onChange(of: initialTerminalId) { _, terminalId in
             if terminalId != nil { page = .terminal }

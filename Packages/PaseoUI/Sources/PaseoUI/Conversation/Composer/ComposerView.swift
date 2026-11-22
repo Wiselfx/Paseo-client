@@ -71,7 +71,6 @@ struct ComposerView: View {
     @State private var showFileImporter = false
     @State private var showForgePicker = false
     @State private var viewedImage: ViewedAttachmentImage?
-    @State private var surfaceHeight: CGFloat = 0
     /// Whether the tall draft's expand control is in the card's corner, and with it whether the
     /// field reserves the corner's trailing column. **Written by the field** from its own laid-out
     /// line count, only when the answer flips: sticky between `ComposerMetrics.expandShowLines`
@@ -83,9 +82,14 @@ struct ComposerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
 
+    /// How many lines the field grows to before it scrolls (`ComposerFieldLimit`). The screen
+    /// measures the space it offers and passes the answer in: the composer's own height follows its
+    /// content (and its menus), so it can't tell how much room the screen has.
+    let fieldLineLimit: Int
+
     init(
         mode: ComposerMode, store: ConversationStore, controller: ChatController,
-        focused: Binding<Bool>
+        focused: Binding<Bool>, fieldLineLimit: Int = ComposerFieldLimit.unmeasured
     ) {
         self.mode = mode
         self.store = store
@@ -93,12 +97,13 @@ struct ComposerView: View {
         self.draftHost = nil
         self.onSubmit = nil
         self._focused = focused
+        self.fieldLineLimit = fieldLineLimit
     }
 
     /// The draft screen's composer: the same card, before its agent exists (R6 §5).
     init(
         draft: DraftSession, session: HostSession, onSubmit: @escaping (DraftSubmission) -> Void,
-        focused: Binding<Bool>
+        focused: Binding<Bool>, fieldLineLimit: Int = ComposerFieldLimit.unmeasured
     ) {
         self.mode = .draft(draft)
         self.store = nil
@@ -106,6 +111,7 @@ struct ComposerView: View {
         self.draftHost = session
         self.onSubmit = onSubmit
         self._focused = focused
+        self.fieldLineLimit = fieldLineLimit
     }
 
     var body: some View {
@@ -134,11 +140,6 @@ struct ComposerView: View {
         // card widens while it grows, so the field slides instead of jumping (E1 §4).
         .animation(
             Motion.disclosure.resolved(reduceMotion: reduceMotion), value: composerExpanded)
-        .onGeometryChange(for: CGFloat.self) { geometry in
-            geometry.size.height
-        } action: { height in
-            surfaceHeight = height
-        }
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: queueIsEmpty == false)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: fastModeActive)
         .onChange(of: photoSelection) { _, items in
@@ -249,9 +250,7 @@ struct ComposerView: View {
     private static let cameraIsAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
     private var cameraAvailable: Bool { Self.cameraIsAvailable }
 
-    private var composerFieldLineLimit: Int {
-        ComposerFieldLimit.lines(availableHeight: surfaceHeight)
-    }
+    private var composerFieldLineLimit: Int { fieldLineLimit }
 
     private var modelChipTitle: String {
         modelLabel ?? "Model"

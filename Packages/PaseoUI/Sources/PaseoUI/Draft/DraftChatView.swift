@@ -19,6 +19,8 @@ struct DraftChatView: View {
     /// The composer's focus (E1 §1): a plain flag, because the composer's field is a
     /// `UITextView` under SwiftUI and nothing focusable is bound to a `@FocusState`.
     @State private var composerFocused = false
+    /// The composer field's line limit, from the space this page offers (see `ChatScreen`).
+    @State private var composerLineLimit = ComposerFieldLimit.unmeasured
 
     /// The shell's drawer, nil outside the shell. The sidebar button toggles through it (N3 F).
     @Environment(\.shellDrawer) private var shellDrawer
@@ -60,13 +62,19 @@ struct DraftChatView: View {
                 // an error. Send hands the prompt to the shell, which creates the agent and swaps
                 // the conversation in.
                 ComposerView(
-                    draft: draft, session: session, onSubmit: onSubmit, focused: $composerFocused)
+                    draft: draft, session: session, onSubmit: onSubmit, focused: $composerFocused,
+                    fieldLineLimit: composerLineLimit)
                 .padding(.bottom, Space.sm)
             }
         }
         // No background here: the shell's rounded card is the canvas (UX-SPEC §1.1).
         .foregroundStyle(Palette.ink)
         .tint(Palette.ink)
+        .onGeometryChange(for: Int.self) { geometry in
+            ComposerFieldLimit.lines(availableHeight: geometry.size.height)
+        } action: { lines in
+            composerLineLimit = lines
+        }
         .task { await loadCatalogue() }
         .onChange(of: session.agentControl.providers) { _, _ in seedIfNeeded() }
     }

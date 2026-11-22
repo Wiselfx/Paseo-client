@@ -28,9 +28,9 @@ struct WorkspaceChangesDiffView: View {
 
     @State private var confirmDiscard = false
     @State private var discardError: String?
-    @AppStorage("paseo.diff.hideWhitespace") private var hideWhitespace = false
-    @AppStorage("paseo.diff.wrapLongLines") private var wrapLongLines = false
-    @AppStorage("paseo.diff.collapseAllHunks") private var collapseAllHunks = false
+    @AppStorage(PaseoSettingsKeys.diffHideWhitespace) private var hideWhitespace = false
+    @AppStorage(PaseoSettingsKeys.diffWrapLongLines) private var wrapLongLines = false
+    @AppStorage(PaseoSettingsKeys.diffCollapseAllHunks) private var collapseAllHunks = false
     @State private var expandedHunks: Set<Int> = []
     @State private var collapsedHunks: Set<Int> = []
     /// Hunks over 400 lines start collapsed to 40; these are the ones the reader expanded.
