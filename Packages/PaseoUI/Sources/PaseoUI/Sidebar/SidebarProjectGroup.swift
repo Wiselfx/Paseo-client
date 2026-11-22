@@ -5,67 +5,31 @@ import UIKit
 
 extension PaseoSidebar {
     func projectRow(_ group: WorkspaceGroup) -> some View {
-        let collapsed = isCollapsed(group.id)
-        let title = projectTitle(group.project)
-        return HStack(spacing: 0) {
-            Button {
-                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                    toggleCollapsed(group.id)
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    ClaudeChevron(expanded: !collapsed)
-                    Text(title)
-                        .font(.paseo(.callout))
-                        .foregroundStyle(Palette.secondaryInk)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 0)
-                }
-                .frame(minHeight: 44)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(title)
-            .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
-            Button {
-                newSession(in: group)
-            } label: {
-                Image(systemName: "plus")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 30, height: 30)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("New session in \(title)")
+        SidebarProjectHeader(
+            title: projectTitle(group.project),
+            collapsed: isCollapsed(group.id),
+            supportsRemove: session.workspaceDirectory.supportsProjectRemove
+        ) { action in
+            handleProjectAction(action, group: group)
         }
-        // A collapsed group is a 44 pt hit row at the sidebar's action-row pitch: 8 pt above,
-        // nothing below (E2b §11). The workspace rows carry their own vertical padding, so the
-        // first one does not crowd the header when the group expands.
-        .padding(.top, Space.sm)
-        .paseoFeedback(.selection, trigger: collapsed)
-        .contextMenu {
-            // PLAN §RH order: open-variants, edit verbs, copy, then the destructive verb.
-            Button("New session", systemImage: "plus") { newSession(in: group) }
-            Button("Rename…", systemImage: "pencil") {
-                renameText = group.project.projectCustomName ?? ""
-                renamingProject = group.project
-            }
-            Button("Project settings…", systemImage: "gearshape") {
-                sheet = .project(group.project)
-            }
-            Button("Copy path", systemImage: "doc.on.doc") {
-                Clipboard.copy(group.project.projectRootPath)
-                showToast("Path copied")
-            }
-            if session.workspaceDirectory.supportsProjectRemove {
-                Divider()
-                Button("Remove project", systemImage: "trash", role: .destructive) {
-                    projectPendingRemoval = group.project
-                }
-            }
+    }
+
+    func handleProjectAction(_ action: SidebarProjectHeaderAction, group: WorkspaceGroup) {
+        switch action {
+        case .toggleCollapsed:
+            toggleCollapsed(group.id)
+        case .newSession:
+            newSession(in: group)
+        case .rename:
+            renameText = group.project.projectCustomName ?? ""
+            renamingProject = group.project
+        case .openSettings:
+            sheet = .project(group.project)
+        case .copyPath:
+            Clipboard.copy(group.project.projectRootPath)
+            showToast("Path copied")
+        case .remove:
+            projectPendingRemoval = group.project
         }
     }
 

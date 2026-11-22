@@ -17,17 +17,6 @@ struct SidebarDerivations {
     let actions: SidebarRowActions
 }
 extension PaseoSidebar {
-    func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.paseo(.footnote, weight: .medium))
-            .foregroundStyle(Palette.secondaryInk)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.top, 18)
-            .padding(.bottom, 6)
-            .accessibilityAddTraits(.isHeader)
-    }
-
     /// Builds the shared tables once per body evaluation. `activityDate` parses up to five
     /// ISO-8601 stamps per workspace; doing that per row (or per sort comparison) was the
     /// sidebar's hot path (P3/P5 finding #3).
@@ -116,7 +105,11 @@ extension PaseoSidebar {
             LazyVStack(alignment: .leading, spacing: 0) {
                 pinnedSection(pinned, derivations: derivations)
                 ForEach(visible) { bucket in
-                    dateGroupHeader(bucket)
+                    SidebarDateGroupHeader(
+                        title: bucket.title, collapsed: isDateGroupCollapsed(bucket.id)
+                    ) {
+                        toggleDateGroupCollapsed(bucket.id)
+                    }
                     SidebarRoll(expanded: !isDateGroupCollapsed(bucket.id)) {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(bucket.workspaces) { workspace in
@@ -134,39 +127,12 @@ extension PaseoSidebar {
         }
     }
 
-    /// The date-group header, collapsible like a project row (persisted by bucket id).
-    func dateGroupHeader(_ bucket: SidebarDateBucket) -> some View {
-        let collapsed = isDateGroupCollapsed(bucket.id)
-        return Button {
-            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                toggleDateGroupCollapsed(bucket.id)
-            }
-        } label: {
-            HStack(spacing: 6) {
-                ClaudeChevron(expanded: !collapsed)
-                Text(bucket.title)
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 18)
-            .padding(.bottom, 6)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(bucket.title)
-        .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
-        .paseoFeedback(.selection, trigger: collapsed)
-    }
-
     /// The Pinned section, shared by both groupings.
     @ViewBuilder func pinnedSection(
         _ pinned: [WorkspaceDescriptor], derivations: SidebarDerivations
     ) -> some View {
         if !pinned.isEmpty {
-            sectionHeader("Pinned")
+            SidebarSectionHeader(title: "Pinned")
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(pinned) { workspace in
                     workspaceRow(workspace, derivations: derivations)
@@ -182,63 +148,19 @@ extension PaseoSidebar {
     /// keeps only the hidden-workspaces disclosure.
     @ViewBuilder var trailingRows: some View {
         if !preferences.hiddenWorkspaces.isEmpty {
-            hiddenWorkspacesRow
-        }
-    }
-
-    var hiddenWorkspacesRow: some View {
-        Button {
-            withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { showHidden.toggle() }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: showHidden ? "eye" : "eye.slash")
-                    .font(.glyph(.small, weight: .semibold))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .frame(width: 24, height: 24)
-                    .background(Palette.chip, in: .circle)
-                Text("Hidden workspaces (\(PaseoFormat.integer(preferences.hiddenWorkspaces.count)))")
-                    .font(.paseo(.callout))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-                ClaudeChevron(expanded: showHidden)
-            }
-            .padding(.top, 12)
-            .frame(minHeight: 46)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-            showHidden
-                ? "Hide hidden workspaces"
-                : "Show hidden workspaces")
-        .paseoFeedback(.selection, trigger: showHidden)
-    }
-
-    /// An error is a banner with a retry (PLAN §RI 22); everything else is the quiet line.
-    @ViewBuilder var emptyDirectoryState: some View {
-        if let error = session.workspaceDirectory.error, labelFilterName == nil {
-            InlineBanner(.failure, title: error, action: ("Try again", retryDirectory))
-                .padding(.vertical, 24)
-        } else {
-            if session.workspaceDirectory.isLoading {
-                LoadingState("Loading workspaces…")
-                    .padding(.vertical, 24)
-            } else {
-                Text(
-                    labelFilterName == nil
-                        ? "No workspaces on this host yet."
-                        : "No workspaces with this label."
-                )
-                .font(.paseo(.callout))
-                .foregroundStyle(Palette.secondaryInk)
-                .padding(.vertical, 24)
+            SidebarHiddenWorkspacesRow(
+                count: preferences.hiddenWorkspaces.count, showHidden: showHidden
+            ) {
+                showHidden.toggle()
             }
         }
     }
 
-    
+    var emptyDirectoryState: some View {
+        SidebarEmptyDirectoryState(
+            directory: session.workspaceDirectory, isFiltered: labelFilterName != nil,
+            onRetry: retryDirectory)
+    }
 
     // MARK: Visibility and ordering
 

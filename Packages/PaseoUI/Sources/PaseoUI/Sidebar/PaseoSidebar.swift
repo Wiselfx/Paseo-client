@@ -96,7 +96,9 @@ struct PaseoSidebar: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    navigation
+                    SidebarNavigation(
+                        session: session, showHistory: showHistory, showSchedules: showSchedules
+                    ) { sheet = $0 }
                     // Reads the agent and workspace lists in its own body (R-1).
                     SidebarDirectoryHost(sidebar: self)
                         .padding(.horizontal, 20)
@@ -111,7 +113,11 @@ struct PaseoSidebar: View {
             }
 
             usageSection
-            footer
+            SidebarFooter(initial: initial) {
+                sheet = .settings
+            } onNewSession: {
+                onNewSession(currentWorkspaceId)
+            }
         }
         .frame(maxHeight: .infinity, alignment: .top)
         // The sidebar canvas equals the conversation canvas (§1.1); only the card's hairline
@@ -137,8 +143,11 @@ struct PaseoSidebar: View {
         .onChange(of: addProjectRequest) { _, _ in
             consumeAddProjectRequest()
         }
-        let sheeted = chrome.sheet(item: $state.sheet) { sheetContent($0) }
-        return withArchiveDialogs(withRenameAlerts(sheeted))
+        return chrome
+            .sheet(item: $state.sheet) { sheetContent($0) }
+            .modifier(SidebarRenameAlerts(state: state, session: session))
+            .workspaceArchiveDialogs(archive, session: session)
+            .modifier(SidebarProjectRemovalDialog(state: state, session: session))
     }
 
     @ViewBuilder
@@ -204,105 +213,6 @@ struct PaseoSidebar: View {
         }
     }
 
-    func withRenameAlerts(_ content: some View) -> some View {
-        content
-        .alert(
-            "Rename workspace",
-            item: $state.renamingWorkspace
-        ) { workspace in
-            TextField("Name", text: $state.renameText)
-            Button("Cancel", role: .cancel) {}
-            Button("Rename") { renameWorkspace(workspace, to: renameText) }
-        } message: { _ in
-            Text("Choose a short name for this workspace.")
-        }
-        .alert(
-            "Rename project",
-            item: $state.renamingProject
-        ) { project in
-            TextField("Folder name", text: $state.renameText)
-            Button("Cancel", role: .cancel) {}
-            Button("Rename") { renameProject(project, to: renameText) }
-        } message: { _ in
-            Text("Empty restores the folder name.")
-        }
-    }
-
-    func withArchiveDialogs(_ content: some View) -> some View {
-        content
-            .workspaceArchiveDialogs(archive, session: session)
-            .confirmationDialog(
-                ProjectActions.removeTitle,
-            item: $state.projectPendingRemoval,
-            titleVisibility: .visible
-        ) { project in
-            Button("Remove", role: .destructive) {
-                ProjectActions.remove(project, session: session, toast: toast)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text(ProjectActions.removeMessage)
-        }
-    }
-
-    /// An empty name keeps the workspace as it was.
-    private func renameWorkspace(_ target: WorkspaceDescriptor, to text: String) {
-        let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        Task {
-            let renamed = await session.workspaceDirectory.renameWorkspace(
-                target.id, title: title)
-            if !renamed {
-                showToast(
-                    session.workspaceDirectory.actionError ?? "Couldn't rename the workspace.")
-            }
-        }
-    }
-
-    /// An empty name restores the folder name.
-    private func renameProject(_ target: WorkspaceProjectDescriptor, to text: String) {
-        let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        Task {
-            let renamed = await session.workspaceDirectory.renameProject(
-                target.projectId, to: title)
-            if !renamed {
-                showToast(
-                    session.workspaceDirectory.actionError
-                        ?? "Couldn't rename the project.")
-            }
-        }
-    }
-
-    // MARK: Navigation
-
-    private var navigation: some View {
-        VStack(spacing: 0) {
-            ListRow(title: "Search", systemImage: "magnifyingglass") { sheet = .search }
-            if showHistory {
-                ListRow(title: "History", systemImage: "clock.arrow.2.circlepath") {
-                    sheet = .history
-                }
-            }
-            if showSchedules {
-                ListRow(title: "Schedules", systemImage: "clock") { sheet = .schedules }
-            }
-            if session.agentControl.isSupported {
-                ListRow(title: "Import session", systemImage: "square.and.arrow.down") {
-                    sheet = .importSession
-                }
-            }
-            if session.workspaceDirectory.supportsProjectAdd {
-                ListRow(title: "Add project", systemImage: "folder.badge.plus") {
-                    sheet = .addProject
-                }
-            }
-            if session.workspaceDirectory.supportsWorkspaceCreate {
-                ListRow(title: "New workspace", systemImage: "plus") { sheet = .newWorkspace }
-            }
-        }
-        .padding(.top, 4)
-    }
-
     // MARK: Usage
 
     /// The footer's usage block. Its own view, which reads the usage store — the narrow
@@ -331,50 +241,6 @@ struct PaseoSidebar: View {
     private func loadUsage() async {
         guard showUsageInSidebar, session.hostUsage.needsAutomaticLoad() else { return }
         _ = await session.hostUsage.load(forceRefresh: false)
-    }
-
-    // MARK: Footer
-
-    /// Avatar leading, the inverted New session pill trailing, sized to its label and never
-    /// truncated (§0.3, §2.5). The host lives in Settings only; the host chip is gone.
-    private var footer: some View {
-        HStack(spacing: 12) {
-            Button {
-                sheet = .settings
-            } label: {
-                Text(initial)
-                    .font(.paseo(.title, weight: .medium))
-                    .foregroundStyle(Palette.ink)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(in: .circle)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Settings")
-
-            Spacer(minLength: 8)
-
-            newSessionPill
-        }
-        .padding(.horizontal, Space.lg)
-        .padding(.bottom, 6)
-    }
-
-    private var newSessionPill: some View {
-        Button {
-            // The shell settles the drawer and plays the one haptic (PLAN §RH).
-            onNewSession(currentWorkspaceId)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.glyph(.regular, weight: .semibold))
-                Text("New session")
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-        }
-        .buttonStyle(.paseoPrimary())
-        .fixedSize(horizontal: true, vertical: false)
-        .accessibilityLabel("New session")
     }
 
     /// Every sidebar message goes through the shell's toast, which sits above sheets (§RI 8).
