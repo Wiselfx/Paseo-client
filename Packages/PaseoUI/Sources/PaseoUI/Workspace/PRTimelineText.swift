@@ -3,6 +3,7 @@ import Foundation
 import PaseoStore
 
 /// The PR pane's words: the excerpts "Add to chat" inserts, verdict wording and relative times.
+@MainActor
 enum PRTimelineText {
     static func excerpt(check: CheckoutPrCheck, prNumber: Int) -> String {
         var line = "PR #\(prNumber) — \(check.name) (\(check.status))"

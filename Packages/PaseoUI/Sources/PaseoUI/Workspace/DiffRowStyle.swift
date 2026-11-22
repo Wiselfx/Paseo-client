@@ -2,6 +2,7 @@
 import SwiftUI
 
 /// The diff palette per row kind: sign glyph, line text and row fill.
+@MainActor
 enum DiffRowStyle {
     static func contentTint(_ kind: DiffModel.RowKind) -> Color {
         switch kind {
