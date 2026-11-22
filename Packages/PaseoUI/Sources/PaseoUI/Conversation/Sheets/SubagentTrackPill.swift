@@ -67,7 +67,7 @@ struct SubagentTrackPill: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("transcript.subagents")
-        .accessibilityLabel(Text("Subagents: ") + accessibilityText)
+        .accessibilityLabel(Text("Subagents: \(accessibilityText)"))
     }
 }
 #endif

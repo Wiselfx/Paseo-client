@@ -134,7 +134,7 @@ final class RichWebSnapshotRenderer: NSObject, WKNavigationDelegate {
         do {
             result = try await webView.callAsyncJavaScript(
                 "return await window.paseoRender(src, theme)",
-                arguments: ["src": source, "theme": theme], in: nil, contentWorld: .page)
+                arguments: ["src": source, "theme": theme], in: nil, contentWorld: .page) ?? NSNull()
         } catch {
             // WebKit reports every JavaScript throw as the same sentence ("A JavaScript
             // exception occurred"). The host document catches mermaid's own rejection and

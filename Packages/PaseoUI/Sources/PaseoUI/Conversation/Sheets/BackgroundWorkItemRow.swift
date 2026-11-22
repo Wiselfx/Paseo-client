@@ -67,7 +67,7 @@ struct BackgroundWorkItemRow: View {
             return Text(verbatim: item.startedAt.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         if Date.now.timeIntervalSince(date) < 3600 {
-            return Text("started ") + Text(min(date, .now), style: .relative) + Text(" ago")
+            return Text("started \(Text(min(date, .now), style: .relative)) ago")
         }
         if calendar.isDateInToday(date) {
             return Text("started \(PaseoFormat.time(date))")

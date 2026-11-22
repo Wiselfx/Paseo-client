@@ -242,7 +242,7 @@ public final class DaemonConnection: DaemonClient, Sendable {
             return transport
         }
         guard let transport else {
-            _ = mutex.withLock { core in
+            mutex.withLock { core in
                 core.pending.removeValue(forKey: requestId)
                 core.fileReadRequests.removeValue(forKey: requestId)
             }

@@ -81,7 +81,7 @@ struct ListRow: View {
         .frame(minHeight: 44)
         .contentShape(.rect)
         // The separator starts under the title, not under the icon (D3 §2).
-        .alignmentGuide(.listRowSeparatorLeading) { _ in titleLeading }
+        .alignmentGuide(.listRowSeparatorLeading) { [titleLeading] _ in titleLeading }
     }
 
     private var isChecked: Bool {

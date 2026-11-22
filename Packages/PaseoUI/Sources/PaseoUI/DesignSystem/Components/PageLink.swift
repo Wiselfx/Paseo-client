@@ -39,7 +39,7 @@ struct PageLink<Value: Hashable>: View {
         .accessibilityHidden(true)
         .background { pushLink }
         .panelRow()
-        .alignmentGuide(.listRowSeparatorLeading) { _ in titleLeading }
+        .alignmentGuide(.listRowSeparatorLeading) { [titleLeading] _ in titleLeading }
     }
 
     /// A clear label, so the link fills the row: an empty one would size to nothing.

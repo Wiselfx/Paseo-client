@@ -91,7 +91,7 @@
             enabled && ProcessInfo.processInfo.arguments.contains("-paseo-perf-changes")
 
         @inline(__always)
-        static func why<V: View>(_ type: V.Type) {
+        @MainActor static func why<V: View>(_ type: V.Type) {
             guard whyEnabled else { return }
             _ = whyPipe
             V._printChanges()

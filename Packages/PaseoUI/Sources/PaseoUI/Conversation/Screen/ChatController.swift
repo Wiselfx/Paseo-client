@@ -455,9 +455,12 @@ extension EnvironmentValues {
                 cwd: descriptor.projectRootPath, query: query, kinds: kinds, limit: 5)
         else { return nil }
         for item in result.items {
+            // Two cases, not one with a shared `where`: a `where` binds only to the last pattern,
+            // so any pull request result would have matched a pull link whatever its number.
             switch (parsed.kind, item.kind) {
-            case (.pull(let number), .changeRequest), (.issue(let number), .issue)
-            where item.number == number:
+            case (.pull(let number), .changeRequest) where item.number == number:
+                return GitHubLinkInfo(title: item.title, state: item.state, labels: item.labels)
+            case (.issue(let number), .issue) where item.number == number:
                 return GitHubLinkInfo(title: item.title, state: item.state, labels: item.labels)
             default:
                 break

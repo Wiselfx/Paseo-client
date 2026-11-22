@@ -166,7 +166,7 @@ struct SettingsRoot: View {
 
     private var workspacesSummary: String {
         guard let config = hostSettings.config else { return "—" }
-        return (config.autoArchiveAfterMerge ?? false) ? "Auto-archive" : "Manual"
+        return config.autoArchiveAfterMerge ? "Auto-archive" : "Manual"
     }
 
     private var projectCountLine: String {

@@ -13,7 +13,7 @@ struct PaseoLogoShimmer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Upstream's `SHIMMER_PEAK_WIDTH`.
-    private static let peakWidth: CGFloat = 120
+    nonisolated private static let peakWidth: CGFloat = 120
     /// Upstream's `SHIMMER_DURATION_MS`, in seconds.
     private static let duration: Double = 1.8
     /// Upstream's web gradient dips to `88` (53 %) around the peak.
@@ -50,7 +50,8 @@ struct PaseoLogoShimmer: View {
     }
 
     /// The peak: transparent, full, transparent.
-    private static func band(height: CGFloat) -> some View {
+    /// Nonisolated: the keyframe animator builds its content off the main actor.
+    nonisolated private static func band(height: CGFloat) -> some View {
         LinearGradient(
             stops: [
                 .init(color: .black.opacity(0), location: 0),
