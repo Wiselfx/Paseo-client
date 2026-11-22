@@ -8,8 +8,7 @@ struct ProjectChip<Content: View>: View {
     let visibleHeight: CGFloat
     private let content: Content
 
-    /// Nonisolated: `PhotosPicker` builds its label outside the main actor.
-    nonisolated init(
+    init(
         horizontalPadding: CGFloat = 14,
         visibleHeight: CGFloat = 36,
         @ViewBuilder content: () -> Content

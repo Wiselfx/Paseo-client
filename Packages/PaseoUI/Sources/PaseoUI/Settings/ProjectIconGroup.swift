@@ -36,12 +36,14 @@ struct ProjectIconGroup: View {
                 .frame(minHeight: 51)
                 RowDivider()
                 HStack(spacing: Space.sm) {
+                    // Built here on the main actor: PhotosPicker's label closure is nonisolated.
+                    let photosLabel = ProjectChip {
+                        Label("Photos", systemImage: "photo")
+                            .font(.paseo(.footnote, weight: .medium))
+                            .foregroundStyle(Palette.ink)
+                    }
                     PhotosPicker(selection: $photoItem, matching: .images) {
-                        ProjectChip {
-                            Label("Photos", systemImage: "photo")
-                                .font(.paseo(.footnote, weight: .medium))
-                                .foregroundStyle(Palette.ink)
-                        }
+                        photosLabel
                     }
                     .buttonStyle(.plain)
                     .disabled(!icons.supportsCustomIcon)
