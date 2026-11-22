@@ -62,6 +62,8 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private var pendingBytes: [UInt8] = []
     private var flushLink: CADisplayLink?
     private var lastFeedTime: CFTimeInterval = 0
+    /// Whether a TUI is repainting the screen, for the Metal renderer's buffering mode.
+    private var tuiSignals = TerminalTUISignals()
     private var lastActivityReport: CFTimeInterval = 0
     private var onOutput: () -> Void = {}
     private var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
@@ -297,10 +299,12 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
                     self.pendingBytes.removeAll(keepingCapacity: true)
                     self.flushLink?.isPaused = true
                     self.view?.resetToInitialState()
+                    self.tuiSignals.reset()
                 case .output(let data):
                     // Replay bytes are parsed in order and never held back: the replies they may
                     // generate have to stay suppressed until the last of them lands.
                     if self.isReplaying {
+                        self.tuiSignals.scan(data, at: CACurrentMediaTime())
                         self.view?.feed(byteArray: ArraySlice(data))
                     } else {
                         self.receive(data)
@@ -326,6 +330,8 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private func receive(_ data: Data) {
         let now = CACurrentMediaTime()
         reportActivity(now)
+        tuiSignals.scan(data, at: now)
+        applyRenderMode(at: now)
         if pendingBytes.isEmpty, now - lastFeedTime >= Self.frameInterval,
             data.count < Self.maxBufferedBytes
         {
@@ -339,6 +345,15 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         } else {
             startFlushLink()
         }
+    }
+
+    /// A TUI repainting most of the screen each frame renders best from one aggregated Metal
+    /// buffer; a shell, which changes a few rows at a time, from the per-row cache (the default).
+    private func applyRenderMode(at now: CFTimeInterval) {
+        guard let view else { return }
+        let mode: MetalBufferingMode =
+            tuiSignals.isTUI(at: now) ? .perFrameAggregated : .perRowPersistent
+        if view.metalBufferingMode != mode { view.metalBufferingMode = mode }
     }
 
     /// Feeds everything received since the last frame, in one parser call.
