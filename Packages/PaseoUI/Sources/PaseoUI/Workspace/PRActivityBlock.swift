@@ -12,10 +12,10 @@ struct PRActivityBlock: View {
         // Group once per evaluation: each review's replies, and the comments that belong to no
         // listed review.
         let reviews = timeline.items.compactMap { item -> PullRequestTimelineReview? in
-            if case .review(let review) = item { review } else { nil }
+            if case .review(let review) = item { return review } else { return nil }
         }
         let comments = timeline.items.compactMap { item -> PullRequestTimelineComment? in
-            if case .comment(let comment) = item { comment } else { nil }
+            if case .comment(let comment) = item { return comment } else { return nil }
         }
         let reviewIds = Set(reviews.map(\.id))
         let repliesByReview = Dictionary(
@@ -100,7 +100,7 @@ struct PRActivityBlock: View {
     private var unknownItems: [String] {
         #if DEBUG
         timeline.items.compactMap { item -> String? in
-            if case .unknown(let kind) = item { kind } else { nil }
+            if case .unknown(let kind) = item { return kind } else { return nil }
         }
         #else
         []
