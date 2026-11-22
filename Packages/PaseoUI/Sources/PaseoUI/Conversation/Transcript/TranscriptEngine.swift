@@ -480,28 +480,34 @@ final class TranscriptEngine: NSObject {
         TurnHeightStore.save(heightMemory.persisted)
     }
 
-    /// A row wholly above the reader's line changed height (measured for the first time in the
-    /// overscan, an older page settling): move the offset with it, so nothing on screen moves. A row
-    /// that reaches into the screen is not compensated: its change happens where the reader can see
-    /// it (a tapped disclosure, streamed text), and the rows below it move as they should. While the
-    /// end is pinned the pin does it instead.
+    /// A row above the reader's line changed height: move the offset with it, so nothing on screen
+    /// moves. While the end is pinned the pin does it instead.
     ///
-    /// One exception reaches into the screen: a turn that just finished folds the work above its
-    /// answer away. When the reader is inside that turn (its top above the screen), reading the
-    /// answer, the turn's end stays put instead of the answer jumping up by the folded height.
+    /// - A row wholly above the line (measured for the first time in the overscan, an older page
+    ///   settling) always compensates.
+    /// - A row reaching across the line compensates too: a turn is one cell, often taller than
+    ///   the screen, and the part of it above the line is the part just built in the overscan (a
+    ///   table, a diagram, an image settling). Uncompensated, the reader saw the text below it
+    ///   move while scrolling. Two exceptions grow where the reader looks and move the rows below
+    ///   as they should: the running turn (streamed text at its end) and a tapped disclosure.
+    /// - A turn that just finished folds the work above its answer away: the turn's end stays put,
+    ///   on a net shrink only (otherwise the answer would move by the footer and changes card
+    ///   added below it instead of by the smaller fold above it).
     func compensatesResize(of frame: CGRect, at index: Int, delta: CGFloat) -> Bool {
         guard !pinsToBottom else { return false }
         let cv = collectionView
         let readerTop = cv.contentOffset.y + cv.contentInset.top
         if frame.maxY <= readerTop + 0.5 { return true }
-        guard let settling = settlingTurn, settling.until > Date.now,
-            items.indices.contains(index), items[index] == settling.id
+        guard frame.minY < readerTop - 0.5, cv.contentOffset.y + delta >= -cv.contentInset.top,
+            items.indices.contains(index), entries.indices.contains(index)
         else { return false }
-        settlingTurn = nil
-        // Only a net shrink: the answer then moves by what was added below it (the footer, the
-        // changes card) instead of by the larger fold above it.
-        return delta < 0 && frame.minY < readerTop
-            && cv.contentOffset.y + delta >= -cv.contentInset.top
+        if let settling = settlingTurn, settling.until > Date.now, items[index] == settling.id {
+            settlingTurn = nil
+            return delta < 0
+        }
+        if Date.now < resizeAnimationUntil { return false }
+        if case .turn(let row) = entries[index], row.turn.phase == .running { return false }
+        return true
     }
 
     // MARK: Insets

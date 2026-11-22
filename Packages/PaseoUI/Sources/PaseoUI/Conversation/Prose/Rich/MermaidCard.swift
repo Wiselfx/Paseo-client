@@ -16,14 +16,21 @@ import WebKit
 struct MermaidCard: View {
     let code: String
 
-    @State private var image: UIImage?
-    @State private var aspectRatio: CGFloat?
+    /// The render this card made. A reused cell reads the shared cache through `image` before
+    /// its render task runs, so a diagram seen before draws at its true size in the first pass.
+    @State private var renderedImage: UIImage?
+    @State private var renderedAspect: CGFloat?
     @State private var svg: String?
     /// The renderer's message for a refused source. `.unavailable` is not a message: the card's
     /// title already says it (J1 §2 — never print the same sentence twice).
     @State private var errorMessage: String?
     @State private var showSource = false
-    @State private var width: CGFloat = 0
+    /// The card's measured width. Until its first layout the card reads the prose column's width
+    /// (it spans the column), so a reused cell sizes it right in its first pass instead of
+    /// settling a frame later, which moved the text below while the transcript scrolled.
+    @State private var measuredWidth: CGFloat = 0
+    @Environment(\.richProseWidth) private var proseWidth
+    private var width: CGFloat { measuredWidth > 1 ? measuredWidth : proseWidth }
     @Environment(\.artifactZoomNamespace) private var artifactZoom
     @Environment(\.richActions) private var richActions
     @Environment(\.colorScheme) private var colorScheme
@@ -44,6 +51,14 @@ struct MermaidCard: View {
     private var renderKey: String? {
         guard width > 1 else { return nil }
         return "\(shapeKey)|\(Int(width.rounded()))|\(dark ? "d" : "l")"
+    }
+
+    private var image: UIImage? {
+        renderedImage ?? renderKey.flatMap { RichSnapshotCache.image(for: $0) }
+    }
+
+    private var aspectRatio: CGFloat? {
+        renderedAspect ?? MediaMetadataCache.aspectRatio(for: shapeKey)
     }
 
     /// The ratio the box reserves: the diagram's own when known, else the 4:3 guess.
@@ -143,7 +158,7 @@ struct MermaidCard: View {
         // size, delivered at once and on change, written only when it differs.
         Color.clear
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
-                if width != newWidth { width = newWidth }
+                if measuredWidth != newWidth { measuredWidth = newWidth }
             }
     }
 
@@ -189,14 +204,9 @@ struct MermaidCard: View {
     private func render() async {
         guard let key = renderKey else { return }
         if let cached = RichSnapshotCache.image(for: key) {
-            image = cached
+            renderedImage = cached
             svg = MermaidSVGCache.string(for: svgKey)
             return
-        }
-        if aspectRatio == nil,
-            let aspect = MediaMetadataCache.aspectRatio(for: shapeKey)
-        {
-            aspectRatio = aspect
         }
         let outcome = await RichSnapshotQueue.shared.mermaid(
             source: code, dark: dark, slotWidth: width)
@@ -206,8 +216,8 @@ struct MermaidCard: View {
             RichSnapshotCache.store(rendered, for: key)
             MermaidSVGCache.store(renderedSVG, for: svgKey)
             MediaMetadataCache.remember(aspect, for: shapeKey)
-            image = rendered
-            aspectRatio = aspect
+            renderedImage = rendered
+            renderedAspect = aspect
             svg = renderedSVG
         case .error(let message):
             errorMessage = message

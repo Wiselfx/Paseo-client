@@ -33,8 +33,16 @@ struct MarkdownTableView: View, Equatable {
     let contentVersion: Int
     let theme: ClaudeMarkdownTheme
 
-    /// The width this table is offered: the overflow and pin decisions compare against it.
-    @State private var viewport: CGFloat = 0
+    /// The width this table measured itself offered.
+    @State private var measuredViewport: CGFloat = 0
+    @Environment(\.richProseWidth) private var proseWidth
+    /// The width this table is offered: the overflow and pin decisions compare against it, and the
+    /// layout wraps its columns to it. Until the first layout it is the prose column's, so a reused
+    /// cell lays the table out at its real width in its first pass. Laid out at zero, every column
+    /// wrapped to its minimum and the table settled shorter a frame later, moving the text below
+    /// it while the transcript scrolled. (A table nested in a list or quote measures a little
+    /// narrower and corrects once.)
+    private var viewport: CGFloat { measuredViewport > 1 ? measuredViewport : proseWidth }
     /// The table's content width: the overflow signal. Written only when it changes, never per
     /// scroll frame.
     @State private var contentWidth: CGFloat = 0
@@ -66,7 +74,7 @@ struct MarkdownTableView: View, Equatable {
         .onGeometryChange(for: CGFloat.self) {
             $0.size.width
         } action: {
-            viewport = $0
+            if measuredViewport != $0 { measuredViewport = $0 }
         }
         .paseoFeedback(.light, trigger: isExpanded) { _, new in new }
         .sheet(isPresented: $isExpanded) {

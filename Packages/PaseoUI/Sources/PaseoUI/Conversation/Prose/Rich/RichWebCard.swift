@@ -46,7 +46,12 @@ struct RichWebCard: View {
     /// A slot release is already snapshotting this page: the scroll task must not queue the
     /// same render twice.
     @State private var capturingSnapshot = false
-    @State private var width: CGFloat = 0
+    /// The card's measured width. Until its first layout the card reads the prose column's width
+    /// (it spans the column), so a reused cell sizes it right in its first pass instead of
+    /// settling a frame later, which moved the text below while the transcript scrolled.
+    @State private var measuredWidth: CGFloat = 0
+    @Environment(\.richProseWidth) private var proseWidth
+    private var width: CGFloat { measuredWidth > 1 ? measuredWidth : proseWidth }
     /// The live document, built when the slot is claimed (never in `body`: R-1).
     @State private var document: String?
     /// The compiled offline rules, awaited before the first load: a chat document must never
@@ -192,7 +197,7 @@ struct RichWebCard: View {
         // size, delivered at once and on change, written only when it differs.
         Color.clear
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
-                if width != newWidth { width = newWidth }
+                if measuredWidth != newWidth { measuredWidth = newWidth }
             }
     }
 

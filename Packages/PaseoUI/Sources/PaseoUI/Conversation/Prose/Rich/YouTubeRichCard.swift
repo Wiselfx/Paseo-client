@@ -27,7 +27,12 @@ struct YouTubeRichCard: View {
     @State private var stillFailed = false
     /// The card's real width, measured once per layout so the still is decoded at the size it
     /// is drawn at (never a guessed 320/430 pt).
-    @State private var width: CGFloat = 0
+    /// The card's measured width. Until its first layout the card reads the prose column's width
+    /// (it spans the column), so a reused cell sizes it right in its first pass instead of
+    /// settling a frame later, which moved the text below while the transcript scrolled.
+    @State private var measuredWidth: CGFloat = 0
+    @Environment(\.richProseWidth) private var proseWidth
+    private var width: CGFloat { measuredWidth > 1 ? measuredWidth : proseWidth }
     /// The oEmbed title strip (C5): title + channel, cached by video id. Until it
     /// arrives (or when it fails) the strip shows the domain fallback, as before.
     @State private var videoTitle: String?
@@ -112,7 +117,7 @@ struct YouTubeRichCard: View {
         // size, delivered at once and on change, written only when it differs.
         Color.clear
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
-                if width != newWidth { width = newWidth }
+                if measuredWidth != newWidth { measuredWidth = newWidth }
             }
     }
 

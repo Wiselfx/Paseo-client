@@ -30,7 +30,12 @@ struct RichSVGCard: View {
     @State private var image: UIImage?
     @State private var showSource = false
     @State private var showViewer = false
-    @State private var width: CGFloat = 0
+    /// The card's measured width. Until its first layout the card reads the prose column's width
+    /// (it spans the column), so a reused cell sizes it right in its first pass instead of
+    /// settling a frame later, which moved the text below while the transcript scrolled.
+    @State private var measuredWidth: CGFloat = 0
+    @Environment(\.richProseWidth) private var proseWidth
+    private var width: CGFloat { measuredWidth > 1 ? measuredWidth : proseWidth }
     @Namespace private var zoom
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
@@ -134,7 +139,7 @@ struct RichSVGCard: View {
         // size, delivered at once and on change, written only when it differs.
         Color.clear
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
-                if width != newWidth { width = newWidth }
+                if measuredWidth != newWidth { measuredWidth = newWidth }
             }
     }
 
