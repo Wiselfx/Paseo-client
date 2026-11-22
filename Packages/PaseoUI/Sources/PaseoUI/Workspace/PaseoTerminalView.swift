@@ -52,7 +52,7 @@ struct PaseoTerminalView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> TerminalView {
-        let view = TerminalView(frame: .zero, font: PaseoTerminalFont.current())
+        let view: TerminalView = PaseoTerminalSurface(frame: .zero, font: PaseoTerminalFont.current())
         view.terminalDelegate = context.coordinator
         // SwiftUI owns the geometry: the frame already sits inside the safe area and above the
         // keyboard and key bar. The emulator's own automatic inset counted the overlapping safe
