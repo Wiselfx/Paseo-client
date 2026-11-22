@@ -13,7 +13,8 @@ let package = Package(
         .package(path: "../PaseoCore"),
         .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.9.0"),
         .package(url: "https://github.com/smittytone/HighlighterSwift.git", from: "3.1.0"),
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.99.3"),
+        // Unreleased main: its iOS renderer rebuilds far fewer rows per TUI frame than 1.99.3.
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm", revision: "56d5cb3961306ecebae63ad208c6bb1ca1339bc2"),
     ],
     targets: [
         .target(

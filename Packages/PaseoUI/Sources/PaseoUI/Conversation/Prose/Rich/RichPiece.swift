@@ -47,6 +47,8 @@ extension RichContentBlock {
 /// sat in a paragraph with anything else now render as images, and text the reader sees
 /// gets links for bare URLs (item 3). Nil keeps today's behaviour.
 func richPieces(_ source: String, home: String? = nil) -> [RichPiece] {
+    // A ```markdown sample with code blocks inside stays one block (`MarkdownFenceNesting`).
+    let source = MarkdownFenceNesting.normalized(source)
     var pieces: [RichPiece] = []
     // Adjacent single-image units whose only separation is blank text merge into
     // one gallery block (G7 C2). Standalone files (G10) and playable media (G11)

@@ -7,9 +7,11 @@ import UIKit
 
 @MainActor
 final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
-    /// One display frame at 60 Hz: a chunk that arrives inside a frame that already fed bytes
-    /// waits for the next tick; a chunk after an idle frame feeds immediately.
-    static let frameInterval: CFTimeInterval = 1.0 / 60.0
+    /// A hidden tab parses its output at most this often: its emulator stays current (replies
+    /// to the program's queries are late by at most this much) without drawing frames nobody
+    /// sees. SwiftTerm suspends drawing only for a view out of the window, and a hidden tab stays
+    /// in it so its screen survives.
+    static let hiddenFeedInterval: Duration = .milliseconds(250)
     /// Activity bookkeeping writes view state at most this often, and never when the tab's dot
     /// would not change.
     static let activityInterval: CFTimeInterval = 0.5
@@ -62,8 +64,13 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private var pendingBytes: [UInt8] = []
     private var flushLink: CADisplayLink?
     private var lastFeedTime: CFTimeInterval = 0
-    /// Whether a TUI is repainting the screen, for the Metal renderer's buffering mode.
-    private var tuiSignals = TerminalTUISignals()
+    /// One display frame, as the flush link last reported it (8.3 ms on ProMotion): a chunk that
+    /// arrives inside a frame that already fed bytes waits for the next tick; a chunk after an
+    /// idle frame feeds immediately. It was a fixed 60 Hz frame, which held every second chunk
+    /// for a frame the 120 Hz link had already drawn.
+    private var frameInterval: CFTimeInterval = 1.0 / 60.0
+    /// The hidden tab's next batched feed, while one is scheduled.
+    private var hiddenFlushTask: Task<Void, Never>?
     private var lastActivityReport: CFTimeInterval = 0
     private var onOutput: () -> Void = {}
     private var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
@@ -151,6 +158,10 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
             return
         }
         Self.visibleTerminal = self
+        // What the tab held while hidden lands before its first visible frame.
+        hiddenFlushTask?.cancel()
+        hiddenFlushTask = nil
+        flushPending()
         // Claim with the newest measured grid: a hidden tab holds its resizes until now.
         if let store, let terminalId, attachedId == terminalId, !isReplaying,
             let size = pendingResize ?? attachedSize
@@ -193,6 +204,8 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         resizeTask = nil
         flushLink?.invalidate()
         flushLink = nil
+        hiddenFlushTask?.cancel()
+        hiddenFlushTask = nil
         pendingBytes.removeAll(keepingCapacity: false)
         lastFeedTime = 0
         lastActivityReport = 0
@@ -299,12 +312,10 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
                     self.pendingBytes.removeAll(keepingCapacity: true)
                     self.flushLink?.isPaused = true
                     self.view?.resetToInitialState()
-                    self.tuiSignals.reset()
                 case .output(let data):
                     // Replay bytes are parsed in order and never held back: the replies they may
                     // generate have to stay suppressed until the last of them lands.
                     if self.isReplaying {
-                        self.tuiSignals.scan(data, at: CACurrentMediaTime())
                         self.view?.feed(byteArray: ArraySlice(data))
                     } else {
                         self.receive(data)
@@ -330,9 +341,7 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private func receive(_ data: Data) {
         let now = CACurrentMediaTime()
         reportActivity(now)
-        tuiSignals.scan(data, at: now)
-        applyRenderMode(at: now)
-        if pendingBytes.isEmpty, now - lastFeedTime >= Self.frameInterval,
+        if isVisible, pendingBytes.isEmpty, now - lastFeedTime >= frameInterval,
             data.count < Self.maxBufferedBytes
         {
             lastFeedTime = now
@@ -347,15 +356,6 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         }
     }
 
-    /// A TUI repainting most of the screen each frame renders best from one aggregated Metal
-    /// buffer; a shell, which changes a few rows at a time, from the per-row cache (the default).
-    private func applyRenderMode(at now: CFTimeInterval) {
-        guard let view else { return }
-        let mode: MetalBufferingMode =
-            tuiSignals.isTUI(at: now) ? .perFrameAggregated : .perRowPersistent
-        if view.metalBufferingMode != mode { view.metalBufferingMode = mode }
-    }
-
     /// Feeds everything received since the last frame, in one parser call.
     func flushPending() {
         guard !pendingBytes.isEmpty else {
@@ -368,7 +368,18 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         pendingBytes.removeAll(keepingCapacity: true)
     }
 
+    /// The display link's tick: learns the real frame length, then feeds the frame's bytes.
+    func tick(_ link: CADisplayLink) {
+        let duration = link.targetTimestamp - link.timestamp
+        if duration > 0.001 { frameInterval = duration }
+        flushPending()
+    }
+
     private func startFlushLink() {
+        guard isVisible else {
+            scheduleHiddenFlush()
+            return
+        }
         if let flushLink {
             flushLink.isPaused = false
             return
@@ -379,6 +390,19 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         link.preferredFrameRateRange = FrameRate.promotion
         link.add(to: .main, forMode: .common)
         flushLink = link
+    }
+
+    /// A hidden tab's bytes wait for one batched feed every `hiddenFeedInterval` instead of one
+    /// per display frame.
+    private func scheduleHiddenFlush() {
+        flushLink?.isPaused = true
+        guard hiddenFlushTask == nil else { return }
+        hiddenFlushTask = Task { [weak self] in
+            try? await Task.sleep(for: PaseoTerminalCoordinator.hiddenFeedInterval)
+            guard !Task.isCancelled, let self else { return }
+            self.hiddenFlushTask = nil
+            self.flushPending()
+        }
     }
 
     /// Activity bookkeeping for the tab's dot: at most one view write per `activityInterval`,
@@ -399,6 +423,11 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
             return
         }
         pendingResize = size
+        // Leading edge: the first change after a quiet period goes to the PTY at once. The stage
+        // already holds the grid until the size has settled (`TerminalSettledFrame`), so this is
+        // normally the only change, and the program redraws for the grid it is drawn on instead
+        // of 120 ms later. Changes inside the window still trail.
+        if resizeTask == nil { applyResize() }
         resizeTask?.cancel()
         resizeTask = Task { [weak self] in
             try? await Task.sleep(for: PaseoTerminalCoordinator.resizeSettle)

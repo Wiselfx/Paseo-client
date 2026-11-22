@@ -12,7 +12,7 @@ final class PaseoTickTarget: NSObject {
     weak var coordinator: PaseoTerminalCoordinator?
 
     @objc func tick(_ link: CADisplayLink) {
-        coordinator?.flushPending()
+        coordinator?.tick(link)
     }
 }
 #endif
