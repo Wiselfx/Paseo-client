@@ -44,6 +44,8 @@ struct WorkspacePanel: View {
     @State private var showSetupSheet = false
     @State private var showImportSheet = false
     @State private var observedSetupWorkspaceId: String?
+    /// The Terminal page's full-screen mode: the panel hides its own chrome for it.
+    @State private var terminalFullScreen = false
     @Environment(\.shellDrawer) private var shellDrawer
     /// Whether the shell's drawer has the panel on screen. The page content is mounted only
     /// while this is true, so closing the panel stops its work; the tab is remembered separately.
@@ -97,14 +99,21 @@ struct WorkspacePanel: View {
         }
     }
 
+    /// Only the Terminal page goes full screen; leaving it shows the chrome again.
+    private var isTerminalFullScreen: Bool {
+        terminalFullScreen && page == .terminal && workspace != nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            header
-            setupQuietLine
-            segmented
-                .padding(.horizontal, Space.lg)
-                .padding(.bottom, 10)
-            ClaudeDivider()
+            if !isTerminalFullScreen {
+                header
+                setupQuietLine
+                segmented
+                    .padding(.horizontal, Space.lg)
+                    .padding(.bottom, 10)
+                ClaudeDivider()
+            }
             dismissableContent
         }
         // One canvas for every panel page and pushed page (E2 §5): the panel fill, the same one
@@ -114,6 +123,10 @@ struct WorkspacePanel: View {
         .environment(\.workspaceGitExtras, gitExtras)
         .onChange(of: initialTerminalId) { _, terminalId in
             if terminalId != nil { page = .terminal }
+        }
+        // A closed panel reopens with its chrome.
+        .onChange(of: isPanelVisible) { _, visible in
+            if !visible { terminalFullScreen = false }
         }
         .task(id: isPanelVisible ? workspace?.id : nil) {
             guard !Task.isCancelled else { return }
@@ -448,7 +461,8 @@ struct WorkspacePanel: View {
                 changesPage
             case .terminal:
                 WorkspaceTerminalsView(
-                    session: session, workspace: workspace, initialTerminalId: initialTerminalId)
+                    session: session, workspace: workspace, initialTerminalId: initialTerminalId,
+                    isFullScreen: $terminalFullScreen)
             }
         } else {
             unavailable

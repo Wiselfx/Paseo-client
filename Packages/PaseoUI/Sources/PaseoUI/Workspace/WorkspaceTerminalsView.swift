@@ -17,6 +17,9 @@ struct WorkspaceTerminalsView: View {
     /// A terminal to select on appear, e.g. from a notification tap. Nil keeps the usual
     /// first-terminal selection.
     var initialTerminalId: String? = nil
+    /// Full screen hides everything but the terminal: the panel's chrome (owned by the panel),
+    /// the chip bar and the scripts.
+    @Binding var isFullScreen: Bool
 
     @State private var selectedTerminalId: String?
     @State private var isCreating = false
@@ -74,21 +77,25 @@ struct WorkspaceTerminalsView: View {
         let ids = terminals.map(\.id)
         let scripts = store.scripts(in: workspaceId)
         let isLoadingScripts = store.loadingScriptWorkspaces.contains(workspaceId)
+        let fullScreen = isFullScreen && !mountedTerminals.isEmpty
         VStack(spacing: 0) {
             if let error = store.error {
                 TerminalErrorBanner(
                     message: error, onRetry: reopen, onDismiss: { store.clearError() })
             }
-            TerminalChipBar(
-                terminals: terminals,
-                selectedId: selectedTerminalId,
-                dotStates: dotStates(for: terminals),
-                isCreating: isCreating,
-                onSelect: { select($0) },
-                onRename: beginRename,
-                onClose: requestClose,
-                onCreate: createTerminal)
-            ClaudeDivider()
+            if !fullScreen {
+                TerminalChipBar(
+                    terminals: terminals,
+                    selectedId: selectedTerminalId,
+                    dotStates: dotStates(for: terminals),
+                    isCreating: isCreating,
+                    onSelect: { select($0) },
+                    onRename: beginRename,
+                    onClose: requestClose,
+                    onCreate: createTerminal,
+                    onEnterFullScreen: { setFullScreen(true) })
+                ClaudeDivider()
+            }
             TerminalStage(
                 store: store,
                 uploader: session.fileUploader,
@@ -105,7 +112,15 @@ struct WorkspaceTerminalsView: View {
                 onCreate: createTerminal,
                 onReattach: reattach,
                 onDismissExit: dismissExit)
-            if !scripts.isEmpty || isLoadingScripts {
+            .overlay(alignment: .topTrailing) {
+                if fullScreen {
+                    TerminalFullScreenButton(isFullScreen: true) { setFullScreen(false) }
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .padding(Space.sm)
+                        .transition(.opacity)
+                }
+            }
+            if !fullScreen, !scripts.isEmpty || isLoadingScripts {
                 ClaudeDivider()
                 WorkspaceScriptsSection(
                     scripts: scripts,
@@ -223,6 +238,14 @@ struct WorkspaceTerminalsView: View {
         }
         .fullScreenCover(item: $serviceURLSheet) { target in
             SafariView(url: target.url).ignoresSafeArea()
+        }
+    }
+
+    /// Full screen in and out with one layout animation, so the grid resizes once, to the end
+    /// size, instead of following every step.
+    private func setFullScreen(_ value: Bool) {
+        withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
+            isFullScreen = value
         }
     }
 

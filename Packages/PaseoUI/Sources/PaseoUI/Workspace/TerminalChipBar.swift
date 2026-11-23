@@ -13,8 +13,18 @@ struct TerminalChipBar: View {
     let onRename: (TerminalInfo) -> Void
     let onClose: (TerminalInfo) -> Void
     let onCreate: () -> Void
+    let onEnterFullScreen: () -> Void
 
     var body: some View {
+        // The full-screen toggle stays pinned at the trailing edge; the chips scroll beside it.
+        HStack(spacing: 0) {
+            chips
+            TerminalFullScreenButton(isFullScreen: false, action: onEnterFullScreen)
+                .padding(.trailing, Space.sm)
+        }
+    }
+
+    private var chips: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Space.sm) {
                 ForEach(terminals) { terminal in
