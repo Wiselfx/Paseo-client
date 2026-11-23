@@ -23,7 +23,9 @@ struct ClaudeSegmentView: View {
                 highlightedSeq: highlightedSeq, findTarget: findTarget, onOpenFile: onOpenFile)
         case .prose(let row):
             if case .assistantMessage(let message) = row.item {
-                ClaudeProse(markdown: message.text, onAction: onMarkdown, isStreaming: turnIsRunning)
+                ClaudeProse(
+                    markdown: message.text, onAction: onMarkdown, isStreaming: turnIsRunning,
+                    revealKey: row.id, revealsFresh: isTail)
                     .rowAnchor(row.seqEnd)
                     .background { FindWash(highlighted: highlightedSeq == row.seqEnd) }
             }

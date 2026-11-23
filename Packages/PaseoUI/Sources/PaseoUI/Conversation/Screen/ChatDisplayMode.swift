@@ -5,9 +5,10 @@ import Foundation
 ///
 /// - `full`: every turn in full. A turn's thinking and tool calls are always folded into their
 ///   two summary lines (`WorkDigest`); there is no separate mode for that any more.
-/// - `collapseTurns`: completed turns older than the last show the prompt plus the turn
-///   summary; the answer itself always renders in full (UX spec §4.3 forbids clipping a
-///   message behind "Show more").
+/// - `collapseTurns`: completed turns older than the last show only the prompt, the outcome line
+///   and the answer, without the copy / fork footer. Every finished turn already folds its work
+///   behind the outcome line, so both modes open the work with the same single tap; the answer
+///   always renders in full (UX spec §4.3 forbids clipping a message behind "Show more").
 enum ChatDisplayMode: String, CaseIterable {
     case full
     case collapseTurns

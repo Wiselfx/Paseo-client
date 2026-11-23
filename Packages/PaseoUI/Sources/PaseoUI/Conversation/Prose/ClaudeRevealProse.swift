@@ -18,12 +18,23 @@ struct ClaudeRevealProse: View {
     /// pipeline via `RichActions` in the environment.
     /// `nil` renders images as text.
     var imageContent: ((MarkdownImage) -> AnyView)? = nil
+    /// The timeline row this prose belongs to: keys `RevealLedger`, so a remounted view resumes
+    /// its reveal instead of painting the rest at once. Nil paints first sight whole.
+    var revealKey: String? = nil
+    /// The running turn's newest segment: text the ledger has never seen is paced from the start
+    /// (a message that arrived as one delta grows in instead of appearing whole).
+    var revealsFresh: Bool = false
 
     @Environment(\.scenePhase) private var scenePhase
     /// The frame clock runs only for a live turn in the active scene: backgrounding stops
     /// the ticks (upstream's clock is rAF-driven, so a hidden tab stops free of charge).
     /// Keyed into `.task(id:)` below, so a phase flip restarts the task with a fresh key.
-    private var pacingActive: Bool { isStreaming && scenePhase == .active }
+    private var pacingActive: Bool { isLive && scenePhase == .active }
+    /// The turn has ended but the paced backlog has not: it keeps draining at the same rate
+    /// instead of landing in one jump (it used to be released at once).
+    @State private var finishing = false
+    /// Text is still growing on screen: arriving, or the backlog draining after the turn ended.
+    private var isLive: Bool { isStreaming || finishing }
     /// The agent's working directory (J2): `![a](~/shots/a.png)` and `[doc](docs/a.pdf)`
     /// resolve against it. Read here, in the leaf body, once per markdown change (R-1).
     @Environment(\.richActions) private var richActions
@@ -31,17 +42,17 @@ struct ClaudeRevealProse: View {
     /// the turn runs, arrival changes the target and the frame clock below releases the backlog
     /// proportionally — a burst catches up faster instead of jumping. The store keeps the full
     /// text; only this painted slice is paced, so copy, find and scroll geometry stay
-    /// consistent with what is on screen. Nil when settled or complete (first sight paints
-    /// whole, the turn's end paints everything). Written only while the backlog moves.
+    /// consistent with what is on screen. Nil when settled (history paints whole; a live message
+    /// starts where `initialReveal` says). Written only while the backlog moves.
     @State private var paced: TextRevealState?
 
     /// What this update paints. While the turn runs, the slice paces behind arrival: deltas
     /// set the target and the frame clock below releases the backlog, at most once per 60 Hz
     /// frame, so a burst catches up faster instead of jumping (upstream `text-reveal.ts`).
-    /// First sight paints whole; the turn's end paints everything. The store keeps the full text.
-    private func paintedSource(markdown: String, isStreaming: Bool, paced: TextRevealState?) -> String {
-        if isStreaming, let paced {
-            return TextReveal.visibleText(paced, streaming: true)
+    /// After the turn ends the backlog keeps draining (`finishing`). The store keeps the full text.
+    private func paintedSource(markdown: String, isLive: Bool, paced: TextRevealState?) -> String {
+        if isLive, let paced {
+            return TextReveal.visibleText(paced, streaming: isStreaming)
         }
         if isStreaming {
             return TextReveal.trimmedForStreaming(markdown)
@@ -114,7 +125,7 @@ struct ClaudeRevealProse: View {
 
     private func computePieceRefs(_ source: String, home: String?) -> [PieceRef] {
         let raw = PaseoPerf.measure("rich.pieces") {
-            RichPiecesCache.pieces(source, home: home, transient: isStreaming)
+            RichPiecesCache.pieces(source, home: home, transient: isLive)
         }
         var refs: [PieceRef] = []
         var offset = 0
@@ -150,20 +161,20 @@ struct ClaudeRevealProse: View {
     var body: some View {
         let _ = PaseoPerf.body("RevealProse")
         let _ = PaseoPerf.why(Self.self)
-        let source = paintedSource(markdown: markdown, isStreaming: isStreaming, paced: paced)
+        let source = paintedSource(markdown: markdown, isLive: isLive, paced: paced)
         let refs = pieceRefs(source)
         VStack(alignment: .leading, spacing: theme.blockSpacing) {
             ForEach(refs, id: \.stableIdentity) { ref in
                 switch ref.piece {
                 case .markdown:
                     ClaudeMarkdownView(
-                        document: document(ref.text, open: isStreaming && ref.isTailMarkdown),
+                        document: document(ref.text, open: isLive && ref.isTailMarkdown),
                         theme: theme,
                         // Only the open piece can be still arriving. A settled piece sees
                         // `false` while the turn runs, so its code highlights as soon as its
                         // fence is closed and the turn ending changes one piece, not all of
                         // them (W1: `isStreaming` flipping made every piece unequal at once).
-                        imageContent: imageContent, isStreaming: isStreaming && ref.isTailMarkdown,
+                        imageContent: imageContent, isStreaming: isLive && ref.isTailMarkdown,
                         onAction: onAction)
                         .equatable()
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -176,14 +187,25 @@ struct ClaudeRevealProse: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
-            if isStreaming, paced == nil { paced = TextReveal.begin(markdown) }
+            if isStreaming, paced == nil { paced = initialReveal(markdown) }
         }
         .onChange(of: markdown) { _, newValue in
-            guard isStreaming else { return }
-            paced = paced.map { TextReveal.retarget($0, newValue) } ?? TextReveal.begin(newValue)
+            guard isLive else { return }
+            paced = paced.map { TextReveal.retarget($0, newValue) } ?? initialReveal(newValue)
         }
         .onChange(of: isStreaming) { _, streaming in
-            if !streaming { paced = nil }
+            guard !streaming else { return }
+            // The backlog drains at the reveal's own rate; only a settled (or backgrounded)
+            // reveal is released at once.
+            if let current = paced, scenePhase == .active {
+                let remaining = TextReveal.retarget(current, markdown)
+                if !TextReveal.isSettled(remaining) {
+                    paced = remaining
+                    finishing = true
+                    return
+                }
+            }
+            settle()
         }
         // The reveal's frame clock (upstream `text-reveal.ts:nextTextRevealFrame`). Keyed on
         // the live-and-active flag — not per delta — so one task paces the whole turn; it
@@ -216,9 +238,36 @@ struct ClaudeRevealProse: View {
                 else { continue }
                 previousMs = frame.frameAtMs
                 let next = TextReveal.advance(current, elapsedMs: frame.elapsedMs)
-                if next.revealed != current.revealed { paced = next }
+                if next.revealed != current.revealed {
+                    paced = next
+                    if let revealKey { RevealLedger.record(next.revealed, for: revealKey) }
+                }
+                if !isStreaming, TextReveal.isSettled(next) {
+                    settle()
+                    return
+                }
             }
         }
+    }
+
+    /// Where a reveal starts on first sight: where this message's reveal had got if a remounted
+    /// view is picking it up, the start for a message the running turn has never shown, and
+    /// whole otherwise (history, a conversation opened mid-turn).
+    private func initialReveal(_ text: String) -> TextRevealState {
+        let length = text.utf16.count
+        if let revealKey, let shown = RevealLedger.progress(for: revealKey) {
+            return TextRevealState(target: text, revealed: min(shown, length))
+        }
+        let start = revealsFresh ? 0 : length
+        if let revealKey { RevealLedger.record(start, for: revealKey) }
+        return TextRevealState(target: text, revealed: start)
+    }
+
+    /// The reveal is done: paint the message whole and forget its progress.
+    private func settle() {
+        paced = nil
+        finishing = false
+        if let revealKey { RevealLedger.finish(revealKey) }
     }
 }
 #endif

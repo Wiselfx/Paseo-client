@@ -3,11 +3,12 @@ import PaseoStore
 import SwiftUI
 import UIKit
 
-/// One turn: your bubble, the process header, the process body, the answer.
+/// One turn: your bubble, the work header, the work, the answer.
 ///
-/// In `Collapse turns` mode (Settings → General → Chat), completed turns older than the most
-/// recent one show the prompt plus the turn summary; **Show less** is gone — the answer itself
-/// always renders in full. Find expands whatever holds a match automatically.
+/// A finished turn folds its work behind one line that says what the work did and how long it
+/// took (`TurnOutcomeLine`); one tap opens it. The answer (the turn's last message) always stays
+/// on the page, wherever it sits among the work. In `Collapse turns` mode (Settings → General →
+/// Chat) older turns also drop their copy / fork footer. Find opens whatever holds a match.
 struct ClaudeTurnView: View {
     let turn: Turn
     let onMarkdown: (MarkdownAction) -> Void
@@ -40,8 +41,6 @@ struct ClaudeTurnView: View {
 
     /// Nil until the reader taps, so the default can follow the turn's phase.
     @State private var userExpanded: Bool?
-    /// Collapse-turns override: true = expanded (full work), nil = the mode's default.
-    @State private var userExpandedTurn: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(ChatDisplayMode.storageKey) private var chatDisplay = ChatDisplayMode.full.rawValue
 
@@ -55,9 +54,8 @@ struct ClaudeTurnView: View {
     /// call, a thought), which the folded turn does not draw.
     var findTargetsWork: Bool {
         guard let seq = findTarget else { return false }
-        var segments = turn.segments[...]
-        if case .prose? = segments.last { segments = segments.dropLast() }
-        for segment in segments {
+        let answerId = lastProse?.id
+        for segment in turn.segments where segment.id != answerId {
             switch segment {
             case .work(let group):
                 if group.rows.contains(where: { $0.seqStart <= seq && seq <= $0.seqEnd }) { return true }
@@ -68,17 +66,22 @@ struct ClaudeTurnView: View {
         return false
     }
 
-    /// The answer stays visible even when the turn folds.
-    var finalProse: TimelineRow? {
-        guard !isRunning, case .prose(let row)? = turn.segments.last else { return nil }
-        return row
+    /// The turn's last message, wherever it sits: a turn that ends on a tool call still keeps
+    /// what it last said on the page when it folds (it used to fold that away with the work).
+    var lastProse: TimelineRow? {
+        for segment in turn.segments.reversed() {
+            if case .prose(let row) = segment { return row }
+        }
+        return nil
     }
 
-    /// The answer: the last segment when it is prose, shown while the turn runs (work shown) and
-    /// after it completes. Running with the work folded keeps the streaming prose hidden.
+    /// The answer of a finished turn: the fork boundary.
+    var finalProse: TimelineRow? { isRunning ? nil : lastProse }
+
+    /// The answer, shown after the turn completes and while it runs with its work shown.
+    /// Running with the work folded keeps the streaming prose hidden.
     var answerProse: TimelineRow? {
-        guard case .prose(let row)? = turn.segments.last else { return nil }
-        return !isRunning || isExpanded ? row : nil
+        !isRunning || isExpanded ? lastProse : nil
     }
 
     /// The segments the full turn draws, in one `ForEach` keyed by segment id (W1). Opened, that is
@@ -88,142 +91,42 @@ struct ClaudeTurnView: View {
     /// tool call followed it and it moved into the stack.
     var shownSegments: [Turn.Segment] {
         if isExpanded { return turn.segments }
-        var shown = turn.segments.filter { segment in
+        let answerId = answerProse?.id
+        // In document order: messages you sent mid-turn and compaction markers never fold away
+        // (upstream `turn-collapse/model.ts:102` `staysVisibleWhenCollapsed`), nor does the answer.
+        return turn.segments.filter { segment in
+            if segment.id == answerId { return true }
             guard case .notice(let row) = segment else { return false }
             switch row.item {
             case .userMessage, .compaction: return true
             default: return false
             }
         }
-        if let answerProse { shown.append(.prose(answerProse)) }
-        return shown
     }
 
-    /// The segments other than the answer: what the work header stands for.
-    var bodySegments: ArraySlice<Turn.Segment> {
-        answerProse == nil ? turn.segments[...] : turn.segments.dropLast()
+    /// Whether the turn has anything besides the answer for the header to stand for.
+    var hasWork: Bool {
+        let answerId = answerProse?.id
+        return turn.segments.contains { $0.id != answerId }
     }
 
-    var showsHeader: Bool { isRunning || !bodySegments.isEmpty }
+    var showsHeader: Bool { isRunning || hasWork }
 
-    /// `collapseTurns` applies to completed, non-latest turns only; a failure always renders fully.
     var chatDisplayMode: ChatDisplayMode {
         ChatDisplayMode(rawValue: chatDisplay) ?? .full
     }
 
-    var showsCollapsedTurn: Bool {
-        guard chatDisplayMode == .collapseTurns, turn.phase == .completed, !isLatestTurn else {
-            return false
-        }
-        // Find keeps whatever holds the match visible — it wins over the user's fold too.
-        if turnContains(findTarget) { return false }
-        if let userExpandedTurn { return !userExpandedTurn }
-        return true
+    /// `collapseTurns` trims older finished turns to prompt, outcome line and answer.
+    var showsFooter: Bool {
+        guard !isRunning, hasProse || (onFork != nil && finalProse != nil) else { return false }
+        return chatDisplayMode != .collapseTurns || isLatestTurn
     }
-
-    /// Whether any row of this turn covers `seq`.
-    func turnContains(_ seq: Int?) -> Bool {
-        guard let seq else { return false }
-        if let row = turn.userMessage, row.seqStart <= seq, seq <= row.seqEnd { return true }
-        for segment in turn.segments {
-            switch segment {
-            case .work(let group):
-                if group.rows.contains(where: { $0.seqStart <= seq && seq <= $0.seqEnd }) {
-                    return true
-                }
-            case .prose(let row), .todo(let row), .notice(let row):
-                if row.seqStart <= seq, seq <= row.seqEnd { return true }
-            }
-        }
-        return false
-    }
-
-    /// Rows that stay visible while the work is folded: messages you sent while this turn ran, and
-    /// compaction markers. Upstream never folds these away (`turn-collapse/model.ts:102`
-    /// `staysVisibleWhenCollapsed`), so they render whether the work is shown or folded: in place
-    /// inside the work when shown, after the summary when not.
-    var visibleRows: [TimelineRow] {
-        turn.segments.compactMap { (segment: Turn.Segment) -> TimelineRow? in
-            guard case .notice(let row) = segment else { return nil }
-            switch row.item {
-            case .userMessage, .compaction: return row
-            default: return nil
-            }
-        }
-    }
-
-    /// The overview sentence under the prompt. In `collapseTurns` it is the whole fold affordance;
-    /// the answer below it is never clipped, so there is no separate "Show more".
-    var turnSummaryLabel: String { TurnSummary(turn: turn).detailsLabel }
 
     var body: some View {
         let _ = PaseoPerf.body("TurnView")
         let _ = PaseoPerf.why(Self.self)
-        // The haptics sit outside the branch: opening the folded turn removes `collapsedTurn`
-        // from the tree, and a modifier attached inside it would go with it.
-        Group {
-            if showsCollapsedTurn {
-                collapsedTurn
-            } else {
-                fullTurn
-            }
-        }
-        .paseoFeedback(.selection, trigger: userExpanded) { _, new in new != nil }
-        .paseoFeedback(.selection, trigger: userExpandedTurn) { _, new in new != nil }
-    }
-
-    /// The folded turn: the prompt plus the turn summary, then the answer in full.
-    /// Every message is always shown in full (UX spec §4.3); the fold hides work, never prose.
-    @ViewBuilder private var collapsedTurn: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if let row = turn.userMessage, case .userMessage(let message) = row.item {
-                TurnPrompt(
-                    row: row, message: message,
-                    rewindChoices: rewindChoices, rewindInFlight: rewindInFlight,
-                    isHighlighted: highlightedSeq == row.seqEnd, onRewind: onRewind)
-            }
-            // Upstream TurnSummaryLine sits under the user message, above the final reply, and
-            // opens the turn's work.
-            Button {
-                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) {
-                    userExpandedTurn = true
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(turnSummaryLabel)
-                    Image(systemName: "chevron.down")
-                        .font(.glyph(.small, weight: .semibold))
-                }
-                .font(.paseo(.footnote))
-                .foregroundStyle(Palette.secondaryInk)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(turnSummaryLabel)
-            .accessibilityValue("Collapsed")
-            .accessibilityHint("Shows the work in this turn")
-            // Messages sent mid-turn and compaction markers stay visible while the work is folded.
-            ForEach(visibleRows) { row in
-                ClaudeVisibleRow(row: row, highlightedSeq: highlightedSeq)
-            }
-            if let finalProse, case .assistantMessage(let message) = finalProse.item {
-                ClaudeProse(markdown: message.text, onAction: onMarkdown)
-                if let todoState = turn.todoState {
-                    // One card per turn for its todos and plan (live while running),
-                    // ahead of the file changes.
-                    TurnTodoCard(state: todoState).equatable()
-                }
-                if !isRunning, let summary = turn.changeSummary {
-                    TurnChangesCard(summary: summary, turnID: turn.id).equatable()
-                }
-            } else {
-                // A turn with no answer section (all work / no prose): keep it honest.
-                Text("This turn ended without a reply.")
-                    .font(.paseo(.footnote))
-                    .foregroundStyle(Palette.tertiaryInk)
-            }
-        }
+        fullTurn
+            .paseoFeedback(.selection, trigger: userExpanded) { _, new in new != nil }
     }
 
     private var fullTurn: some View {
@@ -259,7 +162,7 @@ struct ClaudeTurnView: View {
                 // The turn's file changes close the turn, after the final prose.
                 TurnChangesCard(summary: summary, turnID: turn.id).equatable()
             }
-            if !isRunning, showsAnswerFooter {
+            if showsFooter {
                 HStack(spacing: 17) {
                     if hasProse {
                         ClaudeCopyButton(text: copyText, label: "Copy response")
@@ -320,17 +223,12 @@ struct ClaudeTurnView: View {
                     case .running:
                         ClaudeLiveStatusLine(turn: turn)
                     case .completed:
-                        // A stopped turn says nothing here: upstream has no wording for it (N5 A).
-                        if !isCanceled {
-                            // A clock before the duration, as the reasoning line has one (user directive).
-                            Image(systemName: "clock")
-                                .font(.paseo(.callout))
-                                .foregroundStyle(Palette.secondaryInk)
-                                .accessibilityHidden(true)
-                            Text(turn.duration.map(DurationText.completed) ?? "Completed")
-                                .font(.paseo(.callout))
-                                .foregroundStyle(Palette.secondaryInk)
-                        }
+                        // What the work did and how long it took, behind a clock (user
+                        // directive), in the one line that also opens the work.
+                        let summary = TurnSummary(turn: turn).overviewLabel
+                        TurnOutcomeLine(
+                            summary: summary.isEmpty ? nil : summary,
+                            duration: turn.duration, isCanceled: isCanceled)
                         Spacer(minLength: 0)
                     case .failed(let message):
                         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -347,12 +245,6 @@ struct ClaudeTurnView: View {
             .accessibilityHint(
                 isExpanded ? "Collapses the work in this turn" : "Shows the work in this turn")
         }
-    }
-
-    /// True when the answer footer has anything to show: copy or the fork menu (needs a boundary
-    /// row).
-    var showsAnswerFooter: Bool {
-        hasProse || (onFork != nil && finalProse != nil)
     }
 
     /// Whether the turn said anything: what Copy needs, without joining the whole reply per pass.

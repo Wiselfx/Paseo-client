@@ -10,6 +10,10 @@ struct ClaudeProse: View {
     var onAction: (MarkdownAction) -> Void
     /// True while the producing turn is running — assistant prose arriving live fades in.
     var isStreaming: Bool = false
+    /// The timeline row id, so the paced reveal survives the row's view being rebuilt.
+    var revealKey: String? = nil
+    /// The running turn's newest segment: a message it has never shown grows in from the start.
+    var revealsFresh: Bool = false
 
     var body: some View {
         let _ = PaseoPerf.body("Prose")
@@ -17,7 +21,9 @@ struct ClaudeProse: View {
         ClaudeRevealProse(
             markdown: markdown, theme: Self.theme(), onAction: onAction,
             isStreaming: isStreaming,
-            imageContent: proseImageContent)
+            imageContent: proseImageContent,
+            revealKey: revealKey,
+            revealsFresh: revealsFresh)
     }
 
     /// `![alt](url)` → `ProseMarkdownImage`; remote hosts and workspace paths both ride the
