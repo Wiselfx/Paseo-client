@@ -1,34 +1,35 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The "New" chip at the end of the chip bar; shows a spinner while the daemon creates the
-/// terminal.
+/// The icon-only "new terminal" glass circle; shows a spinner while the daemon creates the
+/// terminal and says so as its accessibility value.
 struct TerminalNewButton: View {
     let isCreating: Bool
     let action: () -> Void
 
+    private var busyValue: LocalizedStringKey { isCreating ? "Creating" : "" }
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            Group {
                 if isCreating {
                     ProgressView().controlSize(.mini).tint(Palette.secondaryInk)
                 } else {
-                    Image(systemName: "plus")
+                    Label("New terminal", systemImage: "plus")
+                        .labelStyle(.iconOnly)
                         .font(.glyph(.small, weight: .medium))
                 }
-                Text("New").font(.paseo(.footnote))
             }
-            .padding(.horizontal, Space.md)
-            .frame(minHeight: 44)
-            .foregroundStyle(Palette.ink)
-            .overlay {
-                Capsule().strokeBorder(Palette.cardBorder, lineWidth: 0.5)
-            }
-            .contentShape(.capsule)
+            .frame(width: TerminalChrome.hit, height: TerminalChrome.hit)
+            .contentShape(.circle)
         }
         .buttonStyle(.plain)
+        .foregroundStyle(Palette.ink)
+        .glassEffect(.regular.interactive(), in: .circle)
         .disabled(isCreating)
         .accessibilityLabel("New terminal")
+        .accessibilityValue(busyValue)
+        .accessibilityIdentifier("terminal.new")
     }
 }
 #endif

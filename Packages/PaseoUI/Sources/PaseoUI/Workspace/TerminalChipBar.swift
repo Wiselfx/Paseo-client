@@ -2,8 +2,10 @@
 import PaseoStore
 import SwiftUI
 
-/// The chips along the top of the terminal page: one per terminal, then "New". Each chip's
-/// status dot comes in as a value, so the bar does not depend on the page's `lastViewed` state.
+/// The rail along the top of the terminal page: one chip per terminal, scrolling beside a
+/// pinned trailing cluster (New, Full Screen). 44 pt tall. The selected chip's glass capsule
+/// slides between chips; each chip's status dot comes in as a value, so the bar does not depend
+/// on the page's `lastViewed` state.
 struct TerminalChipBar: View {
     let terminals: [TerminalInfo]
     let selectedId: String?
@@ -15,35 +17,49 @@ struct TerminalChipBar: View {
     let onCreate: () -> Void
     let onEnterFullScreen: () -> Void
 
-    var body: some View {
-        // The full-screen toggle stays pinned at the trailing edge; the chips scroll beside it.
-        HStack(spacing: 0) {
-            chips
-            TerminalFullScreenButton(isFullScreen: false, action: onEnterFullScreen)
-                .padding(.trailing, Space.sm)
-        }
-    }
+    @Namespace private var selectionNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var chips: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Space.sm) {
-                ForEach(terminals) { terminal in
-                    TerminalChip(
-                        terminal: terminal,
-                        isSelected: terminal.id == selectedId,
-                        dotState: dotStates[terminal.id] ?? .idle,
-                        onSelect: { onSelect(terminal.id) },
-                        onRename: { onRename(terminal) },
-                        onClose: { onClose(terminal) })
+    var body: some View {
+        HStack(spacing: TerminalChrome.gap) {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    GlassEffectContainer(spacing: TerminalChrome.gap) {
+                        HStack(spacing: TerminalChrome.gap) {
+                            ForEach(terminals) { terminal in
+                                TerminalChip(
+                                    terminal: terminal,
+                                    isSelected: terminal.id == selectedId,
+                                    dotState: dotStates[terminal.id] ?? .idle,
+                                    namespace: selectionNamespace,
+                                    onSelect: { onSelect(terminal.id) },
+                                    onRename: { onRename(terminal) },
+                                    onClose: { onClose(terminal) })
+                            }
+                        }
+                    }
+                    .padding(.horizontal, Space.lg)
                 }
-                TerminalNewButton(isCreating: isCreating, action: onCreate)
+                .scrollIndicators(.hidden)
+                // A new terminal sorts first and a switch from the dock or a script can pick any
+                // chip, so the selected one is always brought into view.
+                .onChange(of: selectedId) { _, id in
+                    guard let id else { return }
+                    withAnimation(Motion.glide.resolved(reduceMotion: reduceMotion)) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
             }
-            .padding(.horizontal, Space.lg)
-            // A horizontal scroll view is as tall as its content, so the bar follows the chips
-            // (44 pt minimum, taller under larger text) instead of clipping them.
-            .padding(.vertical, Space.xs)
+            GlassEffectContainer(spacing: TerminalChrome.gap) {
+                HStack(spacing: TerminalChrome.gap) {
+                    TerminalNewButton(isCreating: isCreating, action: onCreate)
+                    TerminalFullScreenButton(isFullScreen: false, action: onEnterFullScreen)
+                }
+            }
+            .padding(.trailing, Space.sm)
         }
-        .scrollIndicators(.hidden)
+        // The glass capsule moves with the selection; Reduce Motion makes it a cut.
+        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: selectedId)
     }
 }
 #endif

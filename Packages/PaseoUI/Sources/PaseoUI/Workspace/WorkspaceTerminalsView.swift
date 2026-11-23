@@ -54,11 +54,15 @@ struct WorkspaceTerminalsView: View {
     @State private var showPhotoPicker = false
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var showFileImporter = false
+    /// The page's top safe-area inset: how tall the band above the stage is in full screen. On a
+    /// Dynamic Island phone the full-screen dock lives in that band.
+    @State private var topInset: CGFloat = 0
 
     @Environment(\.openURL) private var openURL
     @Environment(\.toast) private var toast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.shellDrawer) private var shellDrawer
 
     /// Upstream keeps the four most recently used terminals' streams alive: "The retained-panel
     /// LRU bounds the number of live streams" (`terminal-performance.md`).
@@ -78,16 +82,13 @@ struct WorkspaceTerminalsView: View {
         let scripts = store.scripts(in: workspaceId)
         let isLoadingScripts = store.loadingScriptWorkspaces.contains(workspaceId)
         let fullScreen = isFullScreen && !mountedTerminals.isEmpty
+        let dots = dotStates(for: terminals)
         VStack(spacing: 0) {
-            if let error = store.error {
-                TerminalErrorBanner(
-                    message: error, onRetry: reopen, onDismiss: { store.clearError() })
-            }
             if !fullScreen {
                 TerminalChipBar(
                     terminals: terminals,
                     selectedId: selectedTerminalId,
-                    dotStates: dotStates(for: terminals),
+                    dotStates: dots,
                     isCreating: isCreating,
                     onSelect: { select($0) },
                     onRename: beginRename,
@@ -102,23 +103,33 @@ struct WorkspaceTerminalsView: View {
                 mounted: mountedTerminals,
                 selectedTerminalId: selectedTerminalId,
                 outgoingTerminalId: outgoingTerminalId,
-                exitMessage: selectedTerminalId.flatMap { exitMessages[$0] },
                 isSupported: store.isSupported,
                 hasTerminals: !terminals.isEmpty,
                 onExit: { recordExit($0, for: $1) },
                 onOutput: markViewedIfChanged,
                 onOpenLink: handleOpenLink,
                 onAttach: { showAttachMenu = true },
-                onCreate: createTerminal,
-                onReattach: reattach,
-                onDismissExit: dismissExit)
-            .overlay(alignment: .topTrailing) {
-                if fullScreen {
-                    TerminalFullScreenButton(isFullScreen: true) { setFullScreen(false) }
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .padding(Space.sm)
-                        .transition(.opacity)
-                }
+                onCreate: createTerminal)
+            // Everything transient floats over the stage, so an error, the dock or the "process
+            // ended" card never takes a row off the grid (which would resize the PTY).
+            .overlay {
+                TerminalOverlayLayer(
+                    isFullScreen: fullScreen,
+                    dockInBand: fullScreen && topInset >= TerminalChrome.dockBand,
+                    topInset: topInset,
+                    terminals: terminals,
+                    selectedId: selectedTerminalId,
+                    dotStates: dots,
+                    isCreating: isCreating,
+                    error: store.error,
+                    exitMessage: selectedTerminalId.flatMap { exitMessages[$0] },
+                    onSelect: { select($0) },
+                    onCreate: createTerminal,
+                    onExitFullScreen: { setFullScreen(false) },
+                    onRetry: reopen,
+                    onDismissError: { store.clearError() },
+                    onReattach: reattachSelected,
+                    onDismissExit: dismissSelectedExit)
             }
             if !fullScreen, !scripts.isEmpty || isLoadingScripts {
                 ClaudeDivider()
@@ -136,6 +147,16 @@ struct WorkspaceTerminalsView: View {
         // One canvas for the whole workspace panel: the terminal page sits on the panel fill,
         // and the emulator's own background matches it (E2b §3).
         .background(Palette.panel)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.safeAreaInsets.top
+        } action: { inset in
+            if topInset != inset { topInset = inset }
+        }
+        // Full screen is the terminal alone, so the status bar goes too. The shell applies it at
+        // its root: a `statusBarHidden` here would stop at the panel's hosting controller.
+        .onChange(of: fullScreen) { _, hidden in
+            shellDrawer?.setStatusBarHidden(hidden)
+        }
         .paseoFeedback(.light, trigger: isCreating) { _, new in new }
         .paseoFeedback(.light, trigger: busyScripts) { old, new in new.count > old.count }
         .task {
@@ -158,6 +179,7 @@ struct WorkspaceTerminalsView: View {
         // (packages/app/src/screens/workspace/workspace-screen.tsx:1505-1526).
         .onDisappear {
             session.hostSettings.updateTerminalFocus(nil)
+            shellDrawer?.setStatusBarHidden(false)
         }
         .onChange(of: scenePhase) { _, phase in
             session.hostSettings.updateTerminalFocus(phase == .active ? selectedTerminalId : nil)
@@ -482,6 +504,16 @@ struct WorkspaceTerminalsView: View {
 
     private func dismissExit(_ terminalId: String) {
         exitMessages[terminalId] = nil
+    }
+
+    private func reattachSelected() {
+        guard let selectedTerminalId else { return }
+        reattach(selectedTerminalId)
+    }
+
+    private func dismissSelectedExit() {
+        guard let selectedTerminalId else { return }
+        dismissExit(selectedTerminalId)
     }
 
     // MARK: Scripts

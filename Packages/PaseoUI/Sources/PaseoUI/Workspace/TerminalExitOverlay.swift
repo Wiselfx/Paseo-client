@@ -1,38 +1,50 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The card over the stage once a terminal's process has ended: why it ended, with Reattach (a
-/// fresh emulator and subscription) and Dismiss.
+/// The card over the top of the stage once a terminal's process has ended: why it ended, with
+/// Reattach (a fresh emulator and subscription) and Dismiss. It sits on the top edge so the
+/// terminal's final output stays readable, and it is announced to VoiceOver when it appears.
 struct TerminalExitOverlay: View {
     let message: String
     let onReattach: () -> Void
     let onDismiss: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        VStack(spacing: Space.md) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.md))
+            : AnyLayout(HStackLayout(spacing: Space.md))
+        layout {
+            Image(systemName: "power")
+                .font(.glyph(.regular, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.paseo(.footnote))
                 .foregroundStyle(Palette.ink)
-                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: Space.sm) {
-                Button(action: onReattach) {
-                    Text("Reattach")
-                }
-                .buttonStyle(.paseoPrimary())
-                Button(action: onDismiss) {
-                    Text("Dismiss")
-                }
-                .buttonStyle(.paseoSecondary)
+                Button("Reattach", action: onReattach)
+                    .buttonStyle(.paseoPrimary())
+                Button("Dismiss", systemImage: "xmark", action: onDismiss)
+                    .labelStyle(.iconOnly)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.secondaryInk)
+                    .buttonStyle(.plain)
+                    .frame(width: TerminalChrome.hit, height: TerminalChrome.hit)
+                    .contentShape(.rect)
             }
         }
-        .padding(Space.xl)
-        .background(Palette.panel, in: .rect(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(Palette.cardBorder, lineWidth: 0.5)
-        }
-        .shadow(color: .black.opacity(0.25), radius: 16, y: 4)
-        .padding(.horizontal, Space.xxxl)
+        .padding(Space.md)
+        .glassEffect(.regular, in: .rect(cornerRadius: Radius.lg))
+        .accessibilityElement(children: .contain)
+        .onAppear(perform: announce)
+    }
+
+    private func announce() {
+        AccessibilityNotification.Announcement(message).post()
     }
 }
 #endif

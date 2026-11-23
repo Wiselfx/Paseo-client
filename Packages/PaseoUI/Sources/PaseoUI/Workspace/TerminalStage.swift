@@ -11,8 +11,6 @@ struct TerminalStage: View {
     let mounted: [MountedTerminal]
     let selectedTerminalId: String?
     let outgoingTerminalId: String?
-    /// Why the selected terminal's process ended, when it did.
-    let exitMessage: String?
     let isSupported: Bool
     let hasTerminals: Bool
     let onExit: (String?, String) -> Void
@@ -20,22 +18,19 @@ struct TerminalStage: View {
     let onOpenLink: (TerminalLinkTarget) -> Void
     let onAttach: () -> Void
     let onCreate: () -> Void
-    let onReattach: (String) -> Void
-    let onDismissExit: (String) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Everything the stage's appearance depends on, so one `.animation` covers the tab
-    /// crossfade, a terminal arriving, and the exit card appearing or leaving.
+    /// crossfade and a terminal arriving. (The "process ended" card is not part of the stage: it
+    /// floats in `TerminalOverlayLayer`.)
     private struct StageState: Equatable {
         var selected: String?
         var mounted: [String]
-        var exit: String?
     }
 
     private var stageState: StageState {
-        StageState(
-            selected: selectedTerminalId, mounted: mounted.map(\.terminalId), exit: exitMessage)
+        StageState(selected: selectedTerminalId, mounted: mounted.map(\.terminalId))
     }
 
     var body: some View {
@@ -56,13 +51,6 @@ struct TerminalStage: View {
                         onOpenLink: onOpenLink,
                         onAttach: onAttach)
                 }
-            }
-            if let selectedTerminalId, let exitMessage {
-                TerminalExitOverlay(
-                    message: exitMessage,
-                    onReattach: { onReattach(selectedTerminalId) },
-                    onDismiss: { onDismissExit(selectedTerminalId) })
-                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

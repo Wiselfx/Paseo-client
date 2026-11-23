@@ -4,11 +4,13 @@ import SwiftUI
 
 /// One terminal's tab in the chip bar: a status dot and the name, with rename and close in the
 /// context menu. The dot only says "something happened" through colour and a pulse, so the
-/// chip also speaks the state as its accessibility value.
+/// chip also speaks the state as its accessibility value. The selected chip carries a glass
+/// capsule that morphs between chips (`glassEffectID`) inside the bar's glass container.
 struct TerminalChip: View {
     let terminal: TerminalInfo
     let isSelected: Bool
     let dotState: StatusDot.State
+    let namespace: Namespace.ID
     let onSelect: () -> Void
     let onRename: () -> Void
     let onClose: () -> Void
@@ -24,35 +26,42 @@ struct TerminalChip: View {
     }
 
     var body: some View {
-        Button {
-            guard !isSelected else { return }
-            Haptics.selection()
-            onSelect()
-        } label: {
-            HStack(spacing: 6) {
+        Button(action: select) {
+            HStack(spacing: Space.sm) {
                 StatusDot(dotState)
                 Text(terminal.displayName)
-                    .font(.paseo(.footnote))
+                    .font(.paseo(.footnote, weight: isSelected ? .medium : nil))
                     .foregroundStyle(isSelected ? Palette.ink : Palette.secondaryInk)
                     .lineLimit(1)
             }
             .padding(.horizontal, Space.md)
-            .frame(minHeight: 44)
-            .background(isSelected ? Palette.chip : Color.clear, in: .capsule)
-            .overlay {
-                Capsule().strokeBorder(
-                    Palette.cardBorder, lineWidth: isSelected ? 0 : 0.5)
+            .frame(minHeight: TerminalChrome.chipVisualHeight)
+            .background {
+                if isSelected {
+                    Color.clear
+                        .glassEffect(.regular, in: .capsule)
+                        .glassEffectID("selection", in: namespace)
+                }
             }
-            .contentShape(.capsule)
+            .padding(.vertical, (TerminalChrome.hit - TerminalChrome.chipVisualHeight) / 2)
+            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TerminalChipPressStyle())
         .accessibilityLabel("Terminal \(terminal.displayName)")
         .accessibilityValue(statusText)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityAction(named: "Rename", onRename)
+        .accessibilityAction(named: "Close", onClose)
         .contextMenu {
             Button("Rename…", systemImage: "pencil", action: onRename)
             Button("Close", systemImage: "xmark", role: .destructive, action: onClose)
         }
+    }
+
+    private func select() {
+        guard !isSelected else { return }
+        Haptics.selection()
+        onSelect()
     }
 }
 #endif

@@ -39,6 +39,8 @@ public struct ShellView: View {
     /// here changes while a finger is down.
     @State private var drawer = ShellDrawer()
     @State private var toastCenter = ToastCenter()
+    /// The terminal's full screen hides the status bar (`ShellDrawer.setStatusBarHidden`).
+    @State private var statusBarHidden = false
     /// False until the first `onAppear` has picked the agent or created the draft: the first
     /// frame is the launch skeleton, never a home greeting that is then replaced (E2 §3.3).
     @State private var homeSettled = false
@@ -73,6 +75,7 @@ public struct ShellView: View {
         ShellContainer(
             drawer: drawer, rootsKey: rootsKey, sidebar: sidebar, main: main, panel: panel)
             .ignoresSafeArea()
+            .statusBarHidden(statusBarHidden)
             .toastHost(toastCenter)
             .background {
                 ShellSessionWatcher(
@@ -117,6 +120,7 @@ public struct ShellView: View {
     /// so the launch skeleton stays up until the home is decided.
     private func shellDidAppear() {
         drawer.onNewSession = { openNewSession(workspaceId: nil) }
+        drawer.onStatusBarHiddenChange = { statusBarHidden = $0 }
         mentionAction.perform = { mentionInChat($0) }
         session.hostSettings.startPresence(
             focusedAgentId: selectedAgentId, appVisible: scenePhase == .active)
