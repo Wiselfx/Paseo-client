@@ -38,7 +38,7 @@ struct TerminalExitOverlay: View {
             }
         }
         .padding(Space.md)
-        .glassEffect(.regular, in: .rect(cornerRadius: Radius.lg))
+        .terminalGlass(.rect(cornerRadius: Radius.lg))
         .accessibilityElement(children: .contain)
         .onAppear(perform: announce)
     }

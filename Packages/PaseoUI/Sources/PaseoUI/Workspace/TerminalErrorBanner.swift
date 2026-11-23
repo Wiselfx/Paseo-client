@@ -9,6 +9,10 @@ struct TerminalErrorBanner: View {
     let onRetry: () -> Void
     let onDismiss: () -> Void
 
+    private func announce() {
+        AccessibilityNotification.Announcement(message).post()
+    }
+
     var body: some View {
         HStack(spacing: Space.sm) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -35,10 +39,11 @@ struct TerminalErrorBanner: View {
                 .contentShape(.rect)
         }
         .padding(.leading, Space.md)
-        .glassEffect(
-            .regular.tint(Palette.failureInk.opacity(0.18)), in: .rect(cornerRadius: Radius.lg)
+        .terminalGlass(
+            .rect(cornerRadius: Radius.lg), tint: Palette.failureInk.opacity(0.18)
         )
         .accessibilityElement(children: .contain)
+        .onAppear(perform: announce)
     }
 }
 #endif

@@ -39,7 +39,7 @@ struct TerminalChip: View {
             .background {
                 if isSelected {
                     Color.clear
-                        .glassEffect(.regular, in: .capsule)
+                        .terminalGlass(.capsule)
                         .glassEffectID("selection", in: namespace)
                 }
             }

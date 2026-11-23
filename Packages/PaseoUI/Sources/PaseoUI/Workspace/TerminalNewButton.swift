@@ -25,7 +25,7 @@ struct TerminalNewButton: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Palette.ink)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .terminalGlass(.circle, interactive: true)
         .disabled(isCreating)
         .accessibilityLabel("New terminal")
         .accessibilityValue(busyValue)

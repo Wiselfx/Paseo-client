@@ -23,7 +23,7 @@ struct TerminalGlassButton: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Palette.ink)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .terminalGlass(.circle, interactive: true)
         .animation(Motion.feedback.resolved(reduceMotion: reduceMotion), value: systemImage)
         .accessibilityIdentifier(identifier)
     }

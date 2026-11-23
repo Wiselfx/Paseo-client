@@ -33,7 +33,7 @@ struct TerminalSwitcherMenu: View {
             .frame(maxWidth: TerminalChrome.switcherMaxWidth, minHeight: TerminalChrome.hit)
             .contentShape(.capsule)
         }
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .terminalGlass(.capsule, interactive: true)
         .accessibilityLabel("Terminal \(current.displayName)")
         .accessibilityHint("Switches terminal")
     }
