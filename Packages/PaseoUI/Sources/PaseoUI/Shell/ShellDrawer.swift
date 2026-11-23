@@ -32,7 +32,7 @@ final class ShellDrawer {
     var onNewSession: (() -> Void)?
     /// Hides or shows the status bar. The panel's hosting controller is a child of the shell's
     /// container, so its own `statusBarHidden` never reaches the window; the shell applies the
-    /// flag at its root instead. Set by `ShellView`.
+    /// flag at its root instead. Set by `ShellStatusBarHiding`.
     var onStatusBarHiddenChange: ((Bool) -> Void)?
 
     /// The terminal's full screen asks for the status bar to go (and come back).

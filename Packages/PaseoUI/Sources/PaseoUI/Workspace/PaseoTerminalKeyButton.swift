@@ -5,7 +5,8 @@ import UIKit
 /// and shrinks the instant the finger lands, and an activation that works for VoiceOver and
 /// Switch Control (which never send touches).
 ///
-/// A press changes the fill and the transform only: no layout, no animation on the way down.
+/// A press changes the fill and the transform only: no layout, no animation on the way down, and
+/// no allocation (the fills are `TerminalKeyStyle`'s cached colours).
 final class KeyButton: UIButton {
     /// What the key does; the bar sets it and calls it for a press, a repeat, and VoiceOver.
     var onActivate: ((UIButton) -> Void)?
@@ -44,6 +45,12 @@ final class KeyButton: UIButton {
         let glyph = TerminalKeyStyle.glyph(latched: isSelected)
         tintColor = glyph
         setTitleColor(glyph, for: .normal)
+    }
+
+    /// The touch area reaches half the gap past each side, so a key drawn `minWidth` wide still
+    /// takes a 44 pt wide target and a finger landing between two keys always presses one.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.insetBy(dx: -TerminalKeyStyle.hitOutset, dy: 0).contains(point)
     }
 
     override func accessibilityActivate() -> Bool {

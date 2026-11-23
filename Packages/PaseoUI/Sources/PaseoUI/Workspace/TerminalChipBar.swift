@@ -38,6 +38,9 @@ struct TerminalChipBar: View {
                             }
                         }
                     }
+                    // The glass capsule moves with the selection; Reduce Motion makes it a cut.
+                    // Scoped to the chips, so the pinned cluster is never part of the transaction.
+                    .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: selectedId)
                     .padding(.horizontal, Space.lg)
                 }
                 .scrollIndicators(.hidden)
@@ -56,10 +59,10 @@ struct TerminalChipBar: View {
                     TerminalFullScreenButton(isFullScreen: false, action: onEnterFullScreen)
                 }
             }
-            .padding(.trailing, Space.sm)
+            // The full-screen dock's floating inset, so Full Screen sits at the same trailing x
+            // on the way in and Exit Full Screen on the way out.
+            .padding(.trailing, TerminalChrome.edge)
         }
-        // The glass capsule moves with the selection; Reduce Motion makes it a cut.
-        .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: selectedId)
     }
 }
 #endif

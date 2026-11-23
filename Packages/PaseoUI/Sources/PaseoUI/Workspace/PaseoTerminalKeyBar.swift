@@ -15,17 +15,24 @@ import UIKit
 ///
 /// The bar is a `.keyboard`-style input view with no fill of its own, so it carries the keyboard's
 /// material and reads as part of it. Each key is a rounded translucent key (`TerminalKeyStyle`,
-/// `KeyButton`), at least 40 x 44 pt, in three groups: Esc, Tab, Ctrl | arrows | the rest. The keys
-/// scroll sideways when they don't fit and Hide stays pinned at the trailing edge. A normal key
-/// fires when the finger lifts inside it, so a scroll never types; the arrows fire on touch-down
-/// and repeat while held, and stop if the touch is cancelled (a drag turning into a scroll) or
-/// leaves the key.
+/// `KeyButton`), drawn at least 40 x 44 pt with a 44 pt wide touch area, in three groups: Esc, Tab,
+/// Ctrl | arrows | the rest. The keys scroll sideways when they don't fit and Hide stays pinned at
+/// the trailing edge.
+///
+/// Every key lights up on touch-down and acts when the finger lifts inside it, like the system
+/// keyboard's keys, so a drag that turns into a scroll never types. That includes the arrows: an
+/// arrow that fired on touch-down sent Up (a shell history recall) every time a scroll started on
+/// it. Holding an arrow still repeats: after `repeatDelay` it fires and keeps firing until the
+/// finger lifts, is cancelled by a scroll, or leaves the key; a lift after a repeat sends nothing
+/// more.
 final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private weak var terminalView: TerminalView?
     private let onInput: (String) -> Void
     private var ctrlButton: UIButton?
     /// The held arrow key's repeat: a delay, then a steady beat until the finger lifts.
     private var repeatTask: Task<Void, Never>?
+    /// The held arrow has already fired from the hold, so the lift sends nothing more.
+    private var holdDidFire = false
     /// Written once in init, read once in deinit (which is nonisolated).
     nonisolated(unsafe) private var resetObserver: NSObjectProtocol?
     /// The keys and Hide, swapped for the upload row while a transfer is in flight.
@@ -35,6 +42,10 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     private let uploadProgress = UIProgressView(progressViewStyle: .default)
 
     private static let ink = UIColor(Palette.ink)
+    /// The key titles' and the upload file name's base sizes, scaled with Dynamic Type up to
+    /// `TerminalKeyStyle.maximumContentSize`.
+    private static let keyTitleFontSize: CGFloat = 17
+    private static let uploadFileFontSize: CGFloat = 12
 
     /// Set by the coordinator; invoked when the paperclip is tapped.
     var onAttach: (() -> Void)?
@@ -49,6 +60,9 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
             inputViewStyle: .keyboard)
         translatesAutoresizingMaskIntoConstraints = true
         autoresizingMask = [.flexibleWidth]
+        // The bar's height is fixed, so past this size the glyphs and titles would overflow their
+        // keys; the system keyboard stops growing its keys in the same way.
+        maximumContentSizeCategory = TerminalKeyStyle.maximumContentSize
 
         let keys = UIStackView()
         keys.axis = .horizontal
@@ -67,16 +81,16 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         keys.addArrangedSubview(makeKey(image: "tab", label: "Tab") { [weak self] _ in
             self?.press("\t")
         })
-        let ctrl = makeKey(
-            image: "control", label: "Control (sticky, one-shot)", feedback: false
-        ) { [weak self] button in
+        let ctrl = makeKey(image: "control", label: "Control", feedback: false) { [weak self] button in
             self?.toggleControl(button)
         }
         ctrl.accessibilityValue = String(localized: "Off", bundle: #bundle)
+        ctrl.accessibilityHint = String(
+            localized: "Applies Control to the next key you type.", bundle: #bundle)
         ctrlButton = ctrl
         keys.addArrangedSubview(ctrl)
         keys.setCustomSpacing(TerminalKeyStyle.groupGap, after: ctrl)
-        // Group two: the arrows, which fire on touch-down and repeat while held.
+        // Group two: the arrows, which repeat while held.
         keys.addArrangedSubview(makeKey(image: "arrow.up", label: "Up arrow", repeats: true) { [weak self] _ in
             self?.terminalView?.sendKeyUp()
         })
@@ -99,8 +113,9 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         keys.addArrangedSubview(makeKey(image: "paperclip", label: "Attach a file") { [weak self] _ in
             self?.onAttach?()
         })
-        // Hide stays put at the trailing edge, outside the scroller, so it is always reachable.
-        let hide = makeKey(image: "keyboard", label: "Hide keyboard") { [weak self] _ in
+        // Hide stays put at the trailing edge, outside the scroller, so it is always reachable. The
+        // glyph is the system's own "dismiss keyboard" symbol.
+        let hide = makeKey(image: "keyboard.chevron.compact.down", label: "Hide keyboard") { [weak self] _ in
             self?.toggleKeyboard()
         }
         hide.widthAnchor.constraint(equalToConstant: TerminalChrome.hit).isActive = true
@@ -147,7 +162,9 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         spinner.color = Self.ink
         spinner.startAnimating()
         uploadRow.addArrangedSubview(spinner)
-        uploadFileLabel.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        uploadFileLabel.font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
+            for: UIFont.monospacedSystemFont(ofSize: Self.uploadFileFontSize, weight: .regular))
+        uploadFileLabel.adjustsFontForContentSizeCategory = true
         uploadFileLabel.textColor = Self.ink.withAlphaComponent(0.85)
         uploadFileLabel.lineBreakMode = .byTruncatingMiddle
         uploadFileLabel.text = ""
@@ -156,7 +173,9 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         uploadProgress.trackTintColor = Self.ink.withAlphaComponent(0.25)
         uploadProgress.setProgress(0, animated: false)
         uploadRow.addArrangedSubview(uploadProgress)
-        uploadProgress.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        uploadProgress.widthAnchor.constraint(
+            equalToConstant: TerminalChrome.uploadProgressWidth
+        ).isActive = true
         let cancel = makeKey(image: "xmark", label: "Cancel upload") { [weak self] _ in
             self?.onCancelUpload?()
         }
@@ -171,8 +190,8 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
             keysArea.topAnchor.constraint(equalTo: topAnchor, constant: TerminalChrome.keyBarInset),
             keysArea.bottomAnchor.constraint(
                 equalTo: bottomAnchor, constant: -TerminalChrome.keyBarInset),
-            uploadRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            uploadRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            uploadRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.md),
+            uploadRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.md),
             uploadRow.topAnchor.constraint(equalTo: topAnchor, constant: TerminalChrome.keyBarInset),
             uploadRow.bottomAnchor.constraint(
                 equalTo: bottomAnchor, constant: -TerminalChrome.keyBarInset),
@@ -200,9 +219,9 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         return nil
     }
 
-    /// A key. Normal keys act when the finger lifts inside them (so a drag that scrolls the bar
-    /// never types); `repeats` keys act on touch-down and repeat while held. The press highlight
-    /// is `KeyButton`'s, on touch-down either way.
+    /// A key. Every key acts when the finger lifts inside it (so a drag that scrolls the bar never
+    /// types); `repeats` keys also act, and keep acting, once held for `repeatDelay`. The press
+    /// highlight is `KeyButton`'s, on touch-down either way.
     private func makeKey(
         image: String? = nil, title: String? = nil,
         label: String,
@@ -223,11 +242,12 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
             button.setTitle(title, for: .normal)
             // Scales with Dynamic Type, like the rest of the keyboard.
             button.titleLabel?.font = UIFontMetrics(forTextStyle: .body).scaledFont(
-                for: UIFont.monospacedSystemFont(ofSize: 17, weight: .regular))
+                for: UIFont.monospacedSystemFont(ofSize: Self.keyTitleFontSize, weight: .regular))
             button.titleLabel?.adjustsFontForContentSizeCategory = true
         }
         button.accessibilityLabel = label
-        // At least a 44 pt target tall and `minWidth` wide; the glyph decides the rest.
+        // 44 pt tall and drawn at least `minWidth` wide (the glyph decides the rest); the touch
+        // area is 44 pt wide either way (`KeyButton.point(inside:with:)`).
         button.heightAnchor.constraint(equalToConstant: TerminalChrome.hit).isActive = true
         button.widthAnchor.constraint(
             greaterThanOrEqualToConstant: TerminalKeyStyle.minWidth
@@ -236,14 +256,17 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
         if repeats {
             button.addAction(
                 UIAction { [weak self, weak button] _ in
-                    guard let button else { return }
-                    if feedback { self?.tick() }
-                    action(button)
-                    self?.beginRepeat(on: button)
+                    guard let self, let button else { return }
+                    self.beginHold(on: button, feedback: feedback)
                 }, for: .touchDown)
             button.addAction(
+                UIAction { [weak self, weak button] _ in
+                    guard let self, let button else { return }
+                    self.endHold(firing: button, feedback: feedback)
+                }, for: .touchUpInside)
+            button.addAction(
                 UIAction { [weak self] _ in self?.endRepeat() },
-                for: [.touchUpInside, .touchUpOutside, .touchCancel, .touchDragExit])
+                for: [.touchUpOutside, .touchCancel, .touchDragExit])
         } else {
             button.addAction(
                 UIAction { [weak self, weak button] _ in
@@ -258,20 +281,34 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
     /// The light tap of a key press, with the generator readied for the next one.
     private func tick() {
         Haptics.light()
-        Haptics.prepare()
+        Haptics.prepareLight()
     }
 
-    /// Holding an arrow repeats it after a short delay, like a hardware key.
-    private func beginRepeat(on button: KeyButton) {
+    /// An arrow went down: nothing is sent yet (this touch may become a scroll). Held for
+    /// `repeatDelay`, it fires once with the tap, then repeats on a steady beat like a hardware key.
+    private func beginHold(on button: KeyButton, feedback: Bool) {
         repeatTask?.cancel()
-        repeatTask = Task { [weak button] in
-            try? await Task.sleep(for: .milliseconds(350))
+        holdDidFire = false
+        repeatTask = Task { [weak self, weak button] in
+            try? await Task.sleep(for: TerminalKeyStyle.repeatDelay)
             while !Task.isCancelled {
-                guard let button else { return }
+                guard let self, let button else { return }
+                if !self.holdDidFire {
+                    self.holdDidFire = true
+                    if feedback { self.tick() }
+                }
                 button.onActivate?(button)
-                try? await Task.sleep(for: .milliseconds(60))
+                try? await Task.sleep(for: TerminalKeyStyle.repeatInterval)
             }
         }
+    }
+
+    /// The arrow lifted inside the key: a tap sends one press now; a hold already sent its own.
+    private func endHold(firing button: KeyButton, feedback: Bool) {
+        endRepeat()
+        guard !holdDidFire else { return }
+        if feedback { tick() }
+        button.onActivate?(button)
     }
 
     private func endRepeat() {
@@ -287,7 +324,7 @@ final class PaseoTerminalKeyBar: UIInputView, UIInputViewAudioFeedback {
             return
         }
         // Ready the haptic, and pick up a Reduce Transparency change made since the last time.
-        Haptics.prepare()
+        Haptics.prepareLight()
         refreshKeyColors(in: keysArea)
         refreshKeyColors(in: uploadRow)
     }

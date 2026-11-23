@@ -40,7 +40,9 @@ struct TerminalExitOverlay: View {
         .padding(Space.md)
         .terminalGlass(.rect(cornerRadius: Radius.lg))
         .accessibilityElement(children: .contain)
-        .onAppear(perform: announce)
+        // Once when it appears, and again only when it now describes another ending (a switch
+        // between two ended terminals keeps the card up).
+        .onChange(of: message, initial: true) { announce() }
     }
 
     private func announce() {

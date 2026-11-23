@@ -52,6 +52,11 @@ struct TerminalOverlayLayer: View {
         (error == nil ? 0 : 1) + (exitMessage == nil ? 0 : 1)
     }
 
+    /// Cards slide and the dock fades; under Reduce Motion both are fades.
+    private var motion: Animation? {
+        Motion.disclosure.resolved(reduceMotion: reduceMotion) ?? Motion.fade.animation
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: TerminalChrome.gap) {
@@ -69,6 +74,10 @@ struct TerminalOverlayLayer: View {
             .padding(.horizontal, TerminalChrome.edge)
             .padding(.top, cardsTopPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // Each card animates on its own presence only, so a message changing under a card
+            // that is already up (or the dock waking) is not swept into the transaction.
+            .animation(motion, value: error == nil)
+            .animation(motion, value: exitMessage == nil)
             if isFullScreen {
                 TerminalFullScreenDock(
                     terminals: terminals, selectedId: selectedId, dotStates: dotStates,
@@ -82,9 +91,7 @@ struct TerminalOverlayLayer: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(
-            Motion.disclosure.resolved(reduceMotion: reduceMotion) ?? Motion.fade.animation,
-            value: [error != nil, exitMessage != nil, isFullScreen])
+        .animation(motion, value: isFullScreen)
     }
 }
 #endif

@@ -15,6 +15,9 @@ struct TerminalChip: View {
     let onRename: () -> Void
     let onClose: () -> Void
 
+    /// The one glass shape that moves between chips.
+    private static let selectionGlassID = "selection"
+
     private var statusText: LocalizedStringKey {
         switch dotState {
         case .attention: "Needs input"
@@ -29,18 +32,22 @@ struct TerminalChip: View {
         Button(action: select) {
             HStack(spacing: Space.sm) {
                 StatusDot(dotState)
+                // One weight in both states: a heavier selected label would widen the chip, so
+                // every chip after it would shift while the glass morphs. Ink and the glass carry
+                // the selection.
                 Text(terminal.displayName)
-                    .font(.paseo(.footnote, weight: isSelected ? .medium : nil))
+                    .font(.paseo(.footnote))
                     .foregroundStyle(isSelected ? Palette.ink : Palette.secondaryInk)
                     .lineLimit(1)
             }
             .padding(.horizontal, Space.md)
             .frame(minHeight: TerminalChrome.chipVisualHeight)
             .background {
+                // Inserted and removed on purpose: the glass leaving one chip and arriving at
+                // another with the same morph id is what the container animates as one slide.
                 if isSelected {
                     Color.clear
-                        .terminalGlass(.capsule)
-                        .glassEffectID("selection", in: namespace)
+                        .terminalGlass(.capsule, morphID: Self.selectionGlassID, in: namespace)
                 }
             }
             .padding(.vertical, (TerminalChrome.hit - TerminalChrome.chipVisualHeight) / 2)

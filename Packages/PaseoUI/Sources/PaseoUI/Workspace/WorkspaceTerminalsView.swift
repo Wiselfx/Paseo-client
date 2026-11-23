@@ -110,6 +110,9 @@ struct WorkspaceTerminalsView: View {
                 onOpenLink: handleOpenLink,
                 onAttach: { showAttachMenu = true },
                 onCreate: createTerminal)
+            // Chrome state (cards, the dock, dots, the New spinner) re-evaluates this page; the
+            // stage only updates when a value it shows changed (`TerminalStage.==`).
+            .equatable()
             // Everything transient floats over the stage, so an error, the dock or the "process
             // ended" card never takes a row off the grid (which would resize the PTY).
             .overlay {
@@ -395,17 +398,21 @@ struct WorkspaceTerminalsView: View {
 
     // MARK: Terminals
 
-    /// Newest first when the daemon sent timestamps; otherwise the daemon's order.
+    /// Newest first when the daemon sent timestamps; otherwise the daemon's order. Each
+    /// timestamp is parsed once, not twice per comparison: this runs on every page update.
     private var orderedTerminals: [TerminalInfo] {
-        let all = store.terminals(in: workspaceId)
-        return all.sorted { lhs, rhs in
-            switch (lhs.createdAt.flatMap(PaseoDate.parse), rhs.createdAt.flatMap(PaseoDate.parse)) {
+        let dated = store.terminals(in: workspaceId).map { terminal in
+            (terminal: terminal, createdAt: terminal.createdAt.flatMap(PaseoDate.parse))
+        }
+        return dated.sorted { lhs, rhs in
+            switch (lhs.createdAt, rhs.createdAt) {
             case let (left?, right?): return left > right
             case (.some, nil): return true
             case (nil, .some): return false
-            default: return lhs.name < rhs.name
+            default: return lhs.terminal.name < rhs.terminal.name
             }
         }
+        .map { $0.terminal }
     }
 
     private func beginRename(_ terminal: TerminalInfo) {

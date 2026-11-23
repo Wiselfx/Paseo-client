@@ -5,7 +5,13 @@ import SwiftUI
 /// The stage. Every recently used terminal stays mounted; only the selected one is visible,
 /// hit-testable and reachable by VoiceOver, and the others keep applying output with their
 /// streams open.
-struct TerminalStage: View {
+///
+/// Equatable on its values, and shown with `.equatable()`: the page re-evaluates for chrome
+/// (the dock, a card, the New spinner, a dot, typing a rename), and none of that may reach the
+/// emulators, whose `updateUIView` re-runs the coordinator's attach and resize path. The callbacks
+/// are not part of `==`; they only reach the page's `@State` and its stable stores, so a skipped
+/// stage keeps working ones.
+struct TerminalStage: View, Equatable {
     let store: TerminalsStore
     let uploader: ConversationUpload
     let mounted: [MountedTerminal]
@@ -20,6 +26,15 @@ struct TerminalStage: View {
     let onCreate: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Compared off the main actor: every compared input is a plain value or a store's identity.
+    nonisolated static func == (lhs: TerminalStage, rhs: TerminalStage) -> Bool {
+        lhs.store === rhs.store && lhs.uploader === rhs.uploader
+            && lhs.mounted == rhs.mounted
+            && lhs.selectedTerminalId == rhs.selectedTerminalId
+            && lhs.outgoingTerminalId == rhs.outgoingTerminalId
+            && lhs.isSupported == rhs.isSupported && lhs.hasTerminals == rhs.hasTerminals
+    }
 
     /// Everything the stage's appearance depends on, so one `.animation` covers the tab
     /// crossfade and a terminal arriving. (The "process ended" card is not part of the stage: it

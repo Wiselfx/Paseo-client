@@ -23,6 +23,9 @@ struct TerminalErrorBanner: View {
                 .font(.paseo(.footnote, weight: .medium))
                 .foregroundStyle(Palette.ink)
                 .lineLimit(2)
+                // Breathing room for two lines at large text sizes; one line still sits inside
+                // the 44 pt row the buttons set.
+                .padding(.vertical, Space.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("Try again", action: onRetry)
                 .font(.paseo(.footnote, weight: .semibold))
@@ -40,10 +43,11 @@ struct TerminalErrorBanner: View {
         }
         .padding(.leading, Space.md)
         .terminalGlass(
-            .rect(cornerRadius: Radius.lg), tint: Palette.failureInk.opacity(0.18)
+            .rect(cornerRadius: Radius.lg), tint: Palette.failureInk.opacity(TerminalChrome.failureTintOpacity)
         )
         .accessibilityElement(children: .contain)
-        .onAppear(perform: announce)
+        // Once when it appears, and again only when the error itself changes.
+        .onChange(of: message, initial: true) { announce() }
     }
 }
 #endif

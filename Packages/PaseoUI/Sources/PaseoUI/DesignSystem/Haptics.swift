@@ -41,6 +41,13 @@ public enum Haptics {
     /// A user-initiated action failed. Never on a background or automatic failure.
     public static func failure() { guard isEnabled else { return }; notification.notificationOccurred(.error) }
 
+    /// Keeps only the `light()` generator warm: for a run of identical taps (the terminal key bar),
+    /// where `prepare()` would spin up all four generators on every key.
+    public static func prepareLight() {
+        guard isEnabled else { return }
+        lightImpact.prepare()
+    }
+
     /// Call before a gesture that will likely produce feedback, to cut latency.
     public static func prepare() {
         guard isEnabled else { return }
