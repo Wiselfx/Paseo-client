@@ -237,7 +237,11 @@ struct ClaudeRevealProse: View {
                     let current = paced
                 else { continue }
                 previousMs = frame.frameAtMs
-                let next = TextReveal.advance(current, elapsedMs: frame.elapsedMs)
+                // A late step (a layout hitch, a busy main thread) counts as at most three
+                // frames: `computeRevealStep` releases the whole backlog once a step reaches its
+                // 150 ms horizon, which painted a stall's text in one lump.
+                let next = TextReveal.advance(
+                    current, elapsedMs: min(frame.elapsedMs, 3 * TextReveal.frameIntervalMs))
                 if next.revealed != current.revealed {
                     paced = next
                     if let revealKey { RevealLedger.record(next.revealed, for: revealKey) }
