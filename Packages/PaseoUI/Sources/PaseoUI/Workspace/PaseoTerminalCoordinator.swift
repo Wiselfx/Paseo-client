@@ -7,11 +7,6 @@ import UIKit
 
 @MainActor
 final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
-    /// A hidden tab parses its output at most this often: its emulator stays current (replies
-    /// to the program's queries are late by at most this much) without drawing frames nobody
-    /// sees. SwiftTerm suspends drawing only for a view out of the window, and a hidden tab stays
-    /// in it so its screen survives.
-    static let hiddenFeedInterval: Duration = .milliseconds(250)
     /// Activity bookkeeping writes view state at most this often, and never when the tab's dot
     /// would not change.
     static let activityInterval: CFTimeInterval = 0.5
@@ -20,8 +15,6 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     /// and erases the wrong lines. Sizes go out at most this often: the first at once, the last
     /// always.
     static let resizeInterval: CFTimeInterval = 0.05
-    /// A burst larger than this is fed at once rather than held back for a frame.
-    static let maxBufferedBytes = 256 * 1024
 
     /// The coordinator whose terminal is on screen. Only one terminal is visible at a time, so a
     /// keyboard hand-off has exactly one place to go.
@@ -63,18 +56,11 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private var resizeTask: Task<Void, Never>?
     /// When the last size went to the PTY, for the resize throttle.
     private var lastResizeSent: CFTimeInterval = 0
-    /// Bytes received since the last feed. Live output only: replay bytes are barriers and go
-    /// straight through.
-    private var pendingBytes: [UInt8] = []
-    private var flushLink: CADisplayLink?
-    private var lastFeedTime: CFTimeInterval = 0
-    /// One display frame, as the flush link last reported it (8.3 ms on ProMotion): a chunk that
-    /// arrives inside a frame that already fed bytes waits for the next tick; a chunk after an
-    /// idle frame feeds immediately. It was a fixed 60 Hz frame, which held every second chunk
-    /// for a frame the 120 Hz link had already drawn.
-    private var frameInterval: CFTimeInterval = 1.0 / 60.0
-    /// The hidden tab's next batched feed, while one is scheduled.
-    private var hiddenFlushTask: Task<Void, Never>?
+    /// Parses live output off the main thread, in arrival order. SwiftTerm's `feed` is
+    /// nonisolated and parses on the calling thread under the terminal lock; its own frame driver
+    /// draws at the display's cadence. Parsing a TUI's frames on the main thread, behind a
+    /// display-link coalescer of our own, cost a frame of latency and main-thread time per frame.
+    private let feedQueue = DispatchQueue(label: "paseo.terminal.feed", qos: .userInteractive)
     private var lastActivityReport: CFTimeInterval = 0
     private var onOutput: () -> Void = {}
     private var onOpenLink: (TerminalLinkTarget) -> Void = { _ in }
@@ -162,10 +148,6 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
             return
         }
         Self.visibleTerminal = self
-        // What the tab held while hidden lands before its first visible frame.
-        hiddenFlushTask?.cancel()
-        hiddenFlushTask = nil
-        flushPending()
         // Claim with the newest measured grid: a hidden tab holds its resizes until now.
         if let store, let terminalId, attachedId == terminalId, !isReplaying,
             let size = pendingResize ?? attachedSize
@@ -206,12 +188,8 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         streamTask = nil
         resizeTask?.cancel()
         resizeTask = nil
-        flushLink?.invalidate()
-        flushLink = nil
-        hiddenFlushTask?.cancel()
-        hiddenFlushTask = nil
-        pendingBytes.removeAll(keepingCapacity: false)
-        lastFeedTime = 0
+        // Live bytes already queued for the old attachment land before the reset below.
+        feedQueue.sync {}
         lastActivityReport = 0
         if let attachedId, let attachedToken { store?.detach(attachedId, token: attachedToken) }
         attachedId = nil
@@ -310,15 +288,15 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
                 guard self.attachedId == terminalId else { break }
                 switch output {
                 case .replayBegin:
-                    // A barrier: the snapshot replaces the screen, so bytes still waiting for the
-                    // next frame are dropped rather than replayed under it.
+                    // A barrier: live bytes still queued are parsed first, then the snapshot
+                    // replaces the screen.
                     self.isReplaying = true
-                    self.pendingBytes.removeAll(keepingCapacity: true)
-                    self.flushLink?.isPaused = true
+                    self.feedQueue.sync {}
                     self.view?.resetToInitialState()
                 case .output(let data):
-                    // Replay bytes are parsed in order and never held back: the replies they may
-                    // generate have to stay suppressed until the last of them lands.
+                    // Replay bytes are parsed here, on the main actor: the replies they generate
+                    // are then delivered inline, while `isReplaying` still suppresses them. Off the
+                    // main thread they would arrive after the replay ended and reach the PTY.
                     if self.isReplaying {
                         self.view?.feed(byteArray: ArraySlice(data))
                     } else {
@@ -331,82 +309,19 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
                     self.applyResize()
                 case .exited(let error):
                     self.isReplaying = false
-                    self.pendingBytes.removeAll(keepingCapacity: true)
-                    self.flushLink?.isPaused = true
                     self.onExit(error)
                 }
             }
         }
     }
 
-    /// A live output chunk. Bursts are one `feed` per frame; a chunk that arrives after an idle
-    /// frame goes straight through so keystroke echo never waits (upstream
-    /// `terminal-performance.md`, "Coalescers are leading+trailing throttles").
+    /// A live output chunk: parsed on the feed queue as soon as it arrives. SwiftTerm marks the
+    /// frame dirty and draws it on its next display tick, so keystroke echo and a TUI's frames
+    /// both reach the screen one vsync later at most, and a burst costs the main thread nothing.
     private func receive(_ data: Data) {
-        let now = CACurrentMediaTime()
-        reportActivity(now)
-        if isVisible, pendingBytes.isEmpty, now - lastFeedTime >= frameInterval,
-            data.count < Self.maxBufferedBytes
-        {
-            lastFeedTime = now
-            view?.feed(byteArray: ArraySlice(data))
-            return
-        }
-        pendingBytes.append(contentsOf: data)
-        if pendingBytes.count >= Self.maxBufferedBytes {
-            flushPending()
-        } else {
-            startFlushLink()
-        }
-    }
-
-    /// Feeds everything received since the last frame, in one parser call.
-    func flushPending() {
-        guard !pendingBytes.isEmpty else {
-            flushLink?.isPaused = true
-            return
-        }
-        lastFeedTime = CACurrentMediaTime()
-        // `feed` parses synchronously, so the batch buffer is reusable the moment it returns.
-        view?.feed(byteArray: pendingBytes[...])
-        pendingBytes.removeAll(keepingCapacity: true)
-    }
-
-    /// The display link's tick: learns the real frame length, then feeds the frame's bytes.
-    func tick(_ link: CADisplayLink) {
-        let duration = link.targetTimestamp - link.timestamp
-        if duration > 0.001 { frameInterval = duration }
-        flushPending()
-    }
-
-    private func startFlushLink() {
-        guard isVisible else {
-            scheduleHiddenFlush()
-            return
-        }
-        if let flushLink {
-            flushLink.isPaused = false
-            return
-        }
-        let target = PaseoTickTarget()
-        target.coordinator = self
-        let link = CADisplayLink(target: target, selector: #selector(PaseoTickTarget.tick(_:)))
-        link.preferredFrameRateRange = FrameRate.promotion
-        link.add(to: .main, forMode: .common)
-        flushLink = link
-    }
-
-    /// A hidden tab's bytes wait for one batched feed every `hiddenFeedInterval` instead of one
-    /// per display frame.
-    private func scheduleHiddenFlush() {
-        flushLink?.isPaused = true
-        guard hiddenFlushTask == nil else { return }
-        hiddenFlushTask = Task { [weak self] in
-            try? await Task.sleep(for: PaseoTerminalCoordinator.hiddenFeedInterval)
-            guard !Task.isCancelled, let self else { return }
-            self.hiddenFlushTask = nil
-            self.flushPending()
-        }
+        reportActivity(CACurrentMediaTime())
+        guard let sender = view?.feedSender else { return }
+        feedQueue.async { sender.feed(byteArray: ArraySlice(data)) }
     }
 
     /// Activity bookkeeping for the tab's dot: at most one view write per `activityInterval`,
