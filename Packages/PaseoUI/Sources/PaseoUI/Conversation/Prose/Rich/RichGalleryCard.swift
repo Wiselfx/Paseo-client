@@ -242,18 +242,28 @@ struct RichGalleryCard: View {
             return
         }
         offlineTiles = []
-        // Bounded concurrency: tiles are keyed by id, so each lands in its own slot whatever
-        // order the downloads finish in.
-        await withTaskGroup(of: Void.self) { group in
-            var next = pending.makeIterator()
-            for _ in 0..<Self.loadConcurrency {
-                guard let index = next.next() else { break }
-                group.addTask { @MainActor in await self.loadTile(at: index) }
-            }
-            while await group.next() != nil {
-                guard let index = next.next() else { continue }
-                group.addTask { @MainActor in await self.loadTile(at: index) }
-            }
+        // Bounded concurrency: `loadConcurrency` lanes, each loading every nth pending tile in
+        // turn. Tiles are keyed by id, so each lands in its own slot whatever order the
+        // downloads finish in. The lanes are main-actor tasks (a task group capturing the view
+        // trips the region checker); cancelling this load cancels them.
+        var lanes: [Task<Void, Never>] = []
+        for lane in 0..<Self.loadConcurrency {
+            let indices = Array(stride(from: lane, to: pending.count, by: Self.loadConcurrency))
+                .map { pending[$0] }
+            guard !indices.isEmpty else { break }
+            lanes.append(
+                Task { @MainActor in
+                    for index in indices {
+                        guard !Task.isCancelled else { return }
+                        await loadTile(at: index)
+                    }
+                })
+        }
+        let running = lanes
+        await withTaskCancellationHandler {
+            for lane in running { await lane.value }
+        } onCancel: {
+            for lane in running { lane.cancel() }
         }
     }
 
