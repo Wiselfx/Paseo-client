@@ -15,9 +15,11 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     /// Activity bookkeeping writes view state at most this often, and never when the tab's dot
     /// would not change.
     static let activityInterval: CFTimeInterval = 0.5
-    /// The keyboard and the key bar move the grid in animated steps; the size is sent once they
-    /// have settled.
-    static let resizeSettle: Duration = .milliseconds(120)
+    /// The keyboard and the key bar move the grid in animated steps. Each step resizes the
+    /// emulator at once, so the PTY has to follow closely or a TUI keeps drawing for the old grid
+    /// and erases the wrong lines. Sizes go out at most this often: the first at once, the last
+    /// always.
+    static let resizeInterval: CFTimeInterval = 0.05
     /// A burst larger than this is fed at once rather than held back for a frame.
     static let maxBufferedBytes = 256 * 1024
 
@@ -59,6 +61,8 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
     private var attachTask: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
     private var resizeTask: Task<Void, Never>?
+    /// When the last size went to the PTY, for the resize throttle.
+    private var lastResizeSent: CFTimeInterval = 0
     /// Bytes received since the last feed. Live output only: replay bytes are barriers and go
     /// straight through.
     private var pendingBytes: [UInt8] = []
@@ -415,29 +419,31 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
 
     // MARK: Resize
 
-    /// Debounces a measured grid size. A keyboard animation walks the terminal through a dozen
-    /// heights, and each `sizeChanged` used to send its own resize RPC.
+    /// Throttles a measured grid size to the PTY: sent at once when nothing went out in the last
+    /// `resizeInterval`, otherwise at the end of that window with the newest size. A debounce
+    /// held every size until the animation had stopped, which left the program drawing for the
+    /// old grid for the whole animation.
     private func scheduleResize(_ size: TerminalSize) {
         guard attachedSize != size else {
             pendingResize = nil
             return
         }
         pendingResize = size
-        // Leading edge: the first change after a quiet period goes to the PTY at once. The stage
-        // already holds the grid until the size has settled (`TerminalSettledFrame`), so this is
-        // normally the only change, and the program redraws for the grid it is drawn on instead
-        // of 120 ms later. Changes inside the window still trail.
-        if resizeTask == nil { applyResize() }
-        resizeTask?.cancel()
+        guard resizeTask == nil else { return }
+        let wait = lastResizeSent + Self.resizeInterval - CACurrentMediaTime()
+        guard wait > 0 else {
+            applyResize()
+            return
+        }
         resizeTask = Task { [weak self] in
-            try? await Task.sleep(for: PaseoTerminalCoordinator.resizeSettle)
+            try? await Task.sleep(for: .seconds(wait))
             guard !Task.isCancelled, let self else { return }
             self.resizeTask = nil
             self.applyResize()
         }
     }
 
-    /// Sends the debounced size, once the keyboard animation has settled and any replay has
+    /// Sends the throttled size, once the keyboard animation has settled and any replay has
     /// finished. Replay geometry belongs to the parser queue, so a resize never lands inside one.
     private func applyResize() {
         guard let store, let terminalId, let size = pendingResize else { return }
@@ -454,6 +460,7 @@ final class PaseoTerminalCoordinator: NSObject, TerminalViewDelegate {
         // attachment are updates. A retained hidden tab never claims.
         let intent: TerminalResizeIntent = isVisible && !claimed ? .claim : .update
         store.resize(terminalId, to: size, intent: intent)
+        lastResizeSent = CACurrentMediaTime()
         if intent == .claim { claimed = true }
         attachedSize = size
         pendingResize = nil

@@ -44,22 +44,17 @@ struct TerminalStage: View {
                 TerminalStagePlaceholder(
                     isSupported: isSupported, hasTerminals: hasTerminals, onCreate: onCreate)
             } else {
-                // The grids resize once the stage's size has settled, never per animation step.
-                TerminalSettledFrame {
-                    ZStack {
-                        ForEach(mounted) { entry in
-                            TerminalStageEntry(
-                                store: store,
-                                uploader: uploader,
-                                terminalId: entry.terminalId,
-                                isSelected: entry.terminalId == selectedTerminalId,
-                                isOutgoing: entry.terminalId == outgoingTerminalId,
-                                onExit: { onExit($0, entry.terminalId) },
-                                onOutput: { onOutput(entry.terminalId) },
-                                onOpenLink: onOpenLink,
-                                onAttach: onAttach)
-                        }
-                    }
+                ForEach(mounted) { entry in
+                    TerminalStageEntry(
+                        store: store,
+                        uploader: uploader,
+                        terminalId: entry.terminalId,
+                        isSelected: entry.terminalId == selectedTerminalId,
+                        isOutgoing: entry.terminalId == outgoingTerminalId,
+                        onExit: { onExit($0, entry.terminalId) },
+                        onOutput: { onOutput(entry.terminalId) },
+                        onOpenLink: onOpenLink,
+                        onAttach: onAttach)
                 }
             }
             if let selectedTerminalId, let exitMessage {
