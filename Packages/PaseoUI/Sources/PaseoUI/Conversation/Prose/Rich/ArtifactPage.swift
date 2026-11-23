@@ -149,7 +149,7 @@ struct ArtifactPage: View {
     private var allowsScripts: Bool {
         switch document.kind {
         case .mermaid, .svg: false
-        case .visualize, .html: true
+        case .html: true
         }
     }
 

@@ -562,6 +562,24 @@ import Testing
         #expect(detected("/").map { $0 }.isEmpty)
     }
 
+    /// §1.5 — a single-segment slash word without an extension is a command or a word, not
+    /// a file: it never becomes a path chip or file card.
+    @Test func slashWordsAreNotPaths() {
+        #expect(detected("run /compact to shrink the context").isEmpty)
+        #expect(detected("/clear").isEmpty)
+        #expect(detected("then /clear, then /compact.").isEmpty)
+        #expect(detected("~/").isEmpty)
+    }
+
+    /// §1.5 — real paths keep their previews: an extension, a home prefix, or two or more
+    /// segments.
+    @Test func realPathsStillMatch() {
+        #expect(localPath(in: "/Users/me/x") == "/Users/me/x")
+        #expect(localPath(in: "/tmp/a.log") == "/tmp/a.log")
+        #expect(localPath(in: "/notes.txt") == "/notes.txt")
+        #expect(localPath(in: "~/notes") == "~/notes")
+    }
+
     /// §1.5 — inline code and fences are untouched.
     @Test func localPathInCodeZonesIsIgnored() {
         #expect(detected("`/tmp/a.png`").isEmpty)
@@ -651,54 +669,15 @@ import Testing
         #expect(blocks.count == 1)
     }
 
-    // MARK: §2 — visualize fences
+    // MARK: §2 — retired visualize fences
 
-    /// §2 fence detection — an explicit ` ```visualize ` fence hosts the stage;
-    /// the block carries the fence body.
-    @Test func visualizeFenceYieldsBlock() throws {
-        let source = "```visualize\n<style>p{color:red}</style><p>hi</p>\n```"
-        let blocks = detected(source)
-        #expect(blocks.count == 1)
-        guard case .visualize(let code, let range) = try #require(blocks.first) else {
-            Issue.record("expected .visualize, got \(blocks)")
-            return
-        }
-        #expect(code == "<style>p{color:red}</style><p>hi</p>")
-        #expect(String(source[range]) == source)
-    }
-
-    /// §2 — an unclosed fence is EOF-terminated and still yields a block
-    /// (streaming paints partial and settles; the stale "stays markdown" comment
-    /// in the spec does not win over `viz.test.ts`).
-    @Test func unclosedVisualizeFenceYieldsBlock() throws {
-        let blocks = detected("```visualize\n<p>partial")
-        #expect(blocks.count == 1)
-        guard case .visualize(let code, _) = try #require(blocks.first) else {
-            Issue.record();return
-        }
-        #expect(code == "<p>partial")
-    }
-
-    /// §2 — fence lang is case-insensitive.
-    @Test func visualizeFenceLangIsCaseInsensitive() throws {
-        let blocks = detected("```Visualize\n<p>x</p>\n```")
-        guard case .visualize = try #require(blocks.first) else {
-            Issue.record();return
-        }
-    }
-
-    /// §2 — a fence with a blank body renders nothing; detection reports nothing.
-    @Test func visualizeFenceWithBlankBodyYieldsNothing() {
-        #expect(detected("```visualize\n```").isEmpty)
-        #expect(detected("```visualize\n   \n```").isEmpty)
-    }
-
-    /// §2 — URLs inside a visualize fence are not double-reported by other stages.
-    @Test func visualizeFenceContentsAreNotScanned() throws {
-        let source = "```visualize\n<img src=\"https://example.com/a.png\">\n```"
-        let blocks = detected(source)
-        try #require(blocks.count == 1)
-        guard case .visualize = blocks[0] else { Issue.record(); return }
+    /// The ` ```visualize ` fence is no longer hosted: it stays an ordinary code block,
+    /// closed, unclosed, or in any letter case.
+    @Test func visualizeFenceIsPlainCode() {
+        #expect(detected("```visualize\n<style>p{color:red}</style><p>hi</p>\n```").isEmpty)
+        #expect(detected("```visualize\n<p>partial").isEmpty)
+        #expect(detected("```Visualize\n<p>x</p>\n```").isEmpty)
+        #expect(detected("```visualize\r\n<p>x</p>\r\n```\r\n").isEmpty)
     }
 
     /// §2/§1.8 — fences we don't host produce nothing. (Mermaid moved out: G4 detects
@@ -725,12 +704,12 @@ import Testing
     // MARK: robustness — CRLF line endings
 
     /// CRLF — lines, fences and blocks behave exactly as with LF.
-    @Test func crlfVisualizeFenceYieldsBlock() throws {
-        let source = "```visualize\r\n<style>p{}</style><p>x</p>\r\n```\r\n"
+    @Test func crlfHTMLFenceYieldsBlock() throws {
+        let source = "```html\r\n<style>p{}</style><p>x</p>\r\n```\r\n"
         let blocks = detected(source)
         let block = try #require(blocks.first)
-        guard case .visualize(let code, _) = block else {
-            Issue.record("expected .visualize, got \(block)")
+        guard case .htmlArtifact(let code, _) = block else {
+            Issue.record("expected .htmlArtifact, got \(block)")
             return
         }
         #expect(code == "<style>p{}</style><p>x</p>")

@@ -191,7 +191,7 @@ struct WorkspaceBranchSwitcherSheet: View {
                 if extras.lastSwitchBlockedByChanges {
                     pendingStashSwitch = name
                 } else {
-                    switchError = extras.actionError ?? "Failed to switch branch"
+                    switchError = extras.actionError ?? "Couldn't switch branch."
                 }
                 return
             }
@@ -223,7 +223,7 @@ struct WorkspaceBranchSwitcherSheet: View {
                 completeSwitch()
             } else {
                 Haptics.failure()
-                switchError = extras.actionError ?? "Failed to switch branch"
+                switchError = extras.actionError ?? "Couldn't switch branch."
             }
         }
     }

@@ -68,6 +68,18 @@ import Testing
         #expect(mapCard("95.0, 999.0") == nil)
     }
 
+    @Test func lowPrecisionPairsStayProse() {
+        #expect(mapCard("1.5, 2.5") == nil)
+        #expect(mapCard("3.14, 2.71") == nil)
+        #expect(mapCard("37.77, -122.41") == nil)
+    }
+
+    @Test func labeledPairNeedsNoPrecision() {
+        let reference = mapCard("Location: 37.7, -122.4")
+        #expect(reference?.latitude == 37.7)
+        #expect(reference?.longitude == -122.4)
+    }
+
     @Test func coordinateInListStaysProse() {
         #expect(mapCard("- 37.7749, -122.4194") == nil)
     }

@@ -40,14 +40,21 @@ struct ChatTitleMenu: View {
             // line. A truncated second line under the title was the "ugly" the user saw; the
             // workspace stays reachable in this menu (H2 §3). The bar's height is constant: the
             // title block is shorter than `ShellHeader`'s 48 pt either way.
-            ViewThatFits(in: .horizontal) {
-                VStack(alignment: .center, spacing: Space.xs) {
-                    headerTitle
-                    if let workspaceLine {
-                        headerWorkspace(workspaceLine)
+            // A small chevron says the pill opens a menu; without it the title read as static text.
+            HStack(spacing: Space.xs) {
+                ViewThatFits(in: .horizontal) {
+                    VStack(alignment: .center, spacing: Space.xs) {
+                        headerTitle
+                        if let workspaceLine {
+                            headerWorkspace(workspaceLine)
+                        }
                     }
+                    headerTitle
                 }
-                headerTitle
+                Image(systemName: "chevron.down")
+                    .font(.glyph(.small, weight: .semibold))
+                    .foregroundStyle(Palette.tertiaryInk)
+                    .accessibilityHidden(true)
             }
             // N6 C: the pill takes the height its text needs at every Dynamic Type size, so the two
             // lines never draw over each other. No fixed height anywhere on this path.

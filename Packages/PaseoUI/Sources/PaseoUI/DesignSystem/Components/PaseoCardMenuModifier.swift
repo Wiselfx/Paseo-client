@@ -19,6 +19,7 @@ struct PaseoCardMenuModifier: ViewModifier {
 
     @Environment(\.richActions) private var richActions
     @Environment(\.openURL) private var openURL
+    @Environment(\.toast) private var toast
 
     func body(content: Content) -> some View {
         content.contextMenu {
@@ -59,6 +60,7 @@ struct PaseoCardMenuModifier: ViewModifier {
             Clipboard.copy(text)
             Haptics.light()
         }
+        toast?.show("Copied", systemImage: "checkmark")
     }
 
     @MainActor private func save(_ image: UIImage) {

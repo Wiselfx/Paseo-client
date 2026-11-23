@@ -1092,7 +1092,7 @@ final class TranscriptEngine: NSObject {
         history.settle(historyGeometry(metrics))
     }
 
-    /// "Retry": the machine is ready again and asked for the page now.
+    /// "Try again": the machine is ready again and asked for the page now.
     func retryOlderHistory() {
         history.rearm()
         let m = metrics

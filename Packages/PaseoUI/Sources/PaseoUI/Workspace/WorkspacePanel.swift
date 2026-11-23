@@ -243,7 +243,7 @@ struct WorkspacePanel: View {
     /// page's secondary actions trailing. A horizontal drag on it dismisses the panel through the
     /// shell's pan.
     private var header: some View {
-        ShellHeader(leading: .back({ close() })) {
+        ShellHeader(leading: .back({ goBack() })) {
             Text(workspaceTitle)
                 .font(.paseo(.title))
                 .foregroundStyle(Palette.ink)
@@ -312,6 +312,16 @@ struct WorkspacePanel: View {
             return title
         }
         return workspace.branch ?? workspace.name
+    }
+
+    /// The back chevron: one level up when the Files page has pushed a folder or file, the panel
+    /// closes only from the root.
+    private func goBack() {
+        if let pop = shellDrawer?.panelPopOne {
+            pop()
+        } else {
+            close()
+        }
     }
 
     /// The panel closes through the shell's drawer: the back button is one of its dismissal

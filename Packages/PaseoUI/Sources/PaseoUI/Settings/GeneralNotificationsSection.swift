@@ -77,7 +77,7 @@ struct GeneralNotificationsSection: View {
             Text(
                 sent
                     ? "Paseo handed the notification to the operating system."
-                    : "Failed to send notification.")
+                    : "Couldn't send the notification.")
         }
     }
 

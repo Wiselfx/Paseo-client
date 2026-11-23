@@ -1,8 +1,8 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The full-width "Open" row under a card whose content is taller than its cap: the artifact
-/// page shows the whole thing, at any width.
+/// The full-width "Open" row under a card: the artifact page shows the whole thing, at any
+/// width.
 struct RichOpenButton: View {
     /// What VoiceOver says: it starts with the visible word, so Voice Control's "Tap Open" matches.
     let accessibilityText: String

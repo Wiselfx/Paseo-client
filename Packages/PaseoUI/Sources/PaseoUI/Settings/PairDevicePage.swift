@@ -70,7 +70,7 @@ struct PairDevicePage: View {
                         .foregroundStyle(Palette.ink)
                 } else {
                     // en.ts:1970 failedToLoadOffer
-                    Text("Failed to load pairing offer.")
+                    Text("Couldn't load the pairing offer.")
                         .font(.paseo(.callout, weight: .medium))
                         .foregroundStyle(Palette.ink)
                     Text(message)
@@ -78,7 +78,7 @@ struct PairDevicePage: View {
                         .foregroundStyle(Palette.secondaryInk)
                 }
                 // en.ts:1991 retry
-                Button("Retry") {
+                Button("Try again") {
                     Task { await session.hostSettings.loadPairingOffer() }
                 }
                 .font(.paseo(.callout, weight: .medium))

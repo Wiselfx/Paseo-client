@@ -5,10 +5,9 @@ import SwiftUI
 import UIKit
 import WebKit
 
-/// HTML documents for the two web-backed rich blocks. Both are offline: the CSP forbids
-/// every source except inline styles/scripts (viz) or nothing at all (SVG), and image
-/// loads to data:/blob: URLs. Theme vars follow docs/research/05-rich-media-spec.md §2:
-/// `--viz-fg`, `--viz-bg`, `--viz-accent`.
+/// HTML documents for the web-backed rich blocks. All are offline: the CSP forbids
+/// every source except inline styles/scripts (html) or nothing at all (SVG), and image
+/// loads to data:/blob: URLs.
 enum RichHTMLDocument {
     /// Reports the document's height once per animation frame and only when it moved by half a
     /// point or more (R9 §2). A `ResizeObserver` on the body replaces the whole-document
@@ -16,31 +15,6 @@ enum RichHTMLDocument {
     private static let heightReporter = """
         <script>(function(){var last=-1,queued=false;function post(){queued=false;var t=document.documentElement,b=document.body;var h=Math.max(t?t.scrollHeight:0,b?b.scrollHeight:0);if(Math.abs(h-last)<0.5)return;last=h;if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vizHeight){window.webkit.messageHandlers.vizHeight.postMessage(h);}}function schedule(){if(queued)return;queued=true;requestAnimationFrame(post);}if(window.ResizeObserver){new ResizeObserver(schedule).observe(document.documentElement);if(document.body)new ResizeObserver(schedule).observe(document.body);if(document.documentElement.firstElementChild)new ResizeObserver(schedule).observe(document.documentElement.firstElementChild);}else{new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true,attributes:true,characterData:true});}window.addEventListener('load',schedule);schedule();})();</script>
         """
-
-    /// The ` ```visualize ` fence: a self-contained HTML fragment in a sandboxed document.
-    /// No network, no frames, no external anything; color scheme follows the app.
-    static func visualize(code: String, dark: Bool) -> String {
-        let fg = dark ? "#e6e6e6" : "#1a1a1a"
-        let accent = dark ? "#7dd3fc" : "#0369a1"
-        let scheme = dark ? "dark" : "light"
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'">
-        <style>:root { color-scheme: \(scheme); --viz-fg: \(fg); --viz-bg: transparent; --viz-accent: \(accent); }
-        html, body { margin: 0; padding: 0; background: transparent; color: var(--viz-fg); font-family: -apple-system, sans-serif; }
-        </style>
-        </head>
-        <body>
-        \(code)
-        \(heightReporter)
-        </body>
-        </html>
-        """
-    }
 
     /// A rendered artifact SVG (mermaid output, G4/G5): the same static guarantees as the
     /// raw block, but sized for a full-screen page instead of a card — the drawing fills
@@ -69,7 +43,7 @@ enum RichHTMLDocument {
 
     /// An html fence or `.html` file for the artifact page: a full document when the source
     /// carries `<html>`, otherwise the fragment wrapped in the offline shell (scripts run,
-    /// like the visualize stage, but the CSP keeps the network closed). The export shares
+    /// but the CSP keeps the network closed). The export shares
     /// this same build, so what exports is what the page showed.
     static func artifactHTML(source: String, dark: Bool) -> String {
         if source.lowercased().contains("<html") { return OfflineCSP.inject(into: source) }

@@ -207,6 +207,7 @@ struct ClaudeTurnView: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
                 .accessibilityHint(
                     isExpanded ? "Collapses the work in this turn" : "Shows the work in this turn")
                 if let onForkInFlight {
@@ -242,6 +243,7 @@ struct ClaudeTurnView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 isExpanded ? "Collapses the work in this turn" : "Shows the work in this turn")
         }

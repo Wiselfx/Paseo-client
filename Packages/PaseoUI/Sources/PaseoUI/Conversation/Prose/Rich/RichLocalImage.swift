@@ -135,12 +135,14 @@ struct RichLocalImage: View {
         .paseoFeedback(.light, trigger: retryToken)
     }
 
-    /// One load per (path, pixel bucket, retry, workspace). The workspace is part of the key
-    /// so a card drawn before the agent snapshot arrives (R1, V1.1) re-runs its load the
-    /// moment `daemonWorkspaceID` becomes known.
+    /// One load per (path, pixel bucket, retry, workspace, offline). The workspace is part of
+    /// the key so a card drawn before the agent snapshot arrives (R1, V1.1) re-runs its load
+    /// the moment `daemonWorkspaceID` becomes known; the offline flag so a card that stopped
+    /// at "No connection" loads by itself when the connection returns.
     private var loadKey: String {
         let bucket = MediaSizing.pixelWidth(points: width, scale: displayScale)
-        return "\(path)|\(bucket)|\(retryToken)|\(richActions?.daemonWorkspaceID ?? "-")"
+        let workspace = richActions?.daemonWorkspaceID ?? "-"
+        return "\(path)|\(bucket)|\(retryToken)|\(workspace)|\(policy == .cacheOnly)"
     }
 
     /// The card's inner width, for decoding at the size it will be drawn at. Published only
@@ -179,11 +181,22 @@ struct RichLocalImage: View {
             return
         }
         guard width > 1 else { return }
-        // Offline fails closed: no fetch, the offline failure shows. Every other link fetches.
+        // Offline fails closed: no fetch. An image already drawn this session still shows;
+        // otherwise the offline failure shows in the kept box, with Try again.
         if policy == .cacheOnly {
-            if image == nil, failure == nil { failure = .offline }
+            if image == nil, let cached = MediaPipeline.cached(for: MediaPipeline.liveKey(ref: ref)) {
+                image = cached.image
+                aspectRatio = cached.aspectRatio
+                failure = nil
+            }
+            if image == nil, failure == nil {
+                keepsFailureBox = true
+                failure = .offline
+            }
             return
         }
+        // Back online: the placeholder replaces the offline failure while it loads.
+        if failure == .offline { failure = nil }
         // The placeholder is on screen from here: a failure keeps its box.
         keepsFailureBox = true
         let pixelWidth = MediaSizing.pixelWidth(points: width, scale: displayScale)
@@ -222,10 +235,9 @@ struct RichLocalImage: View {
             aspectRatio = knownAspect
             MediaMetadataCache.remember(knownAspect, for: MediaPipeline.liveKey(ref: ref))
         }
-        let html = RichHTMLDocument.rawSVG(source: source, dark: colorScheme == .dark)
         guard
-            let rendered = await RichSnapshotQueue.shared.snapshot(
-                html: html, width: width, scale: displayScale)
+            let rendered = await RichSVGImageRender.image(
+                source: source, width: width, scale: displayScale, dark: colorScheme == .dark)
         else {
             // A render skipped because the card scrolled away is not a decoding failure.
             if !Task.isCancelled { failure = .decoding }

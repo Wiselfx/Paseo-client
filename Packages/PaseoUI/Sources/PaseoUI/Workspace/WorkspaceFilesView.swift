@@ -49,19 +49,36 @@ struct WorkspaceFilesView: View {
         // The Files page and every pushed folder/file share the panel canvas (E2 §5): without
         // this the window's black shows through in dark and pure black.
         .background(Palette.panel)
-        .onAppear { shellDrawer?.panelHandlesBack = !path.isEmpty }
-        .onChange(of: path) { _, newPath in
-            shellDrawer?.panelHandlesBack = !newPath.isEmpty
+        .onAppear { syncDrawerBack() }
+        .onChange(of: path) { _, _ in
+            syncDrawerBack()
             rememberLocation()
         }
         .onChange(of: openFile) { _, _ in
-            // A file is a terminal destination; only folders make the stack "deeper".
-            shellDrawer?.panelHandlesBack = !path.isEmpty
+            syncDrawerBack()
             rememberLocation()
         }
         .onDisappear {
             shellDrawer?.panelHandlesBack = false
+            shellDrawer?.panelPopOne = nil
             WorkspaceFilesLocation.flush(checkout.workspaceId)
+        }
+    }
+
+    /// Tells the shell how Back behaves here. The edge swipe is the shell's only while the stack
+    /// is at its root (a file is a terminal destination; only folders make it "deeper" for the
+    /// swipe). The header's chevron pops one page, file or folder, and closes the panel only
+    /// when nothing is pushed.
+    private func syncDrawerBack() {
+        shellDrawer?.panelHandlesBack = !path.isEmpty
+        shellDrawer?.panelPopOne = path.isEmpty && openFile == nil ? nil : { popOnePage() }
+    }
+
+    private func popOnePage() {
+        if openFile != nil {
+            openFile = nil
+        } else if !path.isEmpty {
+            path.removeLast()
         }
     }
 

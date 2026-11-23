@@ -90,7 +90,7 @@ struct WorkspaceFilesDirectoryList: View {
             case .failure(let error):
                 guard !WorkspaceShare.isUserCancellation(error) else { return }
                 Haptics.failure()
-                toast?.show("Couldn't save: \(error.localizedDescription)")
+                toast?.show("Couldn't save the file.")
             }
         }
         .onChange(of: isExporting) { _, exporting in

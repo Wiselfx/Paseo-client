@@ -22,6 +22,7 @@ struct RichGalleryCard: View {
     @Environment(\.richActions) private var richActions
     @Environment(\.richProseWidth) private var proseWidth
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var colorScheme
     @Namespace private var zoom
     @State private var thumbnails: [String: UIImage] = [:]
     @State private var selection = 0
@@ -31,6 +32,8 @@ struct RichGalleryCard: View {
     @State private var width: CGFloat = 0
     /// Tiles that failed after an explicit fetch: a small glyph, and a tap retries.
     @State private var failedTiles: Set<String> = []
+    /// Tiles with nothing cached while offline: no fetch was tried, and they say so.
+    @State private var offlineTiles: Set<String> = []
 
     init(images: [RichImage]) {
         self.images = images
@@ -63,12 +66,13 @@ struct RichGalleryCard: View {
         return max((cardWidth - Metrics.galleryTileSpacing) / 2, 1)
     }
 
-    /// One load per count + width bucket + workspace: geometry never re-runs loads,
-    /// tiles skipped as cached never refetch on the re-run, and a grid drawn before the
-    /// agent snapshot names its workspace (V1.1) loads when the id lands.
+    /// One load per count + width bucket + workspace + connectivity: geometry never re-runs
+    /// loads, tiles skipped as cached never refetch on the re-run, a grid drawn before the
+    /// agent snapshot names its workspace (V1.1) loads when the id lands, and a grid that
+    /// stopped offline loads by itself when the connection returns.
     private var loadKey: String {
         "\(images.count)|\(MediaSizing.pixelWidth(points: slotPoints, scale: displayScale))"
-            + "|\(richActions?.daemonWorkspaceID ?? "-")"
+            + "|\(richActions?.daemonWorkspaceID ?? "-")|\(policy == .automatic)"
     }
 
     /// The card's inner width, measured on the frame it is actually drawn in.
@@ -190,6 +194,7 @@ struct RichGalleryCard: View {
             displayed: resolvedThumb(id: id, image: image),
             saved: thumbnails[id],
             failed: failedTiles.contains(id),
+            offline: offlineTiles.contains(id),
             moreCount: moreCount,
             sourceID: id,
             namespace: zoom,
@@ -206,6 +211,7 @@ struct RichGalleryCard: View {
     /// A failed tile retries on tap: the reader's explicit fetch.
     private func retry(image: RichImage, id: String) {
         failedTiles.remove(id)
+        offlineTiles.remove(id)
         Task { @MainActor in
             await loadTile(image: image, id: id, fetch: true)
         }
@@ -213,22 +219,47 @@ struct RichGalleryCard: View {
 
     // MARK: Loading
 
+    /// How many tiles load at once: enough that a short grid does not wait on each download
+    /// in turn, few enough not to flood the connection.
+    private static let loadConcurrency = 3
+
     @MainActor
     private func loadAll() async {
-        // Offline (cacheOnly): no fetch. Cached tiles draw; the rest stay empty.
-        // Sequential, not concurrent: one task per card, tiles arrive in document
-        // order (progressive fidelity), and the shape matches the gated `.task`
-        // call sites elsewhere (no unstructured cross-actor captures).
-        let allowFetch = policy == .automatic
+        // Tiles already in the decoded cache draw at once; the rest are the ones to fetch.
+        var pending: [Int] = []
         for (index, image) in images.enumerated() {
             let id = tileIDs[index]
             if let cached = resolvedThumb(id: id, image: image) {
                 thumbnails[id] = cached
+                offlineTiles.remove(id)
                 continue
             }
-            await loadTile(image: image, id: id, fetch: allowFetch)
-            guard !Task.isCancelled else { return }
+            pending.append(index)
         }
+        // Offline (cacheOnly): no fetch. Cached tiles draw; the rest say there is no connection.
+        guard policy == .automatic else {
+            offlineTiles = Set(pending.map { tileIDs[$0] })
+            return
+        }
+        offlineTiles = []
+        // Bounded concurrency: tiles are keyed by id, so each lands in its own slot whatever
+        // order the downloads finish in.
+        await withTaskGroup(of: Void.self) { group in
+            var next = pending.makeIterator()
+            for _ in 0..<Self.loadConcurrency {
+                guard let index = next.next() else { break }
+                group.addTask { @MainActor in await self.loadTile(at: index) }
+            }
+            while await group.next() != nil {
+                guard let index = next.next() else { continue }
+                group.addTask { @MainActor in await self.loadTile(at: index) }
+            }
+        }
+    }
+
+    @MainActor
+    private func loadTile(at index: Int) async {
+        await loadTile(image: images[index], id: tileIDs[index], fetch: true)
     }
 
     @MainActor
@@ -260,13 +291,30 @@ struct RichGalleryCard: View {
                 switch outcome {
                 case .image(let payload):
                     thumbnails[id] = payload.image
-                case .svg:
-                    break
+                case .svg(let source, _):
+                    await renderSVG(source, id: id)
                 case .failure:
                     failedTiles.insert(id)
                 }
             }
         }
+    }
+
+    /// SVG tiles draw through the shared offscreen renderer (cached by content and width), so
+    /// they get a picture or the failure glyph like every other tile.
+    @MainActor
+    private func renderSVG(_ source: String, id: String) async {
+        guard
+            let rendered = await RichSVGImageRender.image(
+                source: source, width: slotPoints, scale: displayScale,
+                dark: colorScheme == .dark)
+        else {
+            // A render skipped because the card scrolled away is not a failure.
+            if !Task.isCancelled { failedTiles.insert(id) }
+            return
+        }
+        guard !Task.isCancelled else { return }
+        thumbnails[id] = rendered
     }
 
     private func cacheIdentity(for image: RichImage) -> String? {

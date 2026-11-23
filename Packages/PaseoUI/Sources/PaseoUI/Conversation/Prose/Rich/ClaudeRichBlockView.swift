@@ -48,8 +48,6 @@ struct ClaudeRichBlockView: View {
             RichSVGCard(code: source)
         case .mermaid(let source, _):
             MermaidCard(code: source)
-        case .visualize(let code, _):
-            RichWebCard(code: code, kind: .visualize)
         case .htmlArtifact(let code, _):
             RichWebCard(code: code, kind: .html)
         case .mapCard(let reference, _):

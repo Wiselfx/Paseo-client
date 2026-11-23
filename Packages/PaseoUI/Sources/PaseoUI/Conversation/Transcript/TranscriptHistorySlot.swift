@@ -4,8 +4,7 @@ import SwiftUI
 import UIKit
 
 /// Upstream's fixed header slot (strategy-native.tsx:69-74: height 32): the spinner while the
-/// operation runs, the retry on failure, empty otherwise. The retry is upstream's verbatim copy
-/// (strategy-native.tsx:727-729, i18n/resources/en.ts:14).
+/// operation runs, "Try again" on failure, empty otherwise (the app's one retry wording).
 struct TranscriptHistorySlot: View {
     let store: ConversationStore
     let history: HistoryStartController
@@ -20,7 +19,7 @@ struct TranscriptHistorySlot: View {
                     .allowsHitTesting(false)
                     .accessibilityLabel("Loading earlier messages")
             } else if status == .failed, store.timeline.hasOlder {
-                Button("Retry", action: onRetry)
+                Button("Try again", action: onRetry)
                     .buttonStyle(.paseoSecondary)
             }
         }

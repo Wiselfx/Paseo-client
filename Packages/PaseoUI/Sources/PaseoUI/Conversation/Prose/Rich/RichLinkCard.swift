@@ -12,6 +12,8 @@ struct RichLinkCard: View {
     @State private var metadata: LPLinkMetadata?
     @State private var hero: UIImage?
     @State private var icon: UIImage?
+    /// The hero fetch ended without an image: the reserved slot gives its height back.
+    @State private var heroFailed = false
     @State private var showSafari = false
     @State private var showShare = false
     @State private var width: CGFloat = 0
@@ -23,8 +25,9 @@ struct RichLinkCard: View {
     /// The hero's width: the prose column when published, else this card's own measurement.
     private var slotWidth: CGFloat { proseWidth > 1 ? proseWidth : width }
 
-    /// The OG image slot: 1.91:1 reserved from the first layout, so the card never
-    /// changes height when the pixels land (C6). Tiles crop; the viewer never does.
+    /// The OG image slot: 1.91:1, reserved as soon as the metadata says an image exists
+    /// (the card is a text row only for links that have none), so the card does not change
+    /// height when the pixels land (C6). Tiles crop; the viewer never does.
     private var heroAspect: CGFloat { Metrics.ogHeroAspect }
 
     private var policy: MediaFetchPolicy {
@@ -63,6 +66,13 @@ struct RichLinkCard: View {
         RichContentDetector.displayURL(url)
     }
 
+    /// An OG image is on its way: the metadata names one and nothing has failed or been
+    /// skipped (Low Data Mode and offline never fetch it).
+    private var expectsHero: Bool {
+        policy == .automatic && !heroFailed && !RichLinkHeroCache.missed(heroCacheKey)
+            && resolvedMetadata?.imageProvider != nil
+    }
+
     var body: some View {
         Button {
             showSafari = true
@@ -71,17 +81,21 @@ struct RichLinkCard: View {
                 PaseoMediaCard(
                     media: heroSlot(hero),
                     header: PaseoCardHeader(title: linkTitle, meta: linkMeta))
+            } else if expectsHero {
+                PaseoMediaCard(
+                    media: heroPlaceholder,
+                    header: PaseoCardHeader(title: linkTitle, meta: linkMeta))
             } else {
                 PaseoCard(content: LinkRowContent(
                     icon: resolvedIcon, title: linkTitle, meta: linkMeta))
             }
         }
         .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-        // The first-ever hero grows the card once, animated; revisits lay the
-        // cached hero out on frame one and never animate.
+        // The slot appears once metadata names an image; the pixels then fill the same box.
+        // Revisits lay the cached hero out on frame one and never animate.
         .animation(
             Motion.disclosure.resolved(reduceMotion: reduceMotion),
-            value: resolvedHero != nil)
+            value: resolvedHero != nil || expectsHero)
         .paseoCardMenu(
             openTitle: "Open",
             onOpen: { showSafari = true },
@@ -94,7 +108,7 @@ struct RichLinkCard: View {
             kind: "Link", title: linkTitle, meta: linkMeta, isButton: true)
         .background { widthReader }
         .task(id: url) { await loadMetadata() }
-        .task(id: heroKey) { await loadHero() }
+        .task(id: heroTaskKey) { await loadHero() }
         .fullScreenCover(isPresented: $showSafari) {
             if let target = URL(string: url) {
                 SafariView(url: target).ignoresSafeArea()
@@ -105,6 +119,17 @@ struct RichLinkCard: View {
                 ActivityView(items: [target])
             }
         }
+    }
+
+    /// The hero's box before its pixels arrive: same width, same ratio, so only content
+    /// changes when the image lands.
+    private var heroPlaceholder: some View {
+        Rectangle()
+            .fill(Palette.codeSurface)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(heroAspect, contentMode: .fit)
+            .mediaSlot(width: slotWidth, heightCap: .infinity)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private func heroSlot(_ hero: UIImage) -> some View {
@@ -135,15 +160,26 @@ struct RichLinkCard: View {
         return "\(url)|\(MediaSizing.pixelWidth(points: width, scale: displayScale))"
     }
 
+    /// The hero task reruns when the metadata lands: its provider is what the load needs,
+    /// and the first view would otherwise skip the hero until a later visit.
+    private var heroTaskKey: String? {
+        guard let heroKey, resolvedMetadata?.imageProvider != nil else { return nil }
+        return heroKey
+    }
+
     @MainActor
     private func loadMetadata() async {
         guard policy == .automatic else { return }
         guard let parsed = URL(string: url) else { return }
         if let cached = RichLinkMetadataCache.metadata(for: parsed) {
             metadata = cached
-        } else if let fetched = try? await Self.fetchMetadata(for: parsed) {
-            RichLinkMetadataCache.store(fetched, for: parsed)
-            metadata = fetched
+        } else if !RichLinkMetadataCache.missed(parsed) {
+            if let fetched = try? await Self.fetchMetadata(for: parsed) {
+                RichLinkMetadataCache.store(fetched, for: parsed)
+                metadata = fetched
+            } else if !Task.isCancelled {
+                RichLinkMetadataCache.noteMiss(for: parsed)
+            }
         }
         await loadIcon()
     }
@@ -156,6 +192,7 @@ struct RichLinkCard: View {
         guard let provider = resolvedMetadata?.imageProvider else { return }
         guard let loaded: UIImage = try? await Self.loadImage(from: provider) else {
             RichLinkHeroCache.noteMiss(for: heroCacheKey)
+            if !Task.isCancelled { heroFailed = true }
             return
         }
         guard !Task.isCancelled else { return }
@@ -167,6 +204,7 @@ struct RichLinkCard: View {
                 width: pixels, height: pixels))
         else {
             RichLinkHeroCache.noteMiss(for: heroCacheKey)
+            heroFailed = true
             return
         }
         RichLinkHeroCache.store(prepared, for: heroCacheKey)

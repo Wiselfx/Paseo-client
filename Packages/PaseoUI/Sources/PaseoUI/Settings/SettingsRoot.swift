@@ -32,6 +32,13 @@ struct SettingsRoot: View {
                     PageSectionHeader("App")
                 }
                 Section {
+                    if case .failed = hostSettings.phase {
+                        InlineBanner(
+                            .failure, title: "Couldn't load host settings",
+                            action: ("Try again", retryHostSettings)
+                        )
+                        .panelRow()
+                    }
                     routeRow(
                         .overview, value: session.serverInfo?.hostname ?? "Paseo host",
                         identifier: "settings.route.overview")
@@ -153,20 +160,39 @@ struct SettingsRoot: View {
         return count == 0 ? "None" : "\(count) saved"
     }
 
-    private var agentsSummary: String {
-        guard let config = hostSettings.config else { return "—" }
-        return (config.mcp?.injectIntoAgents ?? true) ? "Tools on" : "Tools off"
+    /// A host-config summary's detail: the value once the config is in, "Loading…" while it
+    /// loads, "Couldn't load" when it failed (the section's banner offers Try again), and
+    /// nothing when the value is genuinely absent. A bare dash told those four apart by nothing.
+    private func hostDetail(_ value: () -> String?) -> String? {
+        if hostSettings.config != nil { return value() }
+        switch hostSettings.phase {
+        case .idle, .loading: return "Loading…"
+        case .failed: return "Couldn't load"
+        case .ready: return nil
+        }
     }
 
-    private var metadataSummary: String {
-        guard let config = hostSettings.config else { return "—" }
-        let automatic = config.metadataGeneration?.providers.isEmpty ?? true
-        return automatic ? "Automatic" : "Manual"
+    private func retryHostSettings() {
+        Task { await hostSettings.load() }
     }
 
-    private var workspacesSummary: String {
-        guard let config = hostSettings.config else { return "—" }
-        return config.autoArchiveAfterMerge ? "Auto-archive" : "Manual"
+    private var agentsSummary: String? {
+        hostDetail {
+            (hostSettings.config?.mcp?.injectIntoAgents ?? true) ? "Tools on" : "Tools off"
+        }
+    }
+
+    private var metadataSummary: String? {
+        hostDetail {
+            let automatic = hostSettings.config?.metadataGeneration?.providers.isEmpty ?? true
+            return automatic ? "Automatic" : "Manual"
+        }
+    }
+
+    private var workspacesSummary: String? {
+        hostDetail {
+            hostSettings.config?.autoArchiveAfterMerge == true ? "Auto-archive" : "Manual"
+        }
     }
 
     private var projectCountLine: String {
@@ -181,11 +207,13 @@ struct SettingsRoot: View {
             AttributedString(localized: "^[\(count) provider](inflect: true)", bundle: #bundle).characters)
     }
 
-    private var voiceSummary: String {
-        guard let speech = session.voiceSettings.speechSettings else { return "—" }
-        let dictation = speech.dictationEnabled ? "Dictation on" : "Dictation off"
-        let voiceMode = speech.voiceModeEnabled ? "Voice on" : "Voice off"
-        return "\(dictation) · \(voiceMode)"
+    private var voiceSummary: String? {
+        hostDetail {
+            guard let speech = session.voiceSettings.speechSettings else { return nil }
+            let dictation = speech.dictationEnabled ? "Dictation on" : "Dictation off"
+            let voiceMode = speech.voiceModeEnabled ? "Voice on" : "Voice off"
+            return "\(dictation) · \(voiceMode)"
+        }
     }
 
     private var versionLine: String {

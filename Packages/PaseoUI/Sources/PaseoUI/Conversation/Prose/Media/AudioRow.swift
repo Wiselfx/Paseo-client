@@ -69,6 +69,17 @@ struct AudioRow: View {
             condition: richActions?.linkCondition ?? .assumed)
     }
 
+    /// Offline with nothing loaded to play: the button is dimmed and the row says why. A player
+    /// that is already loaded (or playing) keeps working, so Pause never goes dead.
+    private var playUnavailable: Bool {
+        policy == .cacheOnly && !isPlaying && localPlayer == nil && streamPlayer == nil
+    }
+
+    private var playHint: String {
+        if loadFailure { return "Tries loading the audio again" }
+        return isPlaying ? "Pauses the audio" : "Plays the audio"
+    }
+
     private var playLabel: LocalizedStringKey {
         isPlaying ? "Pause audio" : "Play audio"
     }
@@ -102,8 +113,8 @@ struct AudioRow: View {
                             .contentShape(.circle)
                     }
                     .buttonStyle(.plain)
-                    .disabled(policy == .cacheOnly)
-                    .accessibilityHint(loadFailure ? "Retries loading \(fileName)" : fileName)
+                    .disabled(playUnavailable)
+                    .accessibilityHint(playHint)
                     AudioWaveform(
                         bars: bars,
                         progress: duration > 0 ? elapsed / duration : 0,
@@ -124,6 +135,11 @@ struct AudioRow: View {
                             .foregroundStyle(Palette.failureInk)
                             .lineLimit(1)
                             .accessibilityLabel("Couldn't load audio, \(fileName)")
+                    } else if playUnavailable {
+                        Text("No connection")
+                            .font(.paseo(.caption))
+                            .foregroundStyle(Palette.secondaryInk)
+                            .lineLimit(1)
                     } else {
                         Text(timeText)
                             .font(.paseo(.caption))

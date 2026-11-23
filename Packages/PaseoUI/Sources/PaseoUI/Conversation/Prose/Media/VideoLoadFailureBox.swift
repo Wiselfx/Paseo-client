@@ -1,7 +1,7 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The honest failure: the reserved box, one line, and Retry in place.
+/// The honest failure: the reserved box, one line, and Try again in place.
 struct VideoLoadFailureBox: View {
     let fileName: String
     let aspect: CGFloat
@@ -23,7 +23,7 @@ struct VideoLoadFailureBox: View {
                         Text("Couldn't load video")
                             .font(.paseo(.caption, weight: .medium))
                             .foregroundStyle(Palette.ink)
-                        Text("Retry")
+                        Text("Try again")
                             .font(.paseo(.caption, weight: .medium))
                             .foregroundStyle(Palette.accentInk)
                     }

@@ -26,7 +26,6 @@ extension RichContentBlock {
         case .localImage: "local-image"
         case .localFileLink: "file"
         case .rawSVG: "svg"
-        case .visualize: "visualize"
         case .htmlArtifact: "html"
         case .mermaid: "mermaid"
         case .imageGroup: "gallery"

@@ -5,7 +5,7 @@ import Testing
 
 // V2: what models already write is an artifact, not its source. An html/htm fence renders
 // as a sandboxed page, an svg fence and an xml fence holding an `<svg` document render as
-// drawings, and the visualize fence keeps working as an alias. Streaming fences and fences
+// drawings. Streaming fences and fences
 // the author marks `source`/`title` stay code blocks.
 struct ArtifactFenceDetectionTests {
     private func detected(_ source: String) -> [RichContentBlock] {
@@ -65,7 +65,6 @@ struct ArtifactFenceDetectionTests {
         #expect(detected("```htm source\n<p>hi</p>\n```").isEmpty)
         #expect(detected("```svg source\n<svg></svg>\n```").isEmpty)
         #expect(detected("```xml title\n<svg></svg>\n```").isEmpty)
-        #expect(detected("```visualize source\n<p>hi</p>\n```").isEmpty)
         #expect(detected("```mermaid source\ngraph TD; A-->B\n```").isEmpty)
     }
 
@@ -75,7 +74,7 @@ struct ArtifactFenceDetectionTests {
         #expect(detected("```html\nx < y > z\n```").isEmpty)
     }
 
-    /// A blank body renders nothing, like the visualize fence.
+    /// A blank body renders nothing, like the other artifact fences.
     @Test func blankHTMLBodyYieldsNothing() {
         #expect(detected("```html\n```").isEmpty)
         #expect(detected("```html\n   \n```").isEmpty)

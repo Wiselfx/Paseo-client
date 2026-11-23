@@ -5,7 +5,7 @@ import WebKit
 // MARK: - OfflineContentRules (G4/G5 hardening)
 
 // NOTE: RemoteImagePipeline/G4: the second layer under the documents' own offline CSP.
-// Chat artifacts (visualize fences, html fences, raw SVG, mermaid host) must not reach
+// Chat artifacts (html fences, raw SVG, mermaid host) must not reach
 // the network no matter what markup an agent wrote: a `WKContentRuleList` on the web
 // view blocks http(s)/ws(s) subresources and navigations at the WebKit level. The Files
 // panel and file artifact pages keep today's behaviour (no rule list) because workspace

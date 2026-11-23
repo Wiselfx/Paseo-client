@@ -7,12 +7,40 @@ import UIKit
 import WebKit
 
 /// A calm MapKit snapshot (no live map in the transcript) that opens Apple Maps on tap.
+/// While the snapshot loads the slot shows a spinner; offline or after a failed render it
+/// says so, with a Try again control beside the card (the card itself stays tappable).
 struct RichMapCard: View {
     let reference: MapReference
 
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.richActions) private var richActions
     @State private var snapshot: UIImage?
+    /// The render ended without an image.
+    @State private var failed = false
+    /// Bumped by Try again: reruns the load task.
+    @State private var retryToken = 0
+
+    /// The snapshot is a network fetch (Apple's tiles): it follows the same etiquette as the
+    /// link card, so offline and Low Data Mode never start one.
+    private var policy: MediaFetchPolicy {
+        mediaFetchPolicy(
+            kind: .linkPreview, knownBytes: nil,
+            condition: richActions?.linkCondition ?? .assumed)
+    }
+
+    private var hasCoordinates: Bool {
+        reference.latitude != nil && reference.longitude != nil
+    }
+
+    /// The decoded image from this card or an earlier visit, on the first pass.
+    private var resolvedSnapshot: UIImage? {
+        snapshot ?? RichMapSnapshotCache.image(for: reference)
+    }
+
+    private var loadKey: String {
+        "\(reference.latitude ?? 0),\(reference.longitude ?? 0)|\(policy == .automatic)|\(retryToken)"
+    }
 
     private var targetURL: URL? {
         if let lat = reference.latitude, let lng = reference.longitude {
@@ -24,16 +52,16 @@ struct RichMapCard: View {
     /// The 150 pt snapshot slot, edge to edge in the media card; the container clips it.
     private var snapshotBox: some View {
         ZStack {
-            if let snapshot {
-                Image(uiImage: snapshot)
+            if let resolvedSnapshot {
+                Image(uiImage: resolvedSnapshot)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
                 Rectangle().fill(Palette.codeSurface)
                     .overlay {
-                        Image(systemName: "map")
-                            .font(.glyph(.xlarge, weight: .light))
-                            .foregroundStyle(Palette.secondaryInk)
+                        RichMapPlaceholder(
+                            showsProgress: hasCoordinates && !failed && policy == .automatic,
+                            message: placeholderMessage)
                     }
             }
         }
@@ -42,21 +70,46 @@ struct RichMapCard: View {
         .contentShape(.rect)
     }
 
+    /// What the empty slot says: nothing while loading or for a query-only link.
+    private var placeholderMessage: String? {
+        guard hasCoordinates, resolvedSnapshot == nil else { return nil }
+        if failed { return "Couldn't load map preview" }
+        if policy == .cacheOnly { return "No connection" }
+        return nil
+    }
+
     var body: some View {
-        Button(action: openInMaps) {
-            PaseoMediaCard(
-                media: snapshotBox,
-                header: PaseoCardHeader(glyph: "mappin", title: caption))
+        ZStack(alignment: .topTrailing) {
+            Button(action: openInMaps) {
+                PaseoMediaCard(
+                    media: snapshotBox,
+                    header: PaseoCardHeader(glyph: "mappin", title: caption))
+            }
+            .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+            .paseoCardMenu(
+                openTitle: "Open in Maps",
+                onOpen: openInMaps,
+                copyTitle: "Copy location",
+                copyText: caption)
+            .paseoCardAccessibility(kind: "Map", title: caption, isButton: true)
+            .accessibilityHint("Opens Apple Maps")
+            if failed, resolvedSnapshot == nil {
+                Button("Try again", systemImage: "arrow.clockwise", action: retry)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .font(.glyph(.small, weight: .medium))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: Metrics.hitSize, height: Metrics.hitSize)
+                    .contentShape(.rect)
+                    .accessibilityHint("Tries loading the map preview again")
+            }
         }
-        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
-        .paseoCardMenu(
-            openTitle: "Open in Maps",
-            onOpen: openInMaps,
-            copyTitle: "Copy location",
-            copyText: caption)
-        .paseoCardAccessibility(kind: "Map", title: caption, isButton: true)
-        .accessibilityHint("Opens Apple Maps")
-        .task(id: "\(reference.latitude ?? 0),\(reference.longitude ?? 0)") { await loadSnapshot() }
+        .task(id: loadKey) { await loadSnapshot() }
+    }
+
+    private func retry() {
+        failed = false
+        retryToken += 1
     }
 
     private func openInMaps() {
@@ -73,9 +126,16 @@ struct RichMapCard: View {
             snapshot = cached
             return
         }
-        snapshot = await Self.snapshot(lat: lat, lng: lng)
-        if let snapshot {
-            RichMapSnapshotCache.store(snapshot, for: reference)
+        // Offline and Low Data Mode keep the placeholder instead of fetching tiles.
+        guard policy == .automatic else { return }
+        failed = false
+        let rendered = await Self.snapshot(lat: lat, lng: lng)
+        guard !Task.isCancelled else { return }
+        if let rendered {
+            RichMapSnapshotCache.store(rendered, for: reference)
+            snapshot = rendered
+        } else {
+            failed = true
         }
     }
 

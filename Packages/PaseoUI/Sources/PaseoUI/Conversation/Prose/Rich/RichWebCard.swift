@@ -6,17 +6,18 @@ import SwiftUI
 import UIKit
 import WebKit
 
-/// A ` ```visualize ` or ` ```html ` block: a sandboxed WKWebView sized to its content, with a
-/// "View source" toggle that swaps in the raw source with a copy button.
+/// A ` ```html ` block: a sandboxed WKWebView sized to its content, with a
+/// "View source" toggle that shows the raw source with a copy button. The live view stays
+/// mounted (hidden) while the source shows, so toggling back never reloads the page.
 ///
 /// E3 §3.2: the height follows the reported content up to 70 % of the window height. V2: the
 /// page is measured once, after its load, then fixed — a later layout change never re-flows
-/// the transcript. Past the cap an "Open" button shows the page full screen.
+/// the transcript. The "Open" row shows the page full screen.
 ///
 /// The live web view exists only on a first on-screen visit, with a slot and the compiled
 /// offline rules (R9 §2, at most 2 live). Off screen the card snapshots itself and releases
 /// its slot; a later visit draws that snapshot on its first frame, so nothing flashes.
-/// Interaction has its home on the artifact page (G5 C8).
+/// Interaction has its home on the artifact page (G5 C8), reached by the always-visible "Open" row.
 struct RichWebCard: View {
     let code: String
     let kind: RichWebCardKind
@@ -34,7 +35,6 @@ struct RichWebCard: View {
     @State private var contentHeight: CGFloat = WebCardMetrics.reservedHeight
     /// True once the page published its load-time height: the one and only reflow.
     @State private var measuredHeight = false
-    @State private var overflows = false
     @State private var isVisible = false
     @State private var holdsSlot = false
     @State private var snapshot: UIImage?
@@ -117,12 +117,20 @@ struct RichWebCard: View {
                 RichCardSourceHeader(title: kind.title, showSource: $showSource)
                 if showSource {
                     RichSourcePanel(code: code)
-                } else {
-                    stage
-                    if overflows {
-                        RichOpenButton(
-                            accessibilityText: "Open full screen", action: openArtifactPage)
-                    }
+                }
+                // Hidden, not removed: dismantling the stage would drop the live web view,
+                // and showing it again would reload the page into a blank box.
+                stage
+                    .frame(height: showSource ? 0 : nil)
+                    .clipped()
+                    .opacity(showSource ? 0 : 1)
+                    .allowsHitTesting(!showSource)
+                    .accessibilityHidden(showSource)
+                // Always offered: the page is whole and interactive there, and the long-press
+                // menu was the only other way in for a page that fits the card.
+                if !showSource {
+                    RichOpenButton(
+                        accessibilityText: "Open full screen", action: openArtifactPage)
                 }
             })
         .background { widthReader }
@@ -169,7 +177,6 @@ struct RichWebCard: View {
                 heightFloor: WebCardMetrics.minimumHeight,
                 heightCeiling: heightCap,
                 onHeightChange: { setMeasuredHeight($0) },
-                onOverflowChange: { overflows = $0 },
                 contentRuleList: contentRules,
                 awaitContentRules: true)
             .frame(height: stageHeight)
@@ -217,17 +224,11 @@ struct RichWebCard: View {
     /// A whole page: a full document gets the offline CSP injected; a fragment gets the
     /// sandboxed shell.
     private func makeDocument() -> String {
-        switch kind {
-        case .visualize: RichHTMLDocument.visualize(code: code, dark: dark)
-        case .html: RichHTMLDocument.artifactHTML(source: code, dark: dark)
-        }
+        RichHTMLDocument.artifactHTML(source: code, dark: dark)
     }
 
     private var artifactDocument: ArtifactDocument {
-        switch kind {
-        case .visualize: ArtifactDocument(kind: .visualize(code: code), shareImage: nil)
-        case .html: ArtifactDocument(kind: .html(source: code, fileName: nil), shareImage: nil)
-        }
+        ArtifactDocument(kind: .html(source: code, fileName: nil), shareImage: nil)
     }
 
     /// Open goes to the artifact page (G5 C8): the live stage, source toggle, Reload
@@ -285,20 +286,10 @@ struct RichWebCard: View {
             RichSnapshotCache.store(rendered, for: key, content: contentKey, dark: renderDark)
             // A scheme change while the snapshot rendered made it the wrong picture.
             guard renderDark == dark else { return }
-            noteOverflow(in: rendered, at: renderWidth)
             // The card may have scrolled back and reclaimed a slot while this rendered:
             // its live view stays, and the image is only a cache for the next visit.
             if snapshot == nil, !holdsSlot { snapshot = rendered }
         }
-    }
-
-    /// A snapshot as tall as the card's cap was clipped by it: the page is at least that tall,
-    /// so the card shows the same "Open" the live view would have shown.
-    @MainActor
-    private func noteOverflow(in image: UIImage, at renderWidth: CGFloat) {
-        guard heightCap > 1, image.size.width > 1, renderWidth > 1 else { return }
-        let height = image.size.height * (renderWidth / image.size.width)
-        if height >= heightCap - 0.5 { overflows = true }
     }
 
     /// The page's own load-time height, once. Later reports are ignored here as well as in
@@ -327,7 +318,6 @@ struct RichWebCard: View {
             return
         }
         RichSnapshotCache.store(rendered, for: key, content: contentKey, dark: dark)
-        noteOverflow(in: rendered, at: renderWidth)
         // Scrolled back before the render landed: the live view is showing and keeps the
         // slot; the image waits in the cache for the next visit.
         guard !holdsSlot else { return }

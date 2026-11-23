@@ -12,8 +12,7 @@ struct RichGitHubCard: View {
     @Environment(\.richActions) private var richActions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showSafari = false
-    @State private var info: GitHubLinkInfo?
-    @State private var lookedUp = false
+    @State private var looked: GitHubLinkInfo?
 
     /// The checkout's PR, mirrored by the conversation controller. Nil outside one.
     private var checkoutPR: CheckoutPrStatus? { richActions?.checkoutPR }
@@ -33,9 +32,10 @@ struct RichGitHubCard: View {
         return pr
     }
 
-    private var linkTitle: String {
-        if let info { return info.title }
-        return "\(parsed.slug)\(kindSuffix)"
+    /// The lookup's answer: this card's own, or an earlier visit's (read on the first pass,
+    /// so a remount shows the title and state at once).
+    private var info: GitHubLinkInfo? {
+        looked ?? RichGitHubLookupCache.info(for: url)
     }
 
     private var kindSuffix: String {
@@ -103,9 +103,12 @@ struct RichGitHubCard: View {
 
     /// One lookup per URL, through the controller's forge search — same repo only, and
     /// only when the checkout names its repo. Anything else degrades to the link card
-    /// (a workspace-scoped search must never answer for a foreign repo).
+    /// (a workspace-scoped search must never answer for a foreign repo). The key depends only
+    /// on inputs, never on the lookup's own progress: a key that flipped mid-flight would cancel
+    /// the lookup it started. It turns non-nil when the checkout's PR arrives after the card,
+    /// which is the normal cold-open order.
     private var lookupKey: String? {
-        guard matchedPR == nil, !lookedUp, sameRepo == true else { return nil }
+        guard matchedPR == nil, sameRepo == true else { return nil }
         return url
     }
 
@@ -123,13 +126,13 @@ struct RichGitHubCard: View {
 
     @MainActor
     private func lookup() async {
-        lookedUp = true
         // Same repo only, and only when the checkout names its repo: a
         // workspace-scoped search must never answer for a foreign repo.
-        guard sameRepo == true, let lookup = richActions?.githubLookup else { return }
+        guard lookupKey != nil, info == nil, let lookup = richActions?.githubLookup else { return }
         guard let found = await lookup(parsed) else { return }
         guard !Task.isCancelled else { return }
-        info = found
+        RichGitHubLookupCache.store(found, for: url)
+        looked = found
     }
 
     private func openPRPane() {

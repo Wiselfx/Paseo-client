@@ -20,20 +20,25 @@ struct YouTubeTitleStrip: View {
                     .lineLimit(2)
             }
             HStack(spacing: 6) {
-                Image(systemName: "play")
-                    .font(.glyph(.small, weight: .medium))
-                    .foregroundStyle(Palette.secondaryInk)
-                Text(channel ?? "youtube.com · \(id)")
-                    .font(.paseo(.caption))
-                    .foregroundStyle(Palette.secondaryInk)
-                    .lineLimit(1)
+                // The channel when known, nothing while the title loads or when offline:
+                // a bare "youtube.com · <id>" says nothing a reader can use.
+                if let channel {
+                    Image(systemName: "play")
+                        .font(.glyph(.small, weight: .medium))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .accessibilityHidden(true)
+                    Text(channel)
+                        .font(.paseo(.caption))
+                        .foregroundStyle(Palette.secondaryInk)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 0)
                 if isPlaying {
                     Button("Close", action: onClose)
                         .font(.paseo(.caption, weight: .medium))
                         .foregroundStyle(Palette.secondaryInk)
                         .buttonStyle(.plain)
-                        .frame(minHeight: Metrics.hitSize)
+                        .frame(minWidth: Metrics.hitSize, minHeight: Metrics.hitSize)
                         .contentShape(.rect)
                 }
             }

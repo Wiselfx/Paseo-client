@@ -3,7 +3,7 @@ import PaseoStore
 import SwiftUI
 
 /// The trailing control of a local speech model row: progress while it downloads or extracts,
-/// Delete once installed and unused, Download or Retry otherwise. A sibling of the row's select
+/// Delete once installed and unused, Download or Try again otherwise. A sibling of the row's select
 /// button, never inside it, so each is its own element for VoiceOver and Voice Control.
 struct LocalModelControl: View {
     let model: LocalSpeechModel
@@ -41,7 +41,7 @@ struct LocalModelControl: View {
                 Haptics.light()
                 onDownload()
             } label: {
-                Label(isFailed ? "Retry" : "Download", systemImage: "arrow.down.circle")
+                Label(isFailed ? "Try again" : "Download", systemImage: "arrow.down.circle")
                     .font(.paseo(.footnote, weight: .medium))
             }
             .buttonStyle(.bordered)

@@ -381,10 +381,17 @@ public struct ShellView: View {
     private func select(_ agentId: String, closeDrawer: Bool = true) {
         // Picking an agent always leaves the draft, even when it is the agent the sidebar still
         // shows selected: the row is the way back to the conversation.
-        dropDraft()
-        if selectedAgentId != agentId {
-            selectedAgentId = agentId
-            conversation = session.conversation(for: agentId)
+        let changed = selectedAgentId != agentId
+        // A pick from the sidebar or the panel cross-fades the main surface, like the draft's
+        // first send; startup and automatic adoption (`closeDrawer: false`) stay unanimated.
+        swapMainContent(animated: closeDrawer) {
+            dropDraft()
+            if changed {
+                selectedAgentId = agentId
+                conversation = session.conversation(for: agentId)
+            }
+        }
+        if changed {
             let store = conversation
             Task {
                 // Opening clears the badge on the daemon; refresh so the sidebar row agrees.
@@ -524,23 +531,37 @@ public struct ShellView: View {
             ?? mostRecentWorkspace
         if userInitiated { draftOpenedByUser = true }
         drawer.close()
-        // A new session is not the agent that was on screen: the draft replaces the chat, and
-        // the sidebar stops marking a row as current.
-        selectedAgentId = nil
-        conversation = nil
-        if let current = draft, current.workspaceId == resolved?.id,
-            current.pendingPrompt == nil
-        {
-            return
+        var reusedDraft = false
+        swapMainContent(animated: userInitiated) {
+            // A new session is not the agent that was on screen: the draft replaces the chat, and
+            // the sidebar stops marking a row as current.
+            selectedAgentId = nil
+            conversation = nil
+            if let current = draft, current.workspaceId == resolved?.id,
+                current.pendingPrompt == nil
+            {
+                reusedDraft = true
+                return
+            }
+            let preferences =
+                draft?.preferences ?? DraftStore.shared.formPreferences.draftPreferences
+            // No workspace at all: the draft's hero offers "Add project" instead of a composer
+            // (§2.2), so there is still somewhere to go.
+            draft = DraftSession(
+                workspaceId: resolved?.id, cwd: resolved?.cwd ?? "", preferences: preferences,
+                drafts: .shared)
         }
-        let preferences =
-            draft?.preferences ?? DraftStore.shared.formPreferences.draftPreferences
-        // No workspace at all: the draft's hero offers "Add project" instead of a composer
-        // (§2.2), so there is still somewhere to go.
-        draft = DraftSession(
-            workspaceId: resolved?.id, cwd: resolved?.cwd ?? "", preferences: preferences,
-            drafts: .shared)
-        rememberScreen()
+        if !reusedDraft { rememberScreen() }
+    }
+
+    /// Changes what the main surface shows. Animated, it cross-fades (`Motion.fade`, which
+    /// Reduce Motion shortens), so the swap does not cut under the sliding drawer.
+    private func swapMainContent(animated: Bool, _ change: () -> Void) {
+        if animated {
+            withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) { change() }
+        } else {
+            change()
+        }
     }
 
     /// The workspace with the newest activity, for “New session” with no conversation on

@@ -123,9 +123,12 @@ struct RichRemoteImage: View {
         return scheme == "http" || scheme == "https" ? url : nil
     }
 
-    /// One load per (URL, pixel bucket, retry). Nothing here runs per scroll frame.
+    /// One load per (URL, pixel bucket, retry, offline). The offline flag is part of the key so
+    /// a card that stopped at "No connection" loads by itself when the connection returns.
+    /// Nothing here runs per scroll frame.
     private var loadKey: String {
-        "\(urlString)|\(MediaSizing.pixelWidth(points: width, scale: displayScale))|\(retryToken)"
+        let bucket = MediaSizing.pixelWidth(points: width, scale: displayScale)
+        return "\(urlString)|\(bucket)|\(retryToken)|\(policy == .cacheOnly)"
     }
 
     /// What the card's box is doing, as one value: a placeholder at a reserved ratio, the image
@@ -277,10 +280,24 @@ struct RichRemoteImage: View {
         if stateURL != urlString { adoptState(for: urlString) }
         // No width yet: a fetch at a guessed size would only be thrown away.
         guard width > 1 else { return }
-        // Offline fails closed: no fetch, the offline failure shows. Every other link fetches.
+        // Offline fails closed: no fetch. A picture another card already loaded this session
+        // still shows; otherwise the offline failure does, and the connection returning
+        // reruns this task.
         if policy == .cacheOnly {
+            if image == nil,
+                let cached = MediaPipeline.cached(for: MediaPipeline.cacheIdentity(for: urlString))
+            {
+                image = cached.image
+                aspectRatio = cached.aspectRatio
+                failure = nil
+            }
             if image == nil, failure == nil { failure = .offline }
             return
+        }
+        if failure == .offline {
+            // Back online: the placeholder replaces the offline failure while it loads.
+            failure = nil
+            keepsFailureBox = true
         }
         guard let url = target else {
             failure = .badURL
@@ -338,11 +355,9 @@ struct RichRemoteImage: View {
             aspectRatio = knownAspect
             MediaMetadataCache.remember(knownAspect, for: identity)
         }
-        let dark = colorScheme == .dark
-        let html = RichHTMLDocument.rawSVG(source: source, dark: dark)
         guard
-            let rendered = await RichSnapshotQueue.shared.snapshot(
-                html: html, width: width, scale: displayScale)
+            let rendered = await RichSVGImageRender.image(
+                source: source, width: width, scale: displayScale, dark: colorScheme == .dark)
         else {
             // A render skipped because the card scrolled away is not a decoding failure.
             if !Task.isCancelled { failure = .decoding }

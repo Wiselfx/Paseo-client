@@ -27,6 +27,7 @@ struct ComposerPrimaryButton: View {
         .disabled(!isEnabled)
         .simultaneousGesture(queuesOnLongPress)
         .accessibilityLabel(label)
+        .accessibilityHint(queueHint)
         .modifier(QueueAction(action: onQueue))
         .accessibilityIdentifier(identifier)
         // ⌘↩ means send and nothing else: in any other state the chord must not start voice mode
@@ -138,6 +139,11 @@ struct ComposerPrimaryButton: View {
         case .stop: "Stop response"
         case .voiceActive: isMuted ? "Unmute voice mode" : "Mute Voice mode"
         }
+    }
+
+    /// Names the long press where queueing exists, for VoiceOver and Voice Control users.
+    private var queueHint: String {
+        state == .send && onQueue != nil ? "Touch and hold to queue the message" : ""
     }
 
     private var identifier: String {

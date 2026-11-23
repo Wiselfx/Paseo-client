@@ -81,6 +81,8 @@ struct ComposerView: View {
     @Environment(\.composerFocusRequested) private var composerFocusRequested
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(DefaultSendBehavior.storageKey) private var defaultSend = DefaultSendBehavior.steer.rawValue
+    /// The one-time tip about touch-and-hold queueing has been shown.
+    @AppStorage(PaseoSettingsKeys.queueHintSeen) private var queueHintSeen = false
 
     /// How many lines the field grows to before it scrolls (`ComposerFieldLimit`). The screen
     /// measures the space it offers and passes the answer in: the composer's own height follows its
@@ -681,9 +683,18 @@ struct ComposerView: View {
             queueDraft()
             return
         }
-        let behavior: String? =
-            store?.isRunning == true && defaultSendBehavior == .interrupt ? "interrupt" : nil
+        let running = store?.isRunning == true
+        let behavior: String? = running && defaultSendBehavior == .interrupt ? "interrupt" : nil
         send(behavior: behavior)
+        if running { teachQueueGesture() }
+    }
+
+    /// Queueing is a touch-and-hold on Send, which nothing on screen names. The first time a
+    /// message goes out while a turn runs, a toast says so once; the tap itself is unchanged.
+    private func teachQueueGesture() {
+        guard !queueHintSeen, let controller else { return }
+        queueHintSeen = true
+        controller.showToast("Tip: touch and hold Send to queue a message instead")
     }
 
     /// Long-press on the send button: the opposite of the default between steer and queue
@@ -810,7 +821,7 @@ struct ComposerView: View {
     /// Pasted images, in pasteboard order, through the same path a picked photo takes.
     private func attachPastedImages(_ images: [Data]) {
         guard !images.isEmpty else {
-            reportAttachmentError("Failed to paste image")
+            reportAttachmentError("Couldn't paste that image.")
             return
         }
         for data in images {

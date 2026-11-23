@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import SwiftUI
+import class SwiftTerm.TerminalView
 import UIKit
 
 /// The shell's one moving part.
@@ -8,6 +9,9 @@ import UIKit
 /// panel card slides in from the right over both. Every move is one `UIViewPropertyAnimator` with
 /// a critically damped spring, seeded with the finger's velocity, and a pan that starts during a
 /// settle grabs the surface where it is (R5 §1–§3).
+///
+/// With Reduce Motion on nothing travels: the panel cross-fades over the conversation, and the
+/// sidebar fades in while the conversation card steps aside at once, with no parallax.
 @MainActor
 final class ShellContainerController: UIViewController, UIGestureRecognizerDelegate {
     private let drawer: ShellDrawer
@@ -164,9 +168,23 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
     /// The one place that writes the four moving values. Called inside an animator's animation
     /// block for a settle, and with actions disabled while a finger drives it.
     private func applyModel(sidebar s: CGFloat, panel p: CGFloat) {
-        conversationCard.transform = CGAffineTransform(
-            translationX: drawerWidth * s - parallax * p, y: 0)
-        panelCard.transform = CGAffineTransform(translationX: width * (1 - p), y: 0)
+        if UIAccessibility.isReduceMotionEnabled {
+            // Cross-fade instead of slide and parallax (accessibility.md: opacity, not travel).
+            // The transforms step; only the alphas ride the animator.
+            UIView.performWithoutAnimation {
+                conversationCard.transform = CGAffineTransform(
+                    translationX: s > 0 ? drawerWidth : 0, y: 0)
+                panelCard.transform = .identity
+            }
+            sidebarHost.view.alpha = s
+            panelCard.alpha = p
+        } else {
+            conversationCard.transform = CGAffineTransform(
+                translationX: drawerWidth * s - parallax * p, y: 0)
+            panelCard.transform = CGAffineTransform(translationX: width * (1 - p), y: 0)
+            sidebarHost.view.alpha = 1
+            panelCard.alpha = 1
+        }
         // No scrim: the dim view draws nothing, and the front card's shadow supplies the depth (E2 §1).
         // It must stay hit-testable while a surface is on screen: UIKit skips hit-testing below
         // alpha 0.01, so a zero alpha let the tap-to-close never arrive (N3 E).
@@ -253,7 +271,23 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
             if target == .sidebar { view.endEditing(true) }
         }
         applyChrome()
-        if changed { drawer.onStateChange?(target) }
+        if changed {
+            announceSurfaceChange(to: target)
+            drawer.onStateChange?(target)
+        }
+    }
+
+    /// VoiceOver: the surface that just opened (or the conversation that was uncovered) becomes
+    /// the screen, so focus leaves the control that was hidden by the move and lands on the new
+    /// surface's first element.
+    private func announceSurfaceChange(to target: ShellDrawer.Surface) {
+        let focus: UIView
+        switch target {
+        case .sidebar: focus = sidebarHost.view
+        case .panel: focus = panelHost.view
+        case .none: focus = conversationHost.view
+        }
+        UIAccessibility.post(notification: .screenChanged, argument: focus)
     }
 
     private func applyRoots() {
@@ -337,6 +371,17 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
     /// A pan that starts during a settle stops the surface dead where it is and keeps tracking.
     private func interruptMotion() {
         guard let animator, animator.isRunning else { return }
+        if UIAccessibility.isReduceMotionEnabled {
+            // Nothing travels under Reduce Motion: the progress is the fade's opacity.
+            let sidebarAlpha = sidebarHost.view.layer.presentation()?.opacity ?? sidebarHost.view.layer.opacity
+            let panelAlpha = panelCard.layer.presentation()?.opacity ?? panelCard.layer.opacity
+            animator.stopAnimation(true)
+            self.animator = nil
+            sidebarProgress = min(max(CGFloat(sidebarAlpha), 0), 1)
+            panelProgress = min(max(CGFloat(panelAlpha), 0), 1)
+            writeModel(sidebar: sidebarProgress, panel: panelProgress)
+            return
+        }
         let conversationX =
             conversationCard.layer.presentation()?.transform.m41
             ?? conversationCard.layer.transform.m41
@@ -394,8 +439,8 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
         scrollView.isScrollEnabled && scrollView.contentSize.width > scrollView.bounds.width + 1
     }
 
-    /// The touch's own view, or one of its ancestors: a horizontally scrollable scroll view, or
-    /// text that is being edited, owns the gesture instead.
+    /// The touch's own view, or one of its ancestors: a horizontally scrollable scroll view,
+    /// text that is being edited, or the terminal, owns the gesture instead.
     private func isBlocked(at point: CGPoint) -> Bool {
         guard let hit = view.hitTest(point, with: nil) else { return false }
         var node: UIView? = hit
@@ -404,6 +449,10 @@ final class ShellContainerController: UIViewController, UIGestureRecognizerDeleg
                 return true
             }
             if current is UITextInput, current.isFirstResponder { return true }
+            // The terminal owns its drags (text selection, scrollback): SwiftTerm's `TerminalView`
+            // is a `UIScrollView` whose content is not wider than its frame, so the check above
+            // never sees it.
+            if current is TerminalView { return true }
             node = current.superview
         }
         return false

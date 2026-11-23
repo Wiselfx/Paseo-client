@@ -1126,7 +1126,7 @@ extension EnvironmentValues {
         guard let image = UIPasteboard.general.image,
             let data = image.jpegData(compressionQuality: 1.0)
         else {
-            showToast("Failed to paste image")
+            showToast("Couldn't paste that image.")
             return
         }
         attachImageData(data, fileName: "pasted-\(UUID().uuidString.prefix(8)).jpg")

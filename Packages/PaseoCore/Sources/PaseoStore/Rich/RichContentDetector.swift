@@ -40,12 +40,9 @@ public enum RichContentBlock: Sendable, Equatable {
     /// §1.6 — a raw inline `<svg>…</svg>` block, at most `RichContentDetector.rawSVGMaxLength`
     /// bytes. Scripts never run (image context); unclosed blocks stay text.
     case rawSVG(source: String, range: Range<String.Index>)
-    /// §2 — a ` ```visualize ` fence with a non-blank body: a self-contained HTML
-    /// fragment hosting the sandboxed stage. Unclosed (streaming) fences are detected.
-    case visualize(code: String, range: Range<String.Index>)
     /// V2 — a closed ` ```html ` (or ` ```htm `) fence whose body is an HTML document or
-    /// fragment: the same sandboxed page as a visualize fence. A streaming fence stays a
-    /// code block, so a half-written page never flashes.
+    /// fragment, hosted in a sandboxed page. A streaming fence stays a code block, so a
+    /// half-written page never flashes.
     case htmlArtifact(code: String, range: Range<String.Index>)
     /// C9 — a closed ` ```mermaid ` fence with a non-blank body: a diagram the client
     /// renders natively. A streaming (unclosed) fence stays a code block until it closes.
@@ -91,7 +88,6 @@ public extension RichContentBlock {
              .localImage(_, _, let range),
              .localFileLink(_, let range),
              .rawSVG(_, let range),
-             .visualize(_, let range),
              .htmlArtifact(_, let range),
              .mermaid(_, let range),
              .localMedia(_, _, let range),
@@ -125,7 +121,7 @@ public struct YouTubeURLHit: Sendable, Equatable {
     }
 }
 
-/// Detects rich content in assistant Markdown (the §1 kinds and the §2 viz fence).
+/// Detects rich content in assistant Markdown (the §1 kinds and the §2 artifact fences).
 /// All functions are pure; nothing touches the network or disk.
 public enum RichContentDetector {
     /// §1.6 — `RAW_SVG_MAX_CHARS`. Blocks larger than this stay text.
@@ -154,11 +150,6 @@ public enum RichContentDetector {
             let body = RichArtifactEntities.decodedArtifactBody(fence.body)
             let bodyIsBlank = body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             switch language {
-            case "visualize":
-                // §2 — fence value must be non-blank or the fence renders nothing.
-                if !wantsSource, !bodyIsBlank {
-                    blocks.append(.visualize(code: body, range: fence.range))
-                }
             case "html", "htm":
                 // V2 — what models already write. Closed only: an open fence stays a code
                 // block until it closes, so a half-written page never flashes.
@@ -436,9 +427,10 @@ public enum RichContentDetector {
     }
 
     /// M17 — a strict standalone map reference (the whole trimmed line): a `lat, lng`
-    /// coordinate pair (decimal point required, latitude −90…90, longitude −180…180),
-    /// a `geo:` URI, or an Apple/Google Maps URL. Anything looser — street addresses,
-    /// coordinates in prose — is deliberately not a map: no fuzzy guessing.
+    /// coordinate pair (latitude −90…90, longitude −180…180, at least
+    /// `bareCoordinateDecimals` decimals each, or any decimals behind an explicit label such
+    /// as `Location:`), a `geo:` URI, or an Apple/Google Maps URL. Anything looser — street
+    /// addresses, coordinates in prose, `1.5, 2.5` — is deliberately not a map.
     public static func mapReference(forLine line: String) -> MapReference? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -446,7 +438,12 @@ public enum RichContentDetector {
             guard let (lat, lng) = parseCoordinatePair(String(trimmed.dropFirst(4))) else { return nil }
             return MapReference(url: trimmed, latitude: lat, longitude: lng)
         }
-        if let pair = parseCoordinatePair(trimmed) {
+        if let pair = parseCoordinatePair(trimmed, minimumDecimals: bareCoordinateDecimals) {
+            return MapReference(url: trimmed, latitude: pair.0, longitude: pair.1)
+        }
+        if let label = coordinateLabels.first(where: { trimmed.lowercased().hasPrefix($0) }),
+            let pair = parseCoordinatePair(String(trimmed.dropFirst(label.count)))
+        {
             return MapReference(url: trimmed, latitude: pair.0, longitude: pair.1)
         }
         guard isBareURLLineLike(trimmed) else { return nil }
@@ -459,21 +456,38 @@ public enum RichContentDetector {
             && !line.contains(where: { $0.isWhitespace })
     }
 
-    /// `lat, lng` — both parts must be plain decimals (a decimal point is required so
-    /// year pairs and fractions never match) and in range.
-    private static func parseCoordinatePair(_ text: String) -> (Double, Double)? {
+    /// A bare pair needs this many decimals on each value: real coordinates carry four or
+    /// more, and `3.14, 2.71` or `1.5, 2.5` in a note is not a place.
+    private static let bareCoordinateDecimals = 3
+
+    /// Explicit cues that make a line a coordinate pair whatever its precision.
+    private static let coordinateLabels = [
+        "coordinates:", "coordinate:", "coords:", "location:", "lat/lng:", "lat/long:",
+        "lat,lng:", "latlng:",
+    ]
+
+    /// `lat, lng` — both parts must be plain decimals with at least `minimumDecimals`
+    /// digits after the point (a decimal point is required so year pairs and fractions
+    /// never match) and in range.
+    private static func parseCoordinatePair(
+        _ text: String, minimumDecimals: Int = 1
+    ) -> (Double, Double)? {
         let semicolonHead = text.split(separator: ";", omittingEmptySubsequences: true).first.map(String.init) ?? text
         let head = semicolonHead.split(separator: "&", omittingEmptySubsequences: false).first.map(String.init) ?? semicolonHead
         let parts = head.split(separator: ",", omittingEmptySubsequences: false)
         guard parts.count == 2 else { return nil }
-        guard let lat = parseDecimal(parts[0]), let lng = parseDecimal(parts[1]) else { return nil }
+        guard let lat = parseDecimal(parts[0], minimumDecimals: minimumDecimals),
+            let lng = parseDecimal(parts[1], minimumDecimals: minimumDecimals)
+        else { return nil }
         guard (-90...90).contains(lat), (-180...180).contains(lng) else { return nil }
         return (lat, lng)
     }
 
-    private static func parseDecimal(_ part: Substring) -> Double? {
+    private static func parseDecimal(_ part: Substring, minimumDecimals: Int) -> Double? {
         let trimmed = part.trimmingCharacters(in: .whitespaces)
-        guard trimmed.contains(".") else { return nil }
+        guard let point = trimmed.firstIndex(of: "."),
+            trimmed[trimmed.index(after: point)...].count >= minimumDecimals
+        else { return nil }
         var body = trimmed[...]
         if body.first == "-" || body.first == "+" { body = body.dropFirst() }
         guard !body.isEmpty,
@@ -1111,7 +1125,8 @@ private func isBareURLChar(_ char: Character) -> Bool {
 /// `(~?\/[^\s`'"[\]()<>]*)` with the boundary rule: the char before the match must be
 /// start-of-text, space, \n, \t, `(`, `[`, `"` or `'`. Trailing `.,;:!?` is trimmed;
 /// minimum length 2; image extensions become images (alt = basename), the rest
-/// `file://` links. Relative and Windows drive paths never match.
+/// `file://` links. Relative and Windows drive paths never match. A match must also have a
+/// path shape (`hasLocalPathShape`): a single-segment word such as `/compact` is text.
 func scanLocalPaths(in segment: Substring, into blocks: inout [RichContentBlock]) {
     var i = segment.startIndex
     while i < segment.endIndex {
@@ -1148,6 +1163,10 @@ func scanLocalPaths(in segment: Substring, into blocks: inout [RichContentBlock]
             i = segment.index(after: i) // lone slash: not a path
             continue
         }
+        guard hasLocalPathShape(raw) else {
+            i = trimEnd // a slash word such as `/compact`: plain text, skip the whole word
+            continue
+        }
         if RichContentDetector.isLocalImagePath(raw) {
             let base = raw.split(separator: "/", omittingEmptySubsequences: true).last.map(String.init) ?? raw
             blocks.append(.localImage(path: raw, alt: base, range: matchStart..<trimEnd))
@@ -1156,6 +1175,16 @@ func scanLocalPaths(in segment: Substring, into blocks: inout [RichContentBlock]
         }
         i = trimEnd
     }
+}
+
+/// Whether a slash-prefixed match looks like a file path rather than a slash command or
+/// a bare word. A `~/` path always does (home prefix); an absolute path needs two or more
+/// segments (`/tmp/a.log`) or a dotted name (`/notes.txt`). `/compact` and `/clear` do not.
+func hasLocalPathShape(_ raw: String) -> Bool {
+    if raw.hasPrefix("~/") { return raw.count > 2 }
+    let segments = raw.split(separator: "/", omittingEmptySubsequences: true)
+    guard let last = segments.last else { return false }
+    return segments.count >= 2 || last.contains(".")
 }
 
 private func isPathChar(_ char: Character) -> Bool {

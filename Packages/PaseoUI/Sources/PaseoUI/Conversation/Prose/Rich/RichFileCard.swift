@@ -118,13 +118,25 @@ struct RichFileCard: View {
     var body: some View {
         // Read once: until the size lands each read searches the cached directory listing.
         let meta = metaText
-        Button(action: open) {
-            PaseoCard(content:
-                RichFileRow(
-                    fileName: fileName, meta: meta, glyph: glyph,
-                    thumbnail: pdfThumbnail, downloading: downloading))
+        Group {
+            if loadFailed || overLimit {
+                // A failed or refused download says so, in the image cards' failure
+                // wording, and offers Try again where trying again can help.
+                PaseoCard(content:
+                    RichFileFailureRow(
+                        fileName: fileName, overLimit: overLimit, onRetry: open))
+            } else {
+                Button(action: open) {
+                    PaseoCard(content:
+                        RichFileRow(
+                            fileName: fileName, meta: meta, glyph: glyph,
+                            thumbnail: pdfThumbnail, downloading: downloading))
+                }
+                .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
+                .paseoCardAccessibility(
+                    kind: "File", title: fileName, meta: meta, isButton: true)
+            }
         }
-        .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
         .paseoCardMenu(
             openTitle: opensInWorkspaceViewer ? "Open" : nil,
             onOpen: opensInWorkspaceViewer ? { open() } : nil,
@@ -132,7 +144,6 @@ struct RichFileCard: View {
             copyTitle: "Copy path",
             copyText: path,
             filePath: path)
-        .paseoCardAccessibility(kind: "File", title: fileName, meta: meta, isButton: true)
         .paseoFeedback(.light, trigger: downloadTap)
         .task(id: path) { await loadMetadata() }
         .fullScreenCover(isPresented: $showQuickLook) {
@@ -197,9 +208,9 @@ struct RichFileCard: View {
             richActions?.openFile(path)
             return
         }
-        // The 64 MB cap row and the failure row both retry on tap: the cap retries
-        // into the same honest answer, a failure retries the fetch.
+        // Try again on the failure row lands here too: it clears the failure and fetches.
         overLimit = false
+        loadFailed = false
         downloadTap += 1
         Task { @MainActor in
             await downloadAndPreview()
@@ -212,7 +223,12 @@ struct RichFileCard: View {
     /// preview the kind, else the share sheet. The card keeps its box throughout.
     @MainActor
     private func downloadAndPreview() async {
-        guard !downloading, let ref else { return }
+        guard !downloading else { return }
+        guard let ref else {
+            // No workspace to fetch from: say so instead of doing nothing.
+            loadFailed = true
+            return
+        }
         downloading = true
         defer { downloading = false }
         let result = await MediaPipeline.shared.fetchDaemonFile(ref: ref, maxBytes: 64 * 1024 * 1024)

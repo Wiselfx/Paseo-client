@@ -6,7 +6,7 @@ import WebKit
 
 // MARK: - ArtifactDocument (G4 C9, G5 C8)
 
-// NOTE: RemoteImagePipeline/G4: G4 ships the mermaid kind; G5 adds visualize/svg/html
+// NOTE: RemoteImagePipeline/G4: G4 ships the mermaid kind; G5 adds svg/html
 // and grows this page (title extraction, Reload, Share as .html, Preview entries).
 // NOTE: RemoteImagePipeline/G5: no viz bridges (`sendPrompt`/`saveState`/`loadState`)
 // on this page — they do not exist in the inline card either (verified by grep:
@@ -25,8 +25,6 @@ struct ArtifactDocument: Identifiable, Equatable, @unchecked Sendable {
     enum Kind: Equatable, Sendable {
         /// A rendered diagram: the live vector SVG plus the snapshot for Share.
         case mermaid(source: String, svg: String?, snapshot: UIImage?)
-        /// A ` ```visualize ` fence: the self-contained interactive stage.
-        case visualize(code: String)
         /// A raw `<svg>` block.
         case svg(source: String)
         /// An html fence, or a `.html` file: a full document when the source carries
@@ -41,7 +39,6 @@ struct ArtifactDocument: Identifiable, Equatable, @unchecked Sendable {
     var id: String {
         switch kind {
         case .mermaid(let source, _, _): "mermaid:\(source.hashValue)"
-        case .visualize(let code): "visualize:\(code.hashValue)"
         case .svg(let source): "svg:\(source.hashValue)"
         case .html(let source, let fileName):
             "html:\(fileName ?? ""):\(source.hashValue)"
@@ -53,7 +50,6 @@ struct ArtifactDocument: Identifiable, Equatable, @unchecked Sendable {
     var title: String {
         switch kind {
         case .mermaid: "Diagram"
-        case .visualize: "Visualization"
         case .svg: "SVG"
         case .html(let source, let fileName):
             ArtifactTitle.extract(html: source) ?? fileName ?? "HTML"
@@ -67,8 +63,6 @@ struct ArtifactDocument: Identifiable, Equatable, @unchecked Sendable {
             // Static SVG: scripts never run (the CSP has no `script-src`).
             guard let svg else { return nil }
             return RichHTMLDocument.artifactSVG(source: svg, dark: dark)
-        case .visualize(let code):
-            return RichHTMLDocument.visualize(code: code, dark: dark)
         case .svg(let source):
             return RichHTMLDocument.rawSVG(source: source, dark: dark)
         case .html(let source, _):
@@ -80,7 +74,6 @@ struct ArtifactDocument: Identifiable, Equatable, @unchecked Sendable {
     var sourceText: String {
         switch kind {
         case .mermaid(let source, _, _): source
-        case .visualize(let code): code
         case .svg(let source): source
         case .html(let source, _): source
         }
@@ -90,7 +83,7 @@ struct ArtifactDocument: Identifiable, Equatable, @unchecked Sendable {
     var canReload: Bool {
         switch kind {
         case .mermaid, .svg: false
-        case .visualize, .html: true
+        case .html: true
         }
     }
 

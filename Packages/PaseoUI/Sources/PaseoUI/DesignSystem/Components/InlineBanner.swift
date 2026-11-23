@@ -109,7 +109,7 @@ struct InlineBanner: View {
         InlineBanner(.warning, title: "Warning banner", systemImage: "exclamationmark.triangle")
         InlineBanner(
             .failure, title: "Failure banner", message: "Something went wrong.",
-            systemImage: "xmark.octagon", action: ("Retry", {}), onDismiss: {})
+            systemImage: "xmark.octagon", action: ("Try again", {}), onDismiss: {})
     }
     .padding()
     .background(Palette.background)

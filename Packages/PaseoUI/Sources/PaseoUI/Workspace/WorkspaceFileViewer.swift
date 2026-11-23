@@ -246,7 +246,7 @@ struct WorkspaceFileViewer: View {
             case .failure(let error):
                 guard !WorkspaceShare.isUserCancellation(error) else { return }
                 Haptics.failure()
-                shareFailure = "Couldn't save: \(error.localizedDescription)"
+                shareFailure = "Couldn't save the file."
             }
         }
         .onChange(of: isExporting) { _, exporting in

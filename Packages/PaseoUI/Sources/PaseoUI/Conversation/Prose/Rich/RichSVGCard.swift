@@ -28,6 +28,9 @@ struct RichSVGCard: View {
     }
 
     @State private var image: UIImage?
+    /// The render ended without an image (WebKit refused): the source shows instead of a
+    /// spinner that never ends.
+    @State private var renderFailed = false
     @State private var showSource = false
     @State private var showViewer = false
     /// The card's measured width. Until its first layout the card reads the prose column's width
@@ -115,6 +118,10 @@ struct RichSVGCard: View {
             .matchedTransitionSource(id: contentKey, in: zoom)
             .accessibilityLabel("SVG drawing")
             .accessibilityHint("Opens the drawing full screen")
+        } else if renderFailed {
+            // Honest and calm in the same card: the source is what the renderer could not
+            // turn into a picture (like the web card).
+            RichSourcePanel(code: code)
         } else {
             Rectangle()
                 .fill(Palette.codeSurface)
@@ -152,6 +159,7 @@ struct RichSVGCard: View {
     @MainActor
     private func render() async {
         guard let key = renderKey else { return }
+        renderFailed = false
         if let cached = RichSnapshotCache.image(for: key) {
             image = cached
             return
@@ -159,7 +167,11 @@ struct RichSVGCard: View {
         let html = RichHTMLDocument.rawSVG(source: code, dark: dark)
         let rendered = await RichSnapshotQueue.shared.snapshot(
             html: html, width: width, scale: displayScale)
-        guard !Task.isCancelled, let rendered else { return }
+        guard !Task.isCancelled else { return }
+        guard let rendered else {
+            renderFailed = true
+            return
+        }
         RichSnapshotCache.store(rendered, for: key, content: contentKey, dark: dark)
         image = rendered
     }

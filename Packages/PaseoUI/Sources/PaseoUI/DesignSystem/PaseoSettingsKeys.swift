@@ -17,5 +17,7 @@ public enum PaseoSettingsKeys {
     public static let diffHideWhitespace = "paseo.diff.hideWhitespace"
     public static let diffWrapLongLines = "paseo.diff.wrapLongLines"
     public static let diffCollapseAllHunks = "paseo.diff.collapseAllHunks"
+    /// Set once the composer has taught the touch-and-hold queue gesture (a one-time tip).
+    public static let queueHintSeen = "paseo.composer.queueHintSeen"
 }
 #endif

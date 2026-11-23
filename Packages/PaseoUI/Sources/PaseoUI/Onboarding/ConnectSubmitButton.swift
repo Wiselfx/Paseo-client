@@ -14,7 +14,7 @@ struct ConnectSubmitButton: View {
         Button(action: action) {
             Text(
                 connecting
-                    ? "Connecting…" : (status.isFailed ? "Retry" : "Connect"))
+                    ? "Connecting…" : (status.isFailed ? "Try again" : "Connect"))
         }
         .buttonStyle(.paseoPrimary(isWorking: connecting))
         .disabled(!canConnect)

@@ -30,6 +30,7 @@ struct InlineYouTubePlayer: UIViewRepresentable {
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.loadHTMLString(Self.document(for: referenceID), baseURL: Self.origin)
         context.coordinator.loadedOrigin = Self.origin
         return webView
@@ -42,6 +43,7 @@ struct InlineYouTubePlayer: UIViewRepresentable {
         // delegate makes sure the media session ends with the view.
         webView.stopLoading()
         webView.navigationDelegate = nil
+        webView.uiDelegate = nil
         webView.pauseAllMediaPlayback {}
     }
 
@@ -66,8 +68,22 @@ struct InlineYouTubePlayer: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var loadedOrigin: URL?
+
+        /// A link the embed opens in a new window ("Watch on YouTube"): without a UI delegate
+        /// WebKit drops it and the tap does nothing, so web links go to the system browser.
+        func webView(
+            _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if let url = navigationAction.request.url,
+                url.scheme == "https" || url.scheme == "http"
+            {
+                UIApplication.shared.open(url)
+            }
+            return nil
+        }
 
         /// The document load is allowed; a main-frame navigation away from it (YouTube's own
         /// "Watch on YouTube") is cancelled — the card's menu opens the app instead.

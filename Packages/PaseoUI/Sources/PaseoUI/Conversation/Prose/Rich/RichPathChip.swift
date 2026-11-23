@@ -14,6 +14,7 @@ struct RichPathChip: View {
 
     @Environment(\.richActions) private var richActions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.toast) private var toast
     /// Bumped on a pasteboard copy (no `RichActions`): the copy haptic, once per tap.
     @State private var copyTaps = 0
 
@@ -52,6 +53,8 @@ struct RichPathChip: View {
             UIPasteboard.general.string = path
             copyTaps += 1
         }
+        // The haptic alone is invisible: say what happened.
+        toast?.show("Path copied", systemImage: "checkmark")
     }
 }
 #endif

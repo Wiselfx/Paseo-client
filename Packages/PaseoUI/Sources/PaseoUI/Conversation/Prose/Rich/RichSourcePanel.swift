@@ -11,6 +11,7 @@ struct RichSourcePanel: View {
     var role: TextRole = .codeCaption
 
     @Environment(\.richActions) private var richActions
+    @Environment(\.toast) private var toast
     /// Bumped on a pasteboard copy (no `RichActions`): the copy haptic, once per tap.
     @State private var copyTaps = 0
 
@@ -48,6 +49,7 @@ struct RichSourcePanel: View {
             UIPasteboard.general.string = code
             copyTaps += 1
         }
+        toast?.show("Source copied", systemImage: "checkmark")
     }
 }
 #endif

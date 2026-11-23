@@ -137,7 +137,9 @@ struct VideoCard: View {
                     header: PaseoCardHeader(title: fileName, meta: metaText))
             }
         }
-            .task(id: cardID) { await prepare() }
+            // The connectivity flag is part of the id: a card that stopped at the tap box while
+            // offline prepares its poster by itself when the connection returns.
+            .task(id: "\(cardID)|\(policy == .cacheOnly)") { await prepare() }
             .onDisappear { tearDown() }
             .onScrollVisibilityChange(threshold: 0.05) { visible in
                 // Far enough off screen: pause rather than let audio keep running.
@@ -150,8 +152,6 @@ struct VideoCard: View {
                 onShare: shareTarget != nil ? { showShare = true } : nil,
                 copyTitle: "Copy link",
                 copyText: copyLinkText,
-                externalTitle: "Open in Files",
-                externalURL: nil,
                 filePath: filePath)
             // Once AVKit's player is on screen its transport controls must stay separate
             // elements: combining the card would hide them behind one "Video" button.

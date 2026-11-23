@@ -20,6 +20,10 @@ final class ShellDrawer {
     var trailingEdgeReserved = false
     /// The panel's inner `NavigationStack` is deeper than its root (R7's Files stack).
     var panelHandlesBack = false
+    /// Pops one pushed page (a folder, or a file) of the panel's Files stack; nil while the panel
+    /// is at its root. The header's back chevron calls it first and closes the panel only when
+    /// it is nil, so Back means one level up everywhere.
+    var panelPopOne: (() -> Void)?
     /// Called once per committed change, so the shell can mirror it for accessibility and pausing.
     var onStateChange: ((Surface) -> Void)?
     /// The sidebar's search route, called by ⌘K. The sidebar sets it.

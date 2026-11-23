@@ -33,7 +33,7 @@ struct MermaidDetectorTests {
         }
     }
 
-    /// C9 — a blank body renders nothing, like the visualize fence.
+    /// C9 — a blank body renders nothing, like the other artifact fences.
     @Test func blankBodyYieldsNothing() {
         #expect(detected("```mermaid\n   \n```").isEmpty)
         #expect(detected("```mermaid\n```").isEmpty)

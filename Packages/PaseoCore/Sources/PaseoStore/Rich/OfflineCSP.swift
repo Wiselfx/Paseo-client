@@ -3,7 +3,7 @@ import Foundation
 // MARK: - OfflineCSP (G5 artifact hardening)
 
 // NOTE: RemoteImagePipeline/G5: chat artifacts stay offline. Documents the client builds
-// (`visualize`, `rawSVG`, `artifactSVG`, `artifactHTML` shell) carry a no-network CSP by
+// (`html`, `rawSVG`, `artifactSVG`, `artifactHTML` shell) carry a no-network CSP by
 // construction; this type covers the one case they cannot: an agent-written *full*
 // document, which arrives with its own `<head>`. Injecting the meta is the second layer
 // (the first is the `WKContentRuleList` on the rendering web view); the export shares

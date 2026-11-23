@@ -130,11 +130,6 @@ public struct ConversationMediaIndex: Sendable, Equatable {
             itemKind = .diagram
             ref = source
             title = "Diagram"
-        case .visualize(let code, _):
-            id = "artifact:\(code.hashValue)"
-            itemKind = .artifact
-            ref = code
-            title = "Visualization"
         case .htmlArtifact(let code, _):
             id = "artifact:\(code.hashValue)"
             itemKind = .artifact

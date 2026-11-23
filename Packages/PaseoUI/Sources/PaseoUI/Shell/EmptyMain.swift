@@ -2,13 +2,23 @@
 import PaseoStore
 import SwiftUI
 
-/// No agent and no draft: the brand mark, and a retry when the agent list failed (R5 §4.4).
+/// No agent and no draft: the brand mark, and a retry when the agent list or the workspace
+/// directory failed to load (R5 §4.4), so the first screen is never a dead end.
 struct EmptyMain: View {
     let session: HostSession
     let onOpenSidebar: () -> Void
 
-    private func refreshAgents() {
-        Task { await session.refreshAgents() }
+    /// The load failure to show: the agent list's, else the workspace directory's.
+    private var loadError: String? {
+        session.agentsError ?? session.workspaceDirectory.error
+    }
+
+    /// Retries both loads, like the sidebar's banner: either one can be what failed.
+    private func retry() {
+        Task {
+            await session.workspaceDirectory.refresh()
+            await session.refreshAgents()
+        }
     }
 
     var body: some View {
@@ -25,8 +35,8 @@ struct EmptyMain: View {
             ClaudeHomeHero()
         }
         .overlay(alignment: .bottom) {
-            if let error = session.agentsError {
-                InlineBanner(.failure, title: error, action: ("Try again", refreshAgents))
+            if let error = loadError {
+                InlineBanner(.failure, title: error, action: ("Try again", retry))
                     .padding(.horizontal, Space.lg)
                     .padding(.bottom, Space.xl)
             }

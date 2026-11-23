@@ -57,7 +57,7 @@ struct EmptyState: View {
             message: "Subagents your provider runs for this agent appear here.")
         EmptyState(
             systemImage: "tray", title: "Nothing here", message: "Detail line.",
-            action: (title: "Retry", run: {}))
+            action: (title: "Try again", run: {}))
         EmptyState(title: "No title glyph")
     }
     .background(Palette.background)

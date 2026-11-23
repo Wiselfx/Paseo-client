@@ -134,7 +134,7 @@ import Testing
             "First\n\nSecond",
             "```ts\nconst a = 1\n\nconst b = 2\n```",
             "Before\n\n```ts\ncode\n```\n\nAfter",
-            "```visualize\n<div>\n\n</div>\n```\n\nAfter",
+            "```html\n<div>\n\n</div>\n```\n\nAfter",
             "https://example.com/some/page\n\nText",
             "see https://example.com/x for details\n\nMore",
             "- https://example.com/x\n- b\n\nAfter",
@@ -168,7 +168,6 @@ import Testing
             case .localImage: kind = "localImage"
             case .localFileLink: kind = "localFileLink"
             case .rawSVG: kind = "rawSVG"
-            case .visualize: kind = "visualize"
             case .htmlArtifact: kind = "htmlArtifact"
             case .mermaid: kind = "mermaid"
             case .imageGroup: kind = "imageGroup"

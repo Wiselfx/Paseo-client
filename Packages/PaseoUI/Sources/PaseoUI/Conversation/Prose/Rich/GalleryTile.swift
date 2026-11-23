@@ -17,6 +17,8 @@ struct GalleryTile: View {
     /// The stored thumbnail, the one Share and Save to Photos act on.
     let saved: UIImage?
     let failed: Bool
+    /// Offline with nothing cached for this tile: it says so, and a tap tries anyway.
+    let offline: Bool
     let moreCount: Int?
     let sourceID: String
     let namespace: Namespace.ID
@@ -36,11 +38,17 @@ struct GalleryTile: View {
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .transition(.opacity)
-                    } else if failed {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.glyph(.regular, weight: .light))
-                            .foregroundStyle(Palette.secondaryInk)
-                            .accessibilityLabel("Couldn't load image")
+                    } else if failed || offline {
+                        VStack(spacing: Space.xs) {
+                            Image(systemName: offline ? "wifi.slash" : "exclamationmark.triangle")
+                                .font(.glyph(.regular, weight: .light))
+                            Text("Try again")
+                                .font(.paseo(.caption))
+                        }
+                        .foregroundStyle(Palette.secondaryInk)
+                        .accessibilityHidden(true)
+                    } else {
+                        ProgressView().controlSize(.small).tint(Palette.secondaryInk)
                     }
                 }
                 .overlay {
@@ -75,18 +83,25 @@ struct GalleryTile: View {
         return { onShare(saved) }
     }
 
+    /// A tile that has no picture to open retries on tap, and says so.
+    private var retriesOnTap: Bool { displayed == nil && (failed || offline) }
+
     private var accessibilityHint: String {
-        moreCount == nil ? "Opens the image full screen" : "Opens the images full screen"
+        if retriesOnTap { return "Tries loading the image again" }
+        return moreCount == nil ? "Opens the image full screen" : "Opens the images full screen"
     }
 
     private func tap() {
-        if failed { onRetry() } else { onOpen() }
+        if retriesOnTap { onRetry() } else { onOpen() }
     }
 
     /// "Image 2 of 5, name", with the hidden-count scrim folded in on the last tile.
     private var accessibilityText: String {
         let name = image.alt.isEmpty ? Self.fileName(for: image) : image.alt
-        let text = "Image \(index + 1) of \(count), \(name)"
+        var text = "Image \(index + 1) of \(count), \(name)"
+        if displayed == nil {
+            if offline { text += ", no connection" } else if failed { text += ", couldn't load" }
+        }
         guard let moreCount else { return text }
         return "\(text), \(moreCount) more images"
     }
