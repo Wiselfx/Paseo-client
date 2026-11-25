@@ -31,6 +31,9 @@ struct TurnOutcomeLine: View {
         }
         .font(.paseo(.callout))
         .foregroundStyle(Palette.secondaryInk)
+        // The same 24 pt floor as `ClaudeLiveStatusLine`: the header keeps its height when the
+        // turn ends and this line replaces the live status.
+        .frame(minHeight: 24)
     }
 
     /// The time part: short after a summary ("12s"), a sentence on its own ("Completed in 12s").

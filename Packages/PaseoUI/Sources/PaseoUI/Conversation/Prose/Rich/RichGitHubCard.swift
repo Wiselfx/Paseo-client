@@ -10,7 +10,6 @@ struct RichGitHubCard: View {
     let parsed: GitHubURL
 
     @Environment(\.richActions) private var richActions
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showSafari = false
     @State private var looked: GitHubLinkInfo?
 
@@ -64,7 +63,7 @@ struct RichGitHubCard: View {
 
     /// The row shape from the first frame: a GitHub URL never shows the generic
     /// hero link card. The title and state fill in in place (same height) when the
-    /// lookup lands; the live PR card grows once, animated, when it can be known.
+    /// lookup lands; the live PR card grows once, without animation, when it can be known.
     var body: some View {
         Group {
             if let matchedPR {
@@ -81,8 +80,6 @@ struct RichGitHubCard: View {
             }
         }
         .task(id: lookupKey) { await lookup() }
-        .animation(
-            Motion.disclosure.resolved(reduceMotion: reduceMotion), value: cardShape)
         // Attached above the branches: a lookup landing (or the checkout PR arriving) while
         // Safari is up swaps the row for another view, and a cover hosted by the swapped-out
         // row would be dismissed from under the reader.
@@ -91,14 +88,6 @@ struct RichGitHubCard: View {
                 SafariView(url: target).ignoresSafeArea()
             }
         }
-    }
-
-    /// What the card is showing, as one value, so the taller live PR card grows
-    /// once (animated) instead of swapping heights under the reader.
-    private var cardShape: Int {
-        if matchedPR != nil { return 2 }
-        if info != nil { return 1 }
-        return 0
     }
 
     /// One lookup per URL, through the controller's forge search — same repo only, and

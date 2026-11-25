@@ -47,7 +47,7 @@ struct RichLocalImage: View {
     private var viewerItem: MediaViewerItem {
         MediaViewerItem(
             id: "local-image:\(path)",
-            thumbnail: image,
+            thumbnail: displayImage,
             fullSource: ref.map(MediaSource.daemon),
             fileName: fileName,
             alt: alt.isEmpty ? fileName : alt,
@@ -61,8 +61,21 @@ struct RichLocalImage: View {
         return DaemonFileRef(workspaceID: workspaceID, path: path, revision: nil)
     }
 
-    /// The ratio the box reserves: the image's own when known, else the 4:3 guess.
-    private var reservedAspect: CGFloat { aspectRatio ?? 4.0 / 3.0 }
+    /// The picture this card draws: the one it loaded, else the session's decoded copy of the same
+    /// file. Read in `body` because the workspace id comes from the environment, so a card scrolled
+    /// back into view draws its picture on the first frame instead of the placeholder.
+    private var displayImage: UIImage? {
+        image ?? ref.flatMap { MediaPipeline.cached(for: MediaPipeline.liveKey(ref: $0))?.image }
+    }
+
+    /// The ratio the box reserves: the image's own when this card knows it, else the session's
+    /// record of the file's shape, else the 4:3 guess. Both known ratios exist before any pixel is
+    /// drawn, so a revisit reserves its final box on the first frame.
+    private var reservedAspect: CGFloat {
+        aspectRatio
+            ?? ref.flatMap { MediaMetadataCache.aspectRatio(for: MediaPipeline.liveKey(ref: $0)) }
+            ?? 4.0 / 3.0
+    }
 
     private var policy: MediaFetchPolicy {
         mediaFetchPolicy(
@@ -70,27 +83,11 @@ struct RichLocalImage: View {
             condition: richActions?.linkCondition ?? .assumed)
     }
 
-    /// What the card's box is doing, as one value, so motion runs only when this changes.
-    private struct Layout: Equatable {
-        let aspectRatio: CGFloat
-        let stage: Int
-    }
-
-    private var layout: Layout {
-        var stage = 0
-        if image != nil {
-            stage = 2
-        } else if failure != nil {
-            stage = keepsFailureBox ? 3 : 1
-        }
-        return Layout(aspectRatio: reservedAspect, stage: stage)
-    }
-
     var body: some View {
         Group {
-            if let image {
+            if let displayImage {
                 Button(action: openViewer) {
-                    Image(uiImage: image)
+                    Image(uiImage: displayImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .mediaSlot(width: slotWidth, heightCap: heightCap)
@@ -102,6 +99,9 @@ struct RichLocalImage: View {
                 .matchedTransitionSource(id: viewerSourceID, in: zoom)
                 .accessibilityLabel(alt.isEmpty ? fileName : alt)
                 .accessibilityHint("Opens the image full screen")
+                // The picture is the branch root, so the fade-in is its transition. Its arrival is
+                // animated in `load()`; the box never is.
+                .transition(.opacity)
             } else if failure != nil {
                 if keepsFailureBox {
                     // The kept box with the failure line, like the remote card: the reader
@@ -120,9 +120,6 @@ struct RichLocalImage: View {
             }
         }
         .background { widthReader }
-        .animation(
-            Motion.disclosure.resolved(reduceMotion: reduceMotion),
-            value: layout)
         .task(id: loadKey) { await load() }
         .fullScreenCover(isPresented: $showViewer) {
             MediaViewerView(
@@ -216,9 +213,12 @@ struct RichLocalImage: View {
                 downloadProgress = nil
                 switch outcome {
                 case .image(let payload):
-                    image = payload.image
+                    // The box takes its final ratio at once; only the picture fades in over it.
                     aspectRatio = payload.aspectRatio
-                    failure = nil
+                    withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) {
+                        image = payload.image
+                        failure = nil
+                    }
                 case .svg(let source, let knownAspect):
                     await renderDaemonSVG(source, knownAspect: knownAspect, ref: ref)
                 case .failure(let reason):
@@ -244,10 +244,12 @@ struct RichLocalImage: View {
             return
         }
         guard !Task.isCancelled else { return }
-        image = rendered
         let size = rendered.size
         if size.height > 0 { aspectRatio = size.width / size.height }
-        failure = nil
+        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) {
+            image = rendered
+            failure = nil
+        }
     }
 }
 #endif

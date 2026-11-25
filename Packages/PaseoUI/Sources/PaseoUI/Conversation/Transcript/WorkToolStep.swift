@@ -4,7 +4,8 @@ import SwiftUI
 import UIKit
 
 /// One tool call: the line, and its output when opened. A live shell call opens on its own so its
-/// output can be watched; it folds again when it lands unless the reader opened it.
+/// output can be watched, and stays open once it lands. The reader can still fold it, and the
+/// turn's end fold removes it with the rest of the work.
 struct WorkToolStep: View {
     let call: ToolCall
     let rail: WorkRailPosition
@@ -13,6 +14,8 @@ struct WorkToolStep: View {
     let findHit: Bool
 
     @State private var userExpanded: Bool?
+    /// Set once a live shell call has opened this step; `isExpanded` then keeps it open.
+    @State private var openedLive = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var opensLive: Bool {
@@ -21,7 +24,9 @@ struct WorkToolStep: View {
         return false
     }
 
-    private var isExpanded: Bool { userExpanded ?? (findHit || opensLive) }
+    // Once a live shell call has opened, its box stays open when the call lands, so completion
+    // changes no height. The turn's end fold removes the box later, in one step.
+    private var isExpanded: Bool { userExpanded ?? (findHit || opensLive || openedLive) }
 
     var body: some View {
         let wording = WorkToolWording(call)
@@ -61,6 +66,9 @@ struct WorkToolStep: View {
             }
         }
         .paseoFeedback(.selection, trigger: userExpanded)
+        .onChange(of: opensLive, initial: true) { _, live in
+            if live { openedLive = true }
+        }
     }
 
     /// What the visible line shows besides the verb and target, which the spoken label replaces.

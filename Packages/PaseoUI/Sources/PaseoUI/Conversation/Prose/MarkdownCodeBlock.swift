@@ -3,8 +3,10 @@ import PaseoStore
 import SwiftUI
 
 /// One fenced code block: the language header with its copy / expand / preview actions, and the
-/// horizontally scrolling code. It owns the expand sheet, so only a block that is actually
-/// expanded presents anything and a document without code mounts no sheet host (W8).
+/// horizontally scrolling code. The inline code shows at most `inlineLineLimit` lines, and a row
+/// under it opens the expand sheet for the rest, so a block lays out at most that many lines however
+/// long it grows. The sheet draws every line. It owns the expand sheet, so only a block that is
+/// actually expanded presents anything and a document without code mounts no sheet host (W8).
 ///
 /// Equatable on its value inputs, like `ClaudeMarkdownView`: the callbacks are stable objects'
 /// methods and not part of equality, so a settled block is skipped when the document re-renders.
@@ -15,6 +17,9 @@ struct MarkdownCodeBlock: View, Equatable {
         guard lhs.language == rhs.language, lhs.content == rhs.content else { return false }
         return lhs.theme == rhs.theme
     }
+
+    /// Lines the inline code draws before its "Show N more lines" row. The expand sheet draws them all.
+    static let inlineLineLimit = 24
 
     let language: String?
     let content: String
@@ -38,6 +43,7 @@ struct MarkdownCodeBlock: View, Equatable {
     }
 
     var body: some View {
+        let hiddenLines = MarkdownCodeText.lineCount(of: content) - Self.inlineLineLimit
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(language ?? "").font(.paseo(.code)).foregroundStyle(
@@ -60,8 +66,22 @@ struct MarkdownCodeBlock: View, Equatable {
             }.foregroundStyle(theme.secondary).padding(.horizontal, Space.lg).padding(.vertical, Space.sm)
             Rectangle().fill(theme.rule).frame(height: 0.5)
             ScrollView(.horizontal) {
-                codeText.accessibilityIdentifier("markdown.code.content")
+                codeText(maxLines: Self.inlineLineLimit)
+                    .accessibilityIdentifier("markdown.code.content")
             }.scrollIndicators(.hidden).padding(Space.lg)
+            if hiddenLines > 0 {
+                Button(action: expandCode) {
+                    Text("Show ^[\(hiddenLines) more line](inflect: true)")
+                        .font(.paseo(.footnote, weight: .medium))
+                        .foregroundStyle(theme.secondary)
+                        .padding(.horizontal, Space.lg)
+                        .frame(minHeight: Metrics.hitSize)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("markdown.code.more")
+            }
         }.background {
             RoundedRectangle(cornerRadius: Radius.group)
                 .fill(theme.codeBackground)
@@ -69,17 +89,20 @@ struct MarkdownCodeBlock: View, Equatable {
         }.sheet(item: $expanded) { item in
             SheetScaffold(item.title, detents: .large) {
                 ScrollView([.vertical, .horizontal]) {
-                    codeText.accessibilityIdentifier("markdown.code.expandedContent")
+                    codeText(maxLines: nil)
+                        .accessibilityIdentifier("markdown.code.expandedContent")
                         .padding(Space.lg)
                 }.defaultScrollAnchor(.topLeading, for: .alignment)
             }
         }
     }
 
-    private var codeText: MarkdownCodeText {
+    /// The code's text, cut to `maxLines` lines when one is given. The inline block passes its limit;
+    /// the expand sheet passes nil and draws all of it.
+    private func codeText(maxLines: Int?) -> MarkdownCodeText {
         MarkdownCodeText(
             language: language, content: content, theme: theme, isStreaming: isStreaming,
-            codeContent: codeContent)
+            codeContent: codeContent, maxLines: maxLines)
     }
 
     private func copyCode() {

@@ -93,9 +93,7 @@ struct YouTubeRichCard: View {
                     isPlaying: isPlaying,
                     onClose: stopPlayback
                 )
-                .animation(
-                    Motion.disclosure.resolved(reduceMotion: reduceMotion),
-                    value: resolvedTitle != nil)
+                // Instant: the title row changes the cell's height in one step, never animated.
                 .task(id: reference.id) { await loadTitle() }
             }
         }
@@ -122,7 +120,7 @@ struct YouTubeRichCard: View {
     }
 
     /// The title strip reads the cache on the first pass (remounts never flash the
-    /// domain fallback); the fetch fills it in once, animated, on cheap links only.
+    /// domain fallback); the fetch fills it in once, on cheap links only.
     private var resolvedTitle: String? {
         videoTitle ?? YouTubeTitleCache.entry(for: reference.id)?.title
     }

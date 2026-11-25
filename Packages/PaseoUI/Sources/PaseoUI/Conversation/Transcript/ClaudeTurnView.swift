@@ -145,12 +145,15 @@ struct ClaudeTurnView: View {
                 if !isExpanded, case .notice(let row) = segment {
                     ClaudeVisibleRow(row: row, highlightedSeq: highlightedSeq)
                 } else {
+                    // Equal segments skip their body (`ClaudeSegmentView ==`), so a streamed token
+                    // re-runs only the segment that changed.
                     ClaudeSegmentView(
                         segment: segment, turnIsRunning: isRunning,
                         isTail: isRunning && segment.id == turn.segments.last?.id,
                         onMarkdown: onMarkdown,
                         highlightedSeq: highlightedSeq, findTarget: findTarget,
                         onOpenFile: onOpenFile)
+                        .equatable()
                         .transition(.opacity.combined(with: .offset(y: -2)))
                 }
             }
@@ -177,9 +180,11 @@ struct ClaudeTurnView: View {
             }
         }
         .onChange(of: turn.phase) { _, phase in
-            // A finished turn folds itself away; the answer stays on the page.
+            // A finished turn folds itself away; the answer stays on the page. The fold is one
+            // unanimated step: UIKit resizes the transcript cell in the same pass, so an animation
+            // here would run on a second clock and look detached. Only the reader's tap animates.
             if phase != .running {
-                withAnimation(Motion.disclosure.resolved(reduceMotion: reduceMotion)) { userExpanded = nil }
+                userExpanded = nil
             }
         }
     }

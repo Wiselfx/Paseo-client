@@ -106,19 +106,28 @@ struct WorkspaceFileViewer: View {
         return nil
     }
 
+    /// Only a raster image is decoded to the viewer's size, so only its key includes the budget.
+    /// Text and SVG key with no budget, so a resize never rebuilds them.
     private var renderKey: FileRenderKey? {
-        // No budget before the first layout: wait one frame for the real size instead of
-        // decoding twice (placeholder first, image at the layout size).
-        guard let file, stageSize.width > 1 || stageSize.height > 1 else { return nil }
+        guard let file else { return nil }
+        let budget: Int
+        if file.usesPixelBudget {
+            // No budget before the first layout: wait one frame for the real size instead of
+            // decoding twice (placeholder first, image at the layout size).
+            guard stageSize.width > 1 || stageSize.height > 1 else { return nil }
+            budget = pixelBudget
+        } else {
+            budget = 0
+        }
         return FileRenderKey(
             path: file.path,
             revision: file.revision ?? file.modifiedAt,
             dark: colorScheme == .dark,
-            pixelBudget: pixelBudget)
+            pixelBudget: budget)
     }
 
     /// The largest edge this viewer can draw, in pixels; 512 until the first layout pass. Part of
-    /// `renderKey`, so a rotation re-decodes once at the new size.
+    /// `renderKey` for a raster image only, so a rotation re-decodes that image once at the new size.
     private var pixelBudget: Int {
         let dimension = max(stageSize.width, stageSize.height)
         guard dimension > 1 else { return 512 }
@@ -272,8 +281,8 @@ struct WorkspaceFileViewer: View {
             render = nil
             return
         }
-        // Before the first layout there is no pixel budget: `.task(id:)` fires again once
-        // `renderKey` gains one, so this returns instead of decoding twice.
+        // A raster image has no `renderKey` until the first layout gives it a pixel budget;
+        // `.task(id:)` fires again then, so this returns instead of decoding twice.
         guard let key = renderKey else { return }
         let language = language(for: file.path)
         let theme: ClaudeCodeSyntaxTheme = colorScheme == .dark ? .dark : .light

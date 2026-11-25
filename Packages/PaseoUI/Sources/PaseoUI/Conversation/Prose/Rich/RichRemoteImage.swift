@@ -15,8 +15,8 @@ import WebKit
 ///
 /// - the loader keeps the decoded image and its shape, so scrolling back draws it on the first
 ///   frame — no placeholder, no re-download, no layout shift;
-/// - the box is reserved from the known aspect ratio before the bytes land, and the single
-///   change from the 4:3 guess to the real ratio is animated with `Motion.disclosure`;
+/// - the box is reserved from the known aspect ratio before the bytes land, and a change of
+///   ratio happens at once: only the picture fades in (`Motion.fade`) when it arrives;
 /// - a row that scrolls away mid-load does not end in a broken card: the fetch finishes into
 ///   the cache and the card is instant when it returns;
 /// - failure says what happened and offers Retry and Open link, instead of a bare URL string.
@@ -131,31 +131,10 @@ struct RichRemoteImage: View {
         return "\(urlString)|\(bucket)|\(retryToken)|\(policy == .cacheOnly)"
     }
 
-    /// What the card's box is doing, as one value: a placeholder at a reserved ratio, the image
-    /// at its own, or a failure that either keeps the box or is compact. Motion runs only when
-    /// this changes.
-    private struct Layout: Equatable {
-        let aspectRatio: CGFloat
-        let stage: Int
-    }
-
-    private var layout: Layout {
-        var stage = 0
-        if image != nil {
-            stage = 2
-        } else if failure != nil {
-            stage = keepsFailureBox ? 3 : 1
-        }
-        return Layout(aspectRatio: reservedAspect, stage: stage)
-    }
-
     var body: some View {
         stage
             .frame(maxWidth: .infinity)
             .background { widthReader }
-            .animation(
-                Motion.disclosure.resolved(reduceMotion: reduceMotion),
-                value: layout)
             .task(id: loadKey) { await load() }
             .fullScreenCover(isPresented: $showViewer) {
                 MediaViewerView(
@@ -202,6 +181,9 @@ struct RichRemoteImage: View {
                 copyText: webURL != nil ? urlString : nil,
                 externalTitle: "Open link",
                 externalURL: webURL)
+            // The picture is the branch root, so the fade-in is its transition. Its arrival is
+            // animated in `load()`; the box never is.
+            .transition(.opacity)
         } else if let failure {
             // Two forms, one behaviour: a card that showed the placeholder keeps the
             // placeholder's height, a card that was created already failed takes the compact row.
@@ -323,9 +305,12 @@ struct RichRemoteImage: View {
                 downloadProgress = nil
                 switch outcome {
                 case .image(let payload):
-                    image = payload.image
+                    // The box takes its final ratio at once; only the picture fades in over it.
                     aspectRatio = payload.aspectRatio
-                    failure = nil
+                    withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) {
+                        image = payload.image
+                        failure = nil
+                    }
                 case .svg(let source, let knownAspect):
                     await renderSVG(source, knownAspect: knownAspect)
                 case .failure(let reason):
@@ -364,11 +349,13 @@ struct RichRemoteImage: View {
             return
         }
         guard !Task.isCancelled else { return }
-        image = rendered
         let size = rendered.size
         let ratio = size.height > 0 ? size.width / size.height : 1
         aspectRatio = ratio
         MediaMetadataCache.remember(ratio, for: identity)
+        withAnimation(Motion.fade.resolved(reduceMotion: reduceMotion)) {
+            image = rendered
+        }
     }
 }
 #endif

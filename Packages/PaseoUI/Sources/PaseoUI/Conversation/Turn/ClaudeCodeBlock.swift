@@ -18,16 +18,17 @@ struct ClaudeCodeBlock: View {
     var exitCode: Double? = nil
 
     /// The parsed terminal: tail runs for the card, full runs for Copy all, the
-    /// capped sheet runs for Show all (a SwiftUI `Text` with 1 MB of
-    /// `AttributedString` is very slow), the test summary for the chip, the built
-    /// sheet `AttributedString` (once per parse, cached here), and the total line
-    /// count for the Show-all label.
+    /// capped sheet runs for Show all, the test summary for the chip, and the total
+    /// line count for the Show-all label. The sheet's `AttributedString` is not here:
+    /// it builds when Show all presents the sheet (a SwiftUI `Text` with 1 MB of
+    /// `AttributedString` is very slow, and a streaming command would rebuild it on
+    /// every chunk for a sheet nobody has opened).
     struct ParsedTerminal: Equatable {
         var tail: [AnsiRun]
         var full: [AnsiRun]
+        /// The last `sheetLines` lines' runs; the sheet lays out only the tail of these.
         var sheet: [AnsiRun]
-        var sheetAttributed: AttributedString
-        /// The tail's coloured text, built once per parse like `sheetAttributed`.
+        /// The tail's coloured text, built once per parse.
         var tailAttributed: AttributedString
         var summary: TestSummary?
         var lineCount: Int
@@ -35,7 +36,8 @@ struct ClaudeCodeBlock: View {
 
     @State private var parsed: ParsedTerminal?
 
-    /// The sheet's line cap (G8 review): full output scrolls nowhere fast.
+    /// The sheet's line cap (G8 review): the parse keeps at most this many lines for the sheet.
+    /// `ClaudeTerminalOutput` lays out the last of them, from a first page of 200 that grows on request.
     nonisolated static let sheetLines = 2000
 
     init(
@@ -121,9 +123,11 @@ struct ClaudeCodeBlock: View {
     }
 
     /// Parses the output off main when it changes (never per body pass): ANSI runs,
-    /// the tail slice, the capped sheet slice, and the test summary. The sheet's
-    /// `AttributedString` builds once here (never per body pass) and rides with the
-    /// parse into the cache. State writes only when the output changes.
+    /// the tail slice, the capped sheet slice, and the test summary. The tail's
+    /// `AttributedString` builds once here and rides with the parse into the cache.
+    /// The sheet's string is left to Show all, so a streaming command does not build
+    /// up to 2,000 lines of color on every chunk for a sheet nobody has opened.
+    /// State writes only when the output changes.
     @MainActor
     private func parseTerminal() async {
         guard terminal, let output, !output.isEmpty else {
@@ -134,12 +138,11 @@ struct ClaudeCodeBlock: View {
             parsed = cached
             return
         }
-        // The parse runs off main; the AttributedString (fonts and colours are
-        // main-actor tokens) is built once here, from the capped sheet runs.
+        // The parse runs off main; the tail's AttributedString (fonts and colours are
+        // main-actor tokens) is built here, from the 12 tail lines only.
         guard let parts = await Self.parseParts(output), !Task.isCancelled else { return }
         let result = ParsedTerminal(
             tail: parts.tail, full: parts.full, sheet: parts.sheet,
-            sheetAttributed: Self.attributedText(parts.sheet),
             tailAttributed: Self.attributedText(parts.tail), summary: parts.summary,
             lineCount: parts.lines)
         TerminalParseCache.store(result, for: output)
@@ -163,8 +166,9 @@ struct ClaudeCodeBlock: View {
         return (tail, runs, sheet, summary, lines)
     }
 
-    /// Runs to a colored `Text`: the tail and the sheet each build once per parse and ride with it.
-    private static func attributedText(_ runs: [AnsiRun]) -> AttributedString {
+    /// Runs to a colored `AttributedString`, on the main actor (fonts and colors are main-actor
+    /// tokens). The tail builds once per parse; the sheet builds when Show all presents it.
+    static func attributedText(_ runs: [AnsiRun]) -> AttributedString {
         var out = AttributedString()
         for run in runs {
             var part = AttributedString(run.text)

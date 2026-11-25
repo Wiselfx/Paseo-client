@@ -62,7 +62,6 @@ struct RichWebCard: View {
     @State private var rulesLoaded = false
 
     @Environment(\.richViewportHeight) private var viewportHeight
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
     @Environment(\.richActions) private var richActions
@@ -179,8 +178,9 @@ struct RichWebCard: View {
                 onHeightChange: { setMeasuredHeight($0) },
                 contentRuleList: contentRules,
                 awaitContentRules: true)
+            // Never animated: the transcript applies the cell's height at once. An animated
+            // frame here would run on a second clock behind it.
             .frame(height: stageHeight)
-            .animation(Motion.disclosure.resolved(reduceMotion: reduceMotion), value: stageHeight)
         } else if let snapshot = resolvedSnapshot {
             Image(uiImage: snapshot)
                 .resizable()

@@ -4,9 +4,9 @@ import SwiftUI
 /// One fenced code block, highlighted **after** first paint (R9 §1).
 ///
 /// The plain mono text is what mounts; the actor's tokens arrive a moment later and replace it with
-/// the same font and metrics, so nothing moves. While the producing turn is still streaming the
-/// block waits — the last fence of a running answer is not closed yet — and highlights once the
-/// turn ends.
+/// the same font and metrics, so nothing moves. While the producing turn is still streaming the block
+/// waits (the last fence of a running answer is not closed yet): it draws its plain text without
+/// asking the mirror, and highlights once the turn ends.
 struct ClaudeHighlightedCode: View {
     let language: String?
     let content: String
@@ -30,8 +30,18 @@ struct ClaudeHighlightedCode: View {
         "\(syntaxTheme.rawValue)/\(language ?? "")/\(content.utf16.count)/\(isStreaming)"
     }
 
+    /// What to draw now: the highlight once one exists. A streaming block draws its plain source and
+    /// skips the mirror, whose lookup hashes the whole source on every streamed token. A settled block
+    /// takes the mirror, which holds the highlight when an earlier visit or the warm-up left one.
+    private var displayed: AttributedString {
+        if let highlighted { return highlighted }
+        if isStreaming { return AttributedString(content) }
+        return CodeHighlightMirror.value(code: content, language: language, theme: syntaxTheme)
+            ?? AttributedString(content)
+    }
+
     var body: some View {
-        Text(highlighted ?? CodeHighlightMirror.value(code: content, language: language, theme: syntaxTheme) ?? AttributedString(content))
+        Text(displayed)
             .font(theme.codeFont)
             .foregroundStyle(theme.foreground)
             .task(id: requestKey) {

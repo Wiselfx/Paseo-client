@@ -92,10 +92,8 @@ struct RichLinkCard: View {
         }
         .buttonStyle(PaseoCardButtonStyle(reduceMotion: reduceMotion))
         // The slot appears once metadata names an image; the pixels then fill the same box.
-        // Revisits lay the cached hero out on frame one and never animate.
-        .animation(
-            Motion.disclosure.resolved(reduceMotion: reduceMotion),
-            value: resolvedHero != nil || expectsHero)
+        // The row-to-hero swap is instant: the transcript applies the cell's height at once,
+        // so an animated frame here would run on a second clock behind it.
         .paseoCardMenu(
             openTitle: "Open",
             onOpen: { showSafari = true },

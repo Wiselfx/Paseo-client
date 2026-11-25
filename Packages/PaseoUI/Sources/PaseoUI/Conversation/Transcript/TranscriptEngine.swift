@@ -80,6 +80,12 @@ final class TranscriptEngine: NSObject {
     /// A tap opens and closes things in the cells: until then, a row that a resize moves glides
     /// (`animateMoves`) and the end pin follows in the same curve.
     private var resizeAnimationUntil = Date.distantPast
+    /// The item the last tap landed on: only its resize is a disclosure growing where the reader looks
+    /// and so is left uncompensated (`compensatesResize`). Other cells keep compensating.
+    private var tappedItemID: TranscriptItemID?
+    /// The row under the reader's line in a cell that is resizing, waiting for SwiftUI to report where
+    /// the rows went (`rowFramesChanged`).
+    private var rowAnchor: RowAnchor?
     /// A turn that just finished and is folding its work away above its answer, and until when its
     /// resize keeps the turn's end in place (see `compensatesResize`).
     private var settlingTurn: (id: TranscriptItemID, until: Date)?
@@ -131,7 +137,7 @@ final class TranscriptEngine: NSObject {
         // The composer's blur is `ComposerUnderBlur`, drawn by the chat screen: no system edge.
         collectionView.topEdgeEffect.isHidden = true
         collectionView.bottomEdgeEffect.isHidden = true
-        let tap = UITapGestureRecognizer(target: self, action: #selector(transcriptTapped))
+        let tap = UITapGestureRecognizer(target: self, action: #selector(transcriptTapped(_:)))
         tap.cancelsTouchesInView = false
         tap.delaysTouchesEnded = false
         tap.delegate = self
@@ -158,8 +164,16 @@ final class TranscriptEngine: NSObject {
         return action
     }
 
-    @objc private func transcriptTapped() {
+    @objc private func transcriptTapped(_ tap: UITapGestureRecognizer) {
         resizeAnimationUntil = Date.now.addingTimeInterval(0.6)
+        let cv = collectionView
+        if let indexPath = cv.indexPathForItem(at: tap.location(in: cv)),
+            items.indices.contains(indexPath.item)
+        {
+            tappedItemID = items[indexPath.item]
+        } else {
+            tappedItemID = nil
+        }
         controller?.dismissKeyboard()
     }
 
@@ -290,6 +304,7 @@ final class TranscriptEngine: NSObject {
     /// the history slot, a new turn before the trailing cards), applied as one batch with no animation.
     /// Unless the reader follows the tail, the first visible item keeps its place on screen.
     private func applyStructuralChange(_ model: TranscriptModel) {
+        endRowAnchor()
         let old = items
         let oldEntries = entries
         let new = model.items
@@ -450,14 +465,42 @@ final class TranscriptEngine: NSObject {
             case .prose(let row):
                 if case .assistantMessage(let message) = row.item {
                     height += lines(message.text) * 25 + 14
+                    height += Double(codeLineCount(in: message.text)) * 18
+                    height += Double(imageCount(in: message.text)) * 220
                 }
             case .notice:
                 height += 44
-            case .work, .todo:
+            case .work:
+                // A collapsed section header and the gap after it.
+                height += 52
+            case .todo:
                 break
             }
         }
+        if turn.changeSummary != nil, turn.phase != .running { height += 36 }
         return CGFloat(min(max(height, 60), 8000))
+    }
+
+    /// Lines inside fenced code blocks (the fence lines included: they draw the block's frame).
+    private static func codeLineCount(in text: String) -> Int {
+        guard text.contains("```") else { return 0 }
+        var inside = false
+        var count = 0
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.drop(while: { $0 == " " }).hasPrefix("```") {
+                inside.toggle()
+                count += 1
+            } else if inside {
+                count += 1
+            }
+        }
+        return count
+    }
+
+    /// Markdown image references (`![`).
+    private static func imageCount(in text: String) -> Int {
+        guard text.contains("![") else { return 0 }
+        return text.components(separatedBy: "![").count - 1
     }
 
     private func fingerprint(_ turn: Turn, column: CGFloat) -> String {
@@ -480,16 +523,20 @@ final class TranscriptEngine: NSObject {
         TurnHeightStore.save(heightMemory.persisted)
     }
 
-    /// A row above the reader's line changed height: move the offset with it, so nothing on screen
-    /// moves. While the end is pinned the pin does it instead.
+    /// A row above the reader's line changed height: keep what the reader looks at where it is. While
+    /// the end is pinned the pin does it instead.
     ///
-    /// - A row wholly above the line (measured for the first time in the overscan, an older page
-    ///   settling) always compensates.
-    /// - A row reaching across the line compensates too: a turn is one cell, often taller than
-    ///   the screen, and the part of it above the line is the part just built in the overscan (a
-    ///   table, a diagram, an image settling). Uncompensated, the reader saw the text below it
-    ///   move while scrolling. Two exceptions grow where the reader looks and move the rows below
-    ///   as they should: the running turn (streamed text at its end) and a tapped disclosure.
+    /// - A cell wholly above the line (measured for the first time in the overscan, an older page
+    ///   settling) always compensates with the whole delta, inside the layout pass.
+    /// - A cell reaching across the line is a turn, often taller than the screen. The reader looks at
+    ///   one row of it: only how far that row moves matters. Growth below the row (streamed text at the
+    ///   end of the running turn, a block settling under the line) moves nothing; growth above it is
+    ///   absorbed. The row is captured here (`captureRowAnchor`) and the offset follows it once SwiftUI
+    ///   has reported the rows' new frames (`rowFramesChanged`), so this returns false for such a cell.
+    /// - A straddling cell that has no row frames yet, or any straddling cell while a flick decelerates
+    ///   (writing the offset would stop it), keeps the whole-cell rule, except the running turn, whose
+    ///   growth at its end never moves the reader.
+    /// - The tapped cell is a disclosure opening where the reader looks: nothing compensates.
     /// - A turn that just finished folds the work above its answer away: the turn's end stays put,
     ///   on a net shrink only (otherwise the answer would move by the footer and changes card
     ///   added below it instead of by the smaller fold above it).
@@ -505,9 +552,95 @@ final class TranscriptEngine: NSObject {
             settlingTurn = nil
             return delta < 0
         }
-        if Date.now < resizeAnimationUntil { return false }
+        if Date.now < resizeAnimationUntil, items[index] == tappedItemID { return false }
+        if !cv.isDecelerating,
+            captureRowAnchor(cellFrame: frame, at: index, readerTop: readerTop)
+        {
+            return false
+        }
+        // No row frames to anchor to (or a flick in flight): the whole-cell rule.
         if case .turn(let row) = entries[index], row.turn.phase == .running { return false }
         return true
+    }
+
+    /// The row of a turn under the reader's line, followed until SwiftUI has laid the resized cell out.
+    private struct RowAnchor {
+        var id: TranscriptItemID
+        var seqEnd: Int
+        /// The row's top in the cell's own space when it was last seen. The cell's place in the content
+        /// is not part of it: cells above compensate by themselves.
+        var localY: CGFloat
+        var token: Int
+        var until: Date
+    }
+
+    /// How long after a resize the anchor row is followed (SwiftUI reports a pass or two later).
+    private static let rowAnchorWindow: TimeInterval = 0.3
+
+    /// Remembers the row under the reader's line of a resizing cell, once per resize. False when the
+    /// cell has no row frames to anchor to.
+    private func captureRowAnchor(cellFrame: CGRect, at index: Int, readerTop: CGFloat) -> Bool {
+        guard case .turn(let row) = entries[index] else { return false }
+        let id = items[index]
+        if let pending = rowAnchor, pending.id == id, pending.until > Date.now { return true }
+        let local = readerTop - cellFrame.minY
+        var best: (seqEnd: Int, minY: CGFloat)?
+        func consider(_ seqEnd: Int) {
+            guard let frame = rowFrames.frame(of: seqEnd), frame.minY >= -1, frame.minY <= local + 0.5
+            else { return }
+            if let current = best, current.minY >= frame.minY { return }
+            best = (seqEnd, frame.minY)
+        }
+        let turn = row.turn
+        if let user = turn.userMessage { consider(user.seqEnd) }
+        for segment in turn.segments {
+            switch segment {
+            case .work(let group):
+                for step in group.rows { consider(step.seqEnd) }
+            case .prose(let proseRow), .todo(let proseRow), .notice(let proseRow):
+                consider(proseRow.seqEnd)
+            }
+        }
+        guard let best else { return false }
+        rowAnchor = RowAnchor(
+            id: id, seqEnd: best.seqEnd, localY: best.minY, token: revealToken,
+            until: Date.now.addingTimeInterval(Self.rowAnchorWindow))
+        rowFrames.onChange = { [weak self] in self?.rowFramesChanged() }
+        return true
+    }
+
+    private func endRowAnchor() {
+        rowAnchor = nil
+        rowFrames.onChange = nil
+    }
+
+    /// Rows reported new frames: when the anchor row moved inside its cell, the offset moves with it by
+    /// a plain write, so the row stays where the reader sees it. Skipped, and the anchor dropped, when
+    /// the end is pinned, a jump or a structural change took over, or the turn is gone.
+    private func rowFramesChanged() {
+        guard var anchor = rowAnchor else {
+            rowFrames.onChange = nil
+            return
+        }
+        let cv = collectionView
+        guard anchor.until > Date.now, anchor.token == revealToken, !isApplyingStructuralChange,
+            !pinsToBottom, !isAnimatingScroll, let index = indexByID[anchor.id],
+            entries.indices.contains(index), case .turn = entries[index],
+            let frame = rowFrames.frame(of: anchor.seqEnd)
+        else {
+            endRowAnchor()
+            return
+        }
+        // A write would stop a flick in flight; wait for it to end within the window.
+        guard !cv.isDecelerating else { return }
+        let shift = frame.minY - anchor.localY
+        guard abs(shift) > 0.5 else { return }
+        anchor.localY = frame.minY
+        rowAnchor = anchor
+        let target = clamp(cv.contentOffset.y + shift)
+        if abs(target - cv.contentOffset.y) > 0.25 {
+            cv.contentOffset = CGPoint(x: 0, y: target)
+        }
     }
 
     // MARK: Insets
@@ -591,7 +724,10 @@ final class TranscriptEngine: NSObject {
         }
     }
 
-    /// How long the end takes to catch up with a streamed line.
+    /// A streamed line moves the end by a plain offset write in the same layout pass (Fish Pocket does
+    /// the same: no animation on follow). Flip to `true` to A/B the short glide on a device.
+    private static let glidesStreamFollow = false
+    /// How long the end takes to catch up with a streamed line (only with `glidesStreamFollow`).
     private static let streamFollowDuration: TimeInterval = 0.16
     /// Growth past this is a jump (a block, a card, history), not a streamed line: it lands at once.
     private static let streamFollowMaxStep: CGFloat = 96
@@ -599,7 +735,8 @@ final class TranscriptEngine: NSObject {
     /// A small downward growth while a turn streams, with nothing else animating the content.
     private func followsStreamGrowth(by delta: CGFloat) -> Bool {
         let keyboardMoving = (keyboardAnimation?.until ?? .distantPast) > Date.now
-        guard store?.activeTurnId != nil, !reduceMotion, !keyboardMoving else { return false }
+        guard Self.glidesStreamFollow, store?.activeTurnId != nil, !reduceMotion, !keyboardMoving
+        else { return false }
         return delta > 0 && delta <= Self.streamFollowMaxStep
     }
 
