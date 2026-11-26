@@ -42,12 +42,12 @@ struct TranscriptCellRoot: View {
         .environment(\.scenePhase, env.ui.scenePhase)
         .foregroundStyle(Palette.ink)
         .tint(Palette.ink)
-        // A cell is scrolled content: the bars and the home indicator are the collection view's
+        // Vertical only: the side insets already narrow the column. A cell is scrolled content: the bars and the home indicator are the collection view's
         // content inset, never the cell's. A cell under a bar is handed that bar's safe area, and
         // the hosting view laid the turn out below it and measured it that much taller, so a turn
         // slid inside its own cell as it crossed a bar and the gap to the next bubble grew and
         // shrank while history scrolled (measured: TranscriptHarnessTests).
-        .ignoresSafeArea()
+        .ignoresSafeArea(edges: .vertical)
     }
 
     private var identity: String {
