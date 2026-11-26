@@ -56,6 +56,14 @@ struct ClaudeUserBubble: View {
         self._entered = State(initialValue: !isPending)
     }
 
+    private var showsTimestamp: Bool { sentAt != nil && !isPending }
+
+    /// A space while there is nothing to show yet: the line keeps its height.
+    private var timestampText: String {
+        guard let sentAt else { return " " }
+        return PaseoFormat.messageTimestamp(sentAt)
+    }
+
     var body: some View {
         // The bubble's width is decided once, by the column: a fixed inset on the leading side and
         // the text's own wrapped width, never an HStack/Spacer split that depends on the height
@@ -64,11 +72,16 @@ struct ClaudeUserBubble: View {
         VStack(alignment: .trailing, spacing: Space.xs) {
             bubble
                 .padding(.leading, 42)
-            if let sentAt, !isPending, !text.isEmpty {
-                Text(PaseoFormat.messageTimestamp(sentAt))
+            if !text.isEmpty {
+                // The timestamp's line is always there, so the bubble keeps one height: it used to
+                // appear when the message was acknowledged, just as the reply began, and pushed
+                // everything below it down. It fades in instead.
+                Text(timestampText)
                     .font(.paseo(.caption))
                     .foregroundStyle(Palette.secondaryInk)
                     .padding(.trailing, Space.xs)
+                    .opacity(showsTimestamp ? 1 : 0)
+                    .accessibilityHidden(!showsTimestamp)
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
