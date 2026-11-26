@@ -28,8 +28,14 @@ final class TranscriptCell: UICollectionViewCell {
             CGSize(width: layoutAttributes.size.width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel)
+        // The hosting view adds the cell's safe area to its fitting size even though the content
+        // ignores it (TranscriptCellRoot), so a turn measured under a bar or the home indicator came
+        // out that much taller and left that much extra space before the next bubble. The content's
+        // own height is the same wherever the cell happens to be.
+        let safe = contentView.safeAreaInsets
+        let height = fitting.height - safe.top - safe.bottom
         let scale = traitCollection.displayScale > 0 ? traitCollection.displayScale : 3
-        attributes.size.height = max(1, (fitting.height * scale).rounded(.up) / scale)
+        attributes.size.height = max(1, (height * scale).rounded(.up) / scale)
         return attributes
     }
 }
