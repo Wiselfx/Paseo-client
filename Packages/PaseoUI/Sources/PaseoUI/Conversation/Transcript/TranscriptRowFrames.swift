@@ -13,22 +13,7 @@ final class TranscriptRowFrames {
     nonisolated static let space = "paseo.transcript.cell"
     private var frames: [Int: CGRect] = [:]
 
-    /// Set by the engine while it follows a row through a resize; called once per main-actor turn after
-    /// reports that moved a row, and never while nil (streaming reports cost nothing).
-    var onChange: (@MainActor () -> Void)?
-    private var notifyScheduled = false
-
-    func report(_ seqEnd: Int, _ frame: CGRect) {
-        let previous = frames[seqEnd]
-        frames[seqEnd] = frame
-        guard previous != frame, onChange != nil, !notifyScheduled else { return }
-        notifyScheduled = true
-        Task { [weak self] in
-            guard let self else { return }
-            self.notifyScheduled = false
-            self.onChange?()
-        }
-    }
+    func report(_ seqEnd: Int, _ frame: CGRect) { frames[seqEnd] = frame }
     func frame(of seqEnd: Int) -> CGRect? { frames[seqEnd] }
     func reset() { frames.removeAll() }
 }

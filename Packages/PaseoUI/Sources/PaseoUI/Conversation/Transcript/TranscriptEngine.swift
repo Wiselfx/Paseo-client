@@ -83,9 +83,8 @@ final class TranscriptEngine: NSObject {
     /// The item the last tap landed on: only its resize is a disclosure growing where the reader looks
     /// and so is left uncompensated (`compensatesResize`). Other cells keep compensating.
     private var tappedItemID: TranscriptItemID?
-    /// The row under the reader's line in a cell that is resizing, waiting for SwiftUI to report where
-    /// the rows went (`rowFramesChanged`).
-    private var rowAnchor: RowAnchor?
+    /// The anchor cell of the layout pass in progress (`anchorIndex`); cleared when the pass ends.
+    private var anchorLock: TranscriptItemID?
     /// A turn that just finished and is folding its work away above its answer, and until when its
     /// resize keeps the turn's end in place (see `compensatesResize`).
     private var settlingTurn: (id: TranscriptItemID, until: Date)?
@@ -304,7 +303,6 @@ final class TranscriptEngine: NSObject {
     /// the history slot, a new turn before the trailing cards), applied as one batch with no animation.
     /// Unless the reader follows the tail, the first visible item keeps its place on screen.
     private func applyStructuralChange(_ model: TranscriptModel) {
-        endRowAnchor()
         let old = items
         let oldEntries = entries
         let new = model.items
@@ -523,20 +521,20 @@ final class TranscriptEngine: NSObject {
         TurnHeightStore.save(heightMemory.persisted)
     }
 
-    /// A row above the reader's line changed height: keep what the reader looks at where it is. While
+    /// A cell changed height: keep what the reader looks at where it is, in the same layout pass. While
     /// the end is pinned the pin does it instead.
     ///
-    /// - A cell wholly above the line (measured for the first time in the overscan, an older page
-    ///   settling) always compensates with the whole delta, inside the layout pass.
-    /// - A cell reaching across the line is a turn, often taller than the screen. The reader looks at
-    ///   one row of it: only how far that row moves matters. Growth below the row (streamed text at the
-    ///   end of the running turn, a block settling under the line) moves nothing; growth above it is
-    ///   absorbed. The row is captured here (`captureRowAnchor`) and the offset follows it once SwiftUI
-    ///   has reported the rows' new frames (`rowFramesChanged`), so this returns false for such a cell.
-    /// - A straddling cell that has no row frames yet, or any straddling cell while a flick decelerates
-    ///   (writing the offset would stop it), keeps the whole-cell rule, except the running turn, whose
-    ///   growth at its end never moves the reader.
-    /// - The tapped cell is a disclosure opening where the reader looks: nothing compensates.
+    /// Upstream's rule (LegendList `maintainVisibleContentPosition` with Paseo's patch): the anchor is
+    /// the first cell wholly on screen below the reader's line, locked for the pass (`anchorLock`). A
+    /// cell before it (above the line, or cut off by it) changes height by moving the offset by the
+    /// whole delta (`contentOffsetAdjustment`), so the anchor and everything below it stay put: an
+    /// older turn measured or settling in the overscan, the top of a turn the reader is scrolling into.
+    /// The anchor and the cells after it grow downward and move nothing above them. When no cell is
+    /// wholly on screen (one turn taller than the screen), the cell under the line is the anchor and
+    /// grows downward too.
+    ///
+    /// - The tapped cell is a disclosure opening where the reader looks: its top stays (upstream holds
+    ///   the toggled row).
     /// - A turn that just finished folds the work above its answer away: the turn's end stays put,
     ///   on a net shrink only (otherwise the answer would move by the footer and changes card
     ///   added below it instead of by the smaller fold above it).
@@ -544,7 +542,6 @@ final class TranscriptEngine: NSObject {
         guard !pinsToBottom else { return false }
         let cv = collectionView
         let readerTop = cv.contentOffset.y + cv.contentInset.top
-        if frame.maxY <= readerTop + 0.5 { return true }
         guard frame.minY < readerTop - 0.5, cv.contentOffset.y + delta >= -cv.contentInset.top,
             items.indices.contains(index), entries.indices.contains(index)
         else { return false }
@@ -553,94 +550,27 @@ final class TranscriptEngine: NSObject {
             return delta < 0
         }
         if Date.now < resizeAnimationUntil, items[index] == tappedItemID { return false }
-        if !cv.isDecelerating,
-            captureRowAnchor(cellFrame: frame, at: index, readerTop: readerTop)
-        {
-            return false
-        }
-        // No row frames to anchor to (or a flick in flight): the whole-cell rule.
-        if case .turn(let row) = entries[index], row.turn.phase == .running { return false }
-        return true
+        return index < anchorIndex(readerTop: readerTop)
     }
 
-    /// The row of a turn under the reader's line, followed until SwiftUI has laid the resized cell out.
-    private struct RowAnchor {
-        var id: TranscriptItemID
-        var seqEnd: Int
-        /// The row's top in the cell's own space when it was last seen. The cell's place in the content
-        /// is not part of it: cells above compensate by themselves.
-        var localY: CGFloat
-        var token: Int
-        var until: Date
-    }
-
-    /// How long after a resize the anchor row is followed (SwiftUI reports a pass or two later).
-    private static let rowAnchorWindow: TimeInterval = 0.3
-
-    /// Remembers the row under the reader's line of a resizing cell, once per resize. False when the
-    /// cell has no row frames to anchor to.
-    private func captureRowAnchor(cellFrame: CGRect, at index: Int, readerTop: CGFloat) -> Bool {
-        guard case .turn(let row) = entries[index] else { return false }
-        let id = items[index]
-        if let pending = rowAnchor, pending.id == id, pending.until > Date.now { return true }
-        let local = readerTop - cellFrame.minY
-        var best: (seqEnd: Int, minY: CGFloat)?
-        func consider(_ seqEnd: Int) {
-            guard let frame = rowFrames.frame(of: seqEnd), frame.minY >= -1, frame.minY <= local + 0.5
-            else { return }
-            if let current = best, current.minY >= frame.minY { return }
-            best = (seqEnd, frame.minY)
-        }
-        let turn = row.turn
-        if let user = turn.userMessage { consider(user.seqEnd) }
-        for segment in turn.segments {
-            switch segment {
-            case .work(let group):
-                for step in group.rows { consider(step.seqEnd) }
-            case .prose(let proseRow), .todo(let proseRow), .notice(let proseRow):
-                consider(proseRow.seqEnd)
-            }
-        }
-        guard let best else { return false }
-        rowAnchor = RowAnchor(
-            id: id, seqEnd: best.seqEnd, localY: best.minY, token: revealToken,
-            until: Date.now.addingTimeInterval(Self.rowAnchorWindow))
-        rowFrames.onChange = { [weak self] in self?.rowFramesChanged() }
-        return true
-    }
-
-    private func endRowAnchor() {
-        rowAnchor = nil
-        rowFrames.onChange = nil
-    }
-
-    /// Rows reported new frames: when the anchor row moved inside its cell, the offset moves with it by
-    /// a plain write, so the row stays where the reader sees it. Skipped, and the anchor dropped, when
-    /// the end is pinned, a jump or a structural change took over, or the turn is gone.
-    private func rowFramesChanged() {
-        guard var anchor = rowAnchor else {
-            rowFrames.onChange = nil
-            return
-        }
+    /// The pass's anchor: the first cell wholly between the reader's line and the bottom bars, else the
+    /// cell under the line. Chosen once per layout pass from the frames the pass started with, so the
+    /// cells measured in one pass all compensate against the same row (upstream's anchor lock: without
+    /// it, a cell measured early in the pass moves the frames the next decision reads).
+    private func anchorIndex(readerTop: CGFloat) -> Int {
+        if let anchorLock, let index = indexByID[anchorLock] { return index }
         let cv = collectionView
-        guard anchor.until > Date.now, anchor.token == revealToken, !isApplyingStructuralChange,
-            !pinsToBottom, !isAnimatingScroll, let index = indexByID[anchor.id],
-            entries.indices.contains(index), case .turn = entries[index],
-            let frame = rowFrames.frame(of: anchor.seqEnd)
-        else {
-            endRowAnchor()
-            return
+        let readerBottom = cv.contentOffset.y + cv.bounds.height - cv.contentInset.bottom
+        let underLine = layout.firstIndex(withMaxYAtLeast: readerTop)
+        var anchor = underLine
+        while let frame = layout.frame(at: anchor), frame.minY < readerBottom {
+            if frame.height > 0, frame.minY >= readerTop - 0.5, frame.maxY <= readerBottom + 0.5 { break }
+            anchor += 1
         }
-        // A write would stop a flick in flight; wait for it to end within the window.
-        guard !cv.isDecelerating else { return }
-        let shift = frame.minY - anchor.localY
-        guard abs(shift) > 0.5 else { return }
-        anchor.localY = frame.minY
-        rowAnchor = anchor
-        let target = clamp(cv.contentOffset.y + shift)
-        if abs(target - cv.contentOffset.y) > 0.25 {
-            cv.contentOffset = CGPoint(x: 0, y: target)
-        }
+        // Nothing wholly on screen: the cell under the line holds.
+        if layout.frame(at: anchor).map({ $0.minY >= readerBottom }) ?? true { anchor = underLine }
+        if items.indices.contains(anchor) { anchorLock = items[anchor] }
+        return anchor
     }
 
     // MARK: Insets
@@ -691,6 +621,7 @@ final class TranscriptEngine: NSObject {
 
     func collectionViewDidLayout() {
         didInitialLayout = true
+        anchorLock = nil
         pinIfNeeded()
         if items.count > 1 { prewarmWebOnce() }
         let cv = collectionView
