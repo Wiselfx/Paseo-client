@@ -121,7 +121,7 @@ struct MismatchRecord {
 /// The visible gap between a turn's last row and the next turn's prompt changed between two steps.
 struct GapRecord {
     var step: Int
-    /// "rows" (from the SwiftUI row anchors) or "ink" (from the pixels the cell draws).
+    /// "rows" (from the SwiftUI row anchors) or "drawn" (from the layers the cell draws).
     var kind: String
     var upper: String
     var lower: String

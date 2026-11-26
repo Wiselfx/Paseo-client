@@ -31,7 +31,7 @@ struct HarnessStats {
             ]
         }
     }
-    var gapStats: [String: GapStats] = ["rows": GapStats(), "ink": GapStats()]
+    var gapStats: [String: GapStats] = ["rows": GapStats(), "drawn": GapStats()]
     /// Ink edges of cells (where pixels are drawn) moving beyond the scroll, on screen.
     var inkJumpsOnScreen = 0
     var sumAbsInkMotionOnScreen = 0.0
@@ -79,7 +79,7 @@ struct HarnessStats {
         var estimateSignedSum = 0.0
         for pass in passes {
             steps += pass.steps.count
-            for jump in pass.jumps where jump.kind == "row" || jump.kind.hasPrefix("ink") {
+            for jump in pass.jumps where jump.kind == "row" || jump.kind.hasPrefix("drawn") {
                 guard jump.onScreen else { continue }
                 if jump.kind == "row" {
                     rowJumpsOnScreen += 1
@@ -100,7 +100,7 @@ struct HarnessStats {
             }
             for range in pass.gapRanges.values {
                 gapStats[range.kind, default: GapStats()].pairs += 1
-                let threshold = range.kind == "ink" ? 1.5 : 0.5
+                let threshold = range.kind == "drawn" ? 1.5 : 0.5
                 if range.range > threshold { gapStats[range.kind, default: GapStats()].pairsThatMoved += 1 }
                 gapStats[range.kind, default: GapStats()].maxRange =
                     max(gapStats[range.kind]?.maxRange ?? 0, range.range)

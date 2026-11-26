@@ -263,7 +263,7 @@ final class TranscriptHarnessTests: XCTestCase {
         var previous = sample(hosted, pass: pass, recorder: recorder, record: false, atRest: false)
         let onScreenAtStart = previous.values.filter(\.onScreen)
         notes.append(
-            "\(pass.title) ink probe: \(onScreenAtStart.filter { $0.inkTop != nil }.count) of \(onScreenAtStart.count) on-screen cells have drawn pixels; "
+            "\(pass.title) ink probe: \(onScreenAtStart.filter { $0.inkTop != nil }.count) of \(onScreenAtStart.count) on-screen cells have a drawn extent; "
                 + onScreenAtStart.prefix(3).map {
                     "\($0.item) screenY \(Int($0.screenY)) cell \(Int($0.cellHeight)) safe \(Int($0.safeTop))/\(Int($0.safeBottom)) ink \($0.inkTop.map { Int($0) } ?? -1)...\($0.inkBottom.map { Int($0) } ?? -1)"
                 }.joined(separator: " | "))
@@ -310,7 +310,7 @@ final class TranscriptHarnessTests: XCTestCase {
     /// beyond what the scroll commanded, so a cell that scrolls by exactly the commanded step reads 0,
     /// whether or not the engine compensated. Three things are followed: the cell's frame, the SwiftUI
     /// rows inside it (anchor position plus the content view's top safe area inset, which is where
-    /// SwiftUI places its root) and the drawn pixels (`inkExtent`). Then the gap between each turn's last
+    /// SwiftUI places its root) and the drawn extent (`drawnExtent`). Then the gap between each turn's last
     /// content and the next turn's first, by rows and by pixels.
     private func compare(
         previous: [String: CellSample], now: [String: CellSample], commanded: Double, pass: PassData,
@@ -337,14 +337,14 @@ final class TranscriptHarnessTests: XCTestCase {
                     current.screenY + current.safeTop + top, tolerance: 0.5)
             }
             if let before = was.inkTop, let after = current.inkTop {
-                record("ink-top", name, was.screenY + before, current.screenY + after, tolerance: 1.5)
+                record("drawn-top", name, was.screenY + before, current.screenY + after, tolerance: 1.5)
             }
             if let before = was.inkBottom, let after = current.inkBottom {
-                record("ink-bottom", name, was.screenY + before, current.screenY + after, tolerance: 1.5)
+                record("drawn-bottom", name, was.screenY + before, current.screenY + after, tolerance: 1.5)
             }
         }
-        for kind in ["rows", "ink"] {
-            let tolerance = kind == "ink" ? 1.5 : 0.5
+        for kind in ["rows", "drawn"] {
+            let tolerance = kind == "drawn" ? 1.5 : 0.5
             let before = gaps(previous, kind: kind)
             for (pair, gap) in gaps(now, kind: kind) {
                 pass.gapSampleCounts[kind, default: 0] += 1
@@ -378,7 +378,7 @@ final class TranscriptHarnessTests: XCTestCase {
 
     /// For each pair of adjacent turns that are both sampled: the distance from the upper turn's last
     /// content to the lower turn's first. "rows": row anchors (placed below the top safe area inset).
-    /// "ink": the drawn pixels, which is the gap on the screen.
+    /// "drawn": the drawn layers, which is the gap on the screen.
     private func gaps(_ samples: [String: CellSample], kind: String) -> [String: Gap] {
         let byIndex = samples.values.sorted { $0.index < $1.index }
         var out: [String: Gap] = [:]
@@ -387,7 +387,7 @@ final class TranscriptHarnessTests: XCTestCase {
             let lower = byIndex[position + 1]
             guard lower.index == upper.index + 1 else { continue }
             let value: Double
-            if kind == "ink" {
+            if kind == "drawn" {
                 guard let bottom = upper.inkBottom, let top = lower.inkTop else { continue }
                 value = (lower.screenY + top) - (upper.screenY + bottom)
             } else {
@@ -453,8 +453,8 @@ final class TranscriptHarnessTests: XCTestCase {
                 }
             }
             var ink: (top: Double?, bottom: Double?) = (nil, nil)
-            if onScreen, drawn != nil {
-                ink = inkExtent(of: cell)
+            if drawn != nil {
+                ink = drawnExtent(of: cell)
                 if record {
                     if ink.top != nil { pass.inkAvailableSamples += 1 } else { pass.inkMissingSamples += 1 }
                 }
@@ -500,67 +500,33 @@ final class TranscriptHarnessTests: XCTestCase {
         return out
     }
 
-    private static let inkAlpha: UInt8 = 24
-    private static let inkTopStrip: CGFloat = 400
-    private static let inkBottomStrip: CGFloat = 420
-
-    /// The first row near the top of the cell, and the last row near its bottom, that has a drawn pixel
-    /// (alpha above a small threshold), in the cell's own space. Rendered at 1x from the layer tree, so
-    /// precise to about a point. A view that does not draw into the layer tree (a web view) reads blank.
-    private func inkExtent(of view: UIView) -> (top: Double?, bottom: Double?) {
-        let size = view.bounds.size
-        guard size.width > 1, size.height > 1 else { return (nil, nil) }
-        let topHeight = min(size.height, Self.inkTopStrip)
-        let bottomHeight = min(size.height, Self.inkBottomStrip)
-        let top = inkRows(of: view, from: 0, height: topHeight)
-        let bottom = inkRows(of: view, from: size.height - bottomHeight, height: bottomHeight)
-        return (top?.first, bottom?.last)
-    }
-
-    private func inkRows(of view: UIView, from originY: CGFloat, height: CGFloat) -> (first: Double, last: Double)? {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = false
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: view.bounds.width, height: height), format: format)
-        let image = renderer.image { context in
-            context.cgContext.translateBy(x: 0, y: -originY)
-            view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
-        }
-        guard let cgImage = image.cgImage else { return nil }
-        let width = cgImage.width
-        let rows = cgImage.height
-        guard width > 0, rows > 0 else { return nil }
-        var pixels = [UInt8](repeating: 0, count: width * rows * 4)
-        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
-            guard
-                let context = CGContext(
-                    data: buffer.baseAddress, width: width, height: rows, bitsPerComponent: 8,
-                    bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
-                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-            else { return false }
-            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: rows))
-            return true
-        }
-        guard drawn else { return nil }
-        var first: Int?
-        var last: Int?
-        for row in 0..<rows {
-            let base = row * width * 4
-            var column = 3
-            var inked = false
-            while column < width * 4 {
-                if pixels[base + column] > Self.inkAlpha {
-                    inked = true
-                    break
+    /// Where the cell draws: the top of the first and the bottom of the last layer that has contents or a
+    /// fill, in the cell's own space (the content view's layer tree: SwiftUI draws text, shapes and images
+    /// into CGDrawingLayer, ImageLayer and ColorShapeLayer; UIKit views such as code blocks and web views
+    /// bring their own layers). Read from the layer tree, not from pixels: `drawHierarchy` does not draw
+    /// SwiftUI hosting content in the test host (it returns false), and the layer tree is exact and cheap.
+    /// Scroll indicators are skipped. Layers carry a few points of padding, so only changes mean something.
+    private func drawnExtent(of cell: UICollectionViewCell) -> (top: Double?, bottom: Double?) {
+        let root = cell.contentView.layer
+        var top = Double.infinity
+        var bottom = -Double.infinity
+        func visit(_ layer: CALayer) {
+            if layer.isHidden || layer.opacity < 0.01 { return }
+            if let view = layer.delegate as? UIView, String(describing: type(of: view)).contains("ScrollIndicator") {
+                return
+            }
+            let fills = layer.backgroundColor.map { $0.alpha > 0.01 } ?? false
+            if layer.contents != nil || fills {
+                let rect = layer.convert(layer.bounds, to: root)
+                if rect.height > 0.5, rect.width > 0.5, rect.minY.isFinite, rect.maxY.isFinite {
+                    top = min(top, Double(rect.minY))
+                    bottom = max(bottom, Double(rect.maxY))
                 }
-                column += 4
             }
-            if inked {
-                if first == nil { first = row }
-                last = row
-            }
+            for sublayer in layer.sublayers ?? [] { visit(sublayer) }
         }
-        guard let first, let last else { return nil }
-        return (Double(originY) + Double(first), Double(originY) + Double(last + 1))
+        visit(root)
+        guard top.isFinite, bottom.isFinite else { return (nil, nil) }
+        return (top, bottom)
     }
 }

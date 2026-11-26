@@ -21,7 +21,7 @@ jobs:
     env:
       PKG_DIR: Packages/PaseoUI
       # Identifier form is TestTarget[/TestClass[/TestMethod]] (xcodebuild man page).
-      ONLY_TESTING: PaseoUITests/TranscriptInkProbeTests
+      ONLY_TESTING: PaseoUITests/TranscriptHarnessTests
     steps:
       - uses: actions/checkout@v4
 

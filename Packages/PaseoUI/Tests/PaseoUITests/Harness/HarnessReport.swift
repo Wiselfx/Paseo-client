@@ -28,22 +28,22 @@ enum HarnessReport {
         out +=
             "- ROW motion on screen (content inside cells, |unexplained| > 0.5): \(s.rowJumpsOnScreen); sum \(f(s.sumAbsRowMotionOnScreen)) pt; max \(f(s.maxAbsRowMotionOnScreen)) pt\n"
         out +=
-            "- INK motion on screen (the first and last drawn pixel row of each cell, |unexplained| > 1.5): \(s.inkJumpsOnScreen); sum \(f(s.sumAbsInkMotionOnScreen)) pt; max \(f(s.maxAbsInkMotionOnScreen)) pt "
-            + "(\(s.inkSamples) cell samples with pixels, \(s.inkMissing) without)\n"
-        for kind in ["ink", "rows"] {
+            "- DRAWN motion on screen (top and bottom of what each cell draws, |unexplained| > 1.5): \(s.inkJumpsOnScreen); sum \(f(s.sumAbsInkMotionOnScreen)) pt; max \(f(s.maxAbsInkMotionOnScreen)) pt "
+            + "(\(s.inkSamples) cell samples with a drawn extent, \(s.inkMissing) without)\n"
+        for kind in ["drawn", "rows"] {
             guard let g = s.gapStats[kind] else { continue }
             let what =
-                kind == "ink"
-                ? "last drawn pixel of a turn to the next turn's first drawn pixel (the gap you see)"
+                kind == "drawn"
+                ? "bottom of what a turn draws to the top of what the next turn draws (the gap you see)"
                 : "last row anchor of a turn to the next turn's prompt anchor"
             out +=
-                "- GAP \(kind) (\(what)): \(g.pairs) adjacent pairs seen, \(g.pairsThatMoved) changed by more than \(kind == "ink" ? "1.5" : "0.5") pt (max range \(f(g.maxRange)) pt); "
+                "- GAP \(kind) (\(what)): \(g.pairs) adjacent pairs seen, \(g.pairsThatMoved) changed by more than \(kind == "drawn" ? "1.5" : "0.5") pt (max range \(f(g.maxRange)) pt); "
                 + "\(g.driftsOnScreen) step-to-step drifts on screen of \(g.samples) samples, sum \(f(g.sumAbsDrift)) pt, max \(f(g.maxAbsDrift)) pt\n"
         }
         out +=
             "- cell frames taller than the content needs (cell - natural height, natural = fitting minus safe area insets): \(s.inflatedFrames) of \(s.cellsSeen) cells; mean \(f(s.cellsSeen > 0 ? s.sumInflation / Double(s.cellsSeen) : 0)) pt, max \(f(s.maxInflation)) pt\n"
         out +=
-            "- space under the last drawn pixel (cell height - ink bottom): changed by more than 1.5 pt for \(s.slackItemsThatMoved) of \(s.slackItems) cells (max range \(f(s.maxSlackRange)) pt); first drawn pixel from the cell's top changed for \(s.inkTopItemsThatMoved) cells (max range \(f(s.maxInkTopRange)) pt)\n"
+            "- space under what the cell draws (cell height - drawn bottom): changed by more than 1.5 pt for \(s.slackItemsThatMoved) of \(s.slackItems) cells (max range \(f(s.maxSlackRange)) pt); drawn top within the cell changed for \(s.inkTopItemsThatMoved) cells (max range \(f(s.maxInkTopRange)) pt)\n"
         out +=
             "- mismatch samples |cell - drawn| > 0.5 on screen: \(s.mismatchOnScreen) of \(s.mismatchSamplesOnScreen) sampled; max \(f(s.mismatchMaxOnScreen)) pt\n"
         out +=
