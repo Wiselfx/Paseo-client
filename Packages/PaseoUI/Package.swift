@@ -26,5 +26,14 @@ let package = Package(
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
             resources: [.process("Resources")]),
-        .testTarget(name: "PaseoUITests", dependencies: ["PaseoUI"]),
+        // The transcript harness (TranscriptHarnessTests) builds a conversation through the real store
+        // path, so it reaches the Core products PaseoUI itself is built on.
+        .testTarget(
+            name: "PaseoUITests",
+            dependencies: [
+                "PaseoUI",
+                .product(name: "PaseoStore", package: "PaseoCore"),
+                .product(name: "PaseoKit", package: "PaseoCore"),
+                .product(name: "PaseoProtocol", package: "PaseoCore"),
+            ]),
     ])

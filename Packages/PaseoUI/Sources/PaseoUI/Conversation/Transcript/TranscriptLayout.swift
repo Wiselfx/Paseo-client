@@ -145,13 +145,21 @@ final class TranscriptLayout: UICollectionViewLayout {
         else { return context }
         let old = heights[index]
         let new = max(preferredAttributes.size.height, 0)
+        let firstMeasure = measured[engine.items[index]] == nil
         heights[index] = new
         measured[engine.items[index]] = new
         engine.didMeasure(index: index, height: new)
         let delta = new - old
-        if engine.compensatesResize(of: frames[index], at: index, delta: delta) {
+        let decision = engine.compensatesResize(of: frames[index], at: index, delta: delta)
+        if decision.compensates {
             context.contentOffsetAdjustment = CGPoint(x: 0, y: delta)
         }
+        TranscriptProbe.emit(
+            .invalidation(
+                index: index, id: String(describing: engine.items[index]), old: old, new: new,
+                firstMeasure: firstMeasure, compensated: decision.compensates, branch: decision.branch,
+                frame: frames[index],
+                readerTop: (collectionView?.contentOffset.y ?? 0) + (collectionView?.contentInset.top ?? 0)))
         context.contentSizeAdjustment = CGSize(width: 0, height: delta)
         return context
     }

@@ -70,7 +70,14 @@ final class TranscriptEngine: NSObject {
 
     /// A finger, a flick or its deceleration owns the scroll. Read live from the scroll view: a tap
     /// that stops a flick ends the deceleration without any callback.
-    var isUserScrolling: Bool { collectionView.isDragging || collectionView.isDecelerating }
+    var isUserScrolling: Bool {
+        collectionView.isDragging || collectionView.isDecelerating || TranscriptProbe.simulatedDragging
+            || TranscriptProbe.simulatedDecelerating
+    }
+    /// A flick is coasting (the harness can stand in for one: `TranscriptProbe`).
+    private var isDecelerating: Bool {
+        collectionView.isDecelerating || TranscriptProbe.simulatedDecelerating
+    }
     /// A programmatic animated scroll is running (`setContentOffset(_:animated: true)`).
     private var isAnimatingScroll = false
     private var animationCompletion: (@MainActor () -> Void)?
@@ -99,7 +106,7 @@ final class TranscriptEngine: NSObject {
     private var historyLoadInFlight = false
     private var historyTicker: Task<Void, Never>?
 
-    private var heightMemory = TurnHeightMemory()
+    private(set) var heightMemory = TurnHeightMemory()
     private var lastHeightSave = Date.distantPast
     private var estimateCache: [String: CGFloat] = [:]
 
@@ -540,27 +547,29 @@ final class TranscriptEngine: NSObject {
     /// - A turn that just finished folds the work above its answer away: the turn's end stays put,
     ///   on a net shrink only (otherwise the answer would move by the footer and changes card
     ///   added below it instead of by the smaller fold above it).
-    func compensatesResize(of frame: CGRect, at index: Int, delta: CGFloat) -> Bool {
-        guard !pinsToBottom else { return false }
+    func compensatesResize(of frame: CGRect, at index: Int, delta: CGFloat) -> (
+        compensates: Bool, branch: TranscriptProbe.Branch
+    ) {
+        guard !pinsToBottom else { return (false, .pinned) }
         let cv = collectionView
         let readerTop = cv.contentOffset.y + cv.contentInset.top
-        if frame.maxY <= readerTop + 0.5 { return true }
+        if frame.maxY <= readerTop + 0.5 { return (true, .wholeAbove) }
         guard frame.minY < readerTop - 0.5, cv.contentOffset.y + delta >= -cv.contentInset.top,
             items.indices.contains(index), entries.indices.contains(index)
-        else { return false }
+        else { return (false, .notStraddling) }
         if let settling = settlingTurn, settling.until > Date.now, items[index] == settling.id {
             settlingTurn = nil
-            return delta < 0
+            return (delta < 0, .settlingTurn)
         }
-        if Date.now < resizeAnimationUntil, items[index] == tappedItemID { return false }
-        if !cv.isDecelerating,
+        if Date.now < resizeAnimationUntil, items[index] == tappedItemID { return (false, .tapped) }
+        if !isDecelerating,
             captureRowAnchor(cellFrame: frame, at: index, readerTop: readerTop)
         {
-            return false
+            return (false, .rowAnchor)
         }
         // No row frames to anchor to (or a flick in flight): the whole-cell rule.
-        if case .turn(let row) = entries[index], row.turn.phase == .running { return false }
-        return true
+        if case .turn(let row) = entries[index], row.turn.phase == .running { return (false, .runningTurn) }
+        return (true, .wholeCell)
     }
 
     /// The row of a turn under the reader's line, followed until SwiftUI has laid the resized cell out.
@@ -632,13 +641,14 @@ final class TranscriptEngine: NSObject {
             return
         }
         // A write would stop a flick in flight; wait for it to end within the window.
-        guard !cv.isDecelerating else { return }
+        guard !isDecelerating else { return }
         let shift = frame.minY - anchor.localY
         guard abs(shift) > 0.5 else { return }
         anchor.localY = frame.minY
         rowAnchor = anchor
         let target = clamp(cv.contentOffset.y + shift)
         if abs(target - cv.contentOffset.y) > 0.25 {
+            TranscriptProbe.emit(.offsetWrite(site: "rowFramesChanged", from: cv.contentOffset.y, to: target))
             cv.contentOffset = CGPoint(x: 0, y: target)
         }
     }
@@ -709,17 +719,20 @@ final class TranscriptEngine: NSObject {
         guard abs(cv.contentOffset.y - target) > 0.25 else { return }
         if glides, animatesResizes {
             // A disclosure at the end: the end follows it in the content's own curve.
+            TranscriptProbe.emit(.offsetWrite(site: "pinIfNeeded.disclosure", from: cv.contentOffset.y, to: target))
             UIView.animate(Motion.disclosure.animation, changes: {
                 cv.contentOffset = CGPoint(x: 0, y: target)
             })
         } else if glides, followsStreamGrowth(by: target - cv.contentOffset.y) {
             // A reply growing at the end: a new line slides up into place instead of the whole
             // transcript jumping a line per reveal step. Short, so it never trails the text.
+            TranscriptProbe.emit(.offsetWrite(site: "pinIfNeeded.glide", from: cv.contentOffset.y, to: target))
             UIView.animate(
                 withDuration: Self.streamFollowDuration, delay: 0,
                 options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction],
                 animations: { cv.contentOffset = CGPoint(x: 0, y: target) })
         } else {
+            TranscriptProbe.emit(.offsetWrite(site: "pinIfNeeded", from: cv.contentOffset.y, to: target))
             cv.contentOffset = CGPoint(x: 0, y: target)
         }
     }
@@ -887,6 +900,7 @@ final class TranscriptEngine: NSObject {
         animationCompletion = completion
         animationToken += 1
         let token = animationToken
+        TranscriptProbe.emit(.offsetWrite(site: "animateScroll", from: cv.contentOffset.y, to: target))
         cv.setContentOffset(CGPoint(x: 0, y: target), animated: true)
         // UIKit does not report the end of an animation another offset change cut short: the flag never
         // outlives the animation it stands for.
@@ -903,6 +917,7 @@ final class TranscriptEngine: NSObject {
             isAnimatingScroll = false
             animationCompletion = nil
         }
+        TranscriptProbe.emit(.offsetWrite(site: "setOffset", from: collectionView.contentOffset.y, to: y))
         collectionView.contentOffset = CGPoint(x: 0, y: y)
     }
 
@@ -1288,6 +1303,13 @@ extension TranscriptEngine: UICollectionViewDataSource, UICollectionViewDataSour
         }
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: reuse, for: indexPath)
         if let cell = cell as? TranscriptCell { configure(cell, at: indexPath.item) }
+        TranscriptProbe.emit(
+            .dequeue(
+                index: indexPath.item,
+                id: items.indices.contains(indexPath.item) ? String(describing: items[indexPath.item]) : "?",
+                hadMeasured: items.indices.contains(indexPath.item)
+                    && layout.measuredHeight(of: items[indexPath.item]) != nil,
+                height: layout.frame(at: indexPath.item)?.height ?? -1))
         return cell
     }
 
