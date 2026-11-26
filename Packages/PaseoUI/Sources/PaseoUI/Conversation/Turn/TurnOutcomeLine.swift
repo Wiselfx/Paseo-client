@@ -19,11 +19,8 @@ struct TurnOutcomeLine: View {
                 .accessibilityHidden(true)
             if let summary {
                 // The summary gives way to the time when the line runs out of room.
-                // One line, like the live status it replaces: two lines made the header taller
-                // the moment the turn ended. VoiceOver reads the whole line.
                 Text(summary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .lineLimit(2)
                 if let timing {
                     Text("·").accessibilityHidden(true)
                     Text(timing).lineLimit(1).layoutPriority(1)

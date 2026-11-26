@@ -8,12 +8,7 @@ import UIKit
 /// A finished turn folds its work behind one line that says what the work did and how long it
 /// took (`TurnOutcomeLine`); one tap opens it. The answer (the turn's last message) always stays
 /// on the page, wherever it sits among the work. In `Collapse turns` mode (Settings → General →
-/// Chat) older turns also hide their copy / fork buttons (the row keeps its height). Find opens
-/// whatever holds a match.
-///
-/// Spacing is fixed by construction: every slot of the stack (bubble, header, segments, footer)
-/// keeps one height for the turn's whole life, and nothing that draws nothing takes a slot, so
-/// the distance between your bubble and the answer never changes as the turn runs and ends.
+/// Chat) older turns also drop their copy / fork footer. Find opens whatever holds a match.
 struct ClaudeTurnView: View {
     let turn: Turn
     let onMarkdown: (MarkdownAction) -> Void
@@ -94,17 +89,12 @@ struct ClaudeTurnView: View {
     /// slot of its own outside the work stack, so a streamed message was destroyed and rebuilt —
     /// every markdown piece and code block, its unrevealed backlog painted at once — the moment a
     /// tool call followed it and it moved into the stack.
-    ///
-    /// A segment that draws nothing never takes a slot: in the stack each slot costs a 14 pt gap,
-    /// so a todo segment (the card below owns todos) or a message that has not said anything yet
-    /// opened a blank gap that closed again later.
     var shownSegments: [Turn.Segment] {
-        let drawn = turn.segments.filter(Self.draws)
-        if isExpanded { return drawn }
+        if isExpanded { return turn.segments }
         let answerId = answerProse?.id
         // In document order: messages you sent mid-turn and compaction markers never fold away
         // (upstream `turn-collapse/model.ts:102` `staysVisibleWhenCollapsed`), nor does the answer.
-        return drawn.filter { segment in
+        return turn.segments.filter { segment in
             if segment.id == answerId { return true }
             guard case .notice(let row) = segment else { return false }
             switch row.item {
@@ -114,25 +104,13 @@ struct ClaudeTurnView: View {
         }
     }
 
-    /// Whether a segment draws anything (`ClaudeSegmentView`): todos draw in the turn's card, and
-    /// prose draws only an assistant message with text.
-    static func draws(_ segment: Turn.Segment) -> Bool {
-        switch segment {
-        case .todo:
-            return false
-        case .prose(let row):
-            guard case .assistantMessage(let message) = row.item else { return false }
-            return !message.text.isEmpty
-        case .work, .notice:
-            return true
-        }
-    }
-
-    /// Whether the turn has anything besides the answer for the header to open.
+    /// Whether the turn has anything besides the answer for the header to stand for.
     var hasWork: Bool {
         let answerId = answerProse?.id
-        return turn.segments.contains { $0.id != answerId && Self.draws($0) }
+        return turn.segments.contains { $0.id != answerId }
     }
+
+    var showsHeader: Bool { isRunning || hasWork }
 
     var chatDisplayMode: ChatDisplayMode {
         ChatDisplayMode(rawValue: chatDisplay) ?? .full
@@ -159,13 +137,7 @@ struct ClaudeTurnView: View {
                     rewindChoices: rewindChoices, rewindInFlight: rewindInFlight,
                     isHighlighted: highlightedSeq == row.seqEnd, onRewind: onRewind)
             }
-            // Every turn has its header line, live or finished, so the answer sits at the same
-            // distance from your bubble before and after the turn ends. (It used to vanish from a
-            // turn without work when it finished, and the answer jumped up by 38 pt.) One height in
-            // every state: the running line carries the 44 pt fork target, the finished one did not,
-            // so every turn shrank by 20 pt as it ended.
-            header
-                .frame(minHeight: Metrics.hitSize)
+            if showsHeader { header }
             // One stack, keyed by segment, for the work and the answer alike: a message keeps its
             // views whether it is the newest segment, settles above a tool call that follows it,
             // or stays as the answer when the finished turn folds its work away.
@@ -193,10 +165,7 @@ struct ClaudeTurnView: View {
                 // The turn's file changes close the turn, after the final prose.
                 TurnChangesCard(summary: summary, turnID: turn.id).equatable()
             }
-            if !isRunning {
-                // A finished turn always keeps its footer's height, whatever it holds: an older turn
-                // in Collapse mode hides the buttons but keeps the row, so sending a new prompt
-                // never shrinks the turn above it, and fork support arriving late never grows one.
+            if showsFooter {
                 HStack(spacing: 17) {
                     if hasProse {
                         ClaudeCopyButton(text: copyText, label: "Copy response")
@@ -207,11 +176,7 @@ struct ClaudeTurnView: View {
                         }
                     }
                 }
-                .frame(minHeight: Metrics.hitSize, alignment: .leading)
                 .padding(.top, 2)
-                .opacity(showsFooter ? 1 : 0)
-                .allowsHitTesting(showsFooter)
-                .accessibilityHidden(!showsFooter)
             }
         }
         .onChange(of: turn.phase) { _, phase in
@@ -257,17 +222,27 @@ struct ClaudeTurnView: View {
                 }
                 ClaudeChevron(expanded: isExpanded)
             }
-        } else if !hasWork {
-            // Nothing to open: the same line, without the chevron or a tap.
-            HStack(spacing: 8) {
-                finishedStatus
-                Spacer(minLength: 0)
-            }
         } else {
             Button { toggleWork() } label: {
                 HStack(spacing: 8) {
-                    finishedStatus
-                    Spacer(minLength: 0)
+                    switch turn.phase {
+                    case .running:
+                        ClaudeLiveStatusLine(turn: turn)
+                    case .completed:
+                        // What the work did and how long it took, behind a clock (user
+                        // directive), in the one line that also opens the work.
+                        let summary = TurnSummary(turn: turn).overviewLabel
+                        TurnOutcomeLine(
+                            summary: summary.isEmpty ? nil : summary,
+                            duration: turn.duration, isCanceled: isCanceled)
+                        Spacer(minLength: 0)
+                    case .failed(let message):
+                        Label(message, systemImage: "exclamationmark.triangle.fill")
+                            .font(.paseo(.callout))
+                            .foregroundStyle(Palette.failureInk)
+                            .lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
                     ClaudeChevron(expanded: isExpanded)
                 }
                 .contentShape(.rect)
@@ -276,25 +251,6 @@ struct ClaudeTurnView: View {
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 isExpanded ? "Collapses the work in this turn" : "Shows the work in this turn")
-        }
-    }
-
-    /// A finished turn's status: what the work did and how long it took behind a clock (user
-    /// directive), or the failure.
-    @ViewBuilder private var finishedStatus: some View {
-        switch turn.phase {
-        case .running:
-            ClaudeLiveStatusLine(turn: turn)
-        case .completed:
-            let summary = TurnSummary(turn: turn).overviewLabel
-            TurnOutcomeLine(
-                summary: summary.isEmpty ? nil : summary,
-                duration: turn.duration, isCanceled: isCanceled)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.paseo(.callout))
-                .foregroundStyle(Palette.failureInk)
-                .lineLimit(2)
         }
     }
 
