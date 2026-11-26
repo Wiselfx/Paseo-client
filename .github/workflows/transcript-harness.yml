@@ -1,0 +1,214 @@
+name: Transcript harness
+
+# Runs the PaseoUI package test target TranscriptHarnessTests on an iOS simulator and keeps
+# the xcresult plus the report it writes. Package-only: no App project, no xcodegen, no signing.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ['harness/**']
+  workflow_dispatch:
+
+concurrency:
+  group: transcript-harness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      PKG_DIR: Packages/PaseoUI
+      # Identifier form is TestTarget[/TestClass[/TestMethod]] (xcodebuild man page).
+      ONLY_TESTING: PaseoUITests/TranscriptHarnessTests
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same Xcode 27 selection as unsigned-ipa.yml.
+      - name: Select Xcode 27
+        run: |
+          ls -d /Applications/Xcode*.app
+          # 27.1 matches local development; otherwise the newest 27.x release on the image.
+          XCODE=$(ls -d /Applications/Xcode_27.1*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then
+            echo "::error::No Xcode 27 on this runner image"
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/spm
+          key: spm-${{ hashFiles('Packages/*/Package.resolved', 'Packages/*/Package.swift') }}
+          restore-keys: spm-
+
+      - name: Pick and boot an iPhone simulator
+        id: sim
+        run: |
+          command -v python3 >/dev/null || { echo "::error::python3 is not on this runner"; exit 1; }
+          cat > "$RUNNER_TEMP/pick_sim.py" <<'PY'
+          import json, re, sys
+          # Newest iOS runtime first, then the first preferred iPhone name that is available.
+          PREFERRED = ["iPhone 17 Pro", "iPhone 17", "iPhone 16 Pro", "iPhone 16"]
+
+          def available(d):
+              if "isAvailable" in d:
+                  return bool(d["isAvailable"])
+              return "unavailable" not in str(d.get("availability", "")).lower() and not d.get("availabilityError")
+
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          best = None
+          for runtime, devices in data.get("devices", {}).items():
+              m = re.search(r"iOS[- ](\d+)[-.](\d+)", runtime)
+              if not m:
+                  continue
+              version = (int(m.group(1)), int(m.group(2)))
+              for d in devices:
+                  name = d.get("name", "")
+                  if not available(d) or not name.startswith("iPhone"):
+                      continue
+                  rank = PREFERRED.index(name) if name in PREFERRED else len(PREFERRED)
+                  key = (version, -rank, name)
+                  if best is None or key > best[0]:
+                      best = (key, d["udid"], name, runtime)
+          if best is None:
+              sys.exit("no available iPhone simulator")
+          print("\t".join(best[1:]))
+          PY
+          # Plain 'list -j' (flag right after 'list', as Chromium's iossim_util.py does); availability is checked in Python.
+          xcrun simctl list -j > "$RUNNER_TEMP/simctl.json"
+          PICK=$(python3 "$RUNNER_TEMP/pick_sim.py" "$RUNNER_TEMP/simctl.json")
+          UDID=$(printf '%s' "$PICK" | cut -f1)
+          echo "Simulator: $(printf '%s' "$PICK" | cut -f2) on $(printf '%s' "$PICK" | cut -f3) ($UDID)"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          # "Already booted" is not a failure; bootstatus waits until the device is ready.
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" || true
+
+      - name: List the package schemes
+        working-directory: ${{ env.PKG_DIR }}
+        run: |
+          cat > "$RUNNER_TEMP/list_schemes.py" <<'PY'
+          import json, sys
+          with open(sys.argv[1]) as f:
+              text = f.read()
+          data = json.loads(text[text.index("{"):])
+          container = data.get("workspace") or data.get("project") or {}
+          for name in container.get("schemes", []):
+              print(name)
+          PY
+          xcodebuild -list -json > "$RUNNER_TEMP/list.json" 2> "$RUNNER_TEMP/list.err" || { cat "$RUNNER_TEMP/list.err"; exit 1; }
+          python3 "$RUNNER_TEMP/list_schemes.py" "$RUNNER_TEMP/list.json" > "$RUNNER_TEMP/schemes.txt"
+          echo "Schemes listed by xcodebuild -list:"
+          cat "$RUNNER_TEMP/schemes.txt"
+
+      - name: Run TranscriptHarnessTests
+        id: run
+        working-directory: ${{ env.PKG_DIR }}
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+          # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process with the prefix
+          # removed, so the test reads ProcessInfo.processInfo.environment["TRANSCRIPT_HARNESS_OUT"].
+          TEST_RUNNER_TRANSCRIPT_HARNESS_OUT: ${{ runner.temp }}/harness
+        run: |
+          REPORT="$RUNNER_TEMP/harness"
+          XCRESULT="$RUNNER_TEMP/TranscriptHarness.xcresult"
+          LOG="$RUNNER_TEMP/harness-xcodebuild.log"
+          rm -rf "$REPORT" "$XCRESULT" "$LOG"
+          mkdir -p "$REPORT"
+          # Candidates in order. Forum evidence says a '<Package>-Package' scheme appears only for
+          # multi-product packages; PaseoUI has one product, so PaseoUI is the expected name (UNVERIFIED).
+          CANDIDATES=""
+          for S in PaseoUI-Package PaseoUI; do
+            if grep -qx "$S" "$RUNNER_TEMP/schemes.txt"; then CANDIDATES="$CANDIDATES $S"; fi
+          done
+          if [ -z "$CANDIDATES" ]; then
+            echo "::error::Neither PaseoUI-Package nor PaseoUI is listed by xcodebuild -list"
+            exit 1
+          fi
+          STATUS=1
+          for S in $CANDIDATES; do
+            echo "::notice::xcodebuild test -scheme $S"
+            rm -rf "$XCRESULT"
+            set +e
+            xcodebuild test \
+              -scheme "$S" \
+              -configuration Debug \
+              -destination "platform=iOS Simulator,id=$SIM_UDID" \
+              -derivedDataPath "$RUNNER_TEMP/DerivedData-harness" \
+              -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
+              -resultBundlePath "$XCRESULT" \
+              -parallel-testing-enabled NO \
+              -only-testing:"$ONLY_TESTING" \
+              -skipPackagePluginValidation \
+              -skipMacroValidation \
+              CODE_SIGNING_ALLOWED=NO \
+              > "$LOG" 2>&1
+            STATUS=$?
+            set -e
+            if [ "$STATUS" -eq 0 ]; then break; fi
+            if grep -q "configured for the test action" "$LOG"; then
+              echo "::warning::Scheme $S has no test action; trying the next candidate"
+              STATUS=1
+              continue
+            fi
+            break
+          done
+          echo "xcodebuild exit status: $STATUS"
+          exit "$STATUS"
+
+      - name: Check that the harness wrote a report
+        if: success()
+        run: |
+          if [ -z "$(find "$RUNNER_TEMP/harness" -type f 2>/dev/null | head -n 1)" ]; then
+            echo "::error::TranscriptHarnessTests wrote nothing to TRANSCRIPT_HARNESS_OUT ($RUNNER_TEMP/harness). Did it run?"
+            exit 1
+          fi
+
+      - name: Print the harness report
+        if: always()
+        run: |
+          ls -la "$RUNNER_TEMP/harness" 2>/dev/null || echo "No harness output directory"
+          if [ -f "$RUNNER_TEMP/harness/report.md" ]; then
+            echo "::group::report.md"
+            cat "$RUNNER_TEMP/harness/report.md"
+            echo "::endgroup::"
+            # The summary is also what you read first in the log.
+            cat "$RUNNER_TEMP/harness/report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report.md was written"
+          fi
+
+      - name: List errors
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/harness-xcodebuild.log"
+          echo "::group::error lines"
+          grep -E "error:|failed|configured for the test action|Test Case .* failed|XCTAssert|Fatal" "$LOG" 2>/dev/null | sort -u | head -300 || true
+          echo "::endgroup::"
+          echo "::group::last 120 lines of the xcodebuild log"
+          tail -n 120 "$LOG" 2>/dev/null || true
+          echo "::endgroup::"
+
+      - name: Upload the xcresult and the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcript-harness
+          path: |
+            ${{ runner.temp }}/TranscriptHarness.xcresult
+            ${{ runner.temp }}/harness
+            ${{ runner.temp }}/harness-xcodebuild.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Shut the simulator down
+        if: always()
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: xcrun simctl shutdown "$SIM_UDID" || true
