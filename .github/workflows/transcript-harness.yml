@@ -21,7 +21,7 @@ jobs:
     env:
       PKG_DIR: Packages/PaseoUI
       # Identifier form is TestTarget[/TestClass[/TestMethod]] (xcodebuild man page).
-      ONLY_TESTING: PaseoUITests/TranscriptHarnessTests
+      ONLY_TESTING: PaseoUITests/TranscriptInkProbeTests
     steps:
       - uses: actions/checkout@v4
 
@@ -183,6 +183,12 @@ jobs:
           else
             echo "No report.md was written"
           fi
+          for F in "$RUNNER_TEMP"/harness/*.txt; do
+            [ -f "$F" ] || continue
+            echo "::group::$(basename "$F")"
+            cat "$F"
+            echo "::endgroup::"
+          done
 
       - name: List errors
         if: failure()
