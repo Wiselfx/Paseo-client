@@ -31,9 +31,5 @@ final class TranscriptRowFrames {
     }
     func frame(of seqEnd: Int) -> CGRect? { frames[seqEnd] }
     func reset() { frames.removeAll() }
-    /// Drops the frames of rows whose cell is coming back on screen: they describe its last visit.
-    func forget(_ seqs: [Int]) {
-        for seq in seqs { frames[seq] = nil }
-    }
 }
 #endif

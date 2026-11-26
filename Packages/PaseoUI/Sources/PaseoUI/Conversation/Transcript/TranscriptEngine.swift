@@ -89,12 +89,6 @@ final class TranscriptEngine: NSObject {
     /// A turn that just finished and is folding its work away above its answer, and until when its
     /// resize keeps the turn's end in place (see `compensatesResize`).
     private var settlingTurn: (id: TranscriptItemID, until: Date)?
-    /// Items dequeued into a cell and not yet through a layout pass on screen. The reader has not seen
-    /// them, so their first measurement keeps what is on screen in place (`compensatesResize`), never
-    /// a row of theirs: the row frames of a turn coming back on screen are the ones it last reported.
-    private var freshItems: Set<TranscriptItemID> = []
-    /// Fresh items that were displayed during the current layout pass.
-    private var displayedFresh: Set<TranscriptItemID> = []
     private var isApplyingStructuralChange = false
     private var findFetchTask: Task<Void, Never>?
 
@@ -534,8 +528,6 @@ final class TranscriptEngine: NSObject {
     ///
     /// - A cell wholly above the line (measured for the first time in the overscan, an older page
     ///   settling) always compensates with the whole delta, inside the layout pass.
-    /// - So does a cell coming on screen (`freshItems`), even reaching across the line: the reader has
-    ///   not seen it yet, so the rows below it keep their place (a finished turn's only).
     /// - A cell reaching across the line is a turn, often taller than the screen. The reader looks at
     ///   one row of it: only how far that row moves matters. Growth below the row (streamed text at the
     ///   end of the running turn, a block settling under the line) moves nothing; growth above it is
@@ -556,14 +548,6 @@ final class TranscriptEngine: NSObject {
         guard frame.minY < readerTop - 0.5, cv.contentOffset.y + delta >= -cv.contentInset.top,
             items.indices.contains(index), entries.indices.contains(index)
         else { return false }
-        // A cell coming on screen (scrolling up into history): its first height replaces a guess or the
-        // height it had when last seen. What the reader sees is below it, so it keeps its place. The row
-        // anchor would read the frames the turn reported on its last visit and leave the guess's error
-        // on screen, moving every answer and bubble below it.
-        if freshItems.contains(items[index]) {
-            if case .turn(let row) = entries[index], row.turn.phase == .running { return false }
-            return true
-        }
         if let settling = settlingTurn, settling.until > Date.now, items[index] == settling.id {
             settlingTurn = nil
             return delta < 0
@@ -607,40 +591,22 @@ final class TranscriptEngine: NSObject {
             if let current = best, current.minY >= frame.minY { return }
             best = (seqEnd, frame.minY)
         }
-        for seqEnd in Self.rowSeqs(of: row.turn) { consider(seqEnd) }
+        let turn = row.turn
+        if let user = turn.userMessage { consider(user.seqEnd) }
+        for segment in turn.segments {
+            switch segment {
+            case .work(let group):
+                for step in group.rows { consider(step.seqEnd) }
+            case .prose(let proseRow), .todo(let proseRow), .notice(let proseRow):
+                consider(proseRow.seqEnd)
+            }
+        }
         guard let best else { return false }
         rowAnchor = RowAnchor(
             id: id, seqEnd: best.seqEnd, localY: best.minY, token: revealToken,
             until: Date.now.addingTimeInterval(Self.rowAnchorWindow))
         rowFrames.onChange = { [weak self] in self?.rowFramesChanged() }
         return true
-    }
-
-    /// The rows of a turn that report frames (`TranscriptRowAnchor`), by `seqEnd`.
-    private static func rowSeqs(of turn: Turn) -> [Int] {
-        var seqs: [Int] = []
-        if let user = turn.userMessage { seqs.append(user.seqEnd) }
-        for segment in turn.segments {
-            switch segment {
-            case .work(let group):
-                seqs.append(contentsOf: group.rows.map(\.seqEnd))
-            case .prose(let row), .todo(let row), .notice(let row):
-                seqs.append(row.seqEnd)
-            }
-        }
-        return seqs
-    }
-
-    /// A cell was dequeued for the item: until it has been laid out on screen its resizes keep the
-    /// rows below in place, and its turn's old row frames are dropped so an anchor only ever reads
-    /// frames from this visit.
-    private func markFresh(at index: Int) {
-        guard items.indices.contains(index), entries.indices.contains(index) else { return }
-        let id = items[index]
-        freshItems.insert(id)
-        guard case .turn(let row) = entries[index] else { return }
-        if rowAnchor?.id == id { endRowAnchor() }
-        rowFrames.forget(Self.rowSeqs(of: row.turn))
     }
 
     private func endRowAnchor() {
@@ -725,10 +691,6 @@ final class TranscriptEngine: NSObject {
 
     func collectionViewDidLayout() {
         didInitialLayout = true
-        if !displayedFresh.isEmpty {
-            freshItems.subtract(displayedFresh)
-            displayedFresh.removeAll(keepingCapacity: true)
-        }
         pinIfNeeded()
         if items.count > 1 { prewarmWebOnce() }
         let cv = collectionView
@@ -1325,10 +1287,7 @@ extension TranscriptEngine: UICollectionViewDataSource, UICollectionViewDataSour
             collectionView.register(TranscriptCell.self, forCellWithReuseIdentifier: reuse)
         }
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: reuse, for: indexPath)
-        if let cell = cell as? TranscriptCell {
-            configure(cell, at: indexPath.item)
-            markFresh(at: indexPath.item)
-        }
+        if let cell = cell as? TranscriptCell { configure(cell, at: indexPath.item) }
         return cell
     }
 
@@ -1381,15 +1340,6 @@ extension TranscriptEngine: UICollectionViewDataSource, UICollectionViewDataSour
     }
 }
 extension TranscriptEngine: UICollectionViewDelegate, UIGestureRecognizerDelegate {
-    func collectionView(
-        _ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell,
-        forItemAt indexPath: IndexPath
-    ) {
-        guard items.indices.contains(indexPath.item) else { return }
-        let id = items[indexPath.item]
-        if freshItems.contains(id) { displayedFresh.insert(id) }
-    }
-
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         // A finger takes the viewport from any jump or glide still on its way (upstream `beginUserScroll`).
         revealToken += 1
