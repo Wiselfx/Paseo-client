@@ -121,6 +121,8 @@ struct MismatchRecord {
 /// The visible gap between a turn's last row and the next turn's prompt changed between two steps.
 struct GapRecord {
     var step: Int
+    /// "rows" (from the SwiftUI row anchors) or "ink" (from the pixels the cell draws).
+    var kind: String
     var upper: String
     var lower: String
     var previousGap: Double
@@ -131,8 +133,8 @@ struct GapRecord {
 
     var json: [String: Any] {
         [
-            "step": step, "upper": upper, "lower": lower, "previousGap": previousGap, "gap": gap,
-            "drift": drift, "onScreen": onScreen,
+            "step": step, "kind": kind, "upper": upper, "lower": lower, "previousGap": previousGap,
+            "gap": gap, "drift": drift, "onScreen": onScreen,
         ]
     }
 }
@@ -148,17 +150,20 @@ struct SampleRecord {
     var safeBottom: Double
     var firstRowMinY: Double?
     var lastRowMaxY: Double?
+    var inkTop: Double?
+    var inkBottom: Double?
 
     var json: [Any] {
         [
             step, item, screenY, cellHeight, drawnHeight, safeTop, safeBottom,
-            firstRowMinY ?? NSNull(), lastRowMaxY ?? NSNull(),
+            firstRowMinY ?? NSNull(), lastRowMaxY ?? NSNull(), inkTop ?? NSNull(), inkBottom ?? NSNull(),
         ]
     }
 }
 
 /// How far one adjacent pair's gap ranged over a pass.
 struct GapRange {
+    var kind: String
     var upper: String
     var lower: String
     var first: Double
@@ -168,6 +173,9 @@ struct GapRange {
     var range: Double { maximum - minimum }
 
     var json: [String: Any] {
-        ["upper": upper, "lower": lower, "first": first, "min": minimum, "max": maximum, "range": range]
+        [
+            "kind": kind, "upper": upper, "lower": lower, "first": first, "min": minimum, "max": maximum,
+            "range": range,
+        ]
     }
 }

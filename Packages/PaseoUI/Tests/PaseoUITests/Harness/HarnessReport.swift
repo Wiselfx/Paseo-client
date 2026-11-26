@@ -28,8 +28,22 @@ enum HarnessReport {
         out +=
             "- ROW motion on screen (content inside cells, |unexplained| > 0.5): \(s.rowJumpsOnScreen); sum \(f(s.sumAbsRowMotionOnScreen)) pt; max \(f(s.maxAbsRowMotionOnScreen)) pt\n"
         out +=
-            "- GAP (last row of a turn to the next turn's prompt): \(s.gapPairs) adjacent pairs seen, \(s.gapPairsThatMoved) changed by more than 0.5 pt (max range \(f(s.maxGapRange)) pt); "
-            + "\(s.gapDriftsOnScreen) step-to-step drifts on screen of \(s.gapSamples) samples, sum \(f(s.sumAbsGapDrift)) pt, max \(f(s.maxAbsGapDrift)) pt\n"
+            "- INK motion on screen (the first and last drawn pixel row of each cell, |unexplained| > 1.5): \(s.inkJumpsOnScreen); sum \(f(s.sumAbsInkMotionOnScreen)) pt; max \(f(s.maxAbsInkMotionOnScreen)) pt "
+            + "(\(s.inkSamples) cell samples with pixels, \(s.inkMissing) without)\n"
+        for kind in ["ink", "rows"] {
+            guard let g = s.gapStats[kind] else { continue }
+            let what =
+                kind == "ink"
+                ? "last drawn pixel of a turn to the next turn's first drawn pixel (the gap you see)"
+                : "last row anchor of a turn to the next turn's prompt anchor"
+            out +=
+                "- GAP \(kind) (\(what)): \(g.pairs) adjacent pairs seen, \(g.pairsThatMoved) changed by more than \(kind == "ink" ? "1.5" : "0.5") pt (max range \(f(g.maxRange)) pt); "
+                + "\(g.driftsOnScreen) step-to-step drifts on screen of \(g.samples) samples, sum \(f(g.sumAbsDrift)) pt, max \(f(g.maxAbsDrift)) pt\n"
+        }
+        out +=
+            "- cell frames taller than the content needs (cell - natural height, natural = fitting minus safe area insets): \(s.inflatedFrames) of \(s.cellsSeen) cells; mean \(f(s.cellsSeen > 0 ? s.sumInflation / Double(s.cellsSeen) : 0)) pt, max \(f(s.maxInflation)) pt\n"
+        out +=
+            "- space under the last drawn pixel (cell height - ink bottom): changed by more than 1.5 pt for \(s.slackItemsThatMoved) of \(s.slackItems) cells (max range \(f(s.maxSlackRange)) pt); first drawn pixel from the cell's top changed for \(s.inkTopItemsThatMoved) cells (max range \(f(s.maxInkTopRange)) pt)\n"
         out +=
             "- mismatch samples |cell - drawn| > 0.5 on screen: \(s.mismatchOnScreen) of \(s.mismatchSamplesOnScreen) sampled; max \(f(s.mismatchMaxOnScreen)) pt\n"
         out +=
@@ -74,11 +88,11 @@ enum HarnessReport {
 
         let gaps = passes.flatMap { pass in pass.gaps.map { (pass.title, $0) } }
             .sorted { abs($0.1.drift) > abs($1.1.drift) }
-        out += "\n## Top 20 gap drifts (answer to next prompt, between two steps)\n\n"
+        out += "\n## Top 20 gap drifts (a turn's last content to the next turn's first, between two steps)\n\n"
         if gaps.isEmpty { out += "No gap drift.\n" }
         for (title, gap) in gaps.prefix(20) {
             out +=
-                "- \(title) step \(gap.step) \(gap.upper) -> \(gap.lower): gap \(f(gap.previousGap)) -> \(f(gap.gap)) "
+                "- \(title) step \(gap.step) [\(gap.kind)] \(gap.upper) -> \(gap.lower): gap \(f(gap.previousGap)) -> \(f(gap.gap)) "
                 + "(\(String(format: "%+.2f", gap.drift)) pt)" + (gap.onScreen ? ", on screen" : ", overscan") + "\n"
             for line in passes.first(where: { $0.title == title })?.context(forStep: gap.step) ?? [] {
                 out += "  - \(line)\n"
@@ -89,7 +103,7 @@ enum HarnessReport {
         out += "\n## Top 20 gap ranges (largest min-to-max of one pair's gap over a pass)\n\n"
         for (title, range) in ranges.prefix(20) {
             out +=
-                "- \(title) \(range.upper) -> \(range.lower): first \(f(range.first)), min \(f(range.minimum)), max \(f(range.maximum)), range \(f(range.range))\n"
+                "- \(title) [\(range.kind)] \(range.upper) -> \(range.lower): first \(f(range.first)), min \(f(range.minimum)), max \(f(range.maximum)), range \(f(range.range))\n"
         }
 
         let mismatches = passes.flatMap { pass in pass.mismatches.map { (pass.title, $0) } }
@@ -127,9 +141,10 @@ enum HarnessReport {
                 "offsetWrites": pass.offsetWrites.map(\.json), "dequeues": pass.dequeues.map(\.json),
                 "jumps": pass.jumps.map(\.json), "mismatches": pass.mismatches.map(\.json),
                 "gaps": pass.gaps.map(\.json), "gapRanges": pass.gapRanges.values.map(\.json),
+                "inflation": pass.inflation,
                 "sampleColumns": [
                     "step", "item", "screenY", "cellHeight", "drawnHeight", "safeTop", "safeBottom",
-                    "firstRowMinY", "lastRowMaxY",
+                    "firstRowMinY", "lastRowMaxY", "inkTop", "inkBottom",
                 ],
                 "samples": pass.samples.map(\.json),
             ]

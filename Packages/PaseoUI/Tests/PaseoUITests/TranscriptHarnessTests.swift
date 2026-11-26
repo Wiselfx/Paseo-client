@@ -42,6 +42,9 @@ final class TranscriptHarnessTests: XCTestCase {
         var lastRowMaxY: Double?
         /// Top of each anchored row in the cell's own space, by timeline seq.
         var rowTops: [Int: Double]
+        /// The first and last row of the cell (in its own space) that has a drawn pixel.
+        var inkTop: Double?
+        var inkBottom: Double?
     }
 
     private enum Mode: String {
@@ -258,6 +261,12 @@ final class TranscriptHarnessTests: XCTestCase {
         }
 
         var previous = sample(hosted, pass: pass, recorder: recorder, record: false, atRest: false)
+        let onScreenAtStart = previous.values.filter(\.onScreen)
+        notes.append(
+            "\(pass.title) ink probe: \(onScreenAtStart.filter { $0.inkTop != nil }.count) of \(onScreenAtStart.count) on-screen cells have drawn pixels; "
+                + onScreenAtStart.prefix(3).map {
+                    "\($0.item) screenY \(Int($0.screenY)) cell \(Int($0.cellHeight)) safe \(Int($0.safeTop))/\(Int($0.safeBottom)) ink \($0.inkTop.map { Int($0) } ?? -1)...\($0.inkBottom.map { Int($0) } ?? -1)"
+                }.joined(separator: " | "))
         var step = 0
         while collectionView.contentOffset.y > engine.minOffsetY + 0.5 && step < Self.maxSteps {
             if Date().timeIntervalSince(started) > Self.maxPassSeconds {
@@ -295,9 +304,14 @@ final class TranscriptHarnessTests: XCTestCase {
         pass.wallSeconds = Date().timeIntervalSince(started)
     }
 
-    /// Unexplained motion: how far a cell (its frame) or a row inside it moved on screen beyond what the
-    /// scroll commanded. A cell or row that scrolls by exactly the commanded step reads 0, whether or
-    /// not the engine compensated. Also the gap between a turn's last row and the next turn's prompt.
+    // MARK: Measurement
+
+    /// Compares two samples of the same pass. Unexplained motion is how far something moved on screen
+    /// beyond what the scroll commanded, so a cell that scrolls by exactly the commanded step reads 0,
+    /// whether or not the engine compensated. Three things are followed: the cell's frame, the SwiftUI
+    /// rows inside it (anchor position plus the content view's top safe area inset, which is where
+    /// SwiftUI places its root) and the drawn pixels (`inkExtent`). Then the gap between each turn's last
+    /// content and the next turn's first, by rows and by pixels.
     private func compare(
         previous: [String: CellSample], now: [String: CellSample], commanded: Double, pass: PassData,
         step: Int, recorder: HarnessRecorder
@@ -305,46 +319,52 @@ final class TranscriptHarnessTests: XCTestCase {
         for (key, current) in now {
             guard let was = previous[key] else { continue }
             let onScreen = current.onScreen || was.onScreen
-            let unexplained = (current.screenY - was.screenY) - commanded
-            if abs(unexplained) > 0.5 {
+            func record(_ kind: String, _ item: String, _ before: Double, _ after: Double, tolerance: Double) {
+                let unexplained = (after - before) - commanded
+                guard abs(unexplained) > tolerance else { return }
                 pass.jumps.append(
                     JumpRecord(
-                        step: step, kind: "cell", item: recorder.label(key), amount: unexplained,
-                        screenYPrevious: was.screenY, screenYNow: current.screenY, commandedMotion: commanded,
-                        onScreen: onScreen, context: pass.context(forStep: step)))
+                        step: step, kind: kind, item: item, amount: unexplained, screenYPrevious: before,
+                        screenYNow: after, commandedMotion: commanded, onScreen: onScreen,
+                        context: pass.context(forStep: step)))
             }
+            let name = recorder.label(key)
+            record("cell", name, was.screenY, current.screenY, tolerance: 0.5)
             for (seq, top) in current.rowTops {
                 guard let wasTop = was.rowTops[seq] else { continue }
-                let before = was.screenY + wasTop
-                let after = current.screenY + top
-                let rowMotion = (after - before) - commanded
-                if abs(rowMotion) > 0.5 {
-                    pass.jumps.append(
-                        JumpRecord(
-                            step: step, kind: "row", item: recorder.label(key) + " row \(seq)", amount: rowMotion,
-                            screenYPrevious: before, screenYNow: after, commandedMotion: commanded,
-                            onScreen: onScreen, context: pass.context(forStep: step)))
-                }
+                record(
+                    "row", name + " row \(seq)", was.screenY + was.safeTop + wasTop,
+                    current.screenY + current.safeTop + top, tolerance: 0.5)
+            }
+            if let before = was.inkTop, let after = current.inkTop {
+                record("ink-top", name, was.screenY + before, current.screenY + after, tolerance: 1.5)
+            }
+            if let before = was.inkBottom, let after = current.inkBottom {
+                record("ink-bottom", name, was.screenY + before, current.screenY + after, tolerance: 1.5)
             }
         }
-        let before = gaps(previous)
-        for (pair, gap) in gaps(now) {
-            pass.gapSamples += 1
-            let upper = recorder.label(gap.upper)
-            let lower = recorder.label(gap.lower)
-            if var range = pass.gapRanges[pair] {
-                range.minimum = min(range.minimum, gap.value)
-                range.maximum = max(range.maximum, gap.value)
-                pass.gapRanges[pair] = range
-            } else {
-                pass.gapRanges[pair] = GapRange(
-                    upper: upper, lower: lower, first: gap.value, minimum: gap.value, maximum: gap.value)
-            }
-            if let was = before[pair], abs(gap.value - was.value) > 0.5 {
-                pass.gaps.append(
-                    GapRecord(
-                        step: step, upper: upper, lower: lower, previousGap: was.value, gap: gap.value,
-                        onScreen: gap.onScreen))
+        for kind in ["rows", "ink"] {
+            let tolerance = kind == "ink" ? 1.5 : 0.5
+            let before = gaps(previous, kind: kind)
+            for (pair, gap) in gaps(now, kind: kind) {
+                pass.gapSampleCounts[kind, default: 0] += 1
+                let upper = recorder.label(gap.upper)
+                let lower = recorder.label(gap.lower)
+                if var range = pass.gapRanges[pair] {
+                    range.minimum = min(range.minimum, gap.value)
+                    range.maximum = max(range.maximum, gap.value)
+                    pass.gapRanges[pair] = range
+                } else {
+                    pass.gapRanges[pair] = GapRange(
+                        kind: kind, upper: upper, lower: lower, first: gap.value, minimum: gap.value,
+                        maximum: gap.value)
+                }
+                if let was = before[pair], abs(gap.value - was.value) > tolerance {
+                    pass.gaps.append(
+                        GapRecord(
+                            step: step, kind: kind, upper: upper, lower: lower, previousGap: was.value,
+                            gap: gap.value, onScreen: gap.onScreen))
+                }
             }
         }
     }
@@ -357,26 +377,36 @@ final class TranscriptHarnessTests: XCTestCase {
     }
 
     /// For each pair of adjacent turns that are both sampled: the distance from the upper turn's last
-    /// row bottom to the lower turn's prompt top, where the SwiftUI content says it is drawn.
-    private func gaps(_ samples: [String: CellSample]) -> [String: Gap] {
+    /// content to the lower turn's first. "rows": row anchors (placed below the top safe area inset).
+    /// "ink": the drawn pixels, which is the gap on the screen.
+    private func gaps(_ samples: [String: CellSample], kind: String) -> [String: Gap] {
         let byIndex = samples.values.sorted { $0.index < $1.index }
         var out: [String: Gap] = [:]
         for position in byIndex.indices.dropLast() {
             let upper = byIndex[position]
             let lower = byIndex[position + 1]
-            guard lower.index == upper.index + 1, let bottom = upper.lastRowMaxY, let top = lower.firstRowMinY
-            else { continue }
-            let value = (lower.screenY + top) - (upper.screenY + bottom)
-            out["\(upper.item)|\(lower.item)"] = Gap(
+            guard lower.index == upper.index + 1 else { continue }
+            let value: Double
+            if kind == "ink" {
+                guard let bottom = upper.inkBottom, let top = lower.inkTop else { continue }
+                value = (lower.screenY + top) - (upper.screenY + bottom)
+            } else {
+                guard let bottom = upper.lastRowMaxY, let top = lower.firstRowMinY else { continue }
+                value = (lower.screenY + lower.safeTop + top) - (upper.screenY + upper.safeTop + bottom)
+            }
+            out["\(kind)|\(upper.item)|\(lower.item)"] = Gap(
                 upper: upper.item, lower: lower.item, value: value, onScreen: upper.onScreen && lower.onScreen)
         }
         return out
     }
 
-    /// Reads every visible cell: where it is on screen, its frame height, and the height SwiftUI would
-    /// draw it at right now (`systemLayoutSizeFitting` of the cell's content view at the cell's width with
-    /// no height offered: the same measurement the cell reports to the layout, repeated live. The content
-    /// is pinned to the cell's top at its natural height, so this is the drawn height).
+    /// Reads every visible cell: where it is on screen, its frame height, the height SwiftUI reports for
+    /// it right now, its safe area insets, its row anchors and the pixels it draws.
+    ///
+    /// "Drawn height" is `systemLayoutSizeFitting` of the cell's content view at the cell's width with no
+    /// height offered: the same call the cell answers the layout with (`preferredLayoutAttributesFitting`),
+    /// repeated live. It includes the safe area insets SwiftUI lays the content inside, so
+    /// `natural = drawn - safeTop - safeBottom` is the content's own height.
     private func sample(
         _ hosted: Hosted, pass: PassData, recorder: HarnessRecorder, record: Bool, atRest: Bool
     ) -> [String: CellSample] {
@@ -422,31 +452,115 @@ final class TranscriptHarnessTests: XCTestCase {
                     lastRowMaxY = max(lastRowMaxY ?? -Double.infinity, Double(local.maxY))
                 }
             }
+            var ink: (top: Double?, bottom: Double?) = (nil, nil)
+            if onScreen, drawn != nil {
+                ink = inkExtent(of: cell)
+                if record {
+                    if ink.top != nil { pass.inkAvailableSamples += 1 } else { pass.inkMissingSamples += 1 }
+                }
+            }
             let entry = CellSample(
                 item: key, index: indexPath.item, screenY: Double(frame.minY) - offset - overscan,
                 cellHeight: Double(cell.bounds.height), drawnHeight: drawn, onScreen: onScreen,
                 safeTop: Double(safe.top), safeBottom: Double(safe.bottom), firstRowMinY: firstRowMinY,
-                lastRowMaxY: lastRowMaxY, rowTops: rowTops)
+                lastRowMaxY: lastRowMaxY, rowTops: rowTops, inkTop: ink.top, inkBottom: ink.bottom)
             out[key] = entry
             if record, let drawn {
+                let name = recorder.label(key)
                 pass.mismatchSamples += 1
                 if onScreen { pass.mismatchSamplesOnScreen += 1 }
+                let natural = drawn - entry.safeTop - entry.safeBottom
+                pass.inflation[name] = max(pass.inflation[name] ?? -Double.infinity, entry.cellHeight - natural)
                 if abs(entry.cellHeight - drawn) > 0.5 {
                     pass.mismatches.append(
                         MismatchRecord(
-                            step: pass.currentStep, item: recorder.label(key), cellHeight: entry.cellHeight,
+                            step: pass.currentStep, item: name, cellHeight: entry.cellHeight,
                             drawnHeight: drawn, onScreen: onScreen, atRest: atRest, safeTop: entry.safeTop,
                             safeBottom: entry.safeBottom))
                 }
                 if onScreen {
                     pass.samples.append(
                         SampleRecord(
-                            step: pass.currentStep, item: recorder.label(key), screenY: entry.screenY,
+                            step: pass.currentStep, item: name, screenY: entry.screenY,
                             cellHeight: entry.cellHeight, drawnHeight: drawn, safeTop: entry.safeTop,
-                            safeBottom: entry.safeBottom, firstRowMinY: firstRowMinY, lastRowMaxY: lastRowMaxY))
+                            safeBottom: entry.safeBottom, firstRowMinY: firstRowMinY, lastRowMaxY: lastRowMaxY,
+                            inkTop: ink.top, inkBottom: ink.bottom))
+                    if let top = ink.top {
+                        let range = pass.inkTopRange[name] ?? (top, top)
+                        pass.inkTopRange[name] = (min(range.min, top), max(range.max, top))
+                    }
+                    if let bottom = ink.bottom {
+                        let slack = entry.cellHeight - bottom
+                        let range = pass.bottomSlack[name] ?? (slack, slack)
+                        pass.bottomSlack[name] = (min(range.min, slack), max(range.max, slack))
+                    }
                 }
             }
         }
         return out
+    }
+
+    private static let inkAlpha: UInt8 = 24
+    private static let inkTopStrip: CGFloat = 400
+    private static let inkBottomStrip: CGFloat = 420
+
+    /// The first row near the top of the cell, and the last row near its bottom, that has a drawn pixel
+    /// (alpha above a small threshold), in the cell's own space. Rendered at 1x from the layer tree, so
+    /// precise to about a point. A view that does not draw into the layer tree (a web view) reads blank.
+    private func inkExtent(of view: UIView) -> (top: Double?, bottom: Double?) {
+        let size = view.bounds.size
+        guard size.width > 1, size.height > 1 else { return (nil, nil) }
+        let topHeight = min(size.height, Self.inkTopStrip)
+        let bottomHeight = min(size.height, Self.inkBottomStrip)
+        let top = inkRows(of: view, from: 0, height: topHeight)
+        let bottom = inkRows(of: view, from: size.height - bottomHeight, height: bottomHeight)
+        return (top?.first, bottom?.last)
+    }
+
+    private func inkRows(of view: UIView, from originY: CGFloat, height: CGFloat) -> (first: Double, last: Double)? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: view.bounds.width, height: height), format: format)
+        let image = renderer.image { context in
+            context.cgContext.translateBy(x: 0, y: -originY)
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
+        }
+        guard let cgImage = image.cgImage else { return nil }
+        let width = cgImage.width
+        let rows = cgImage.height
+        guard width > 0, rows > 0 else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width * rows * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard
+                let context = CGContext(
+                    data: buffer.baseAddress, width: width, height: rows, bitsPerComponent: 8,
+                    bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return false }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: rows))
+            return true
+        }
+        guard drawn else { return nil }
+        var first: Int?
+        var last: Int?
+        for row in 0..<rows {
+            let base = row * width * 4
+            var column = 3
+            var inked = false
+            while column < width * 4 {
+                if pixels[base + column] > Self.inkAlpha {
+                    inked = true
+                    break
+                }
+                column += 4
+            }
+            if inked {
+                if first == nil { first = row }
+                last = row
+            }
+        }
+        guard let first, let last else { return nil }
+        return (Double(originY) + Double(first), Double(originY) + Double(last + 1))
     }
 }

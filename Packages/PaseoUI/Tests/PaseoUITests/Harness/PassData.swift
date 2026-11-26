@@ -19,7 +19,15 @@ final class PassData {
     var mismatches: [MismatchRecord] = []
     var gaps: [GapRecord] = []
     var gapRanges: [String: GapRange] = [:]
-    var gapSamples = 0
+    var gapSampleCounts: [String: Int] = [:]
+    /// Per item: the largest (cell height - natural height) seen: how much the frame carries beyond what
+    /// the content needs (safe area inflated at measure time).
+    var inflation: [String: Double] = [:]
+    /// Per item: min and max of (cell height - ink bottom) and of the ink top, in the cell's own space.
+    var bottomSlack: [String: (min: Double, max: Double)] = [:]
+    var inkTopRange: [String: (min: Double, max: Double)] = [:]
+    var inkAvailableSamples = 0
+    var inkMissingSamples = 0
     /// Compact per-step series of on-screen cells (for analysis; see `SampleRecord`).
     var samples: [SampleRecord] = []
     /// Cells sampled for mismatch (on screen and in the overscan), to read the counts against.
