@@ -23,7 +23,7 @@ final class TranscriptHarnessTests: XCTestCase {
 
     private struct Hosted {
         let window: UIWindow
-        let host: UIHostingController<TranscriptView>
+        let host: UIHostingController<HarnessChatScreen>
         let collectionView: TranscriptCollectionView
         let engine: TranscriptEngine
     }
@@ -63,9 +63,13 @@ final class TranscriptHarnessTests: XCTestCase {
     private static let turnHeightKey = "paseo.turnHeights.v1"
     private static let screen = CGRect(x: 0, y: 0, width: 393, height: 852)
     /// The bars over the transcript: status bar and header on top, home indicator and composer below.
-    private static let barsSafeArea = UIEdgeInsets(top: 103, left: 0, bottom: 94, right: 0)
+    /// The chat screen's bars, as production adds them: SwiftUI `safeAreaInset`s around the
+    /// transcript (ChatScreen.swift:74-75), on top of the window's own safe area. The header is 48 pt
+    /// (ChatTopChrome.swift:6); the composer is about 60 pt at rest.
+    private static let barsSafeArea = UIEdgeInsets(top: 48, left: 0, bottom: 60, right: 0)
     /// Only the device's own: status bar and home indicator.
-    private static let deviceSafeArea = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
+    /// No bars: only the window's own safe area.
+    private static let deviceSafeArea = UIEdgeInsets.zero
     private static let stepPause: Duration = .milliseconds(16)
     private static let maxPassSeconds: TimeInterval = 420
     private static let maxSteps = 8000
@@ -141,8 +145,8 @@ final class TranscriptHarnessTests: XCTestCase {
         let device = UIDevice.current
         let deviceNote =
             "Simulator \(device.model) iOS \(device.systemVersion), window \(Int(Self.screen.width))x\(Int(Self.screen.height)), "
-            + "safe area (A, B, C) top \(Int(Self.barsSafeArea.top)) bottom \(Int(Self.barsSafeArea.bottom)), "
-            + "(D) top \(Int(Self.deviceSafeArea.top)) bottom \(Int(Self.deviceSafeArea.bottom)), \(turnCount) synthetic turns. "
+            + "SwiftUI bars (A, B, C) top \(Int(Self.barsSafeArea.top)) bottom \(Int(Self.barsSafeArea.bottom)), "
+            + "(D, none) top \(Int(Self.deviceSafeArea.top)) bottom \(Int(Self.deviceSafeArea.bottom)), \(turnCount) synthetic turns. "
             + "Notes: " + notes.joined(separator: "; ") + "."
         let markdown = HarnessReport.markdown(passes: recorder.passes, deviceNote: deviceNote)
         let json = try HarnessReport.json(passes: recorder.passes, deviceNote: deviceNote)
@@ -190,9 +194,18 @@ final class TranscriptHarnessTests: XCTestCase {
     private func makeHosted(
         store: ConversationStore, controller: ChatController, safeArea: UIEdgeInsets
     ) async throws -> Hosted {
-        let host = UIHostingController(rootView: TranscriptView(store: store, controller: controller))
-        host.additionalSafeAreaInsets = safeArea
-        let window = UIWindow(frame: Self.screen)
+        let host = UIHostingController(
+            rootView: HarnessChatScreen(
+                store: store, controller: controller, topBar: safeArea.top, bottomBar: safeArea.bottom))
+        let window: UIWindow
+        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            window = UIWindow(windowScene: scene)
+            window.frame = Self.screen
+            notes.append("window from a connected scene")
+        } else {
+            window = UIWindow(frame: Self.screen)
+            notes.append("window without a scene (none connected)")
+        }
         window.rootViewController = host
         window.makeKeyAndVisible()
         window.layoutIfNeeded()
