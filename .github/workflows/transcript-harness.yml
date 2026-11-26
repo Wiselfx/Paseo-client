@@ -1,7 +1,9 @@
 name: Transcript harness
 
-# Runs the PaseoUI package test target TranscriptHarnessTests on an iOS simulator and keeps
-# the xcresult plus the report it writes. Package-only: no App project, no xcodegen, no signing.
+# Runs a PaseoUI package simulator harness (default TranscriptHarnessTests) on an iOS simulator and
+# keeps the xcresult plus the report it writes. Package-only: no App project, no xcodegen, no signing.
+# Any other harness: gh workflow run transcript-harness.yml --ref <branch> -f only_testing=PaseoUITests/<Class>
+# (see .claude/skills/sim-harness/SKILL.md).
 permissions:
   contents: read
 
@@ -9,6 +11,11 @@ on:
   push:
     branches: ['harness/**']
   workflow_dispatch:
+    inputs:
+      only_testing:
+        description: 'TestTarget/TestClass[/testMethod] to run'
+        default: 'PaseoUITests/TranscriptHarnessTests'
+        required: false
 
 concurrency:
   group: transcript-harness-${{ github.ref }}
@@ -21,7 +28,7 @@ jobs:
     env:
       PKG_DIR: Packages/PaseoUI
       # Identifier form is TestTarget[/TestClass[/TestMethod]] (xcodebuild man page).
-      ONLY_TESTING: PaseoUITests/TranscriptHarnessTests
+      ONLY_TESTING: ${{ inputs.only_testing || 'PaseoUITests/TranscriptHarnessTests' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -107,7 +114,7 @@ jobs:
           echo "Schemes listed by xcodebuild -list:"
           cat "$RUNNER_TEMP/schemes.txt"
 
-      - name: Run TranscriptHarnessTests
+      - name: Run the harness
         id: run
         working-directory: ${{ env.PKG_DIR }}
         env:
@@ -115,6 +122,8 @@ jobs:
           # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process with the prefix
           # removed, so the test reads ProcessInfo.processInfo.environment["TRANSCRIPT_HARNESS_OUT"].
           TEST_RUNNER_TRANSCRIPT_HARNESS_OUT: ${{ runner.temp }}/harness
+          # The generic name for any other harness: same directory, same artifact.
+          TEST_RUNNER_HARNESS_OUT: ${{ runner.temp }}/harness
         run: |
           REPORT="$RUNNER_TEMP/harness"
           XCRESULT="$RUNNER_TEMP/TranscriptHarness.xcresult"
@@ -166,7 +175,7 @@ jobs:
         if: success()
         run: |
           if [ -z "$(find "$RUNNER_TEMP/harness" -type f 2>/dev/null | head -n 1)" ]; then
-            echo "::error::TranscriptHarnessTests wrote nothing to TRANSCRIPT_HARNESS_OUT ($RUNNER_TEMP/harness). Did it run?"
+            echo "::error::$ONLY_TESTING wrote nothing to HARNESS_OUT ($RUNNER_TEMP/harness). Did it run?"
             exit 1
           fi
 
