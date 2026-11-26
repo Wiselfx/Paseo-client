@@ -10,9 +10,10 @@ import UIKit
 ///
 /// When a row above the reader's line changes height — a row measured for the first time while
 /// scrolling up, an older page landing — the offset moves by the same amount in the same layout pass
-/// (`contentOffsetAdjustment`), so what the reader looks at never moves: every cell before the pass's
-/// anchor, the first cell wholly on screen (`TranscriptEngine.compensatesResize`). While the reader
-/// follows the tail the engine pins the end after the pass instead.
+/// (`contentOffsetAdjustment`), so what the reader looks at never moves. A cell that reaches across the
+/// line is followed by row instead (`TranscriptEngine.compensatesResize`): the offset moves only by how
+/// far the row under the line moved. While the reader follows the tail the engine pins the end after
+/// the pass instead.
 @MainActor
 final class TranscriptLayout: UICollectionViewLayout {
     static let spacing: CGFloat = 27
