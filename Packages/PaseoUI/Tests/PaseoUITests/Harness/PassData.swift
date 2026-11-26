@@ -17,6 +17,11 @@ final class PassData {
     var dequeues: [DequeueRecord] = []
     var jumps: [JumpRecord] = []
     var mismatches: [MismatchRecord] = []
+    var gaps: [GapRecord] = []
+    var gapRanges: [String: GapRange] = [:]
+    var gapSamples = 0
+    /// Compact per-step series of on-screen cells (for analysis; see `SampleRecord`).
+    var samples: [SampleRecord] = []
     /// Cells sampled for mismatch (on screen and in the overscan), to read the counts against.
     var mismatchSamples = 0
     var mismatchSamplesOnScreen = 0

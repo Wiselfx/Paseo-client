@@ -10,6 +10,20 @@ struct HarnessStats {
     var maxAbsMotionOnScreen = 0.0
     var sumAbsMotionOverscan = 0.0
     var maxAbsMotionOverscan = 0.0
+    /// Row motion inside cells (where the SwiftUI content is drawn), on screen.
+    var rowJumpsOnScreen = 0
+    var sumAbsRowMotionOnScreen = 0.0
+    var maxAbsRowMotionOnScreen = 0.0
+    var gapSamples = 0
+    var gapDriftsOnScreen = 0
+    var sumAbsGapDrift = 0.0
+    var maxAbsGapDrift = 0.0
+    var gapPairs = 0
+    var gapPairsThatMoved = 0
+    var maxGapRange = 0.0
+    /// Mismatch samples split by whether the cell content view had a safe area inset.
+    var mismatchWithSafeInset = 0
+    var mismatchWithoutSafeInset = 0
     var mismatchSamples = 0
     var mismatchSamplesOnScreen = 0
     var mismatchOnScreen = 0
@@ -39,7 +53,24 @@ struct HarnessStats {
         var estimateSignedSum = 0.0
         for pass in passes {
             steps += pass.steps.count
-            for jump in pass.jumps {
+            for jump in pass.jumps where jump.kind == "row" {
+                guard jump.onScreen else { continue }
+                rowJumpsOnScreen += 1
+                sumAbsRowMotionOnScreen += abs(jump.amount)
+                maxAbsRowMotionOnScreen = max(maxAbsRowMotionOnScreen, abs(jump.amount))
+            }
+            gapSamples += pass.gapSamples
+            for gap in pass.gaps where gap.onScreen {
+                gapDriftsOnScreen += 1
+                sumAbsGapDrift += abs(gap.drift)
+                maxAbsGapDrift = max(maxAbsGapDrift, abs(gap.drift))
+            }
+            for range in pass.gapRanges.values {
+                gapPairs += 1
+                if range.range > 0.5 { gapPairsThatMoved += 1 }
+                maxGapRange = max(maxGapRange, range.range)
+            }
+            for jump in pass.jumps where jump.kind == "cell" {
                 let amount = abs(jump.amount)
                 if jump.onScreen {
                     jumpsOnScreen += 1
@@ -60,6 +91,11 @@ struct HarnessStats {
                 if record.onScreen {
                     mismatchOnScreen += 1
                     mismatchMaxOnScreen = max(mismatchMaxOnScreen, size)
+                }
+                if record.safeTop + record.safeBottom > 0.5 {
+                    mismatchWithSafeInset += 1
+                } else {
+                    mismatchWithoutSafeInset += 1
                 }
                 if record.atRest {
                     mismatchAtRest += 1
@@ -96,6 +132,12 @@ struct HarnessStats {
             "jumpsOnScreen": jumpsOnScreen, "jumpsOverscan": jumpsOverscan,
             "sumAbsMotionOnScreen": sumAbsMotionOnScreen, "maxAbsMotionOnScreen": maxAbsMotionOnScreen,
             "sumAbsMotionOverscan": sumAbsMotionOverscan, "maxAbsMotionOverscan": maxAbsMotionOverscan,
+            "rowJumpsOnScreen": rowJumpsOnScreen, "sumAbsRowMotionOnScreen": sumAbsRowMotionOnScreen,
+            "maxAbsRowMotionOnScreen": maxAbsRowMotionOnScreen, "gapSamples": gapSamples,
+            "gapDriftsOnScreen": gapDriftsOnScreen, "sumAbsGapDrift": sumAbsGapDrift,
+            "maxAbsGapDrift": maxAbsGapDrift, "gapPairs": gapPairs, "gapPairsThatMoved": gapPairsThatMoved,
+            "maxGapRange": maxGapRange, "mismatchWithSafeInset": mismatchWithSafeInset,
+            "mismatchWithoutSafeInset": mismatchWithoutSafeInset,
             "mismatchSamples": mismatchSamples, "mismatchSamplesOnScreen": mismatchSamplesOnScreen,
             "mismatchOnScreen": mismatchOnScreen, "mismatchMaxOnScreen": mismatchMaxOnScreen,
             "mismatchAll": mismatchAll, "mismatchMaxAll": mismatchMaxAll,

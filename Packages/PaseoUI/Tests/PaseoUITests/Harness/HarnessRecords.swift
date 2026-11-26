@@ -75,6 +75,9 @@ struct StepRecord {
 
 struct JumpRecord {
     var step: Int
+    /// "cell" (the collection view's frame for the cell) or "row" (a SwiftUI row inside the cell, from
+    /// the row anchors: where the content is drawn).
+    var kind: String
     var item: String
     var amount: Double
     var screenYPrevious: Double
@@ -86,7 +89,7 @@ struct JumpRecord {
 
     var json: [String: Any] {
         [
-            "step": step, "item": item, "unexplainedMotion": amount, "screenYPrevious": screenYPrevious,
+            "step": step, "kind": kind, "item": item, "unexplainedMotion": amount, "screenYPrevious": screenYPrevious,
             "screenYNow": screenYNow, "commandedMotion": commandedMotion, "onScreen": onScreen,
             "context": context,
         ]
@@ -100,13 +103,71 @@ struct MismatchRecord {
     var drawnHeight: Double
     var onScreen: Bool
     var atRest: Bool
+    /// The cell content view's safe area insets when sampled.
+    var safeTop: Double = 0
+    var safeBottom: Double = 0
 
     var mismatch: Double { cellHeight - drawnHeight }
 
     var json: [String: Any] {
         [
             "step": step, "item": item, "cellHeight": cellHeight, "drawnHeight": drawnHeight,
-            "mismatch": mismatch, "onScreen": onScreen, "atRest": atRest,
+            "mismatch": mismatch, "onScreen": onScreen, "atRest": atRest, "safeTop": safeTop,
+            "safeBottom": safeBottom,
         ]
+    }
+}
+
+/// The visible gap between a turn's last row and the next turn's prompt changed between two steps.
+struct GapRecord {
+    var step: Int
+    var upper: String
+    var lower: String
+    var previousGap: Double
+    var gap: Double
+    var onScreen: Bool
+
+    var drift: Double { gap - previousGap }
+
+    var json: [String: Any] {
+        [
+            "step": step, "upper": upper, "lower": lower, "previousGap": previousGap, "gap": gap,
+            "drift": drift, "onScreen": onScreen,
+        ]
+    }
+}
+
+/// One on-screen cell at one step, compact: the raw series behind the other records.
+struct SampleRecord {
+    var step: Int
+    var item: String
+    var screenY: Double
+    var cellHeight: Double
+    var drawnHeight: Double
+    var safeTop: Double
+    var safeBottom: Double
+    var firstRowMinY: Double?
+    var lastRowMaxY: Double?
+
+    var json: [Any] {
+        [
+            step, item, screenY, cellHeight, drawnHeight, safeTop, safeBottom,
+            firstRowMinY ?? NSNull(), lastRowMaxY ?? NSNull(),
+        ]
+    }
+}
+
+/// How far one adjacent pair's gap ranged over a pass.
+struct GapRange {
+    var upper: String
+    var lower: String
+    var first: Double
+    var minimum: Double
+    var maximum: Double
+
+    var range: Double { maximum - minimum }
+
+    var json: [String: Any] {
+        ["upper": upper, "lower": lower, "first": first, "min": minimum, "max": maximum, "range": range]
     }
 }

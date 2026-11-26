@@ -35,6 +35,13 @@ final class TranscriptHarnessTests: XCTestCase {
         var cellHeight: Double
         var drawnHeight: Double?
         var onScreen: Bool
+        var safeTop: Double
+        var safeBottom: Double
+        /// The turn's prompt top and its last row's bottom, in the cell's own space (row anchors).
+        var firstRowMinY: Double?
+        var lastRowMaxY: Double?
+        /// Top of each anchored row in the cell's own space, by timeline seq.
+        var rowTops: [Int: Double]
     }
 
     private enum Mode: String {
@@ -53,7 +60,9 @@ final class TranscriptHarnessTests: XCTestCase {
     private static let turnHeightKey = "paseo.turnHeights.v1"
     private static let screen = CGRect(x: 0, y: 0, width: 393, height: 852)
     /// The bars over the transcript: status bar and header on top, home indicator and composer below.
-    private static let safeArea = UIEdgeInsets(top: 103, left: 0, bottom: 94, right: 0)
+    private static let barsSafeArea = UIEdgeInsets(top: 103, left: 0, bottom: 94, right: 0)
+    /// Only the device's own: status bar and home indicator.
+    private static let deviceSafeArea = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
     private static let stepPause: Duration = .milliseconds(16)
     private static let maxPassSeconds: TimeInterval = 420
     private static let maxSteps = 8000
@@ -102,27 +111,35 @@ final class TranscriptHarnessTests: XCTestCase {
         ]
         // A: a cold open, no remembered heights.
         try await runScenario(
-            "A-scroll-up", passes: both, store: store, controller: controller, recorder: recorder,
-            persistHeightsAfter: true)
+            "A-scroll-up", passes: both, safeArea: Self.barsSafeArea, store: store, controller: controller,
+            recorder: recorder, persistHeightsAfter: true)
         // B: the same store, a new engine and view; the heights A measured are remembered now.
         let remembered = TurnHeightStore.load().count
         notes.append("B started with \(remembered) remembered turn heights")
         try await runScenario(
-            "B-reopen", passes: both, store: store, controller: controller, recorder: recorder,
-            persistHeightsAfter: false)
+            "B-reopen", passes: both, safeArea: Self.barsSafeArea, store: store, controller: controller,
+            recorder: recorder, persistHeightsAfter: false)
         // C: a cold open again, flick only: estimates meet a decelerating scroll.
         try await Task.sleep(for: .milliseconds(500))
         UserDefaults.standard.removeObject(forKey: Self.turnHeightKey)
         try await Task.sleep(for: .milliseconds(200))
         notes.append("C started with \(TurnHeightStore.load().count) remembered turn heights")
         try await runScenario(
-            "C-cold-flick", passes: [both[1]], store: store, controller: controller, recorder: recorder,
-            persistHeightsAfter: false)
+            "C-cold-flick", passes: [both[1]], safeArea: Self.barsSafeArea, store: store, controller: controller,
+            recorder: recorder, persistHeightsAfter: false)
+        // D: a cold open with only the device's own safe area (no bars), drag only.
+        try await Task.sleep(for: .milliseconds(500))
+        UserDefaults.standard.removeObject(forKey: Self.turnHeightKey)
+        try await Task.sleep(for: .milliseconds(200))
+        try await runScenario(
+            "D-device-safe-area", passes: [both[0]], safeArea: Self.deviceSafeArea, store: store,
+            controller: controller, recorder: recorder, persistHeightsAfter: false)
 
         let device = UIDevice.current
         let deviceNote =
             "Simulator \(device.model) iOS \(device.systemVersion), window \(Int(Self.screen.width))x\(Int(Self.screen.height)), "
-            + "safe area top \(Int(Self.safeArea.top)) bottom \(Int(Self.safeArea.bottom)), \(turnCount) synthetic turns. "
+            + "safe area (A, B, C) top \(Int(Self.barsSafeArea.top)) bottom \(Int(Self.barsSafeArea.bottom)), "
+            + "(D) top \(Int(Self.deviceSafeArea.top)) bottom \(Int(Self.deviceSafeArea.bottom)), \(turnCount) synthetic turns. "
             + "Notes: " + notes.joined(separator: "; ") + "."
         let markdown = HarnessReport.markdown(passes: recorder.passes, deviceNote: deviceNote)
         let json = try HarnessReport.json(passes: recorder.passes, deviceNote: deviceNote)
@@ -140,11 +157,16 @@ final class TranscriptHarnessTests: XCTestCase {
     // MARK: Scenario
 
     private func runScenario(
-        _ scenario: String, passes: [PassSpec], store: ConversationStore, controller: ChatController,
-        recorder: HarnessRecorder, persistHeightsAfter: Bool
+        _ scenario: String, passes: [PassSpec], safeArea: UIEdgeInsets, store: ConversationStore,
+        controller: ChatController, recorder: HarnessRecorder, persistHeightsAfter: Bool
     ) async throws {
         recorder.current = nil
-        let hosted = try await makeHosted(store: store, controller: controller)
+        // A new screen follows the tail; the earlier scenario's scroll left the shared controller off it.
+        controller.isFollowing = true
+        let hosted = try await makeHosted(store: store, controller: controller, safeArea: safeArea)
+        notes.append(
+            "\(scenario) host safeAreaInsets top \(hosted.host.view.safeAreaInsets.top) bottom \(hosted.host.view.safeAreaInsets.bottom), "
+                + "collection view safeAreaInsets top \(hosted.collectionView.safeAreaInsets.top) bottom \(hosted.collectionView.safeAreaInsets.bottom)")
         for (position, spec) in passes.enumerated() {
             if position > 0 { try await returnToEnd(hosted) }
             let pass = PassData(
@@ -162,9 +184,11 @@ final class TranscriptHarnessTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(300))
     }
 
-    private func makeHosted(store: ConversationStore, controller: ChatController) async throws -> Hosted {
+    private func makeHosted(
+        store: ConversationStore, controller: ChatController, safeArea: UIEdgeInsets
+    ) async throws -> Hosted {
         let host = UIHostingController(rootView: TranscriptView(store: store, controller: controller))
-        host.additionalSafeAreaInsets = Self.safeArea
+        host.additionalSafeAreaInsets = safeArea
         let window = UIWindow(frame: Self.screen)
         window.rootViewController = host
         window.makeKeyAndVisible()
@@ -271,22 +295,82 @@ final class TranscriptHarnessTests: XCTestCase {
         pass.wallSeconds = Date().timeIntervalSince(started)
     }
 
-    /// Unexplained motion: how far a cell moved on screen beyond what the scroll commanded. A cell
-    /// that scrolls by exactly the commanded step reads 0, whether or not the engine compensated.
+    /// Unexplained motion: how far a cell (its frame) or a row inside it moved on screen beyond what the
+    /// scroll commanded. A cell or row that scrolls by exactly the commanded step reads 0, whether or
+    /// not the engine compensated. Also the gap between a turn's last row and the next turn's prompt.
     private func compare(
         previous: [String: CellSample], now: [String: CellSample], commanded: Double, pass: PassData,
         step: Int, recorder: HarnessRecorder
     ) {
-        for (key, sample) in now {
+        for (key, current) in now {
             guard let was = previous[key] else { continue }
-            let unexplained = (sample.screenY - was.screenY) - commanded
-            guard abs(unexplained) > 0.5 else { continue }
-            pass.jumps.append(
-                JumpRecord(
-                    step: step, item: recorder.label(key), amount: unexplained, screenYPrevious: was.screenY,
-                    screenYNow: sample.screenY, commandedMotion: commanded, onScreen: sample.onScreen || was.onScreen,
-                    context: pass.context(forStep: step)))
+            let onScreen = current.onScreen || was.onScreen
+            let unexplained = (current.screenY - was.screenY) - commanded
+            if abs(unexplained) > 0.5 {
+                pass.jumps.append(
+                    JumpRecord(
+                        step: step, kind: "cell", item: recorder.label(key), amount: unexplained,
+                        screenYPrevious: was.screenY, screenYNow: current.screenY, commandedMotion: commanded,
+                        onScreen: onScreen, context: pass.context(forStep: step)))
+            }
+            for (seq, top) in current.rowTops {
+                guard let wasTop = was.rowTops[seq] else { continue }
+                let before = was.screenY + wasTop
+                let after = current.screenY + top
+                let rowMotion = (after - before) - commanded
+                if abs(rowMotion) > 0.5 {
+                    pass.jumps.append(
+                        JumpRecord(
+                            step: step, kind: "row", item: recorder.label(key) + " row \(seq)", amount: rowMotion,
+                            screenYPrevious: before, screenYNow: after, commandedMotion: commanded,
+                            onScreen: onScreen, context: pass.context(forStep: step)))
+                }
+            }
         }
+        let before = gaps(previous)
+        for (pair, gap) in gaps(now) {
+            pass.gapSamples += 1
+            let upper = recorder.label(gap.upper)
+            let lower = recorder.label(gap.lower)
+            if var range = pass.gapRanges[pair] {
+                range.minimum = min(range.minimum, gap.value)
+                range.maximum = max(range.maximum, gap.value)
+                pass.gapRanges[pair] = range
+            } else {
+                pass.gapRanges[pair] = GapRange(
+                    upper: upper, lower: lower, first: gap.value, minimum: gap.value, maximum: gap.value)
+            }
+            if let was = before[pair], abs(gap.value - was.value) > 0.5 {
+                pass.gaps.append(
+                    GapRecord(
+                        step: step, upper: upper, lower: lower, previousGap: was.value, gap: gap.value,
+                        onScreen: gap.onScreen))
+            }
+        }
+    }
+
+    private struct Gap {
+        var upper: String
+        var lower: String
+        var value: Double
+        var onScreen: Bool
+    }
+
+    /// For each pair of adjacent turns that are both sampled: the distance from the upper turn's last
+    /// row bottom to the lower turn's prompt top, where the SwiftUI content says it is drawn.
+    private func gaps(_ samples: [String: CellSample]) -> [String: Gap] {
+        let byIndex = samples.values.sorted { $0.index < $1.index }
+        var out: [String: Gap] = [:]
+        for position in byIndex.indices.dropLast() {
+            let upper = byIndex[position]
+            let lower = byIndex[position + 1]
+            guard lower.index == upper.index + 1, let bottom = upper.lastRowMaxY, let top = lower.firstRowMinY
+            else { continue }
+            let value = (lower.screenY + top) - (upper.screenY + bottom)
+            out["\(upper.item)|\(lower.item)"] = Gap(
+                upper: upper.item, lower: lower.item, value: value, onScreen: upper.onScreen && lower.onScreen)
+        }
+        return out
     }
 
     /// Reads every visible cell: where it is on screen, its frame height, and the height SwiftUI would
@@ -316,9 +400,33 @@ final class TranscriptHarnessTests: XCTestCase {
                     withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
                 drawn = Double(fitting.height)
             }
+            let safe = cell.contentView.safeAreaInsets
+            var firstRowMinY: Double?
+            var lastRowMaxY: Double?
+            var rowTops: [Int: Double] = [:]
+            if engine.entries.indices.contains(indexPath.item), case .turn(let row) = engine.entries[indexPath.item] {
+                if let user = row.turn.userMessage, let local = engine.rowFrames.frame(of: user.seqEnd) {
+                    firstRowMinY = Double(local.minY)
+                    rowTops[user.seqEnd] = Double(local.minY)
+                }
+                var seqs: [Int] = []
+                for segment in row.turn.segments {
+                    switch segment {
+                    case .work(let group): seqs += group.rows.map(\.seqEnd)
+                    case .prose(let proseRow), .todo(let proseRow), .notice(let proseRow): seqs.append(proseRow.seqEnd)
+                    }
+                }
+                for seq in seqs {
+                    guard let local = engine.rowFrames.frame(of: seq) else { continue }
+                    rowTops[seq] = Double(local.minY)
+                    lastRowMaxY = max(lastRowMaxY ?? -Double.infinity, Double(local.maxY))
+                }
+            }
             let entry = CellSample(
                 item: key, index: indexPath.item, screenY: Double(frame.minY) - offset - overscan,
-                cellHeight: Double(cell.bounds.height), drawnHeight: drawn, onScreen: onScreen)
+                cellHeight: Double(cell.bounds.height), drawnHeight: drawn, onScreen: onScreen,
+                safeTop: Double(safe.top), safeBottom: Double(safe.bottom), firstRowMinY: firstRowMinY,
+                lastRowMaxY: lastRowMaxY, rowTops: rowTops)
             out[key] = entry
             if record, let drawn {
                 pass.mismatchSamples += 1
@@ -327,7 +435,15 @@ final class TranscriptHarnessTests: XCTestCase {
                     pass.mismatches.append(
                         MismatchRecord(
                             step: pass.currentStep, item: recorder.label(key), cellHeight: entry.cellHeight,
-                            drawnHeight: drawn, onScreen: onScreen, atRest: atRest))
+                            drawnHeight: drawn, onScreen: onScreen, atRest: atRest, safeTop: entry.safeTop,
+                            safeBottom: entry.safeBottom))
+                }
+                if onScreen {
+                    pass.samples.append(
+                        SampleRecord(
+                            step: pass.currentStep, item: recorder.label(key), screenY: entry.screenY,
+                            cellHeight: entry.cellHeight, drawnHeight: drawn, safeTop: entry.safeTop,
+                            safeBottom: entry.safeBottom, firstRowMinY: firstRowMinY, lastRowMaxY: lastRowMaxY))
                 }
             }
         }

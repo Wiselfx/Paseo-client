@@ -26,9 +26,16 @@ enum HarnessReport {
         out +=
             "- JUMP events in the overscan (not seen): \(s.jumpsOverscan); sum \(f(s.sumAbsMotionOverscan)) pt; max \(f(s.maxAbsMotionOverscan)) pt\n"
         out +=
+            "- ROW motion on screen (content inside cells, |unexplained| > 0.5): \(s.rowJumpsOnScreen); sum \(f(s.sumAbsRowMotionOnScreen)) pt; max \(f(s.maxAbsRowMotionOnScreen)) pt\n"
+        out +=
+            "- GAP (last row of a turn to the next turn's prompt): \(s.gapPairs) adjacent pairs seen, \(s.gapPairsThatMoved) changed by more than 0.5 pt (max range \(f(s.maxGapRange)) pt); "
+            + "\(s.gapDriftsOnScreen) step-to-step drifts on screen of \(s.gapSamples) samples, sum \(f(s.sumAbsGapDrift)) pt, max \(f(s.maxAbsGapDrift)) pt\n"
+        out +=
             "- mismatch samples |cell - drawn| > 0.5 on screen: \(s.mismatchOnScreen) of \(s.mismatchSamplesOnScreen) sampled; max \(f(s.mismatchMaxOnScreen)) pt\n"
         out +=
             "- mismatch samples incl. overscan: \(s.mismatchAll) of \(s.mismatchSamples) sampled; max \(f(s.mismatchMaxAll)) pt\n"
+        out +=
+            "- mismatch samples by cell safe area: with an inset \(s.mismatchWithSafeInset), without \(s.mismatchWithoutSafeInset)\n"
         out += "- mismatch at rest (after the pass settled): \(s.mismatchAtRest); max \(f(s.mismatchMaxAtRest)) pt\n"
         out +=
             "- estimate error over \(s.firstMeasures) first measurements: mean |estimate - measured| \(f(s.estimateMeanAbs)), max \(f(s.estimateMaxAbs)), mean signed \(f(s.estimateMeanSigned))\n"
@@ -54,15 +61,35 @@ enum HarnessReport {
 
         let jumps = passes.flatMap { pass in pass.jumps.map { (pass.title, $0) } }
             .sorted { abs($0.1.amount) > abs($1.1.amount) }
-        out += "## Top 20 jumps\n\n"
+        out += "## Top 20 jumps (cell frames and rows)\n\n"
         if jumps.isEmpty { out += "No jumps.\n\n" }
         for (title, jump) in jumps.prefix(20) {
             out +=
-                "- \(title) step \(jump.step) \(jump.item): \(String(format: "%+.2f", jump.amount)) pt "
+                "- \(title) step \(jump.step) \(jump.kind) \(jump.item): \(String(format: "%+.2f", jump.amount)) pt "
                 + "(screenY \(f(jump.screenYPrevious)) -> \(f(jump.screenYNow)), commanded \(f(jump.commandedMotion)), "
                 + (jump.onScreen ? "on screen" : "overscan") + ")\n"
             if jump.context.isEmpty { out += "  - no invalidation or engine offset write in this step\n" }
             for line in jump.context { out += "  - \(line)\n" }
+        }
+
+        let gaps = passes.flatMap { pass in pass.gaps.map { (pass.title, $0) } }
+            .sorted { abs($0.1.drift) > abs($1.1.drift) }
+        out += "\n## Top 20 gap drifts (answer to next prompt, between two steps)\n\n"
+        if gaps.isEmpty { out += "No gap drift.\n" }
+        for (title, gap) in gaps.prefix(20) {
+            out +=
+                "- \(title) step \(gap.step) \(gap.upper) -> \(gap.lower): gap \(f(gap.previousGap)) -> \(f(gap.gap)) "
+                + "(\(String(format: "%+.2f", gap.drift)) pt)" + (gap.onScreen ? ", on screen" : ", overscan") + "\n"
+            for line in passes.first(where: { $0.title == title })?.context(forStep: gap.step) ?? [] {
+                out += "  - \(line)\n"
+            }
+        }
+        let ranges = passes.flatMap { pass in pass.gapRanges.values.map { (pass.title, $0) } }
+            .sorted { $0.1.range > $1.1.range }
+        out += "\n## Top 20 gap ranges (largest min-to-max of one pair's gap over a pass)\n\n"
+        for (title, range) in ranges.prefix(20) {
+            out +=
+                "- \(title) \(range.upper) -> \(range.lower): first \(f(range.first)), min \(f(range.minimum)), max \(f(range.maximum)), range \(f(range.range))\n"
         }
 
         let mismatches = passes.flatMap { pass in pass.mismatches.map { (pass.title, $0) } }
@@ -99,6 +126,12 @@ enum HarnessReport {
                 "steps": pass.steps.map(\.json), "invalidations": pass.invalidations.map(\.json),
                 "offsetWrites": pass.offsetWrites.map(\.json), "dequeues": pass.dequeues.map(\.json),
                 "jumps": pass.jumps.map(\.json), "mismatches": pass.mismatches.map(\.json),
+                "gaps": pass.gaps.map(\.json), "gapRanges": pass.gapRanges.values.map(\.json),
+                "sampleColumns": [
+                    "step", "item", "screenY", "cellHeight", "drawnHeight", "safeTop", "safeBottom",
+                    "firstRowMinY", "lastRowMaxY",
+                ],
+                "samples": pass.samples.map(\.json),
             ]
         }
         let root: [String: Any] = ["device": deviceNote, "scenarios": scenarioStats, "passes": passJSON]
